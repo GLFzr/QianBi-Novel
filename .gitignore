@@ -10,6 +10,8 @@ venv/
 dist/
 build/
 *.spec.bak
+*.exe
+QianBi-Novel.exe
 
 # ---- 本地归档/测试残留 ----
 _archive/
