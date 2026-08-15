@@ -191,12 +191,14 @@ RowLayout {
                 // ---- 卡片：连接信息 ----
                 Rectangle {
                     Layout.fillWidth: true
+                    height: connInfoCol.implicitHeight + 32
                     radius: Theme.rCard
                     color: Theme.bgCard
                     border.width: 1
                     border.color: Theme.border
 
                     Column {
+                        id: connInfoCol
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 12
@@ -276,12 +278,14 @@ RowLayout {
                 // ---- 卡片：模型参数 ----
                 Rectangle {
                     Layout.fillWidth: true
+                    height: paramCol.implicitHeight + 32
                     radius: Theme.rCard
                     color: Theme.bgCard
                     border.width: 1
                     border.color: Theme.border
 
                     Column {
+                        id: paramCol
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 12
@@ -420,12 +424,14 @@ RowLayout {
                 // ---- 卡片：任务槽位绑定 ----
                 Rectangle {
                     Layout.fillWidth: true
+                    height: slotCol.implicitHeight + 32
                     radius: Theme.rCard
                     color: Theme.bgCard
                     border.width: 1
                     border.color: Theme.border
 
                     Column {
+                        id: slotCol
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 10

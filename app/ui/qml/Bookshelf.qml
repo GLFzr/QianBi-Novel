@@ -262,8 +262,10 @@ Item {
             // ---- 第一组：保存与命名 ----
             Rectangle {
                 width: parent.width
+                height: nameGroupCol.implicitHeight + 36
                 color: Theme.bgPage
                 Column {
+                    id: nameGroupCol
                     anchors.fill: parent
                     anchors.margins: 18
                     spacing: 10
@@ -297,8 +299,10 @@ Item {
             // ---- 第二组：创作设定 ----
             Rectangle {
                 width: parent.width
+                height: ideaGroupCol.implicitHeight + 36
                 color: Theme.bgPage
                 Column {
+                    id: ideaGroupCol
                     anchors.fill: parent
                     anchors.margins: 18
                     spacing: 10
@@ -353,8 +357,10 @@ Item {
             // ---- 第三组：灵感 ----
             Rectangle {
                 width: parent.width
+                height: inspireCol.implicitHeight + 36
                 color: Theme.bgPage
                 Column {
+                    id: inspireCol
                     anchors.fill: parent
                     anchors.margins: 18
                     spacing: 10

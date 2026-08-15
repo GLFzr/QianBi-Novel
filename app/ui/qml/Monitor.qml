@@ -197,12 +197,14 @@ ColumnLayout {
             // 当前章状态卡
             Rectangle {
                 Layout.fillWidth: true
+                height: stateCol.implicitHeight + 28
                 radius: Theme.rCard
                 color: Theme.bgCard
                 border.width: 1
                 border.color: Theme.border
 
                 ColumnLayout {
+                    id: stateCol
                     anchors.fill: parent
                     anchors.margins: 14
                     spacing: 10
