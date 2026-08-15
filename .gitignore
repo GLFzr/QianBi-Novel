@@ -1,0 +1,31 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv_*/
+venv/
+
+# ---- 构建产物 ----
+dist/
+build/
+*.spec.bak
+
+# ---- 本地归档/测试残留 ----
+_archive/
+tests_output/
+.tmp_test/
+tmpt2tjun0o/
+smoke_tmp/
+.fake_home/
+*.exe.bak
+
+# ---- IDE / 系统 ----
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- 运行日志 ----
+*.log
