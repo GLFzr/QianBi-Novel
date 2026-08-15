@@ -21,7 +21,7 @@ RowLayout {
         providerCombo.currentIndex = 0
         urlField.text = bridge.providerOptions[0].baseUrl
         keyField.text = ""
-        modelField.text = ""
+        connPage.applyModelName("")
         tempSpin.value = 7
         maxTokensSpin.value = 8192
         timeoutSpin.value = 300
@@ -39,7 +39,7 @@ RowLayout {
             if (bridge.providerOptions[p].key === prov) providerCombo.currentIndex = p
         urlField.text = c.base_url || ""
         keyField.text = c.api_key || ""
-        modelField.text = c.model || ""
+        connPage.applyModelName(c.model || "")
         tempSpin.value = Math.round((c.temperature !== undefined ? c.temperature : 0.7) * 10)
         maxTokensSpin.value = c.max_tokens || 8192
         timeoutSpin.value = c.timeout || 300
@@ -60,6 +60,22 @@ RowLayout {
     function currentEffort() {
         var v = effortCombo.currentText
         return (v === "默认" || v === "") ? "" : v
+    }
+
+    // 模型名取值：用户手动输入过取输入值，否则取下拉选中项
+    function currentModelName() {
+        if (modelField.editable && modelField.editText !== "")
+            return modelField.editText
+        return modelField.currentText
+    }
+
+    // 模型列表（「拉取列表」填充后可选）
+    ListModel { id: modelList }
+
+    function applyModelName(name) {
+        // 优先在下拉列表里定位，找不到则作为自定义输入显示
+        modelField.currentIndex = -1
+        modelField.editText = name || ""
     }
 
     // ---- 左：连接列表 ----
@@ -262,7 +278,24 @@ RowLayout {
                         Row {
                             width: parent.width
                             spacing: 8
-                            AppField { id: modelField; width: parent.width - 110; label: "模型名"; placeholder: "deepseek-v4-flash" }
+                            Column {
+                                spacing: 6
+                                width: parent.width - 110
+                                Text { text: "模型名（点「拉取列表」后可从下拉选择）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                ComboBox {
+                                    id: modelField
+                                    objectName: "modelFieldCombo"
+                                    width: parent.width
+                                    editable: true
+                                    model: modelList
+                                    textRole: "m"
+                                    palette.window: Theme.bgCard
+                                    palette.text: Theme.textPrimary
+                                    palette.buttonText: Theme.textPrimary
+                                    palette.placeholderText: Theme.textTertiary
+                                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                                }
+                            }
                             AppButton {
                                 text: "拉取列表"
                                 anchors.bottom: parent.bottom
@@ -384,7 +417,7 @@ RowLayout {
                             "provider": bridge.providerOptions[providerCombo.currentIndex].key,
                             "base_url": urlField.text,
                             "api_key": keyField.text,
-                            "model": modelField.text,
+                            "model": connPage.currentModelName(),
                             "temperature": tempSpin.value / 10,
                             "max_tokens": maxTokensSpin.value,
                             "timeout": timeoutSpin.value,
@@ -402,7 +435,7 @@ RowLayout {
                                 "provider": bridge.providerOptions[providerCombo.currentIndex].key,
                                 "base_url": urlField.text,
                                 "api_key": keyField.text,
-                                "model": modelField.text,
+                                "model": connPage.currentModelName(),
                                 "temperature": tempSpin.value / 10,
                                 "max_tokens": maxTokensSpin.value,
                                 "timeout": timeoutSpin.value,
@@ -511,8 +544,10 @@ RowLayout {
         target: bridge
         function onModelsFetched(cid, models) {
             if (models.length > 0) {
-                modelField.text = models[0]
-                bridge.showToast("ok", "拉取到 " + models.length + " 个模型，已填入第一个，可手动修改")
+                modelList.clear()
+                for (var i = 0; i < models.length; i++) modelList.append({ "m": models[i] })
+                modelField.currentIndex = 0
+                bridge.showToast("ok", "拉取到 " + models.length + " 个模型，可从下拉框选择")
             } else {
                 bridge.showToast("warn", "未拉取到模型（接口不支持 /models 或连接失败）")
             }
