@@ -15,10 +15,10 @@ ApplicationWindow {
     color: Theme.bgPage
 
     readonly property var navItems: [
-        { "label": "书架", "needProject": false },
-        { "label": "流水线", "needProject": true },
-        { "label": "章节详情", "needProject": true },
-        { "label": "连接与模型", "needProject": false }
+        { "label": "书架", "icon": "▤", "needProject": false },
+        { "label": "流水线", "icon": "▶", "needProject": true },
+        { "label": "章节详情", "icon": "☰", "needProject": true },
+        { "label": "连接与模型", "icon": "⚡", "needProject": false }
     ]
 
     RowLayout {
@@ -32,14 +32,16 @@ ApplicationWindow {
             color: Theme.bgPanel
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
-            Column {
+            ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 2
 
+                // Logo
                 Row {
                     spacing: 8
                     height: 44
+                    Layout.fillWidth: true
                     Rectangle {
                         width: 28; height: 28; radius: 8
                         color: Theme.accent
@@ -53,40 +55,60 @@ ApplicationWindow {
                             font.bold: true
                         }
                     }
-                    Text {
-                        text: "千笔一文"
-                        color: Theme.textPrimary
-                        font.family: Theme.serifFont
-                        font.pixelSize: Theme.fsBody
-                        font.bold: true
+                    Column {
                         anchors.verticalCenter: parent.verticalCenter
+                        spacing: 0
+                        Text {
+                            text: "千笔一文"
+                            color: Theme.textPrimary
+                            font.family: Theme.serifFont
+                            font.pixelSize: Theme.fsBody
+                            font.bold: true
+                        }
+                        Text {
+                            text: "AI 自动写作台"
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
                     }
                 }
 
-                Rectangle { width: parent.width - 8; height: 1; color: Theme.border; anchors.horizontalCenter: parent.horizontalCenter }
-                Item { width: 1; height: 8 }
+                Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+                Item { Layout.fillWidth: true; height: 8 }
 
+                // 导航项
                 Repeater {
                     model: mainWindow.navItems
                     delegate: Rectangle {
                         required property var modelData
                         required property int index
-                        width: parent.width
-                        height: 36
+                        Layout.fillWidth: true
+                        height: 38
                         radius: 8
                         enabled: !modelData.needProject || bridge.hasProject
                         opacity: enabled ? 1.0 : 0.4
                         color: stack.currentIndex === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.10)
                              : navMouse.containsMouse ? Theme.bgHover : "transparent"
 
-                        Text {
+                        Row {
                             anchors.left: parent.left
                             anchors.leftMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.label
-                            color: stack.currentIndex === index ? Theme.accent : Theme.textSecondary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsSmall
+                            spacing: 8
+                            Text {
+                                text: modelData.icon
+                                color: stack.currentIndex === index ? Theme.accent : Theme.textTertiary
+                                font.pixelSize: Theme.fsSmall
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: modelData.label
+                                color: stack.currentIndex === index ? Theme.accent : Theme.textSecondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.bold: stack.currentIndex === index
+                            }
                         }
                         MouseArea {
                             id: navMouse
@@ -98,17 +120,34 @@ ApplicationWindow {
                         }
                     }
                 }
-            }
 
-            Text {
-                anchors.left: parent.left
-                anchors.leftMargin: 22
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 14
-                text: "千笔一文 Novel · P0"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsTiny
-                font.family: Theme.uiFont
+                Item { Layout.fillHeight: true }
+
+                // 底部：当前状态摘要
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+                    Item { height: 8 }
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        text: bridge.hasProject ? bridge.bookTitle : "未打开项目"
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
+                        font.family: Theme.uiFont
+                        elide: Text.ElideRight
+                        width: parent.width - 20
+                    }
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        text: "千笔一文 Novel"
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
+                        font.family: Theme.uiFont
+                    }
+                }
             }
         }
 

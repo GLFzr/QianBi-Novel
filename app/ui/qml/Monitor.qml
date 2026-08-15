@@ -4,7 +4,12 @@ import QtQuick.Layouts
 import "."
 import "components"
 
+// ============================================================
+// 流水线工作台（三栏布局）
+// 左：章节队列  中：写作工作区（当前章状态/质量/操作）  右：运行日志
+// ============================================================
 ColumnLayout {
+    id: monitor
     spacing: 0
 
     signal gotoChapterDetail()
@@ -12,15 +17,14 @@ ColumnLayout {
     // ---- 顶栏 ----
     Rectangle {
         Layout.fillWidth: true
-        height: 62
+        height: 58
         color: Theme.bgPanel
-        border.width: 0
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
 
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 18
-            anchors.rightMargin: 18
+            anchors.rightMargin: 14
             spacing: 12
 
             Column {
@@ -40,11 +44,13 @@ ColumnLayout {
                 }
             }
             Item { Layout.fillWidth: true }
+
             StageStepper {
                 Layout.alignment: Qt.AlignVCenter
                 stageKey: bridge.stageKey
                 proseProgress: bridge.progressText
             }
+
             Item { Layout.fillWidth: true }
 
             AppButton {
@@ -83,15 +89,15 @@ ColumnLayout {
         }
     }
 
-    // ---- 主区 ----
+    // ---- 三栏主区 ----
     RowLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         spacing: 0
 
-        // 章节队列
+        // ========== 左栏：章节队列 ==========
         Rectangle {
-            Layout.preferredWidth: 360
+            Layout.preferredWidth: 300
             Layout.fillHeight: true
             color: "transparent"
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
@@ -99,7 +105,7 @@ ColumnLayout {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 12
-                spacing: 10
+                spacing: 8
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -108,6 +114,7 @@ ColumnLayout {
                         color: Theme.textSecondary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsSmall
+                        font.bold: true
                     }
                     Item { Layout.fillWidth: true }
                     Text {
@@ -123,7 +130,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     model: bridge.chapterModelProp
-                    spacing: 4
+                    spacing: 3
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
@@ -145,9 +152,10 @@ ColumnLayout {
                     }
                 }
 
+                // 全书进度
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 52
+                    height: 46
                     radius: 10
                     color: Theme.bgCard
                     border.width: 1
@@ -156,7 +164,7 @@ ColumnLayout {
                     Column {
                         anchors.fill: parent
                         anchors.margins: 10
-                        spacing: 6
+                        spacing: 5
                         RowLayout {
                             width: parent.width
                             Text {
@@ -179,42 +187,68 @@ ColumnLayout {
             }
         }
 
-        // 当前任务面板
+        // ========== 中栏：写作工作区 ==========
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.margins: 14
-            spacing: 10
+            spacing: 12
 
-            RowLayout {
+            // 当前章状态卡
+            Rectangle {
                 Layout.fillWidth: true
-                Text {
-                    text: bridge.currentChapterNum > 0
-                          ? "第 " + bridge.currentChapterNum + " 章" + (bridge.lastRecord.title ? " · " + bridge.lastRecord.title : "")
-                          : (bridge.isRunning ? "准备中…" : "待命")
-                    color: Theme.textPrimary
-                    font.family: Theme.uiFont
-                    font.pixelSize: 15
-                    font.bold: true
-                }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: bridge.slotsText
-                    color: Theme.textTertiary
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.fsTiny
+                radius: Theme.rCard
+                color: Theme.bgCard
+                border.width: 1
+                border.color: Theme.border
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Column {
+                            spacing: 2
+                            Text {
+                                text: bridge.currentChapterNum > 0
+                                      ? "第 " + bridge.currentChapterNum + " 章" + (bridge.lastRecord.title ? " · " + bridge.lastRecord.title : "")
+                                      : (bridge.isRunning ? "准备中…" : "待命")
+                                color: Theme.textPrimary
+                                font.family: Theme.uiFont
+                                font.pixelSize: 15
+                                font.bold: true
+                            }
+                            Text {
+                                text: bridge.slotsText
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        AppBadge {
+                            visible: bridge.lastRecord.num !== undefined
+                            text: bridge.lastRecord.status === "pass" ? "已通过" : "待修"
+                            tint: bridge.lastRecord.status === "pass" ? Theme.success : Theme.danger
+                        }
+                    }
+
+                    StepPills {
+                        currentStep: bridge.currentStepKey
+                        running: bridge.isRunning && !bridge.isPaused
+                    }
                 }
             }
 
-            StepPills {
-                currentStep: bridge.currentStepKey
-                running: bridge.isRunning && !bridge.isPaused
-            }
-
-            // 质量三格（最近一章定稿结果）
-            RowLayout {
+            // 质量四格（最近一章定稿结果）
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                columns: 4
+                columnSpacing: 8
+                rowSpacing: 8
+
                 Repeater {
                     model: [
                         { "label": "AI 味 · 阻断", "key": "deslop_blocking", "bad": true },
@@ -224,14 +258,14 @@ ColumnLayout {
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
-                        height: 52
+                        height: 56
                         radius: 10
                         color: Theme.bgCard
                         border.width: 1
                         border.color: Theme.border
                         Column {
                             anchors.centerIn: parent
-                            spacing: 2
+                            spacing: 3
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: modelData.label
@@ -253,12 +287,7 @@ ColumnLayout {
                 }
             }
 
-            LogView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                model: bridge.logModelProp
-            }
-
+            // 快捷操作
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -281,74 +310,73 @@ ColumnLayout {
                 Item { Layout.fillWidth: true }
             }
 
-            Dialog {
-                id: guidanceDialog
-                modal: true
-                anchors.centerIn: parent
-                width: 460
-                padding: 18
-                background: Rectangle {
-                    radius: Theme.rCard
-                    color: Theme.bgCard
-                    border.width: 1
-                    border.color: Theme.borderStrong
-                }
-                header: Text {
-                    text: "带指导重写 第 " + (bridge.lastRecord.num || "?") + " 章"
-                    color: Theme.textPrimary
-                    font.family: Theme.serifFont
-                    font.pixelSize: Theme.fsTitle
-                    font.bold: true
-                    padding: 18
-                }
-                contentItem: Column {
-                    spacing: 10
-                    width: parent.width
-                    Text {
-                        text: "写下重写要求（注入正文生成 prompt），点「重写」后点「开始」从本章续跑："
-                        color: Theme.textTertiary
-                        font.pixelSize: Theme.fsTiny
-                        font.family: Theme.uiFont
-                        wrapMode: Text.Wrap
-                        width: parent.width
-                    }
-                    TextArea {
-                        id: guidanceArea
-                        width: parent.width
-                        height: 110
-                        placeholderText: "如：女主这章不要下线；打脸段落写在场配角反应；结尾钩子指向拍卖会…"
-                        placeholderTextColor: Theme.textTertiary
-                        color: Theme.textPrimary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsBody
-                        wrapMode: Text.Wrap
-                        selectByMouse: true
-                        background: Rectangle {
-                            radius: Theme.rBtn
-                            color: Theme.bgHover
-                            border.width: 1
-                            border.color: Theme.border
-                        }
-                    }
-                }
-                footer: Row {
+            // 提示区（未运行时给操作引导）
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: Theme.rCard
+                color: "transparent"
+                border.width: 1
+                border.color: Theme.border
+                visible: !bridge.isRunning
+
+                Column {
+                    anchors.centerIn: parent
                     spacing: 8
-                    anchors.right: parent.right
-                    anchors.margins: 12
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: bridge.lastRecord.num !== undefined
+                              ? "点击章节可阅读/编辑，右键可重写；点「开始」从断点续跑"
+                              : "点「▶ 开始」启动流水线：设定 → 大纲 → 细纲 → 正文，全程可暂停、可介入"
+                        color: Theme.textTertiary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: bridge.isPaused ? "⏸ 已暂停 · 进度已保存，处理完问题后点「继续」" : ""
+                        color: Theme.accent
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                    }
+                }
+            }
+        }
+
+        // ========== 右栏：运行日志 ==========
+        Rectangle {
+            Layout.preferredWidth: 300
+            Layout.fillHeight: true
+            color: "transparent"
+            Rectangle { anchors.left: parent.left; width: 1; height: parent.height; color: Theme.border }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 8
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "运行日志"
+                        color: Theme.textSecondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
                     AppButton {
-                        text: "取消"
+                        text: "清空"
                         kind: "ghost"
-                        onClicked: guidanceDialog.close()
+                        height: 22
+                        onClicked: bridge.logModelProp.clear()
                     }
-                    AppButton {
-                        text: "重写"
-                        kind: "primary"
-                        onClicked: {
-                            bridge.rewriteChapterWithGuidance(bridge.lastRecord.num, guidanceArea.text)
-                            guidanceArea.text = ""
-                            guidanceDialog.close()
-                        }
-                    }
+                }
+
+                LogView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: bridge.logModelProp
                 }
             }
         }
@@ -357,7 +385,7 @@ ColumnLayout {
     // ---- 底栏 ----
     Rectangle {
         Layout.fillWidth: true
-        height: 30
+        height: 28
         color: Theme.bgPanel
         Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.border }
 
@@ -366,12 +394,6 @@ ColumnLayout {
             anchors.leftMargin: 18
             anchors.rightMargin: 18
             spacing: 14
-            Text {
-                text: bridge.slotsText
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsTiny
-                font.family: Theme.uiFont
-            }
             Text {
                 text: "累计 " + bridge.totalTokens.toLocaleString() + " tokens · ≈ " + bridge.estCost
                 color: Theme.textTertiary
@@ -388,7 +410,79 @@ ColumnLayout {
         }
     }
 
-    // ---- 项目文件浏览/编辑（设定/大纲/追踪）----
+    // ---- 带指导重写对话框 ----
+    Dialog {
+        id: guidanceDialog
+        modal: true
+        anchors.centerIn: parent
+        width: 460
+        padding: 18
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+        header: Text {
+            text: "带指导重写 第 " + (bridge.lastRecord.num || "?") + " 章"
+            color: Theme.textPrimary
+            font.family: Theme.serifFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 18
+        }
+        contentItem: Column {
+            spacing: 10
+            width: parent.width
+            Text {
+                text: "写下重写要求（注入正文生成 prompt），点「重写」后点「开始」从本章续跑："
+                color: Theme.textTertiary
+                font.pixelSize: Theme.fsTiny
+                font.family: Theme.uiFont
+                wrapMode: Text.Wrap
+                width: parent.width
+            }
+            TextArea {
+                id: guidanceArea
+                width: parent.width
+                height: 110
+                placeholderText: "如：女主这章不要下线；打脸段落写在场配角反应；结尾钩子指向拍卖会…"
+                placeholderTextColor: Theme.textTertiary
+                color: Theme.textPrimary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+                selectByMouse: true
+                background: Rectangle {
+                    radius: Theme.rBtn
+                    color: Theme.bgHover
+                    border.width: 1
+                    border.color: Theme.border
+                }
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "取消"
+                kind: "ghost"
+                onClicked: guidanceDialog.close()
+            }
+            AppButton {
+                text: "重写"
+                kind: "primary"
+                onClicked: {
+                    bridge.rewriteChapterWithGuidance(bridge.lastRecord.num, guidanceArea.text)
+                    guidanceArea.text = ""
+                    guidanceDialog.close()
+                }
+            }
+        }
+    }
+
+    // ---- 项目文件浏览/编辑对话框 ----
     Dialog {
         id: fileDialog
         modal: true
@@ -417,7 +511,6 @@ ColumnLayout {
         contentItem: RowLayout {
             spacing: 0
 
-            // 左：文件列表
             Rectangle {
                 Layout.preferredWidth: 240
                 Layout.fillHeight: true
@@ -425,6 +518,7 @@ ColumnLayout {
                 Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
                 ListView {
+                    id: fileList
                     anchors.fill: parent
                     anchors.margins: 8
                     model: fileModel
@@ -468,14 +562,12 @@ ColumnLayout {
                 }
             }
 
-            // 右：编辑区
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 12
                 spacing: 8
 
-                property string currentRel: fileDialog.currentRel
                 RowLayout {
                     Layout.fillWidth: true
                     Text {

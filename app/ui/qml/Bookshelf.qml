@@ -31,34 +31,36 @@ Item {
     onVisibleChanged: if (visible) refresh()
 
     readonly property var coverPalette: [
-        { "bg": "#2A2418", "fg": "#E2B15B" },
-        { "bg": "#18232A", "fg": "#7FA3C9" },
-        { "bg": "#241A20", "fg": "#C99AC0" },
-        { "bg": "#1A2418", "fg": "#63C0A8" },
-        { "bg": "#20201A", "fg": "#D9C25C" }
+        { "top": "#3A2F1C", "bottom": "#14100A", "fg": "#E2B15B" },
+        { "top": "#1F2E3A", "bottom": "#0D1418", "fg": "#7FA3C9" },
+        { "top": "#33202E", "bottom": "#140D12", "fg": "#C99AC0" },
+        { "top": "#1F3329", "bottom": "#0D1410", "fg": "#63C0A8" },
+        { "top": "#2E2E1E", "bottom": "#121209", "fg": "#D9C25C" }
     ]
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 26
-        spacing: 18
+        spacing: 16
 
+        // ---- 顶栏 ----
         RowLayout {
             Layout.fillWidth: true
-            Text {
-                text: "书架"
-                color: Theme.textPrimary
-                font.family: Theme.serifFont
-                font.pixelSize: Theme.fsBig
-                font.bold: true
-            }
-            Text {
-                text: shelf.items.length + " 个项目"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsSmall
-                font.family: Theme.uiFont
-                Layout.alignment: Qt.AlignBottom
-                Layout.bottomMargin: 3
+            Column {
+                spacing: 2
+                Text {
+                    text: "书架"
+                    color: Theme.textPrimary
+                    font.family: Theme.serifFont
+                    font.pixelSize: Theme.fsBig
+                    font.bold: true
+                }
+                Text {
+                    text: shelf.items.length > 0 ? "共 " + shelf.items.length + " 本书，继续你的创作" : "从一句话灵感开始你的第一本书"
+                    color: Theme.textTertiary
+                    font.pixelSize: Theme.fsSmall
+                    font.family: Theme.uiFont
+                }
             }
             Item { Layout.fillWidth: true }
             AppButton {
@@ -72,32 +74,39 @@ Item {
             }
         }
 
+        // ---- 项目网格 ----
         GridLayout {
             columns: 3
-            columnSpacing: 14
-            rowSpacing: 14
+            columnSpacing: 16
+            rowSpacing: 16
             Layout.fillWidth: true
 
             Repeater {
                 model: shelf.items
                 delegate: Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 226
+                    Layout.preferredHeight: 210
                     radius: Theme.rCard
                     color: Theme.bgCard
                     border.width: 1
                     border.color: cardMouse.containsMouse ? Theme.borderStrong : Theme.border
+                    Behavior on border.color { ColorAnimation { duration: 120 } }
 
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 0
 
+                        // 封面
                         Rectangle {
+                            id: coverRect
                             Layout.fillWidth: true
-                            height: 84
+                            height: 78
                             radius: Theme.rCard
                             readonly property var pal: shelf.coverPalette[index % shelf.coverPalette.length]
-                            color: pal.bg
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: coverRect.pal.top }
+                                GradientStop { position: 1.0; color: coverRect.pal.bottom }
+                            }
                             Rectangle {
                                 anchors.bottom: parent.bottom
                                 width: parent.width
@@ -107,16 +116,17 @@ Item {
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData.name.length > 0 ? modelData.name.charAt(0) : "书"
-                                color: parent.pal.fg
+                                color: coverRect.pal.fg
                                 font.family: Theme.serifFont
-                                font.pixelSize: 34
+                                font.pixelSize: 32
                             }
                         }
 
+                        // 信息
                         Column {
                             Layout.fillWidth: true
                             Layout.margins: 14
-                            spacing: 6
+                            spacing: 4
                             Text {
                                 width: parent.width
                                 text: modelData.name
@@ -141,7 +151,7 @@ Item {
                                     font.pixelSize: Theme.fsTiny
                                     font.family: Theme.monoFont
                                 }
-                                Item { width: 14 }
+                                Item { width: 12 }
                                 Text {
                                     text: (modelData.words / 10000).toFixed(1) + " 万字"
                                     color: Theme.textSecondary
@@ -149,9 +159,9 @@ Item {
                                     font.family: Theme.monoFont
                                 }
                             }
-                            Item { height: 2 }
+                            Item { height: 3 }
                             Text {
-                                text: "进入 →"
+                                text: cardMouse.containsMouse ? "进入写作 →" : ""
                                 color: Theme.accent
                                 font.pixelSize: Theme.fsSmall
                                 font.family: Theme.uiFont
@@ -170,42 +180,69 @@ Item {
             }
         }
 
+        // ---- 空状态 ----
         Rectangle {
             visible: shelf.items.length === 0
             Layout.fillWidth: true
-            height: 120
+            Layout.fillHeight: true
             radius: Theme.rCard
             color: "transparent"
             border.width: 1
             border.color: Theme.borderStrong
-            Text {
+
+            Column {
                 anchors.centerIn: parent
-                text: "还没有项目 —— 从一句话灵感开始你的第一本书"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsBody
-                font.family: Theme.uiFont
+                spacing: 12
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "✍️"
+                    font.pixelSize: 34
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "还没有项目"
+                    color: Theme.textSecondary
+                    font.family: Theme.serifFont
+                    font.pixelSize: Theme.fsTitle
+                    font.bold: true
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "人定主题，AI 写书 —— 输入题材与一句话灵感，自动完成设定、大纲、细纲与正文"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                }
+                AppButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "＋ 新建你的第一本书"
+                    kind: "primary"
+                    onClicked: newProjectDialog.open()
+                }
             }
         }
 
         Item { Layout.fillHeight: true }
     }
 
+    // ---- 打开项目 ----
     FolderDialog {
         id: openFolderDialog
         title: "打开写作项目"
         onAccepted: bridge.openProject(selectedFolder.toString())
     }
 
+    // ---- 新建项目对话框 ----
     Dialog {
         id: newProjectDialog
         title: "新建项目"
         modal: true
         anchors.centerIn: parent
-        width: 460
-        padding: 20
+        width: 520
+        padding: 0
         background: Rectangle {
             radius: Theme.rCard
-            color: Theme.bgCard
+            color: Theme.bgPanel
             border.width: 1
             border.color: Theme.borderStrong
         }
@@ -219,110 +256,164 @@ Item {
         }
 
         contentItem: Column {
-            spacing: 12
-            width: 420
+            spacing: 0
+            width: 520
 
-            Row {
-                spacing: 8
+            // ---- 第一组：保存与命名 ----
+            Rectangle {
                 width: parent.width
-                AppField {
-                    id: locationField
-                    width: parent.width - 90
-                    label: "保存位置"
-                    text: bridge.defaultBooksRoot()
-                }
-                AppButton {
-                    text: "选择…"
-                    anchors.bottom: parent.bottom
-                    onClicked: locationDialog.open()
-                }
-            }
-            AppField { id: nameField; width: parent.width; label: "书名"; placeholder: "如：诡异复苏：我的笔记能改命" }
-            Row {
-                spacing: 8
-                width: parent.width
-                AppField { id: genreField; width: parent.width / 2 - 4; label: "题材"; placeholder: "如：悬疑脑洞" }
+                color: Theme.bgPage
                 Column {
-                    spacing: 6
-                    width: parent.width / 2 - 4
-                    Text { text: "平台"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    ComboBox {
-                        id: platformCombo
-                        width: parent.width
-                        model: ["番茄", "起点", "晋江", "七猫", "刺猬猫", "其他"]
-                        palette.window: Theme.bgCard
-                        palette.text: Theme.textPrimary
-                        palette.buttonText: Theme.textPrimary
-                        background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
-                    }
-                }
-            }
-            Row {
-                spacing: 8
-                width: parent.width
-                Column {
-                    spacing: 6
-                    width: parent.width / 2 - 4
-                    Text { text: "预计总字数（万字）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    AppSpinBox {
-                        id: totalWanSpin
-                        width: parent.width
-                        from: 20
-                        to: 2000
-                        stepSize: 10
-                        value: 100
-                    }
-                }
-                Item { width: parent.width / 2 - 4; height: 1 }
-            }
-            Column {
-                spacing: 6
-                width: parent.width
-                Row {
-                    width: parent.width
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 10
                     Text {
-                        text: "一句话灵感"
+                        text: "保存与命名"
                         color: Theme.textTertiary
                         font.pixelSize: Theme.fsTiny
                         font.family: Theme.uiFont
                     }
-                    Item { width: 10 }
-                    AppButton {
-                        text: shelf.ideaBusy ? "展开中…" : "✨ AI 展开"
-                        kind: "ghost"
-                        height: 22
-                        enabled: !shelf.ideaBusy
-                        onClicked: { shelf.ideaBusy = true; bridge.expandIdea(ideaArea.text) }
+                    Row {
+                        spacing: 8
+                        width: parent.width
+                        AppField {
+                            id: locationField
+                            width: parent.width - 90
+                            label: "保存位置"
+                            text: bridge.defaultBooksRoot()
+                        }
+                        AppButton {
+                            text: "选择…"
+                            anchors.bottom: parent.bottom
+                            onClicked: locationDialog.open()
+                        }
                     }
-                    Item { Layout.fillWidth: true }
+                    AppField { id: nameField; width: parent.width; label: "书名"; placeholder: "如：诡异复苏：我的笔记能改命" }
                 }
-                ScrollView {
-                    width: parent.width
-                    height: 90
-                    TextArea {
-                        id: ideaArea
-                        placeholderText: "主角 + 核心设定 + 爽点方向…"
-                        placeholderTextColor: Theme.textTertiary
-                        color: Theme.textPrimary
+            }
+
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+            // ---- 第二组：创作设定 ----
+            Rectangle {
+                width: parent.width
+                color: Theme.bgPage
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 10
+                    Text {
+                        text: "创作设定"
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsBody
-                        wrapMode: Text.Wrap
-                        background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                    }
+                    Row {
+                        spacing: 8
+                        width: parent.width
+                        AppField { id: genreField; width: parent.width / 2 - 4; label: "题材"; placeholder: "如：悬疑脑洞" }
+                        Column {
+                            spacing: 6
+                            width: parent.width / 2 - 4
+                            Text { text: "平台"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                            ComboBox {
+                                id: platformCombo
+                                width: parent.width
+                                model: ["番茄", "起点", "晋江", "七猫", "刺猬猫", "其他"]
+                                palette.window: Theme.bgCard
+                                palette.text: Theme.textPrimary
+                                palette.buttonText: Theme.textPrimary
+                                background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                            }
+                        }
+                    }
+                    Row {
+                        spacing: 8
+                        width: parent.width
+                        Column {
+                            spacing: 6
+                            width: parent.width / 2 - 4
+                            Text { text: "预计总字数（万字）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                            AppSpinBox {
+                                id: totalWanSpin
+                                width: parent.width
+                                from: 20
+                                to: 2000
+                                stepSize: 10
+                                value: 100
+                            }
+                        }
+                        Item { width: parent.width / 2 - 4; height: 1 }
                     }
                 }
             }
-            Row {
-                spacing: 8
-                anchors.right: parent.right
-                AppButton { text: "取消"; onClicked: newProjectDialog.close() }
-                AppButton {
-                    text: "创建并进入"
-                    kind: "primary"
-                    onClicked: {
-                        if (bridge.newProject(locationField.text, nameField.text, genreField.text,
-                                              platformCombo.currentText, totalWanSpin.value, ideaArea.text)) {
-                            newProjectDialog.close()
-                            nameField.text = ""; genreField.text = ""; ideaArea.text = ""
+
+            Rectangle { width: parent.width; height: 1; color: Theme.border }
+
+            // ---- 第三组：灵感 ----
+            Rectangle {
+                width: parent.width
+                color: Theme.bgPage
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 10
+                    Row {
+                        width: parent.width
+                        Text {
+                            text: "一句话灵感"
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
+                        Item { width: 10 }
+                        AppButton {
+                            text: shelf.ideaBusy ? "展开中…" : "✨ AI 展开"
+                            kind: "ghost"
+                            height: 22
+                            enabled: !shelf.ideaBusy
+                            onClicked: { shelf.ideaBusy = true; bridge.expandIdea(ideaArea.text) }
+                        }
+                        Item { width: 0; height: 1 }
+                    }
+                    ScrollView {
+                        width: parent.width
+                        height: 84
+                        TextArea {
+                            id: ideaArea
+                            placeholderText: "主角 + 核心设定 + 爽点方向…"
+                            placeholderTextColor: Theme.textTertiary
+                            color: Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsBody
+                            wrapMode: Text.Wrap
+                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                        }
+                    }
+                }
+            }
+
+            // ---- 底部按钮 ----
+            Rectangle {
+                width: parent.width
+                height: 56
+                color: Theme.bgPanel
+                Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.border }
+                Row {
+                    spacing: 8
+                    anchors.right: parent.right
+                    anchors.rightMargin: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    AppButton { text: "取消"; onClicked: newProjectDialog.close() }
+                    AppButton {
+                        text: "创建并进入"
+                        kind: "primary"
+                        onClicked: {
+                            if (bridge.newProject(locationField.text, nameField.text, genreField.text,
+                                                  platformCombo.currentText, totalWanSpin.value, ideaArea.text)) {
+                                newProjectDialog.close()
+                                nameField.text = ""; genreField.text = ""; ideaArea.text = ""
+                            }
                         }
                     }
                 }
@@ -330,6 +421,7 @@ Item {
         }
     }
 
+    // ---- 选择保存位置 ----
     FolderDialog {
         id: locationDialog
         title: "选择保存位置"

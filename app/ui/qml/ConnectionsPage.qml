@@ -4,6 +4,9 @@ import QtQuick.Layouts
 import "."
 import "components"
 
+// ============================================================
+// 连接与模型（左列表 + 右卡片化表单 + 槽位绑定）
+// ============================================================
 RowLayout {
     id: connPage
     spacing: 0
@@ -61,7 +64,7 @@ RowLayout {
 
     // ---- 左：连接列表 ----
     Rectangle {
-        Layout.preferredWidth: 280
+        Layout.preferredWidth: 300
         Layout.fillHeight: true
         color: Theme.bgPanel
         Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
@@ -73,9 +76,19 @@ RowLayout {
 
             RowLayout {
                 Layout.fillWidth: true
-                Text { text: "连接"; color: Theme.textSecondary; font.pixelSize: Theme.fsSmall; font.family: Theme.uiFont }
+                Text {
+                    text: "连接"
+                    color: Theme.textSecondary
+                    font.pixelSize: Theme.fsSmall
+                    font.family: Theme.uiFont
+                    font.bold: true
+                }
                 Item { Layout.fillWidth: true }
-                AppButton { text: "＋ 新建"; onClicked: connPage.startNew() }
+                AppButton {
+                    text: "＋ 新建"
+                    height: 26
+                    onClicked: connPage.startNew()
+                }
             }
 
             ListView {
@@ -89,10 +102,11 @@ RowLayout {
                     required property string cid
                     required property string name
                     required property string model
+                    required property string provider
                     required property string slots
                     required property int index
                     width: ListView.view.width
-                    height: 62
+                    height: 64
                     radius: 10
                     color: connPage.editingId === cid && !connPage.isNew ? Theme.bgHover : "transparent"
                     border.width: 1
@@ -102,13 +116,22 @@ RowLayout {
                         anchors.fill: parent
                         anchors.margins: 10
                         spacing: 3
-                        Text {
-                            width: parent.width
-                            text: name
-                            color: Theme.textPrimary
-                            font.pixelSize: Theme.fsBody
-                            font.family: Theme.uiFont
-                            elide: Text.ElideRight
+                        Row {
+                            spacing: 6
+                            Text {
+                                text: name
+                                color: Theme.textPrimary
+                                font.pixelSize: Theme.fsBody
+                                font.family: Theme.uiFont
+                                font.bold: true
+                                elide: Text.ElideRight
+                                width: Math.min(160, parent.parent.width - 60)
+                            }
+                            AppBadge {
+                                visible: slots !== ""
+                                text: slots
+                                tint: Theme.info
+                            }
                         }
                         Row {
                             spacing: 8
@@ -117,11 +140,13 @@ RowLayout {
                                 color: Theme.textTertiary
                                 font.pixelSize: Theme.fsTiny
                                 font.family: Theme.monoFont
+                                elide: Text.ElideRight
+                                width: 180
                             }
                             Text {
-                                visible: slots !== ""
-                                text: slots
-                                color: Theme.accent
+                                visible: provider !== ""
+                                text: "· " + provider
+                                color: Theme.textTertiary
                                 font.pixelSize: Theme.fsTiny
                                 font.family: Theme.uiFont
                             }
@@ -137,7 +162,7 @@ RowLayout {
         }
     }
 
-    // ---- 右：编辑表单 + 槽位绑定 ----
+    // ---- 右：编辑表单 ----
     ScrollView {
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -145,14 +170,16 @@ RowLayout {
 
         ColumnLayout {
             width: parent.width
-            spacing: 16
+            spacing: 14
 
-            Column {
-                Layout.margins: 24
-                Layout.maximumWidth: 560
-                Layout.preferredWidth: 560
-                spacing: 12
+            ColumnLayout {
+                Layout.margins: 20
+                Layout.maximumWidth: 620
+                Layout.preferredWidth: 620
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 14
 
+                // 标题
                 Text {
                     text: connPage.isNew ? "新建连接" : "编辑连接"
                     color: Theme.textPrimary
@@ -161,145 +188,189 @@ RowLayout {
                     font.bold: true
                 }
 
-                AppField { id: nameField; width: parent.width; label: "名称"; placeholder: "如：DeepSeek V4 Pro" }
+                // ---- 卡片：连接信息 ----
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: Theme.rCard
+                    color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
 
-                Column {
-                    spacing: 6
-                    width: parent.width
-                    Text { text: "服务商"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    ComboBox {
-                        id: providerCombo
-                        width: parent.width
-                        model: bridge.providerOptions.map(function (p) { return p.label })
-                        palette.window: Theme.bgCard
-                        palette.text: Theme.textPrimary
-                        palette.buttonText: Theme.textPrimary
-                        background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
-                        onActivated: urlField.text = bridge.providerOptions[currentIndex].baseUrl
-                    }
-                    Text {
-                        width: parent.width
-                        text: bridge.providerOptions[providerCombo.currentIndex].hint
-                        color: Theme.textTertiary
-                        font.pixelSize: Theme.fsTiny
-                        font.family: Theme.uiFont
-                        wrapMode: Text.Wrap
-                    }
-                }
-
-                AppField { id: urlField; width: parent.width; label: "Base URL"; placeholder: "https://api.deepseek.com" }
-
-                Column {
-                    spacing: 6
-                    width: parent.width
-                    Text { text: "API Key"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    Row {
-                        width: parent.width
-                        spacing: 8
-                        AppField {
-                            id: keyField
-                            width: parent.width - 70
-                            echoMode: showKey.checked ? TextInput.Normal : TextInput.Password
-                            placeholder: "sk-…"
-                        }
-                        AppButton {
-                            id: showKey
-                            checkable: true
-                            text: showKey.checked ? "隐藏" : "显示"
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-                }
-
-                Row {
-                    width: parent.width
-                    spacing: 8
-                    AppField { id: modelField; width: parent.width - 110; label: "模型名"; placeholder: "deepseek-v4-pro" }
-                    AppButton {
-                        text: "拉取列表"
-                        anchors.bottom: parent.bottom
-                        onClicked: {
-                            if (connPage.editingId && !connPage.isNew) bridge.fetchModels(connPage.editingId)
-                            else bridge.showToast("warn", "请先保存连接再拉取模型列表")
-                        }
-                    }
-                }
-
-                Row {
-                    width: parent.width
-                    spacing: 12
                     Column {
-                        spacing: 6
-                        width: (parent.width - 24) / 3
-                        Text { text: "temperature ×10"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        AppSpinBox {
-                            id: tempSpin; width: parent.width; from: 0; to: 20; value: 7
-                            overrideText: (tempSpin.value / 10).toFixed(1)
-                        }
-                    }
-                    Column {
-                        spacing: 6
-                        width: (parent.width - 24) / 3
-                        Text { text: "max_tokens"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        AppSpinBox {
-                            id: maxTokensSpin; width: parent.width; from: 512; to: 131072; stepSize: 1024; value: 8192
-                        }
-                    }
-                    Column {
-                        spacing: 6
-                        width: (parent.width - 24) / 3
-                        Text { text: "timeout（秒）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        AppSpinBox {
-                            id: timeoutSpin; width: parent.width; from: 30; to: 3600; stepSize: 30; value: 300
-                        }
-                    }
-                }
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 12
 
-                Row {
-                    width: parent.width
-                    spacing: 12
-                    Column {
-                        spacing: 6
-                        width: (parent.width - 24) / 2
-                        Text { text: "思考模式"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        ComboBox {
-                            id: thinkingModeCombo
+                        Text {
+                            text: "连接信息"
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
+
+                        Row {
                             width: parent.width
-                            model: ["默认（跟随模型）", "禁用", "启用"]
-                            palette.window: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            palette.buttonText: Theme.textPrimary
-                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                            spacing: 10
+                            AppField { id: nameField; width: parent.width / 2 - 5; label: "名称"; placeholder: "如：OpenCode Go Flash" }
+                            Column {
+                                spacing: 6
+                                width: parent.width / 2 - 5
+                                Text { text: "服务商"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                ComboBox {
+                                    id: providerCombo
+                                    width: parent.width
+                                    model: bridge.providerOptions.map(function (p) { return p.label })
+                                    palette.window: Theme.bgCard
+                                    palette.text: Theme.textPrimary
+                                    palette.buttonText: Theme.textPrimary
+                                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                                    onActivated: urlField.text = bridge.providerOptions[currentIndex].baseUrl
+                                }
+                            }
                         }
-                    }
-                    Column {
-                        spacing: 6
-                        width: (parent.width - 24) / 2
-                        Text { text: "思考强度（启用时生效）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        ComboBox {
-                            id: effortCombo
+                        Text {
                             width: parent.width
-                            model: ["默认", "low", "high", "max"]
-                            enabled: thinkingModeCombo.currentIndex === 2
-                            opacity: enabled ? 1.0 : 0.45
-                            palette.window: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            palette.buttonText: Theme.textPrimary
-                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                            text: bridge.providerOptions[providerCombo.currentIndex].hint
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                            wrapMode: Text.Wrap
+                        }
+
+                        AppField { id: urlField; width: parent.width; label: "Base URL"; placeholder: "https://api.deepseek.com" }
+
+                        Row {
+                            width: parent.width
+                            spacing: 8
+                            AppField {
+                                id: keyField
+                                width: parent.width - 70
+                                label: "API Key"
+                                echoMode: showKey.checked ? TextInput.Normal : TextInput.Password
+                                placeholder: "sk-…"
+                            }
+                            AppButton {
+                                id: showKey
+                                text: showKey.checked ? "隐藏" : "显示"
+                                anchors.bottom: parent.bottom
+                                checkable: true
+                            }
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: 8
+                            AppField { id: modelField; width: parent.width - 110; label: "模型名"; placeholder: "deepseek-v4-flash" }
+                            AppButton {
+                                text: "拉取列表"
+                                anchors.bottom: parent.bottom
+                                onClicked: {
+                                    if (connPage.editingId && !connPage.isNew) bridge.fetchModels(connPage.editingId)
+                                    else bridge.showToast("warn", "请先保存连接再拉取模型列表")
+                                }
+                            }
                         }
                     }
-                }
-                Text {
-                    width: parent.width
-                    text: "思考模式「启用」会发送 thinking={type:enabled}；思考强度作为顶层 reasoning_effort 参数（DeepSeek V4 系：low/high/max，max 为最高档）。注意：启用思考会消耗输出预算，长正文任务请调大 max_tokens。"
-                    color: Theme.textTertiary
-                    font.pixelSize: Theme.fsTiny
-                    font.family: Theme.uiFont
-                    wrapMode: Text.Wrap
                 }
 
-                Row {
-                    width: parent.width
+                // ---- 卡片：模型参数 ----
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: Theme.rCard
+                    color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 12
+
+                        Text {
+                            text: "模型参数"
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: 10
+                            Column {
+                                spacing: 6
+                                width: (parent.width - 20) / 3
+                                Text { text: "temperature ×10"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                AppSpinBox {
+                                    id: tempSpin; width: parent.width; from: 0; to: 20; value: 7
+                                    overrideText: (tempSpin.value / 10).toFixed(1)
+                                }
+                            }
+                            Column {
+                                spacing: 6
+                                width: (parent.width - 20) / 3
+                                Text { text: "max_tokens"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                AppSpinBox {
+                                    id: maxTokensSpin; width: parent.width; from: 512; to: 131072; stepSize: 1024; value: 8192
+                                }
+                            }
+                            Column {
+                                spacing: 6
+                                width: (parent.width - 20) / 3
+                                Text { text: "timeout（秒）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                AppSpinBox {
+                                    id: timeoutSpin; width: parent.width; from: 30; to: 3600; stepSize: 30; value: 300
+                                }
+                            }
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: 10
+                            Column {
+                                spacing: 6
+                                width: (parent.width - 10) / 2
+                                Text { text: "思考模式"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                ComboBox {
+                                    id: thinkingModeCombo
+                                    width: parent.width
+                                    model: ["默认（跟随模型）", "禁用", "启用"]
+                                    palette.window: Theme.bgCard
+                                    palette.text: Theme.textPrimary
+                                    palette.buttonText: Theme.textPrimary
+                                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                                }
+                            }
+                            Column {
+                                spacing: 6
+                                width: (parent.width - 10) / 2
+                                Text { text: "思考强度（启用时生效）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                ComboBox {
+                                    id: effortCombo
+                                    width: parent.width
+                                    model: ["默认", "low", "high", "max"]
+                                    enabled: thinkingModeCombo.currentIndex === 2
+                                    opacity: enabled ? 1.0 : 0.45
+                                    palette.window: Theme.bgCard
+                                    palette.text: Theme.textPrimary
+                                    palette.buttonText: Theme.textPrimary
+                                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                                }
+                            }
+                        }
+                        Text {
+                            width: parent.width
+                            text: "思考模式「启用」发送 thinking={type:enabled}，思考强度作为顶层 reasoning_effort（DeepSeek V4 系 low/high/max）。启用思考会消耗大量输出预算，长正文任务请调大 max_tokens（≥32768）。"
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+
+                // ---- 卡片：操作 ----
+                RowLayout {
+                    Layout.fillWidth: true
                     spacing: 8
                     AppButton {
                         text: "测试连接"
@@ -337,6 +408,7 @@ RowLayout {
                             connPage.isNew = false
                         }
                     }
+                    Item { Layout.fillWidth: true }
                     AppButton {
                         text: "删除"
                         kind: "danger"
@@ -344,87 +416,82 @@ RowLayout {
                         onClicked: { bridge.deleteConnection(connPage.editingId); connPage.startNew() }
                     }
                 }
-            }
 
-            // 槽位绑定
-            Rectangle {
-                Layout.leftMargin: 24
-                Layout.bottomMargin: 24
-                Layout.maximumWidth: 560
-                Layout.preferredWidth: 560
-                height: slotColumn.implicitHeight + 28
-                radius: Theme.rCard
-                color: Theme.bgCard
-                border.width: 1
-                border.color: Theme.border
+                // ---- 卡片：任务槽位绑定 ----
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: Theme.rCard
+                    color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
 
-                Column {
-                    id: slotColumn
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 10
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 10
 
-                    Text {
-                        text: "任务槽位绑定"
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fsBody
-                        font.family: Theme.uiFont
-                        font.bold: true
-                    }
-                    Text {
-                        width: parent.width
-                        text: "写作槽负责正文与设定（建议高质量模型）；辅助槽负责细纲/摘要/追踪（建议快速低价模型）；审校槽负责一致性检查"
-                        color: Theme.textTertiary
-                        font.pixelSize: Theme.fsTiny
-                        font.family: Theme.uiFont
-                        wrapMode: Text.Wrap
-                    }
-
-                    Repeater {
-                        model: [
-                            { "slot": "writing", "label": "写作槽" },
-                            { "slot": "helper", "label": "辅助槽" },
-                            { "slot": "review", "label": "审校槽" }
-                        ]
-                        delegate: Row {
+                        Text {
+                            text: "任务槽位绑定"
+                            color: Theme.textPrimary
+                            font.pixelSize: Theme.fsBody
+                            font.family: Theme.uiFont
+                            font.bold: true
+                        }
+                        Text {
                             width: parent.width
-                            spacing: 12
-                            Text {
-                                width: 56
-                                text: modelData.label
-                                color: Theme.textSecondary
-                                font.pixelSize: Theme.fsSmall
-                                font.family: Theme.uiFont
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            ComboBox {
-                                id: slotCombo
-                                width: parent.width - 80
-                                property string slotKey: modelData.slot
-                                model: bridge.connectionOptions().map(function (c) { return c.name })
-                                palette.window: Theme.bgCard
-                                palette.text: Theme.textPrimary
-                                palette.buttonText: Theme.textPrimary
-                                background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
-                                Component.onCompleted: refreshCurrent()
-                                function refreshCurrent() {
-                                        var opts = bridge.connectionOptions()
-                                        for (var i = 0; i < opts.length; i++) {
-                                            if (opts[i].boundSlots && opts[i].boundSlots.indexOf(slotKey) >= 0) {
-                                                currentIndex = i
-                                                return
-                                            }
-                                        }
-                                        currentIndex = 0
-                                    }
-                                onActivated: {
-                                    var opts = bridge.connectionOptions()
-                                    if (currentIndex >= 0 && currentIndex < opts.length)
-                                        bridge.setSlot(slotKey, opts[currentIndex].id)
+                            text: "写作槽负责正文与设定（建议高质量模型）；辅助槽负责细纲/摘要/追踪（建议快速低价模型）；审校槽负责一致性检查"
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                            wrapMode: Text.Wrap
+                        }
+
+                        Repeater {
+                            model: [
+                                { "slot": "writing", "label": "写作槽" },
+                                { "slot": "helper", "label": "辅助槽" },
+                                { "slot": "review", "label": "审校槽" }
+                            ]
+                            delegate: Row {
+                                width: parent.width
+                                spacing: 12
+                                Text {
+                                    width: 56
+                                    text: modelData.label
+                                    color: Theme.textSecondary
+                                    font.pixelSize: Theme.fsSmall
+                                    font.family: Theme.uiFont
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
-                                Connections {
-                                    target: bridge
-                                    function onSlotsTextChanged() { slotCombo.refreshCurrent() }
+                                ComboBox {
+                                    id: slotCombo
+                                    width: parent.width - 80
+                                    property string slotKey: modelData.slot
+                                    model: bridge.connectionOptions().map(function (c) { return c.name })
+                                    palette.window: Theme.bgCard
+                                    palette.text: Theme.textPrimary
+                                    palette.buttonText: Theme.textPrimary
+                                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                                    Component.onCompleted: refreshCurrent()
+                                    function refreshCurrent() {
+                                            var opts = bridge.connectionOptions()
+                                            for (var i = 0; i < opts.length; i++) {
+                                                if (opts[i].boundSlots && opts[i].boundSlots.indexOf(slotKey) >= 0) {
+                                                    currentIndex = i
+                                                    return
+                                                }
+                                            }
+                                            currentIndex = 0
+                                        }
+                                    onActivated: {
+                                        var opts = bridge.connectionOptions()
+                                        if (currentIndex >= 0 && currentIndex < opts.length)
+                                            bridge.setSlot(slotKey, opts[currentIndex].id)
+                                    }
+                                    Connections {
+                                        target: bridge
+                                        function onSlotsTextChanged() { slotCombo.refreshCurrent() }
+                                    }
                                 }
                             }
                         }
