@@ -9,9 +9,10 @@
   D. 小任务 baseline（对比推理 token 量）
 """
 import httpx
+import os
 import time
 
-KEY = "sk-IkI4WScZQulFk14oJdTVaj8ttgdwjyon2ni9kNNs8TL25cqf8qNpzgp1VolMCEGk"
+KEY = os.environ.get("QIANBI_TEST_KEY", "")
 BASE = "https://opencode.ai/zen/go/v1"
 MODEL = "deepseek-v4-flash"
 

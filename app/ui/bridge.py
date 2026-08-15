@@ -200,6 +200,26 @@ class _NetWorker(QThread):
                 self.models_done.emit(cid, [])
 
 
+class _IdeaWorker(QThread):
+    """选题展开（灵感 → 3 个选题方向）：用辅助槽，后台执行"""
+    done = Signal(bool, str)                    # ok, result_or_error
+
+    def __init__(self, cfg: dict, idea: str, parent=None):
+        super().__init__(parent)
+        self.cfg, self.idea = cfg, idea
+
+    def run(self):
+        from .. import prompts
+        from ..llm import ModelRouter, clean_llm_output
+        try:
+            router = ModelRouter(self.cfg)
+            prompt = prompts.IDEA_EXPAND_PROMPT.format(user_input=self.idea)
+            result = clean_llm_output(router.client(cfg_mod.SLOT_HELPER).chat(prompt))
+            self.done.emit(bool(result), result or "模型返回为空")
+        except Exception as e:
+            self.done.emit(False, str(e))
+
+
 # ---------- 主桥 ----------
 
 class Bridge(QObject):
@@ -223,6 +243,7 @@ class Bridge(QObject):
     toast = Signal(str, str)                    # level, msg
     connTestResult = Signal(str, bool, str)     # cid, ok, msg
     modelsFetched = Signal(str, list)           # cid, models
+    ideaExpanded = Signal(bool, str)            # ok, result_or_error
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -422,9 +443,18 @@ class Bridge(QObject):
     @Slot(int)
     def rewriteChapter(self, num: int):
         """重写某章：删除正文文件后回到流水线（运行中不可操作）"""
+        self._rewrite_chapter_common(num, "")
+
+    @Slot(int, str)
+    def rewriteChapterWithGuidance(self, num: int, guidance: str):
+        """带用户指导重写：删除正文文件 + 登记指导语，续跑时注入正文 prompt"""
+        self._rewrite_chapter_common(num, guidance)
+
+    def _rewrite_chapter_common(self, num: int, guidance: str):
         if self._running or not self.proj:
             self.toast.emit("warn", "请先停止流水线再重写章节")
             return
+        guidance = (guidance or "").strip()
         for n, name, path in project.list_chapters(self.proj):
             if n == num:
                 try:
@@ -433,8 +463,14 @@ class Bridge(QObject):
                     self.toast.emit("warn", f"删除失败: {e}")
                     return
                 break
+        if guidance:
+            state = st.load_state(self.proj)
+            st.set_guidance(self.proj, state, num, guidance)
         self.refreshQueue()
-        self.toast.emit("ok", f"第 {num} 章正文已移除，点击「开始」将从该章续跑")
+        if guidance:
+            self.toast.emit("ok", f"第 {num} 章正文已移除，已登记重写指导，点击「开始」从该章续跑")
+        else:
+            self.toast.emit("ok", f"第 {num} 章正文已移除，点击「开始」将从该章续跑")
 
     # ============ 章节查看/编辑 ============
 
@@ -696,6 +732,58 @@ class Bridge(QObject):
             bound = [s for s in cfg_mod.SLOT_ORDER if slots.get(s) == c.get("id")]
             result.append({"id": c.get("id", ""), "name": c.get("name", ""), "boundSlots": bound})
         return result
+
+    @Slot(str)
+    def expandIdea(self, idea: str):
+        """选题展开：一句话灵感 → 3 个选题方向（后台执行，结果经 ideaExpanded 信号返回）"""
+        idea = (idea or "").strip()
+        if not idea:
+            self.toast.emit("warn", "先填写一句话灵感，再点「AI 展开」")
+            return
+        w = _IdeaWorker(self.cfg, idea, self)
+        w.done.connect(self.ideaExpanded)
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        w.start()
+
+    @Slot(result="QVariantList")
+    def projectFiles(self) -> list:
+        """列出项目内可编辑的 md 文件（设定/大纲/追踪），供「项目文件」面板浏览"""
+        if not self.proj:
+            return []
+        result = []
+        for d in ["设定", "大纲", "追踪"]:
+            base = os.path.join(self.proj, d)
+            if not os.path.isdir(base):
+                continue
+            for name in sorted(os.listdir(base)):
+                p = os.path.join(base, name)
+                if os.path.isfile(p) and name.endswith(".md"):
+                    rel = os.path.join(d, name).replace(os.sep, "/")
+                    result.append({"rel": rel, "name": name, "dir": d,
+                                   "size": os.path.getsize(p)})
+        return result
+
+    @Slot(str, result=str)
+    def readProjectFile(self, rel: str) -> str:
+        if not self.proj:
+            return ""
+        p = os.path.join(self.proj, rel)
+        if not os.path.isfile(p):
+            return ""
+        return project.read_file(p)
+
+    @Slot(str, str)
+    def saveProjectFile(self, rel: str, text: str):
+        if not self.proj:
+            return
+        p = os.path.join(self.proj, rel)
+        if not os.path.isfile(p):
+            self.toast.emit("warn", "文件不存在")
+            return
+        project.write_file(p, text)
+        self.refreshQueue()
+        self.toast.emit("ok", f"已保存 {rel}")
 
     @Slot(result=str)
     def defaultBooksRoot(self) -> str:

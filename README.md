@@ -41,10 +41,14 @@
 
 ## 模型接入（酒馆式，只两家）
 
-- 连接管理：**DeepSeek / OpenAI / 自定义 OpenAI 兼容**（含 OpenCode Go 等中转/网关，如 `https://opencode.ai/zen/go/v1`），填 Base URL + API Key，可测试连接、拉取模型列表
+- 连接管理：**DeepSeek / OpenAI / OpenCode Go / 自定义 OpenAI 兼容**，填 Base URL + API Key，可测试连接、拉取模型列表
+- **思考模式与强度**（DeepSeek V4 系，参考 [DeepSeek 官方 Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/) 与 opencode-go provider 的 effort 映射）：
+  - 连接档案可选「思考模式」：默认 / 禁用 / 启用（发送 `thinking: {"type":"enabled"}`）
+  - 「思考强度」：`low / high / max`（顶层 `reasoning_effort` 参数，max 为最高档，仅思考启用时生效）
+  - ⚠️ 启用思考会消耗大量输出预算（实测 max 档单次推理可达 2 万+ tokens），长任务（大纲/正文）请把 max_tokens 调到 ≥32768，否则正文会被截断
+  - OpenCode Go（`https://opencode.ai/zen/go/v1`）的 deepseek-v4-flash 已内置为模板连接（ocgo-flash），填 key 即可用
 - **三槽位路由**：写作槽（正文/设定）、辅助槽（细纲/摘要/追踪）、审校槽（一致性检查），每槽独立绑定连接与模型
 - 状态栏实时显示累计 tokens 与估算成本（120 章全书约几元到十几元）
-- **DeepSeek 系模型提示**：官方与 OpenCode Go 的 deepseek-v4-* 默认开启深度推理，长输出任务（大纲/正文）易被推理 token 吃光输出上限而返回空——在连接档案勾选「禁用模型思考」（发送 `thinking: {"type": "disabled"}`）即可解决，实测完整输出且速度提升数倍
 
 ## 使用
 
@@ -72,6 +76,18 @@ python run.py
 ├── 追踪/   (伏笔/时间线/角色状态/上下文/全局摘要/章节摘要.md)
 ├── pipeline_debug/   (失败现场/审校发现，异常排查用)
 └── pipeline_state.json   (断点状态机)
+```
+
+## 测试
+
+```bash
+.venv/Scripts/python.exe tests/test_quality.py   # 离线质量测试（不触网）
+.venv/Scripts/python.exe tests/smoke_func.py     # 功能冒烟（不触网）
+.venv/Scripts/python.exe tests/shot_ui.py        # 离屏渲染四页 UI 截图
+# 真实端到端（约定：OpenCode Go + deepseek-v4-flash）：
+$env:QIANBI_TEST_KEY="sk-..." ; $env:QIANBI_TEST_BASE="https://opencode.ai/zen/go/v1"
+$env:QIANBI_TEST_THINKING="enabled" ; $env:QIANBI_TEST_EFFORT="max"
+.venv/Scripts/python.exe tests/e2e_opencodego.py
 ```
 
 ## 技术栈

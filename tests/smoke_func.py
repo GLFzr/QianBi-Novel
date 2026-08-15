@@ -63,11 +63,12 @@ orch.pause(); assert orch.paused
 orch.resume(); assert not orch.paused
 print("5 orchestrator control OK")
 
-# 6. 连接模型与槽位
+# 6. 连接模型与槽位（找任意已绑定槽位的连接，不假设顺序）
 assert bridge.connectionModel.rowCount() >= 2
 opts = bridge.connectionOptions()
-assert opts[0]["boundSlots"], opts
-print("6 connections =", bridge.connectionModel.rowCount(), "slots =", opts[0]["boundSlots"])
+bound = [o for o in opts if o["boundSlots"]]
+assert bound, opts
+print("6 connections =", bridge.connectionModel.rowCount(), "slots =", bound[0]["boundSlots"])
 
 # 7. 打开章节 + 扫描
 bridge.openChapter(1)

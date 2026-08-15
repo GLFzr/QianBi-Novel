@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """模型探测：哪个 opencode go 模型能完成长输出（大纲级）"""
 import httpx
+import os
 import time
 
-KEY = "sk-IkI4WScZQulFk14oJdTVaj8ttgdwjyon2ni9kNNs8TL25cqf8qNpzgp1VolMCEGk"
+KEY = os.environ.get("QIANBI_TEST_KEY", "")
 BASE = "https://opencode.ai/zen/go/v1"
 core = open(r"G:\ai\酒馆\qianbi-novel\tests_output\改命笔记\设定\题材定位.md", encoding="utf-8").read()
 prompt = f"""你是网络小说结构设计师。基于以下核心设定，设计全书卷级大纲与第一卷详细大纲。

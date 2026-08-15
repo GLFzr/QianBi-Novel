@@ -21,7 +21,7 @@ from .stages import StageError, PipelineStopped
 
 logger = logging.getLogger("qianbi.core")
 
-OUTLINE_BATCH = 5  # 细纲每批生成章数
+OUTLINE_BATCH = 2  # 细纲每批生成章数（max 思考下 5 章批会被推理吃光输出预算，2 章批实测稳定）
 
 LOG_TAIL_MAX = 50  # 日志环形缓冲条数（失败 dump 用）
 
@@ -145,7 +145,13 @@ class Orchestrator(QThread):
                 self._cur_stage = st.STAGE_PROSE
                 self.sig_stage.emit(st.STAGE_PROSE)
                 self.sig_chapter_started.emit(num)
-                record = stages.chapter_microcycle(self, num)
+                # 取走用户为该章登记的重写指导（消费即删，写入正文 prompt）
+                state = st.load_state(self.proj)
+                guidance = st.take_guidance(state, num)
+                if guidance:
+                    st.save_state(self.proj, state)
+                    self.log("info", f"第 {num} 章应用用户重写指导：{guidance[:80]}")
+                record = stages.chapter_microcycle(self, num, guidance=guidance)
                 self.sig_chapter_done.emit(record)
 
                 state = st.load_state(self.proj)

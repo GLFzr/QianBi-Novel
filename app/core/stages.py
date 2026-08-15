@@ -60,6 +60,8 @@ def stage_volume_outline(ctx, total_words_wan: int = 0) -> str:
     core_setting = project.read_file(os.path.join(ctx.proj, "设定", "题材定位.md"))
     if not core_setting:
         raise StageError("缺少核心设定（设定/题材定位.md）")
+    # 设定截断：max 思考下输入过长 + 推理会把输出预算吃光，超长设定只取关键前半段
+    core_setting = core_setting[:4000]
     if not total_words_wan:
         total_words_wan = project.read_idea_info(ctx.proj).get("total_words_wan", 0) or 100
     chapter_words = ctx.cfg.get("writing", {}).get("chapter_word_target", 3000)
@@ -154,7 +156,9 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         outlines = parse_outlines(result)
         valid = [o for o in outlines if o[0] in todo]
         if not valid:
-            raise StageError("细纲解析失败：模型输出格式不符")
+            raise StageError(
+                f"细纲解析失败：模型输出 {len(result)} 字，无法按格式解析出目标章"
+                f"（已解析 {[o[0] for o in outlines]}，待生成 {todo}）")
         return valid
     except Exception as e:
         if len(todo) == 1:
@@ -170,18 +174,34 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
 
 
 def parse_outlines(text: str) -> list:
-    """按 ===第N章=== 分隔符解析细纲"""
+    """按 ===第N章=== 分隔符解析细纲；兼容带空格/变体分隔符与 markdown 标题格式"""
     result = []
-    parts = re.split(r"===第(\d+)章===", text)
-    for i in range(1, len(parts) - 1, 2):
-        num = int(parts[i])
-        content = parts[i + 1].strip()
-        title = ""
-        m = re.search(r"###\s*第\s*\d+\s*章[：:]\s*(.+)", content)
-        if m:
-            title = m.group(1).strip()
-        result.append((num, title, content))
+    # 主格式：===第N章===
+    parts = re.split(r"===\s*第\s*(\d+)\s*章\s*===", text or "")
+    if len(parts) >= 3:
+        for i in range(1, len(parts) - 1, 2):
+            num = int(parts[i])
+            content = parts[i + 1].strip()
+            result.append((num, _outline_title(content, num), content))
+        return result
+    # 降级格式：## / ### 第N章：标题（无 === 分隔符时）
+    chunks = re.split(r"^#{1,4}\s*第\s*(\d+)\s*章[\s:：]*", text or "", flags=re.M)
+    if len(chunks) >= 3:
+        for i in range(1, len(chunks) - 1, 2):
+            num = int(chunks[i])
+            content = chunks[i + 1].strip()
+            result.append((num, _outline_title(content, num), content))
     return result
+
+
+def _outline_title(content: str, num: int) -> str:
+    m = re.search(r"###\s*第\s*\d+\s*章[：:]\s*(.+)", content)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"^#+\s*第\s*\d+\s*章[：: ]*\s*(.+)", content, re.M)
+    if m:
+        return m.group(1).strip()
+    return ""
 
 
 # ============ 阶段④：章节微循环（每章 6 步）============
@@ -294,16 +314,28 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
         review_rounds = 0
         while blocking_review and review_rounds < gates_cfg.get("review_max_rounds", 1):
             review_rounds += 1
+            prev_n = len(blocking_review)
             ctx.step(num, st.STEP_REVIEW)
-            ctx.log("warn", f"第 {num} 章 审校发现 {len(blocking_review)} 处阻塞 → 修改（第 {review_rounds} 轮）…")
+            ctx.log("warn", f"第 {num} 章 审校发现 {prev_n} 处阻塞 → 修改（第 {review_rounds} 轮）…")
             ctx.checkpoint()
             fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
                 chapter_num=num, findings="\n".join(blocking_review), prose=prose)
             ctx.last_prompt = fix_prompt
             rewritten = clean_llm_output(ctx.router.client(cfg_mod.SLOT_REVIEW).chat(fix_prompt))
-            if rewritten.strip():
+            if not rewritten.strip():
+                ctx.log("warn", f"第 {num} 章 审校修复返回为空，保留原稿")
+                break
+            # 回滚保护：修复后复扫，未改善（阻塞不减反增）则保留原稿，防止越修越糟
+            new_blocking, new_advisory = _chapter_review(ctx, num, rewritten)
+            if len(new_blocking) < prev_n:
                 prose = rewritten
-            blocking_review, advisory_review = _chapter_review(ctx, num, prose)
+                blocking_review, advisory_review = new_blocking, new_advisory
+                gr.review_blocking = new_blocking
+            else:
+                ctx.log("warn", f"第 {num} 章 审校修复未改善（{prev_n}→{len(new_blocking)} 处），保留原稿")
+                blocking_review = new_blocking
+                gr.review_blocking = new_blocking
+                break
         gr.review_rounds_used = review_rounds
         if blocking_review:
             ctx.log("warn", f"第 {num} 章 审校 {review_rounds} 轮后仍有 {len(blocking_review)} 处阻塞")

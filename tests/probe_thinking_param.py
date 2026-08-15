@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """关键实验：thinking 结构体参数能否关闭 flash 的推理（DeepSeek 官方新格式）"""
 import httpx
+import os
 import time
 
-KEY = "sk-IkI4WScZQulFk14oJdTVaj8ttgdwjyon2ni9kNNs8TL25cqf8qNpzgp1VolMCEGk"
+KEY = os.environ.get("QIANBI_TEST_KEY", "")
 BASE = "https://opencode.ai/zen/go/v1"
 MODEL = "deepseek-v4-flash"
 

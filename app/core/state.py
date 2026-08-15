@@ -54,7 +54,20 @@ DEFAULT_STATE = {
     "total_chapters": 0,        # 计划总章数（0=不限）
     "paused": False,
     "history": [],              # [{num,title,words,deslop_blocking,deslop_advisory,status,ts}]
+    "pending_guidance": {},     # {章号: 重写指导语}：用户"带指导重写"时暂存，续跑时消费
 }
+
+
+def set_guidance(proj: str, state: dict, num: int, text: str):
+    """登记某章的重写指导（写入 state 并落盘）"""
+    state.setdefault("pending_guidance", {})[num] = text
+    save_state(proj, state)
+
+
+def take_guidance(state: dict, num: int) -> str:
+    """取走某章的待用指导（消费即删除）"""
+    pg = state.get("pending_guidance") or {}
+    return pg.pop(str(num), "")
 
 
 def state_path(proj: str) -> str:

@@ -42,7 +42,8 @@ class LLMClient:
 
     def __init__(self, base_url: str, api_key: str, model: str,
                  temperature: float = 0.7, max_tokens: int = 8192, timeout: int = 300,
-                 max_retries: int = 2, backoff_base: float = 2.0, thinking: str = ""):
+                 max_retries: int = 2, backoff_base: float = 2.0, thinking: str = "",
+                 reasoning_effort: str = ""):
         self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.model = model
@@ -52,6 +53,7 @@ class LLMClient:
         self.max_retries = max_retries
         self.backoff_base = backoff_base
         self.thinking = thinking or ""   # "disabled"/"enabled"：DeepSeek 系网关的思考开关
+        self.reasoning_effort = reasoning_effort or ""  # "low"/"high"/"max"：思考强度（DeepSeek 顶层参数）
         # 调用统计
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -73,6 +75,7 @@ class LLMClient:
             max_retries=max_retries,
             backoff_base=backoff_base,
             thinking=conn.get("thinking", ""),
+            reasoning_effort=conn.get("reasoning_effort", ""),
         )
 
     def _chat_url(self) -> str:
@@ -100,6 +103,10 @@ class LLMClient:
         }
         if self.thinking:
             payload["thinking"] = {"type": self.thinking}
+        if self.thinking == "enabled" and self.reasoning_effort:
+            # DeepSeek V4 顶层参数：思考强度 low/high/max（参考 DeepSeek 官方 Thinking Mode 文档
+            # 与 opencode-go provider 的 effort 映射；max 为最高档）
+            payload["reasoning_effort"] = self.reasoning_effort
         t0 = time.monotonic()
         last_err = None
         for attempt in range(self.max_retries + 1):

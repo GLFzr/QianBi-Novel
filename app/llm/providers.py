@@ -14,6 +14,12 @@ PROVIDERS = {
         "models": ["gpt-4o", "gpt-4o-mini"],
         "hint": "OpenAI 官方接口，需可访问的网络环境",
     },
+    "opencodego": {
+        "label": "OpenCode Go",
+        "base_url": "https://opencode.ai/zen/go/v1",
+        "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+        "hint": "OpenCode Go 网关；DeepSeek V4 系支持思考模式（thinking 启用 + reasoning_effort 最高 max），长任务请调大 max_tokens（≥32768）",
+    },
     "custom": {
         "label": "自定义（OpenAI 兼容）",
         "base_url": "",
@@ -22,7 +28,7 @@ PROVIDERS = {
     },
 }
 
-PROVIDER_ORDER = ["deepseek", "openai", "custom"]
+PROVIDER_ORDER = ["deepseek", "openai", "opencodego", "custom"]
 
 
 def provider_label(key: str) -> str:

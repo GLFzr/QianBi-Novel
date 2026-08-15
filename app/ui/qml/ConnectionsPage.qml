@@ -22,7 +22,8 @@ RowLayout {
         tempSpin.value = 7
         maxTokensSpin.value = 8192
         timeoutSpin.value = 300
-        thinkingCheck.checked = false
+        thinkingModeCombo.currentIndex = 0
+        effortCombo.currentIndex = 0
     }
 
     function startEdit(cid) {
@@ -39,7 +40,23 @@ RowLayout {
         tempSpin.value = Math.round((c.temperature !== undefined ? c.temperature : 0.7) * 10)
         maxTokensSpin.value = c.max_tokens || 8192
         timeoutSpin.value = c.timeout || 300
-        thinkingCheck.checked = c.thinking === "disabled"
+        var th = c.thinking || ""
+        thinkingModeCombo.currentIndex = th === "disabled" ? 1 : (th === "enabled" ? 2 : 0)
+        var ef = c.reasoning_effort || ""
+        effortCombo.currentIndex = ef === "low" ? 1 : (ef === "high" ? 2 : (ef === "max" ? 3 : 0))
+    }
+
+    function currentThinking() {
+        switch (thinkingModeCombo.currentIndex) {
+        case 1: return "disabled"
+        case 2: return "enabled"
+        default: return ""
+        }
+    }
+
+    function currentEffort() {
+        var v = effortCombo.currentText
+        return (v === "默认" || v === "") ? "" : v
     }
 
     // ---- 左：连接列表 ----
@@ -238,12 +255,47 @@ RowLayout {
                     }
                 }
 
-                CheckBox {
-                    id: thinkingCheck
-                    text: "禁用模型思考（DeepSeek/OpenCode Go 用，防推理吃光输出上限）"
+                Row {
+                    width: parent.width
+                    spacing: 12
+                    Column {
+                        spacing: 6
+                        width: (parent.width - 24) / 2
+                        Text { text: "思考模式"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                        ComboBox {
+                            id: thinkingModeCombo
+                            width: parent.width
+                            model: ["默认（跟随模型）", "禁用", "启用"]
+                            palette.window: Theme.bgCard
+                            palette.text: Theme.textPrimary
+                            palette.buttonText: Theme.textPrimary
+                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                        }
+                    }
+                    Column {
+                        spacing: 6
+                        width: (parent.width - 24) / 2
+                        Text { text: "思考强度（启用时生效）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                        ComboBox {
+                            id: effortCombo
+                            width: parent.width
+                            model: ["默认", "low", "high", "max"]
+                            enabled: thinkingModeCombo.currentIndex === 2
+                            opacity: enabled ? 1.0 : 0.45
+                            palette.window: Theme.bgCard
+                            palette.text: Theme.textPrimary
+                            palette.buttonText: Theme.textPrimary
+                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                        }
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: "思考模式「启用」会发送 thinking={type:enabled}；思考强度作为顶层 reasoning_effort 参数（DeepSeek V4 系：low/high/max，max 为最高档）。注意：启用思考会消耗输出预算，长正文任务请调大 max_tokens。"
+                    color: Theme.textTertiary
                     font.pixelSize: Theme.fsTiny
                     font.family: Theme.uiFont
-                    palette { text: Theme.textSecondary }
+                    wrapMode: Text.Wrap
                 }
 
                 Row {
@@ -261,7 +313,8 @@ RowLayout {
                             "temperature": tempSpin.value / 10,
                             "max_tokens": maxTokensSpin.value,
                             "timeout": timeoutSpin.value,
-                            "thinking": thinkingCheck.checked ? "disabled" : ""
+                            "thinking": connPage.currentThinking(),
+                            "reasoning_effort": connPage.currentEffort()
                         })
                     }
                     AppButton {
@@ -278,7 +331,8 @@ RowLayout {
                                 "temperature": tempSpin.value / 10,
                                 "max_tokens": maxTokensSpin.value,
                                 "timeout": timeoutSpin.value,
-                                "thinking": thinkingCheck.checked ? "disabled" : ""
+                                "thinking": connPage.currentThinking(),
+                                "reasoning_effort": connPage.currentEffort()
                             })
                             connPage.isNew = false
                         }

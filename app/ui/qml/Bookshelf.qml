@@ -9,6 +9,20 @@ Item {
     id: shelf
 
     property var items: []
+    property bool ideaBusy: false
+
+    Connections {
+        target: bridge
+        function onIdeaExpanded(ok, result) {
+            shelf.ideaBusy = false
+            if (ok) {
+                ideaArea.text = result
+                bridge.showToast("ok", "选题展开完成，可直接使用或修改")
+            } else {
+                bridge.showToast("error", "选题展开失败：" + result)
+            }
+        }
+    }
 
     function refresh() {
         items = bridge.recentProjects()
@@ -264,7 +278,24 @@ Item {
             Column {
                 spacing: 6
                 width: parent.width
-                Text { text: "一句话灵感"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                Row {
+                    width: parent.width
+                    Text {
+                        text: "一句话灵感"
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
+                        font.family: Theme.uiFont
+                    }
+                    Item { width: 10 }
+                    AppButton {
+                        text: shelf.ideaBusy ? "展开中…" : "✨ AI 展开"
+                        kind: "ghost"
+                        height: 22
+                        enabled: !shelf.ideaBusy
+                        onClicked: { shelf.ideaBusy = true; bridge.expandIdea(ideaArea.text) }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
                 ScrollView {
                     width: parent.width
                     height: 90

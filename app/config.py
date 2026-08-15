@@ -30,6 +30,10 @@ DEFAULT_CONNECTIONS = [
     {"id": "ds-v4-flash", "name": "DeepSeek V4 Flash", "provider": "deepseek",
      "base_url": "https://api.deepseek.com", "api_key": "", "model": "deepseek-v4-flash",
      "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "ocgo-flash", "name": "OpenCode Go · V4 Flash", "provider": "opencodego",
+     "base_url": "https://opencode.ai/zen/go/v1", "api_key": "", "model": "deepseek-v4-flash",
+     "temperature": 0.7, "max_tokens": 65536, "timeout": 600,
+     "thinking": "enabled", "reasoning_effort": "max"},
 ]
 
 DEFAULT_CONFIG = {
@@ -121,6 +125,10 @@ def load_config() -> dict:
             if merged["slots"].get(slot) not in ids:
                 merged["slots"][slot] = merged["connections"][0]["id"]
         _migrate_builtin_connections(merged)
+        # 补全新内置连接模板（如 ocgo-flash，无 key，用户在界面填写）
+        for c in DEFAULT_CONNECTIONS:
+            if c["id"] not in ids:
+                merged["connections"].append(json.loads(json.dumps(c)))
         return merged
     except Exception:
         return json.loads(json.dumps(DEFAULT_CONFIG))

@@ -13,22 +13,39 @@ import os
 import sys
 import time
 
+# Windows 控制台 GBK 打印中文/特殊字符会崩，统一 UTF-8 输出
+if os.name == "nt":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.getcwd())
 
-# ---- 测试连接（约定：deepseek-v4-flash）----
+# ---- 测试连接（约定：deepseek-v4-flash；思考模式经环境变量注入）----
 MODEL = "deepseek-v4-flash"
 BASE = os.environ.get("QIANBI_TEST_BASE", "https://api.deepseek.com")
 KEY = os.environ.get("QIANBI_TEST_KEY", "")
+THINKING = os.environ.get("QIANBI_TEST_THINKING", "disabled")   # disabled / enabled
+EFFORT = os.environ.get("QIANBI_TEST_EFFORT", "")               # low / high / max（thinking=enabled 时生效）
 if not KEY:
     cfg_path = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "config.json")
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg0 = json.load(f)
         for c in cfg0.get("connections", []):
-            if c.get("base_url", "").find("deepseek.com") >= 0 and c.get("api_key"):
+            # 测试约定：优先取 OpenCode Go 连接（本次测试只用它）
+            if c.get("base_url", "").find("opencode") >= 0 and c.get("api_key"):
                 KEY = c["api_key"]
+                if not BASE.startswith("http"):
+                    BASE = c.get("base_url", BASE)
                 break
+        if not KEY:
+            for c in cfg0.get("connections", []):
+                if c.get("api_key"):
+                    KEY = c["api_key"]
+                    break
     except Exception:
         pass
 assert KEY, "未找到测试 API Key（设 QIANBI_TEST_KEY 或 ~/.qianbi_novel/config.json）"
@@ -46,17 +63,17 @@ cfg = {
     "connections": [
         {"id": "t-write", "name": f"{MODEL}（写作槽）", "provider": "custom",
          "base_url": BASE, "api_key": KEY, "model": MODEL,
-         "temperature": 0.7, "max_tokens": 16384, "timeout": 300,
-         "thinking": "disabled"},
+         "temperature": 0.7, "max_tokens": 65536, "timeout": 900,
+         "thinking": THINKING, "reasoning_effort": EFFORT},
         {"id": "t-helper", "name": f"{MODEL}（辅助槽）", "provider": "custom",
          "base_url": BASE, "api_key": KEY, "model": MODEL,
-         "temperature": 0.7, "max_tokens": 16384, "timeout": 300,
-         "thinking": "disabled"},
+         "temperature": 0.7, "max_tokens": 65536, "timeout": 900,
+         "thinking": THINKING, "reasoning_effort": EFFORT},
     ],
     "slots": {"writing": "t-write", "helper": "t-helper", "review": "t-helper"},
     "gates": {"strategy": "mark_continue", "deslop_max_rounds": 2,
               "word_tolerance": 0.1, "review_enabled": True, "review_max_rounds": 1},
-    "llm": {"max_retries": 2, "backoff_base": 2.0},
+    "llm": {"max_retries": 1, "backoff_base": 2.0},
     "writing": {"chapter_word_target": CHAPTER_WORDS, "default_genre": "",
                 "default_platform": "番茄"},
     "last_project": "",
@@ -76,9 +93,9 @@ def mark(msg):
     print(line, flush=True)
 
 
-proj = project.create_project(root, "改命笔记_官方api")
+proj = project.create_project(root, f"改命笔记_ocgo_{time.strftime('%m%d_%H%M')}")
 project.write_idea_info(proj, "都市悬疑脑洞", "番茄", "主角捡到一本能改写现实的笔记，每次使用都会付出未知代价", 0)
-mark(f"[e2e] 项目已创建: {proj}（途径：{BASE} · {MODEL} · thinking=disabled）")
+mark(f"[e2e] 项目已创建: {proj}（途径：{BASE} · {MODEL} · thinking={THINKING} effort={EFFORT or '默认'}）")
 
 logs = []
 records = []
@@ -109,17 +126,20 @@ def on_failed(msg):
     mark(f"[e2e] 流水线失败: {msg}")
 
 
+from PySide6.QtCore import Qt
+
 orch = Orchestrator(proj, cfg)
-orch.sig_log.connect(on_log)
-orch.sig_chapter_done.connect(on_chapter_done)
-orch.sig_finished.connect(on_finished)
-orch.sig_failed.connect(on_failed)
+# 直连：on_chapter_done 里请求停止能立刻生效，避免下一章已开跑
+orch.sig_log.connect(on_log, Qt.DirectConnection)
+orch.sig_chapter_done.connect(on_chapter_done, Qt.DirectConnection)
+orch.sig_finished.connect(on_finished, Qt.DirectConnection)
+orch.sig_failed.connect(on_failed, Qt.DirectConnection)
 
 t0 = time.monotonic()
-mark("[e2e] 流水线启动（写 3 章 @2000 字，deepseek-v4-flash + thinking disabled）…")
+mark(f"[e2e] 流水线启动（写 {CHAPTERS_TO_WRITE} 章 @{CHAPTER_WORDS} 字，{MODEL} + thinking={THINKING} effort={EFFORT or '默认'}）…")
 orch.start()
 
-TIMEOUT = 50 * 60  # 50 分钟上限
+TIMEOUT = 100 * 60  # 100 分钟上限（max 思考长任务单次可达 6-8 分钟）
 last_beat = time.monotonic()
 while orch.isRunning() and time.monotonic() - t0 < TIMEOUT:
     app.processEvents()
@@ -159,7 +179,7 @@ for h in state["history"]:
     print(f"  第{h['num']}章: {h['words']}字 去味阻断{h['deslop_blocking']} 审校阻塞{h.get('review_blocking', 0)} {h['status']}", flush=True)
 
 print(f"\ntokens 累计: {orch.router.total_tokens()}", flush=True)
-print(f"成本估算: ¥{orch.router.estimate_cost():.2f}（OpenCode Go 为订阅制，仅供参考）", flush=True)
+print(f"成本估算: 约¥{orch.router.estimate_cost():.2f}（OpenCode Go 为订阅制，仅供参考）", flush=True)
 
 print("\n追踪文件状态:", flush=True)
 for name in ["伏笔", "时间线", "角色状态", "上下文", "全局摘要", "章节摘要"]:
