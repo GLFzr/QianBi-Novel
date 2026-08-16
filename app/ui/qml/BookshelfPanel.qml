@@ -1,0 +1,251 @@
+import QtQuick
+import QtQuick.Controls.Basic
+import QtQuick.Layouts
+import QtQuick.Dialogs
+import "."
+import "components"
+
+// 书架面板：项目列表 + 新建/打开
+Item {
+    id: shelf
+
+    property var items: []
+
+    function refresh() {
+        items = bridge.recentProjects()
+    }
+    Component.onCompleted: refresh()
+    onVisibleChanged: if (visible) refresh()
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        // 头部
+        Rectangle {
+            Layout.fillWidth: true
+            height: 66
+            color: Theme.bgPanel
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            Column {
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 3
+                Text {
+                    text: "书架"
+                    color: Theme.textPrimary
+                    font.family: Theme.serifFont
+                    font.pixelSize: Theme.fsTitle
+                    font.bold: true
+                }
+                Text {
+                    text: shelf.items.length + " 本书"
+                    color: Theme.textTertiary
+                    font.pixelSize: Theme.fsTiny
+                    font.family: Theme.uiFont
+                }
+            }
+            AppButton {
+                anchors.right: parent.right
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                text: "＋"
+                height: 28
+                onClicked: newProjectDialog.open()
+            }
+        }
+
+        // 项目列表
+        ListView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: shelf.items
+            spacing: 6
+            clip: true
+            anchors.margins: 10
+
+            delegate: Rectangle {
+                required property var modelData
+                required property int index
+                width: ListView.view.width - 20
+                height: 62
+                radius: 10
+                color: itemHover.containsMouse ? Theme.bgHover : Theme.bgCard
+                border.width: 1
+                border.color: Theme.border
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 10
+
+                    Rectangle {
+                        width: 40; height: 40; radius: 8
+                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData.name.length > 0 ? modelData.name.charAt(0) : "书"
+                            color: Theme.accent
+                            font.family: Theme.serifFont
+                            font.pixelSize: 18
+                        }
+                    }
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            width: parent.width
+                            text: modelData.name
+                            color: Theme.textPrimary
+                            font.pixelSize: Theme.fsBody
+                            font.family: Theme.uiFont
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            text: (modelData.genre || "未设题材") + " · " + modelData.chapters + " 章 · " + (modelData.words / 10000).toFixed(1) + " 万字"
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
+                    }
+                    Text {
+                        visible: itemHover.containsMouse
+                        text: "进入 →"
+                        color: Theme.accent
+                        font.pixelSize: Theme.fsSmall
+                        font.family: Theme.uiFont
+                    }
+                }
+                MouseArea {
+                    id: itemHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: bridge.openProject(modelData.path)
+                }
+            }
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
+                background: Item {}
+            }
+        }
+
+        // 底部操作
+        Rectangle {
+            Layout.fillWidth: true
+            height: 50
+            color: Theme.bgPanel
+            Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.border }
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+                AppButton {
+                    text: "打开项目…"
+                    Layout.fillWidth: true
+                    onClicked: openFolderDialog.open()
+                }
+                AppButton {
+                    text: "新建项目"
+                    kind: "primary"
+                    Layout.fillWidth: true
+                    onClicked: newProjectDialog.open()
+                }
+            }
+        }
+    }
+
+    FolderDialog {
+        id: openFolderDialog
+        title: "打开写作项目"
+        onAccepted: bridge.openProject(selectedFolder.toString())
+    }
+
+    Dialog {
+        id: newProjectDialog
+        title: "新建项目"
+        modal: true
+        anchors.centerIn: parent
+        width: 440
+        padding: 18
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+        header: Text {
+            text: "新建项目"
+            color: Theme.textPrimary
+            font.family: Theme.serifFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 16
+        }
+        contentItem: Column {
+            spacing: 10
+            width: parent.width
+            AppField { id: nameField; width: parent.width; label: "书名"; placeholder: "如：诡异复苏：我的笔记能改命" }
+            Row {
+                spacing: 8
+                width: parent.width
+                AppField { id: genreField; width: parent.width / 2 - 4; label: "题材"; placeholder: "如：悬疑脑洞" }
+                Column {
+                    spacing: 6
+                    width: parent.width / 2 - 4
+                    Text { text: "平台"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                    ComboBox {
+                        id: platformCombo
+                        width: parent.width
+                        model: ["番茄", "起点", "晋江", "七猫", "刺猬猫", "其他"]
+                        palette.window: Theme.bgCard
+                        palette.text: Theme.textPrimary
+                        palette.buttonText: Theme.textPrimary
+                        background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                    }
+                }
+            }
+            Column {
+                spacing: 6
+                width: parent.width
+                Text { text: "预计总字数（万字）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                AppSpinBox { id: totalWanSpin; width: parent.width; from: 20; to: 2000; stepSize: 10; value: 100 }
+            }
+            Column {
+                spacing: 6
+                width: parent.width
+                Text { text: "一句话灵感"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                TextArea {
+                    id: ideaArea
+                    width: parent.width
+                    height: 60
+                    placeholderText: "主角 + 核心设定 + 爽点方向…"
+                    placeholderTextColor: Theme.textTertiary
+                    color: Theme.textPrimary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsBody
+                    wrapMode: Text.Wrap
+                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                }
+            }
+            Row {
+                spacing: 8
+                anchors.right: parent.right
+                AppButton { text: "取消"; onClicked: newProjectDialog.close() }
+                AppButton {
+                    text: "创建并进入"
+                    kind: "primary"
+                    onClicked: {
+                        if (bridge.newProject(bridge.defaultBooksRoot(), nameField.text, genreField.text,
+                                              platformCombo.currentText, totalWanSpin.value, ideaArea.text)) {
+                            newProjectDialog.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

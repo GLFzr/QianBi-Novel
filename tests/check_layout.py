@@ -54,7 +54,12 @@ engine.warnings.connect(lambda msgs: warns.extend(m.toString() for m in msgs))
 engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
 assert engine.rootObjects(), "QML load failed"
 win = engine.rootObjects()[0]
-stack = win.findChild(QQuickItem, "mainStack")
+# 等待组件树实例化完成
+for _ in range(30):
+    app.processEvents()
+stack = win.findChild(QQuickItem, "panelStack")
+print("DEBUG panelStack found:", stack is not None, flush=True)
+assert stack, "panelStack not found"
 
 problems = []
 

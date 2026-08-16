@@ -1,0 +1,228 @@
+import QtQuick
+import QtQuick.Controls.Basic
+import QtQuick.Layouts
+import "."
+import "components"
+
+// 章节面板：章节列表（阅读/重写/带指导重写）+ 项目文件入口
+Item {
+    id: chapterPanel
+
+    signal openChapter(int num)
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 66
+            color: Theme.bgPanel
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 8
+                Column {
+                    spacing: 3
+                    Text {
+                        text: "章节"
+                        color: Theme.textPrimary
+                        font.family: Theme.serifFont
+                        font.pixelSize: Theme.fsTitle
+                        font.bold: true
+                    }
+                    Text {
+                        text: bridge.progressText
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
+                        font.family: Theme.monoFont
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    text: "📂 项目文件"
+                    height: 28
+                    onClicked: {
+                        fileModel.clear()
+                        var files = bridge.projectFiles()
+                        for (var i = 0; i < files.length; i++) fileModel.append(files[i])
+                        fileDialog.open()
+                    }
+                }
+            }
+        }
+
+        // 章节列表
+        ListView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: bridge.chapterModelProp
+            spacing: 3
+            clip: true
+            anchors.margins: 10
+
+            delegate: QueueRow {
+                width: ListView.view.width - 20
+                num: model.num
+                title: model.title
+                state: model.state
+                words: model.words
+                note: model.note
+                onOpenChapter: function (n) { bridge.openChapter(n); chapterPanel.openChapter(n) }
+                onRewriteChapter: function (n) { bridge.rewriteChapter(n) }
+                onRewriteChapterWithGuidance: function (n, g) { bridge.rewriteChapterWithGuidance(n, g) }
+            }
+
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
+                background: Item {}
+            }
+        }
+
+        // 空状态
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: bridge.chapterModelProp.rowCount === 0
+            Text {
+                anchors.centerIn: parent
+                text: "还没有章节\n点「流水线 ▶ 开始」启动写作"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
+                horizontalAlignment: Text.AlignHCenter
+            }
+        }
+    }
+
+    // ---- 项目文件浏览/编辑对话框 ----
+    Dialog {
+        id: fileDialog
+        modal: true
+        anchors.centerIn: parent
+        width: 820
+        height: 540
+        padding: 0
+        property string currentRel: ""
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+        header: Text {
+            text: "项目文件 · " + bridge.bookTitle
+            color: Theme.textPrimary
+            font.family: Theme.serifFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 16
+        }
+
+        ListModel { id: fileModel }
+
+        contentItem: RowLayout {
+            spacing: 0
+
+            Rectangle {
+                Layout.preferredWidth: 220
+                Layout.fillHeight: true
+                color: Theme.bgCard
+                Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
+
+                ListView {
+                    id: fileList
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    model: fileModel
+                    spacing: 2
+                    clip: true
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 32
+                        radius: 6
+                        color: fileList.currentIndex === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12) : "transparent"
+                        Row {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: 8
+                            spacing: 6
+                            Text {
+                                text: model.dir
+                                color: Theme.textTertiary
+                                font.pixelSize: Theme.fsTiny
+                                font.family: Theme.uiFont
+                            }
+                            Text {
+                                text: model.name
+                                color: fileList.currentIndex === index ? Theme.accent : Theme.textPrimary
+                                font.pixelSize: Theme.fsSmall
+                                font.family: Theme.uiFont
+                                elide: Text.ElideRight
+                                width: 130
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                fileList.currentIndex = index
+                                fileEditor.text = bridge.readProjectFile(model.rel)
+                                fileDialog.currentRel = model.rel
+                            }
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 10
+                spacing: 6
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: fileDialog.currentRel !== "" ? fileDialog.currentRel : "选择左侧文件"
+                        color: Theme.textSecondary
+                        font.family: Theme.monoFont
+                        font.pixelSize: Theme.fsTiny
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: fileEditor.text ? "字数：" + fileEditor.text.replace(/\s/g, "").length : ""
+                        color: Theme.textTertiary
+                        font.family: Theme.monoFont
+                        font.pixelSize: Theme.fsTiny
+                    }
+                }
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    TextArea {
+                        id: fileEditor
+                        color: Theme.textPrimary
+                        font.family: Theme.serifFont
+                        font.pixelSize: 15
+                        wrapMode: Text.Wrap
+                        selectByMouse: true
+                        background: Rectangle { color: Theme.bgLog; radius: 8 }
+                        padding: 10
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    AppButton {
+                        text: "保存修改"
+                        kind: "primary"
+                        enabled: fileDialog.currentRel !== ""
+                        onClicked: bridge.saveProjectFile(fileDialog.currentRel, fileEditor.text)
+                    }
+                }
+            }
+        }
+    }
+}

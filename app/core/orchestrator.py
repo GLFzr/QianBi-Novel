@@ -31,6 +31,7 @@ class Orchestrator(QThread):
     sig_stage = Signal(str)             # 当前总阶段 key
     sig_chapter_started = Signal(int)
     sig_step = Signal(int, str)         # 章号, 微循环步骤 key
+    sig_stream_chunk = Signal(str)      # LLM 流式输出增量（写作工作台实时显示）
     sig_chapter_done = Signal(dict)     # 章节记录
     sig_queue = Signal()                # 队列数据变化，通知 UI 刷新
     sig_finished = Signal(str)          # done / stopped
@@ -88,6 +89,10 @@ class Orchestrator(QThread):
         self._cur_num = num
         self._cur_step = step_key
         self.sig_step.emit(num, step_key)
+
+    def stream_chunk(self, text: str):
+        """LLM 流式增量 → UI（写作工作台实时显示）"""
+        self.sig_stream_chunk.emit(text)
 
     def checkpoint(self):
         if self._stop:

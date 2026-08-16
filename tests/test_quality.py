@@ -52,6 +52,12 @@ class FakeClient:
         return ("===第1章===\n### 第 1 章：测试\n- 核心事件：x\n"
                 "===第2章===\n### 第 2 章：测试2\n- 核心事件：y")
 
+    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None):
+        result = self.chat(prompt)
+        if on_chunk:
+            on_chunk(result)
+        return result
+
 
 class FakeCtx:
     def __init__(self, mode):
@@ -60,12 +66,16 @@ class FakeCtx:
         self.cfg = {}
         self.last_prompt = ""
         self.logs = []
+        self.streamed = []
 
     def log(self, level, msg):
         self.logs.append((level, msg))
 
     def checkpoint(self):
         pass
+
+    def stream_chunk(self, text):
+        self.streamed.append(text)
 
 
 class _FakeRouter:

@@ -238,6 +238,8 @@ class Bridge(QObject):
     chapterTextChanged = Signal()
     chapterFindingsChanged = Signal()
     lastRecordChanged = Signal()
+    liveDraftChanged = Signal()
+    streamingChanged = Signal()
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -265,6 +267,8 @@ class Bridge(QObject):
         self._chapter_path = ""
         self._chapter_findings = []
         self._last_record = {}
+        self._live_draft = ""
+        self._streaming = False
         self.chapterModel = ChapterListModel(self)
         self.logModel = LogListModel(self)
         self.connectionModel = ConnectionListModel(self)
@@ -289,6 +293,8 @@ class Bridge(QObject):
     def _get_chapter_text(self): return self._chapter_text
     def _get_chapter_path(self): return self._chapter_path
     def _get_chapter_findings(self): return self._chapter_findings
+    def _get_live_draft(self): return self._live_draft
+    def _get_streaming(self): return self._streaming
 
     def _get_tokens(self):
         if self.orch:
@@ -324,6 +330,8 @@ class Bridge(QObject):
     chapterPath = Property(str, _get_chapter_path, notify=chapterTextChanged)
     chapterFindings = Property("QVariantList", _get_chapter_findings, notify=chapterFindingsChanged)
     lastRecord = Property("QVariantMap", lambda self: self._last_record, notify=lastRecordChanged)
+    liveDraftText = Property(str, _get_live_draft, notify=liveDraftChanged)
+    isStreaming = Property(bool, _get_streaming, notify=streamingChanged)
     providerOptions = Property("QVariantList", lambda self: [
         {"key": k, "label": PROVIDERS[k]["label"], "baseUrl": PROVIDERS[k]["base_url"],
          "hint": PROVIDERS[k]["hint"], "models": PROVIDERS[k]["models"]}
@@ -409,6 +417,7 @@ class Bridge(QObject):
         self.orch.sig_stage.connect(self._on_stage)
         self.orch.sig_chapter_started.connect(self._on_chapter_started)
         self.orch.sig_step.connect(self._on_step)
+        self.orch.sig_stream_chunk.connect(self._on_stream_chunk)
         self.orch.sig_chapter_done.connect(self._on_chapter_done)
         self.orch.sig_queue.connect(self.refreshQueue)
         self.orch.sig_finished.connect(self._on_finished)
@@ -668,6 +677,8 @@ class Bridge(QObject):
     def _on_chapter_done(self, record: dict):
         self._cur_title = record.get("title", "")
         self._last_record = record
+        self._streaming = False
+        self.streamingChanged.emit()
         self.lastRecordChanged.emit()
         self.currentChapterChanged.emit()
         self.tokensChanged.emit()
@@ -676,6 +687,8 @@ class Bridge(QObject):
     def _on_finished(self, reason: str):
         self._set_running(False)
         self._set_paused(False)
+        self._streaming = False
+        self.streamingChanged.emit()
         self._cur_num = 0
         self._cur_step = ""
         self.currentChapterChanged.emit()
@@ -687,6 +700,8 @@ class Bridge(QObject):
     def _on_failed(self, msg: str):
         self._set_running(False)
         self._set_paused(False)
+        self._streaming = False
+        self.streamingChanged.emit()
         self.logModel.append("error", msg)
         self.toast.emit("error", msg)
         logger.error("流水线失败: %s", msg)
@@ -784,6 +799,24 @@ class Bridge(QObject):
         project.write_file(p, text)
         self.refreshQueue()
         self.toast.emit("ok", f"已保存 {rel}")
+
+    @Slot(str, result=str)
+    def exportProject(self, fmt: str) -> str:
+        """导出全本：txt（平台上传标准）或 epub（阅读器标准）。返回导出路径"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return ""
+        try:
+            from .. import export as export_mod
+            path = export_mod.export_project(self.proj, fmt)
+            self.toast.emit("ok", f"已导出：{os.path.basename(path)}")
+            return path
+        except ValueError as e:
+            self.toast.emit("warn", str(e))
+            return ""
+        except Exception as e:
+            self.toast.emit("error", f"导出失败: {e}")
+            return ""
 
     @Slot(result=str)
     def defaultBooksRoot(self) -> str:

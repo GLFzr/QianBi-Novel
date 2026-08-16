@@ -168,6 +168,104 @@ class LLMClient:
         self.last_latency = time.monotonic() - t0
         raise last_err
 
+    def chat_stream(self, prompt: str, system: str = "", temperature: float = None,
+                    on_chunk=None, on_reasoning=None) -> str:
+        """流式单轮对话：stream=true 逐块回调（on_chunk 收到增量文本），返回完整文本。
+
+        回调约定：
+          on_chunk(text)      —— 内容增量
+          on_reasoning(text)  —— 推理内容增量（DeepSeek 思考模式，可选）
+        重试/错误语义与 chat() 一致；失败时已回调的增量不回收（UI 按现场处理）。
+        """
+        self.last_prompt = prompt
+        self.last_error = ""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature if temperature is None else temperature,
+            "max_tokens": self.max_tokens,
+            "stream": True,
+        }
+        if self.thinking:
+            payload["thinking"] = {"type": self.thinking}
+        if self.thinking == "enabled" and self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
+
+        t0 = time.monotonic()
+        last_err = None
+        parts = []
+        for attempt in range(self.max_retries + 1):
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    with client.stream("POST", self._chat_url(), json=payload, headers=headers) as resp:
+                        if resp.status_code != 200:
+                            err = LLMError(
+                                f"API 返回 {resp.status_code}: {resp.text[:500]}",
+                                retryable=_status_retryable(resp.status_code))
+                            if not err.retryable:
+                                self.last_error = str(err)
+                                self.last_latency = time.monotonic() - t0
+                                raise err
+                            last_err = err
+                            continue
+                        for line in resp.iter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            data = line[5:].strip()
+                            if data == "[DONE]":
+                                break
+                            import json as _json
+                            try:
+                                chunk = _json.loads(data)
+                            except Exception:
+                                continue
+                            choices = chunk.get("choices") or []
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta") or {}
+                            c = delta.get("content") or ""
+                            r = delta.get("reasoning_content") or ""
+                            if c:
+                                parts.append(c)
+                                if on_chunk:
+                                    on_chunk(c)
+                            if r and on_reasoning:
+                                on_reasoning(r)
+                usage = getattr(resp, "_usage", None) if False else None
+                # stream 模式 usage 通常在最后一块；未能解析也不影响
+                break
+            except httpx.TimeoutException:
+                last_err = LLMError("请求超时，请检查网络或增大 timeout", retryable=True)
+            except httpx.RequestError as e:
+                last_err = LLMError(f"网络错误: {e}", retryable=True)
+            except LLMError as e:
+                if not e.retryable:
+                    raise
+                last_err = e
+            except Exception as e:
+                # 流中断（连接断开等）视为可重试，但已产生的增量不回收
+                last_err = LLMError(f"流式读取中断: {e}", retryable=True)
+            if attempt < self.max_retries:
+                delay = self.backoff_base * (2 ** attempt)
+                logger.warning("LLM stream retry %s/%s after %.1fs: %s",
+                               attempt + 1, self.max_retries, delay, last_err)
+                time.sleep(delay)
+        content = "".join(parts).strip()
+        self.last_latency = time.monotonic() - t0
+        if last_err and not content:
+            self.last_error = str(last_err)
+            raise last_err
+        if not content and not last_err:
+            raise LLMError("模型返回空内容 (stream)")
+        return content
+
     def test_connection(self) -> str:
         """测试连接，成功返回提示文本，失败抛 LLMError"""
         url = self.base_url

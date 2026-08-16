@@ -51,12 +51,13 @@ assert engine.rootObjects(), "QML load failed"
 win = engine.rootObjects()[0]
 
 os.makedirs("shots", exist_ok=True)
-stack = win.findChild(type(win), "mainStack")
+stack = win.findChild(type(win), "panelStack")
 if stack is None:
     from PySide6.QtQuick import QQuickItem
-    stack = win.findChild(QQuickItem, "mainStack")
+    stack = win.findChild(QQuickItem, "panelStack")
+assert stack, "panelStack not found"
 
-pages = [("1_bookshelf", 0), ("2_monitor", 1), ("3_chapter", 2), ("4_connections", 3)]
+pages = [("1_bookshelf", 0), ("2_pipeline", 1), ("3_chapters", 2), ("4_settings", 3)]
 results = []
 
 
