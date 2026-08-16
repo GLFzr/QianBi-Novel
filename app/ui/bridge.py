@@ -284,6 +284,18 @@ class Bridge(QObject):
     def _get_stage_key(self): return self._stage_key
     def _get_progress_text(self): return self._progress_text
     def _get_progress_value(self): return self._progress_value
+
+    def _get_progress_percent_text(self):
+        """进度百分比文本：无总字数目标（无限续写）时显示『续写中』而非误导的 0%"""
+        if not self.proj:
+            return ""
+        state = st.load_state(self.proj)
+        total = state.get("total_chapters", 0) or project.planned_chapters(
+            self.proj, self.cfg.get("writing", {}).get("chapter_word_target", 3000))
+        if not total:
+            return "续写中"
+        done = len(project.list_chapters(self.proj))
+        return f"{int(done / total * 100)}%"
     def _get_running(self): return self._running
     def _get_paused(self): return self._paused
     def _get_cur_num(self): return self._cur_num
@@ -317,6 +329,7 @@ class Bridge(QObject):
     stageKey = Property(str, _get_stage_key, notify=stageKeyChanged)
     progressText = Property(str, _get_progress_text, notify=progressChanged)
     progressValue = Property(float, _get_progress_value, notify=progressChanged)
+    progressPercentText = Property(str, _get_progress_percent_text, notify=progressChanged)
     isRunning = Property(bool, _get_running, notify=runningChanged)
     isPaused = Property(bool, _get_paused, notify=pausedChanged)
     currentChapterNum = Property(int, _get_cur_num, notify=currentChapterChanged)
@@ -382,8 +395,16 @@ class Bridge(QObject):
         meta_parts = [p for p in [info["genre"], info["platform"],
                                   f"目标 {info['total_words_wan']} 万字" if info["total_words_wan"] else ""] if p]
         self._book_meta = " · ".join(meta_parts)
+        # 恢复最近一次定稿记录（质量格/快捷按钮的数据源）
+        _state = st.load_state(path)
+        _hist = _state.get("history") or []
+        if _hist:
+            self._last_record = dict(sorted(_hist, key=lambda h: h.get("num", 0))[-1])
+        else:
+            self._last_record = {}
         self._refresh_progress()
         self.refreshQueue()
+        self.lastRecordChanged.emit()
         self.bookTitleChanged.emit()
         self.bookMetaChanged.emit()
         self.hasProjectChanged.emit()

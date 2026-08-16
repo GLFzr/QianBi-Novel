@@ -64,7 +64,7 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    text: Math.round(bridge.progressValue * 100) + "%"
+                    text: bridge.progressPercentText
                     color: Theme.accent
                     font.pixelSize: Theme.fsTiny
                     font.family: Theme.monoFont
@@ -110,7 +110,8 @@ Item {
                 Layout.fillWidth: true
                 Text {
                     text: bridge.currentChapterNum > 0
-                          ? "正在写 第 " + bridge.currentChapterNum + " 章"
+                          ? (bridge.isRunning ? "正在写 第 " + bridge.currentChapterNum + " 章"
+                                              : "当前 第 " + bridge.currentChapterNum + " 章")
                           : (bridge.isRunning ? "准备中…" : "待命")
                     color: Theme.textPrimary
                     font.family: Theme.uiFont

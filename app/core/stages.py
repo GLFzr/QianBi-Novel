@@ -370,6 +370,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
         tracking = _update_tracking(ctx, num, prose)
         applied = [k for k in tracking.keys()]
         ctx.log("ok", f"追踪文件已更新：{', '.join(applied) if applied else '（无变化）'}")
+    except PipelineStopped:
+        # 停止请求在定稿收尾中到达：正文已落库，保留本记录，返回后由调度层停止
+        ctx.log("info", f"第 {num} 章已落库，停止请求在收尾中到达，记录保留")
     except Exception as e:
         ctx.log("warn", f"追踪更新失败（不阻断）：{e}")
 
@@ -395,6 +398,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
             if new_global.strip():
                 memory.write_global_summary(proj, new_global)
             ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
+    except PipelineStopped:
+        ctx.log("info", f"第 {num} 章摘要链更新被停止请求中断（不影响已落库正文与记录）")
     except Exception as e:
         ctx.log("warn", f"摘要链更新失败（不阻断）：{e}")
 
