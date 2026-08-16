@@ -1,7 +1,7 @@
 import QtQuick
 import ".."
 
-Row {
+Flow {
     id: pills
     property string currentStep: ""     // assemble/draft/scan/deslop/review/finalize（空=未开始）
     property bool running: false
@@ -16,6 +16,7 @@ Row {
     ]
 
     spacing: 5
+    flow: Flow.LeftToRight
 
     Repeater {
         model: pills.steps

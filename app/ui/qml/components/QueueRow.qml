@@ -13,7 +13,7 @@ Rectangle {
 
     signal openChapter(int num)
     signal rewriteChapter(int num)
-    signal rewriteChapterWithGuidance(int num, string guidance)
+    signal requestGuidanceRewrite(int num)
 
     width: ListView.view ? ListView.view.width : 300
     height: 46
@@ -99,79 +99,11 @@ Rectangle {
         }
         MenuItem {
             text: "带指导重写…"
-            onTriggered: guidanceDialog.open()
+            onTriggered: row.requestGuidanceRewrite(row.num)
         }
         MenuItem {
             text: "打开查看"
             onTriggered: row.openChapter(row.num)
-        }
-    }
-
-    Dialog {
-        id: guidanceDialog
-        modal: true
-        anchors.centerIn: parent
-        width: 420
-        padding: 18
-        title: "带指导重写 第 " + row.num + " 章"
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
-        }
-        header: Text {
-            text: guidanceDialog.title
-            color: Theme.textPrimary
-            font.family: Theme.serifFont
-            font.pixelSize: Theme.fsTitle
-            font.bold: true
-            padding: 18
-        }
-        contentItem: Column {
-            spacing: 10
-            width: parent.width
-            Text {
-                text: "写下你对本章的重写要求（会注入正文生成 prompt）："
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsTiny
-                font.family: Theme.uiFont
-            }
-            TextField {
-                id: guidanceInput
-                width: parent.width
-                placeholderText: "如：这章别写死女主；打脸要写在场配角的反应；结尾钩子指向下章的拍卖会…"
-                placeholderTextColor: Theme.textTertiary
-                color: Theme.textPrimary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsBody
-                selectByMouse: true
-                background: Rectangle {
-                    radius: Theme.rBtn
-                    color: Theme.bgHover
-                    border.width: 1
-                    border.color: Theme.border
-                }
-            }
-        }
-        footer: Row {
-            spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
-            AppButton {
-                text: "取消"
-                kind: "ghost"
-                onClicked: guidanceDialog.close()
-            }
-            AppButton {
-                text: "重写"
-                kind: "primary"
-                onClicked: {
-                    row.rewriteChapterWithGuidance(row.num, guidanceInput.text)
-                    guidanceInput.text = ""
-                    guidanceDialog.close()
-                }
-            }
         }
     }
 }

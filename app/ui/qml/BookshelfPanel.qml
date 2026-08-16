@@ -83,7 +83,6 @@ Item {
                         width: 40; height: 40; radius: 8
                         color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
                         Text {
-                            anchors.centerIn: parent
                             text: modelData.name.length > 0 ? modelData.name.charAt(0) : "书"
                             color: Theme.accent
                             font.family: Theme.serifFont
@@ -166,9 +165,9 @@ Item {
 
     Dialog {
         id: newProjectDialog
+        objectName: "newProjectDialog"
         title: "新建项目"
         modal: true
-        anchors.centerIn: parent
         width: 440
         padding: 18
         background: Rectangle {
@@ -188,6 +187,16 @@ Item {
         contentItem: Column {
             spacing: 10
             width: parent.width
+            Row {
+                spacing: 8
+                width: parent.width
+                AppField { id: locationField; width: parent.width - 70; label: "保存位置"; text: bridge.defaultBooksRoot() }
+                AppButton {
+                    text: "选择…"
+                    anchors.bottom: parent.bottom
+                    onClicked: locationDialog.open()
+                }
+            }
             AppField { id: nameField; width: parent.width; label: "书名"; placeholder: "如：诡异复苏：我的笔记能改命" }
             Row {
                 spacing: 8
@@ -239,13 +248,23 @@ Item {
                     text: "创建并进入"
                     kind: "primary"
                     onClicked: {
-                        if (bridge.newProject(bridge.defaultBooksRoot(), nameField.text, genreField.text,
+                        if (bridge.newProject(locationField.text, nameField.text, genreField.text,
                                               platformCombo.currentText, totalWanSpin.value, ideaArea.text)) {
                             newProjectDialog.close()
                         }
                     }
                 }
             }
+        }
+    }
+
+    // 选择保存位置
+    FolderDialog {
+        id: locationDialog
+        title: "选择保存位置"
+        onAccepted: {
+            var p = selectedFolder.toString().replace("file:///", "")
+            locationField.text = p
         }
     }
 }

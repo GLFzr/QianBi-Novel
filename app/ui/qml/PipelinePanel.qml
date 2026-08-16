@@ -78,27 +78,27 @@ Item {
                 spacing: 8
                 AppButton {
                     visible: !bridge.isRunning
-                    text: "▶ 开始"
+                    text: "开始"
                     kind: "primary"
                     Layout.fillWidth: true
                     onClicked: bridge.startPipeline()
                 }
                 AppButton {
                     visible: bridge.isRunning && !bridge.isPaused
-                    text: "⏸ 暂停"
+                    text: "暂停"
                     Layout.fillWidth: true
                     onClicked: bridge.pausePipeline()
                 }
                 AppButton {
                     visible: bridge.isRunning && bridge.isPaused
-                    text: "▶ 继续"
+                    text: "继续"
                     kind: "primary"
                     Layout.fillWidth: true
                     onClicked: bridge.resumePipeline()
                 }
                 AppButton {
                     visible: bridge.isRunning
-                    text: "⏹ 停止"
+                    text: "停止"
                     kind: "danger"
                     Layout.fillWidth: true
                     onClicked: bridge.stopPipeline()
@@ -130,10 +130,10 @@ Item {
                 running: bridge.isRunning && !bridge.isPaused
             }
 
-            // 质量四格（最近一章）
+            // 质量四格（最近一章，2×2）
             GridLayout {
                 Layout.fillWidth: true
-                columns: 4
+                columns: 2
                 columnSpacing: 6
                 rowSpacing: 6
                 Repeater {
@@ -145,29 +145,28 @@ Item {
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
-                        height: 46
+                        height: 42
                         radius: 8
                         color: Theme.bgCard
                         border.width: 1
                         border.color: Theme.border
-                        Column {
+                        Row {
                             anchors.centerIn: parent
-                            spacing: 2
+                            spacing: 8
                             Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
                                 text: modelData.label
                                 color: Theme.textTertiary
                                 font.pixelSize: Theme.fsTiny
                                 font.family: Theme.uiFont
                             }
                             Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
                                 text: bridge.lastRecord[modelData.key] !== undefined ? bridge.lastRecord[modelData.key] : "—"
                                 color: modelData.bad && bridge.lastRecord[modelData.key] > 0 ? Theme.danger
                                      : modelData.key === "words" ? Theme.success
                                      : Theme.textPrimary
-                                font.pixelSize: 16
+                                font.pixelSize: 15
                                 font.family: Theme.monoFont
+                                font.bold: true
                             }
                         }
                     }
@@ -179,13 +178,13 @@ Item {
                 Layout.fillWidth: true
                 spacing: 6
                 AppButton {
-                    text: "↺ 重写本章"
+                    text: "重写本章"
                     enabled: !bridge.isRunning && bridge.lastRecord.num !== undefined
                     Layout.fillWidth: true
                     onClicked: bridge.rewriteChapter(bridge.lastRecord.num)
                 }
                 AppButton {
-                    text: "打开最新章"
+                    text: "打开最新"
                     enabled: bridge.lastRecord.num !== undefined
                     Layout.fillWidth: true
                     onClicked: { bridge.openChapter(bridge.lastRecord.num); pipeline.openChapter(bridge.lastRecord.num) }
@@ -194,65 +193,5 @@ Item {
         }
 
         Item { Layout.fillHeight: true }
-    }
-
-    // 带指导重写对话框
-    Dialog {
-        id: guidanceDialog
-        modal: true
-        anchors.centerIn: parent
-        width: 420
-        padding: 16
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
-        }
-        header: Text {
-            text: "带指导重写 第 " + (bridge.lastRecord.num || "?") + " 章"
-            color: Theme.textPrimary
-            font.family: Theme.serifFont
-            font.pixelSize: Theme.fsTitle
-            font.bold: true
-            padding: 16
-        }
-        contentItem: Column {
-            spacing: 10
-            width: parent.width
-            Text {
-                text: "写下重写要求（注入正文生成 prompt）："
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsTiny
-                font.family: Theme.uiFont
-            }
-            TextArea {
-                id: guidanceArea
-                width: parent.width
-                height: 90
-                placeholderText: "如：女主这章不要下线；结尾钩子指向拍卖会…"
-                placeholderTextColor: Theme.textTertiary
-                color: Theme.textPrimary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsBody
-                wrapMode: Text.Wrap
-                background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
-            }
-        }
-        footer: Row {
-            spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 10
-            AppButton { text: "取消"; onClicked: guidanceDialog.close() }
-            AppButton {
-                text: "重写"
-                kind: "primary"
-                onClicked: {
-                    bridge.rewriteChapterWithGuidance(bridge.lastRecord.num, guidanceArea.text)
-                    guidanceArea.text = ""
-                    guidanceDialog.close()
-                }
-            }
-        }
     }
 }

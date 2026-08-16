@@ -10,6 +10,8 @@ Item {
 
     signal openChapter(int num)
 
+    property int guidanceNum: 0
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -41,7 +43,7 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 AppButton {
-                    text: "📂 项目文件"
+                    text: "项目文件"
                     height: 28
                     onClicked: {
                         fileModel.clear()
@@ -71,7 +73,10 @@ Item {
                 note: model.note
                 onOpenChapter: function (n) { bridge.openChapter(n); chapterPanel.openChapter(n) }
                 onRewriteChapter: function (n) { bridge.rewriteChapter(n) }
-                onRewriteChapterWithGuidance: function (n, g) { bridge.rewriteChapterWithGuidance(n, g) }
+                onRequestGuidanceRewrite: function (n) {
+                    chapterPanel.guidanceNum = n
+                    chapterGuidanceDialog.open()
+                }
             }
 
             ScrollBar.vertical: ScrollBar {
@@ -87,8 +92,7 @@ Item {
             Layout.fillHeight: true
             visible: bridge.chapterModelProp.rowCount === 0
             Text {
-                anchors.centerIn: parent
-                text: "还没有章节\n点「流水线 ▶ 开始」启动写作"
+                text: "还没有章节\n点「流水线 开始」启动写作"
                 color: Theme.textTertiary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsSmall
@@ -97,11 +101,83 @@ Item {
         }
     }
 
+    // ---- 带指导重写对话框（面板级统一，窗口居中）----
+    Dialog {
+        id: chapterGuidanceDialog
+        objectName: "chapterGuidanceDialog"
+        modal: true
+        width: 440
+        padding: 18
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+        header: Text {
+            text: "带指导重写 第 " + chapterPanel.guidanceNum + " 章"
+            color: Theme.textPrimary
+            font.family: Theme.serifFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 18
+        }
+        contentItem: Column {
+            spacing: 10
+            width: parent.width
+            Text {
+                text: "写下你对本章的重写要求（会注入正文生成 prompt）："
+                color: Theme.textTertiary
+                font.pixelSize: Theme.fsTiny
+                font.family: Theme.uiFont
+                wrapMode: Text.Wrap
+                width: parent.width
+            }
+            TextArea {
+                id: guidanceArea
+                width: parent.width
+                height: 96
+                placeholderText: "如：这章别写死女主；打脸要写在场配角的反应；结尾钩子指向下章的拍卖会…"
+                placeholderTextColor: Theme.textTertiary
+                color: Theme.textPrimary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+                selectByMouse: true
+                background: Rectangle {
+                    radius: Theme.rBtn
+                    color: Theme.bgHover
+                    border.width: 1
+                    border.color: Theme.border
+                }
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "取消"
+                kind: "ghost"
+                onClicked: chapterGuidanceDialog.close()
+            }
+            AppButton {
+                text: "重写"
+                kind: "primary"
+                onClicked: {
+                    bridge.rewriteChapterWithGuidance(chapterPanel.guidanceNum, guidanceArea.text)
+                    guidanceArea.text = ""
+                    chapterGuidanceDialog.close()
+                }
+            }
+        }
+    }
+
     // ---- 项目文件浏览/编辑对话框 ----
     Dialog {
         id: fileDialog
+        objectName: "fileDialog"
         modal: true
-        anchors.centerIn: parent
         width: 820
         height: 540
         padding: 0

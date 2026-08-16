@@ -202,7 +202,7 @@ ApplicationWindow {
                     }
                     Text {
                         visible: bridge.isStreaming
-                        text: "⏳ 生成中…"
+                        text: "生成中…"
                         color: Theme.accent
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsTiny
@@ -213,7 +213,7 @@ ApplicationWindow {
                         onClicked: bridge.scanChapterText(editor.text)
                     }
                     AppButton {
-                        text: "💾 保存"
+                        text: "保存"
                         kind: "primary"
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
                         onClicked: bridge.saveChapterText(editor.text)
@@ -271,7 +271,10 @@ ApplicationWindow {
                     onTextChanged: {
                         if (bridge.isStreaming) {
                             cursorPosition = text.length
-                            Qt.callLater(function () { positionViewAtEnd() })
+                            Qt.callLater(function () {
+                                var fl = editor.flickableItem
+                                if (fl) fl.positionViewAtEnd()
+                            })
                         }
                     }
                 }
@@ -423,7 +426,7 @@ ApplicationWindow {
             }
             Text {
                 visible: bridge.isPaused
-                text: "⏸ 已暂停"
+                text: "已暂停"
                 color: Theme.accent
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.uiFont
