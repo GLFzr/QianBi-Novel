@@ -223,10 +223,10 @@ Rectangle {
                 font.family: Theme.monoFont; font.pixelSize: 11
             }
 
-            RToolButton { icon: "chapters"; label: "目录"; active: drawer.opened && drawerTab === "toc"; onClicked: drawer.opened && drawerTab === "toc" ? hideDrawer() : showDrawer("toc") }
-            RToolButton { icon: "notes"; label: "标注"; active: drawer.opened && drawerTab === "marks"; onClicked: drawer.opened && drawerTab === "marks" ? hideDrawer() : showDrawer("marks") }
-            RToolButton { icon: "settings"; label: "排版"; active: prefsPanel.visible; onClicked: prefsPanel.visible ? prefsPanel.visible = false : prefsPanel.visible = true }
-            RToolButton { icon: "bookmark"; label: "加书签"; onClicked: {
+            RToolButton { icon: "chapters"; label: ""; tip: "目录"; active: drawer.opened && drawerTab === "toc"; onClicked: drawer.opened && drawerTab === "toc" ? hideDrawer() : showDrawer("toc") }
+            RToolButton { icon: "notes"; label: ""; tip: "标注与书签"; active: drawer.opened && drawerTab === "marks"; onClicked: drawer.opened && drawerTab === "marks" ? hideDrawer() : showDrawer("marks") }
+            RToolButton { icon: "settings"; label: ""; tip: "阅读排版（主题/字号/行距）"; active: prefsPanel.visible; onClicked: prefsPanel.visible ? prefsPanel.visible = false : prefsPanel.visible = true }
+            RToolButton { icon: "bookmark"; label: ""; tip: "在当前位置加书签"; onClicked: {
                 bridge.addBookmark(curNum, flick.contentY / Math.max(1, flick.contentHeight - flick.height), "")
                 refreshStore()
             } }
@@ -806,6 +806,7 @@ Rectangle {
         id: rb
         property string icon: ""
         property string label: ""
+        property string tip: ""
         property bool accent: false
         property bool active: false
         property bool dimmed: false
@@ -844,6 +845,8 @@ Rectangle {
             enabled: !rb.dimmed
             onClicked: rb.clicked()
         }
+        ToolTip.visible: rb.tip !== "" && rbMa.containsMouse
+        ToolTip.text: rb.tip
     }
 
     component RMiniText: Text {

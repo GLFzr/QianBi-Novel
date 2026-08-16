@@ -352,7 +352,7 @@ ApplicationWindow {
                         visible: editor.text !== ""
                         text: editor.text.replace(/\s/g, "").length + " 字"
                         color: Theme.textTertiary
-                        font.family: Theme.monoFont
+                        font.family: Theme.uiFont
                         font.pixelSize: Theme.fsTiny
                     }
                     Row {
@@ -392,13 +392,15 @@ ApplicationWindow {
                     }
                     AppButton {
                         iconName: "scan"
-                        text: "扫描 AI 味"
+                        text: ""
                         enabled: !bridge.isStreaming && editor.text !== ""
                         onClicked: bridge.scanChapterText(editor.text)
+                        ToolTip.visible: hovered
+                        ToolTip.text: "扫描 AI 味"
                     }
                     AppButton {
                         iconName: "pen"
-                        text: "局部重写"
+                        text: ""
                         visible: !bridge.isStreaming
                         enabled: !bridge.isStreaming && editor.selectedText !== "" && !bridge.isRewritingSelection
                         onClicked: {
@@ -406,6 +408,8 @@ ApplicationWindow {
                             mainWindow.selEnd = editor.selectionEnd
                             rewriteDialog.open()
                         }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "局部改写选中段落 · Ctrl+E"
                     }
                     AppButton {
                         iconName: "save"
@@ -437,7 +441,7 @@ ApplicationWindow {
                     AppButton {
                         id: versionsBtn
                         iconName: "history"
-                        text: "版本"
+                        text: ""
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
                         onClicked: {
                             versionListModel.clear()
@@ -451,7 +455,7 @@ ApplicationWindow {
                     }
                     AppButton {
                         iconName: "export"
-                        text: "导出"
+                        text: ""
                         enabled: bridge.hasProject && !bridge.isStreaming
                         onClicked: {
                             exportDialog.refreshPreview()
@@ -559,7 +563,7 @@ ApplicationWindow {
                             text: bridge.reasoningText
                             readOnly: true
                             color: Theme.textSecondary
-                            font.family: Theme.monoFont
+                            font.family: Theme.uiFont
                             font.pixelSize: Theme.fsTiny
                             wrapMode: Text.Wrap
                             background: Rectangle { color: "transparent" }
@@ -703,7 +707,7 @@ ApplicationWindow {
                 text: bridge.progressText !== "" ? "进度 " + bridge.progressText : "未打开项目"
                 color: Theme.textTertiary
                 font.pixelSize: Theme.fsTiny
-                font.family: Theme.monoFont
+                font.family: Theme.uiFont
             }
             Rectangle { width: 1; height: 12; color: Theme.border }
             Text {
@@ -720,7 +724,7 @@ ApplicationWindow {
                 text: "累计 " + bridge.totalTokens.toLocaleString() + " tokens · ≈ " + bridge.estCost
                 color: Theme.textTertiary
                 font.pixelSize: Theme.fsTiny
-                font.family: Theme.monoFont
+                font.family: Theme.uiFont
                 MouseArea {
                     anchors.fill: parent
                     anchors.margins: -6
@@ -793,6 +797,8 @@ ApplicationWindow {
                             selToolbar.visible = false
                             rewriteDialog.open()
                         }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "局部改写选中段落 · Ctrl+E"
                     }
                 }
             }
@@ -996,7 +1002,7 @@ ApplicationWindow {
                     required property var modelData
                     spacing: 2
                     Text { text: modelData.k; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    Text { text: modelData.v; color: Theme.textPrimary; font.pixelSize: Theme.fsBig; font.family: Theme.monoFont }
+                    Text { text: modelData.v; color: Theme.textPrimary; font.pixelSize: Theme.fsBig; font.family: Theme.uiFont }
                 }
             }
         }
@@ -1100,7 +1106,7 @@ ApplicationWindow {
             // 选中段原文（只读）
             Text {
                 text: "选中段落（" + (mainWindow.selEnd - mainWindow.selStart) + " 字符）："
-                color: Theme.textTertiary
+                color: Theme.textSecondary
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.uiFont
             }
@@ -1118,7 +1124,7 @@ ApplicationWindow {
                     TextArea {
                         text: editor.selectedText !== "" ? editor.selectedText : ""
                         readOnly: true
-                        color: Theme.textSecondary
+                        color: Theme.textPrimary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsSmall
                         wrapMode: Text.Wrap
@@ -1428,7 +1434,7 @@ ApplicationWindow {
                                 Text {
                                     text: model.ts + "  ·  " + model.words + " 字"
                                     color: Theme.textTertiary
-                                    font.family: Theme.monoFont
+                                    font.family: Theme.uiFont
                                     font.pixelSize: Theme.fsTiny
                                 }
                             }
@@ -1478,7 +1484,7 @@ ApplicationWindow {
                                 text: model.text
                                 color: model.op === "del" ? Theme.danger
                                      : model.op === "add" ? Theme.success : Theme.textSecondary
-                                font.family: Theme.monoFont
+                                font.family: Theme.uiFont
                                 font.pixelSize: Theme.fsTiny
                                 wrapMode: Text.Wrap
                             }

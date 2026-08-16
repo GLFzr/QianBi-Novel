@@ -45,7 +45,7 @@ Canvas {
             p(); mv(.72, .32); ln(.5, .26); mv(.72, .68); ln(.5, .74); stroke2()
             break
         case "play":  // 流水线：三角播放
-            p(); mv(.34, .24); ln(.72, .5); ln(.34, .76); ctx.closePath(); stroke2()
+            p(); mv(.32, .24); ln(.70, .5); ln(.32, .76); ctx.closePath(); stroke2()
             break
         case "chapters":  // 章节：三行列表
             p(); mv(.24, .3); ln(.76, .3); mv(.24, .5); ln(.76, .5); mv(.24, .7); ln(.76, .7); stroke2()
