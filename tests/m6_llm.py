@@ -136,7 +136,19 @@ def watchdog():
     if orch.isRunning():
         QTimer.singleShot(2000, watchdog)
         return
+    try:
+        _final_report()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        _write_report([])   # 兜底：报告生成失败也要落一份部分报告（不许一崩全弃）
+        app.quit()
+
+
+def _final_report():
     print(f"\n[m6-llm] 结束，耗时 {int(time.monotonic() - t0)}s", flush=True)
+
+    RESULTS = []
 
     RESULTS = []
 
@@ -179,6 +191,7 @@ def watchdog():
     check("W3", "想法消费后标记 applied", idea_rec and idea_rec[0]["status"] == "applied")
 
     passed = sum(1 for r in RESULTS if r[2])
+    return RESULTS
     lines = ["# M6 Phase B/C 报告（真实 LLM：OpenCode Go · deepseek-v4-flash）", "",
              f"- 项目：{os.path.basename(PROJ)} · {TOTAL_CHAPTERS} 章 @1600 字 · 耗时 {int(time.monotonic() - t0)}s",
                  f"- 结果：**{passed} / {len(RESULTS)} PASS**", "",

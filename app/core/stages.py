@@ -150,8 +150,19 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
             nearby.append(project.read_file(p)[:800])
     nearby_text = "\n\n".join(nearby) if nearby else "（无相邻细纲）"
 
+    # 场景承接锚点：上一章「实际写出来的结尾」（细纲只看摘要会丢章末钩子，导致剧情断裂）
+    previous_ending = "（本章为第一章，无上一章结尾）"
+    chapters = project.list_chapters(ctx.proj)
+    if chapters:
+        last_text = project.read_file(chapters[-1][2])
+        if chapters[-1][0] == start - 1 and last_text:
+            previous_ending = last_text[-500:]
+    # 待回收伏笔（细纲层排期，防"回收：未定"无限堆积）
+    foreshadows = memory.unfished_foreshadows(ctx.proj) or "（暂无待回收伏笔）"
+
     outlines = _generate_outline_batch(ctx, todo, chapter_words,
-                                       core_setting, volume_outline, nearby_text)
+                                       core_setting, volume_outline, nearby_text,
+                                       previous_ending, foreshadows)
     saved = []
     for num, title, content in outlines:
         if num in existing:
@@ -166,7 +177,8 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
 
 def _generate_outline_batch(ctx, todo: list, chapter_words: int,
                             core_setting: str, volume_outline: str,
-                            nearby_text: str) -> list:
+                            nearby_text: str, previous_ending: str = "",
+                            foreshadows: str = "") -> list:
     """一次调用生成一批细纲；解析失败或调用失败 → 拆半递归；单章失败跳过
 
     todo: 待生成章号列表（有序）。返回 [(num, title, content)]，失败章不在其中。
@@ -186,6 +198,8 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         chapter_words=chapter_words,
         chapter_words_max=int(chapter_words * 1.1),
         next_chapter=start + 1,
+        previous_ending=previous_ending or "（无）",
+        foreshadows=foreshadows or "（无）",
     )
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
@@ -204,9 +218,11 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         ctx.log("warn", f"第 {start}-{end} 章细纲批失败：{e}，拆半重试…")
         mid = len(todo) // 2
         left = _generate_outline_batch(ctx, todo[:mid], chapter_words,
-                                       core_setting, volume_outline, nearby_text)
+                                       core_setting, volume_outline, nearby_text,
+                                       previous_ending, foreshadows)
         right = _generate_outline_batch(ctx, todo[mid:], chapter_words,
-                                        core_setting, volume_outline, nearby_text)
+                                        core_setting, volume_outline, nearby_text,
+                                        previous_ending, foreshadows)
         return left + right
 
 
