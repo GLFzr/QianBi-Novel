@@ -4,14 +4,48 @@ import QtQuick.Layouts
 import "."
 import "components"
 
-// 设置面板：连接与模型（列表 + 紧凑表单 + 槽位绑定）
+// 设置面板：连接与模型 · 写作偏好 · 外观（编辑器/阅读） · 备份与快捷键
 Item {
     id: settings
+    objectName: "settingsPanel"
 
     property string editingId: ""
     property bool isNew: false
+    property int settingsTab: 0
+    property var wp: ({})
+    property var ep: ({ fontScale: 1.0, narrow: true })
 
     ListModel { id: modelList }
+
+    function refreshPrefs() {
+        wp = bridge.writingPrefs()
+        ep = bridge.editorPrefs()
+        wordTargetSpin.value = bridge.chapterWordTarget()
+        reviewSwitch.checked = bridge.reviewEnabled()
+        autoBackupSwitch.checked = bridge.autoBackupEnabled()
+    }
+    Component.onCompleted: {
+        refreshPrefs()
+        var opts = bridge.connectionOptions()
+        if (opts.length > 0) startEdit(opts[0].id)
+        else startNew()
+    }
+    Connections {
+        target: bridge
+        function onModelsFetched(cid, models) {
+            if (models.length > 0) {
+                modelList.clear()
+                for (var i = 0; i < models.length; i++) modelList.append({ "m": models[i] })
+                modelField.currentIndex = 0
+                bridge.showToast("ok", "拉取到 " + models.length + " 个模型，可从下拉选择")
+            } else {
+                bridge.showToast("warn", "未拉取到模型（接口不支持 /models 或连接失败）")
+            }
+        }
+        function onConnTestResult(cid, ok, msg) {
+            bridge.showToast(ok ? "ok" : "error", msg)
+        }
+    }
 
     function currentModelName() {
         if (modelField.editable && modelField.editText !== "")
@@ -84,25 +118,97 @@ Item {
                 spacing: 8
                 Column {
                     spacing: 3
+                    Layout.fillWidth: true
                     Text {
                         text: "设置"
                         color: Theme.textPrimary
-                        font.family: Theme.serifFont
-                        font.pixelSize: Theme.fsTitle
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
                         font.bold: true
                     }
                     Text {
-                        text: "连接与模型 · 任务槽位"
+                        text: ["连接与模型 · 任务槽位", "写作偏好 · 闸门", "编辑器 · 阅读", "备份 · 快捷键"][settings.settingsTab]
                         color: Theme.textTertiary
                         font.pixelSize: Theme.fsTiny
                         font.family: Theme.uiFont
                     }
                 }
-                Item { Layout.fillWidth: true }
                 AppButton {
+                    visible: settings.settingsTab === 0
                     text: "＋"
                     height: 28
                     onClicked: settings.startNew()
+                }
+            }
+
+            // 标签栏
+            Row {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 6
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 4
+                Repeater {
+                    model: ["连接与模型", "写作偏好", "外观", "系统"]
+                    delegate: Rectangle {
+                        required property string modelData
+                        required property int index
+                        height: 24; radius: 7
+                        width: tabLabel.implicitWidth + 18
+                        color: settings.settingsTab === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16) : "transparent"
+                        border.width: 1
+                        border.color: settings.settingsTab === index ? Theme.accent : Theme.border
+                        Text {
+                            id: tabLabel
+                            anchors.centerIn: parent
+                            text: parent.modelData
+                            color: settings.settingsTab === index ? Theme.accent : Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: settings.settingsTab = index }
+                    }
+                }
+            }
+        }
+
+        StackLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            currentIndex: settings.settingsTab
+
+            // ============ 页0：连接与模型 ============
+            ColumnLayout {
+                spacing: 0
+
+        // ---- 连接与模型适配说明 ----
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.margins: 10
+            radius: Theme.rCard
+            color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.07)
+            border.width: 1
+            border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.3)
+            height: apiNoteCol.implicitHeight + 16
+            ColumnLayout {
+                id: apiNoteCol
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 3
+                Text {
+                    text: "ℹ 关于连接与提示词适配"
+                    color: Theme.info
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    font.bold: true
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "内置提示词（正文写作 / 去味 / 审校等全部 prompt 工程）只适配各家平台的 DeepSeek API（V4 系 thinking / reasoning_effort / 参数习惯）。\n内置官方预设仅两家：DeepSeek 官方、OpenCode Go 官方；其余第三方（中转 / 本地 Ollama / LM Studio 等）请用「自定义」自行接入，非 DeepSeek 模型写作质量与闸门稳定性可能打折。"
+                    color: Theme.textSecondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTiny
+                    wrapMode: Text.Wrap
+                    lineHeight: 1.5
                 }
             }
         }
@@ -350,8 +456,6 @@ Item {
                     Layout.fillWidth: true
                     radius: Theme.rCard
                     color: Theme.bgCard
-                    border.width: 1
-                    border.color: Theme.border
                     height: slotCol.implicitHeight + 24
                     Column {
                         id: slotCol
@@ -420,28 +524,300 @@ Item {
                 Item { height: 20 }
             }
         }
-    }
+            }
 
-    Connections {
-        target: bridge
-        function onModelsFetched(cid, models) {
-            if (models.length > 0) {
-                modelList.clear()
-                for (var i = 0; i < models.length; i++) modelList.append({ "m": models[i] })
-                modelField.currentIndex = 0
-                bridge.showToast("ok", "拉取到 " + models.length + " 个模型，可从下拉选择")
-            } else {
-                bridge.showToast("warn", "未拉取到模型（接口不支持 /models 或连接失败）")
+            // ============ 页1：写作偏好 ============
+            ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 12
+                    Layout.margins: 12
+
+                    Text {
+                        text: "写作偏好"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.bold: true
+                    }
+
+                    // 章节字数目标
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: 76
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+                            Text { text: "章节字数目标"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
+                            Text { text: "草稿低于目标（含容差）会自动扩写一轮"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            RowLayout {
+                                spacing: 8
+                                Layout.fillWidth: true
+                                AppSpinBox { id: wordTargetSpin; from: 500; to: 20000; stepSize: 100; value: 3000 }
+                                Text { text: "字 / 章"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny }
+                                Item { Layout.fillWidth: true }
+                                AppButton { text: "应用"; kind: "primary"; height: 26; onClicked: bridge.setChapterWordTarget(wordTargetSpin.value) }
+                            }
+                        }
+                    }
+
+                    // 审校开关
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: 76
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+                            Text { text: "一致性审校"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
+                            Text { text: "每章定稿前用审校槽做一致性检查，阻塞问题自动修一轮"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Item { Layout.fillWidth: true }
+                                CheckBox {
+                                    id: reviewSwitch
+                                    text: checked ? "已启用" : "已停用"
+                                    font.pixelSize: Theme.fsSmall
+                                    palette.text: Theme.textPrimary
+                                    onCheckedChanged: if (activeFocus) bridge.setReviewEnabled(checked)
+                                }
+                            }
+                        }
+                    }
+
+                    // 逐步确认默认模式
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: 76
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+                            Text { text: "默认运行模式"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
+                            Text { text: "逐步确认：每章定稿后暂停等你确认；自动续写：一口气写到底（运行中也可在驾驶舱切换）"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Item { Layout.fillWidth: true }
+                                CheckBox {
+                                    id: stepSwitch
+                                    checked: settings.wp.stepConfirm === true
+                                    text: checked ? "逐步确认" : "自动续写"
+                                    font.pixelSize: Theme.fsSmall
+                                    palette.text: Theme.textPrimary
+                                    onCheckedChanged: if (activeFocus) bridge.setStepConfirm(checked)
+                                }
+                            }
+                        }
+                    }
+
+                    // 全局写作偏好入口（在创作笔记面板）
+                    Text {
+                        Layout.fillWidth: true
+                        text: "💡 全局写作偏好（文风 / 禁忌 / 节奏，注入所有章节）在左侧「笔记」面板维护。"
+                        color: Theme.textTertiary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsTiny
+                        wrapMode: Text.Wrap
+                    }
+
+                    Item { height: 8 }
+                }
+            }
+
+            // ============ 页2：外观（编辑器 + 阅读） ============
+            ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 12
+                    Layout.margins: 12
+
+                    Text {
+                        text: "编辑器外观"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.bold: true
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: edCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: edCol
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 10
+
+                            Text { text: "正文字号"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            Row {
+                                spacing: 5
+                                Repeater {
+                                    model: [{ t: "小", v: 0.9 }, { t: "标准", v: 1.0 }, { t: "大", v: 1.12 }, { t: "特大", v: 1.25 }]
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        height: 26; radius: 7
+                                        width: fsText.implicitWidth + 16
+                                        color: Math.abs((settings.ep.fontScale || 1.0) - modelData.v) < 0.01
+                                               ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                                        border.width: 1
+                                        border.color: Math.abs((settings.ep.fontScale || 1.0) - modelData.v) < 0.01 ? Theme.accent : Theme.border
+                                        Text {
+                                            id: fsText
+                                            anchors.centerIn: parent
+                                            text: modelData.t
+                                            color: Math.abs((settings.ep.fontScale || 1.0) - modelData.v) < 0.01 ? Theme.accent : Theme.textTertiary
+                                            font.pixelSize: Theme.fsTiny
+                                        }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                            onClicked: { bridge.setEditorPref("fontScale", modelData.v); settings.refreshPrefs() } }
+                                    }
+                                }
+                            }
+
+                            Text { text: "正文限宽居中（约 820px 阅读宽度）"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            CheckBox {
+                                checked: settings.ep.narrow !== false
+                                text: checked ? "开启限宽" : "全宽"
+                                font.pixelSize: Theme.fsSmall
+                                palette.text: Theme.textPrimary
+                                onCheckedChanged: if (activeFocus) { bridge.setEditorPref("narrow", checked); settings.refreshPrefs() }
+                            }
+
+                            Text { text: "流式输出速度（S4 打字机/即时）"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            CheckBox {
+                                checked: settings.ep.streamSmooth === true
+                                text: checked ? "打字机（平滑逐字）" : "即时（全文直出）"
+                                font.pixelSize: Theme.fsSmall
+                                palette.text: Theme.textPrimary
+                                onCheckedChanged: if (activeFocus) { bridge.setEditorPref("streamSmooth", checked); settings.refreshPrefs() }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "阅读偏好"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "阅读主题（夜间 / 羊皮纸 / 纯白）、字号、行距、字体、翻页方式都在阅读模式内「Aa 排版」面板即时调整并持久化。"
+                        color: Theme.textTertiary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsTiny
+                        wrapMode: Text.Wrap
+                    }
+
+                    Item { height: 8 }
+                }
+            }
+
+            // ============ 页3：系统（备份 + 快捷键） ============
+            ScrollView {
+                contentWidth: availableWidth
+                ColumnLayout {
+                    width: parent.width
+                    spacing: 12
+                    Layout.margins: 12
+
+                    Text {
+                        text: "备份与统计"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.bold: true
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: bkCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: bkCol
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 8
+                            Text { text: "项目备份"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
+                            Text {
+                                text: "zip 全量备份到项目同级目录（含设定 / 大纲 / 正文 / 追踪 / 版本 / 状态）。"
+                                color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap; Layout.fillWidth: true
+                            }
+                            CheckBox {
+                                id: autoBackupSwitch
+                                text: checked ? "每日自动备份（打开项目时执行）" : "每日自动备份已关闭"
+                                font.pixelSize: Theme.fsSmall
+                                palette.text: Theme.textPrimary
+                                onCheckedChanged: if (activeFocus) bridge.setAutoBackup(checked)
+                            }
+                            RowLayout {
+                                spacing: 8
+                                AppButton { text: "立即备份 zip"; kind: "primary"; height: 28; onClicked: bridge.backupProject() }
+                                Item { Layout.fillWidth: true }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "快捷键"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.bold: true
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: keysCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: keysCol
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 8
+                            Repeater {
+                                model: [
+                                    ["Ctrl + S", "保存章节（产生新版本 · 保存驱动）"],
+                                    ["F5", "进入沉浸阅读模式"],
+                                    ["Esc", "退出阅读 / 关闭对话框"],
+                                    ["← / →", "阅读模式翻页（翻页模式下）"],
+                                    ["Ctrl + B", "版本历史（diff / 回退）"],
+                                    ["Ctrl + E", "局部改写选中段落"]
+                                ]
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    spacing: 10
+                                    Layout.fillWidth: true
+                                    Rectangle {
+                                        width: 72; height: 24; radius: 6
+                                        color: Theme.bgHover
+                                        border.width: 1; border.color: Theme.border
+                                        Text { anchors.centerIn: parent; text: modelData[0]; color: Theme.accent; font.family: Theme.monoFont; font.pixelSize: 11 }
+                                    }
+                                    Text { text: modelData[1]; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall }
+                                    Item { Layout.fillWidth: true }
+                                }
+                            }
+                        }
+                    }
+
+                    Item { height: 8 }
+                }
             }
         }
-        function onConnTestResult(cid, ok, msg) {
-            bridge.showToast(ok ? "ok" : "error", msg)
-        }
-    }
-
-    Component.onCompleted: {
-        var opts = bridge.connectionOptions()
-        if (opts.length > 0) startEdit(opts[0].id)
-        else startNew()
     }
 }

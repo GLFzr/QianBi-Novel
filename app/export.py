@@ -17,25 +17,69 @@ from . import project
 
 # ============ TXT 导出（平台上传标准）============
 
-def export_txt(proj: str, out_path: str = "") -> str:
-    """按章节顺序合并导出 txt。返回输出路径。"""
+# 章节分隔方式：空行 / 分隔线 / 分页符（\f，部分阅读器识别为翻页）
+_SEPARATORS = {"blank": "\n\n", "line": "\n\n———\n\n", "page": "\n\f\n"}
+# 标题格式：第X章 标题 / 第X章·标题 / 仅标题 / 无标题
+_TITLE_FORMATS = ["第X章 标题", "第X章·标题", "仅标题", "无标题"]
+
+
+def _title_line(fmt_idx: int, num: int, title: str) -> str:
+    if fmt_idx == 0:
+        return f"第{num}章 {title}"
+    if fmt_idx == 1:
+        return f"第{num}章·{title}"
+    if fmt_idx == 2:
+        return title or f"第{num}章"
+    return ""
+
+
+def export_txt(proj: str, out_path: str = "", sep: str = "blank", title_fmt: int = 0) -> str:
+    """按章节顺序合并导出 txt。返回输出路径。
+
+    sep: blank=空行 | line=分隔线 | page=分页符；title_fmt: 见 _title_line
+    """
     chapters = project.list_chapters(proj)
     if not chapters:
         raise ValueError("没有可导出的章节")
     out_path = out_path or os.path.join(proj, f"{os.path.basename(proj)}_全本.txt")
+    sep_text = _SEPARATORS.get(sep, "\n\n")
     lines = [f"《{os.path.basename(proj)}》", ""]
     for num, name, path in chapters:
         title = _chapter_title(name, num)
         text = project.read_file(path)
         # 去掉 markdown 标题行（用统一分节行代替）
         text = re.sub(r"^#\s*第\s*\d+\s*章[^\n]*\n+", "", text, flags=re.M)
-        lines.append(f"第{num}章 {title}")
-        lines.append("")
+        tl = _title_line(title_fmt, num, title)
+        if tl:
+            lines += [tl, ""]
         lines.append(text.strip())
-        lines.append("")
+        lines.append(sep_text)
+    # 收尾：多余的尾部分隔收敛为单个换行
+    while lines and lines[-1] == "":
+        lines.pop()
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        f.write("\n".join(lines) + "\n")
     return out_path
+
+
+def preview_txt(proj: str, sep: str = "blank", title_fmt: int = 0, max_chars: int = 900) -> str:
+    """导出排版预览：前两章的实际导出效果（可视化确认再导出）"""
+    chapters = project.list_chapters(proj)[:2]
+    if not chapters:
+        return "（暂无章节可预览）"
+    sep_text = _SEPARATORS.get(sep, "\n\n")
+    out = []
+    for num, name, path in chapters:
+        title = _chapter_title(name, num)
+        text = project.read_file(path)
+        text = re.sub(r"^#\s*第\s*\d+\s*章[^\n]*\n+", "", text, flags=re.M)
+        tl = _title_line(title_fmt, num, title)
+        if tl:
+            out += [tl, ""]
+        out.append(text.strip()[:400])
+        out.append(sep_text.rstrip("\n"))
+    preview = "\n".join(out)
+    return preview[:max_chars] + ("\n…（预览截断）" if len(preview) > max_chars else "")
 
 
 def _chapter_title(name: str, num: int) -> str:
@@ -121,11 +165,12 @@ def export_epub(proj: str, out_path: str = "") -> str:
         first_title = html.escape(chapter_files[0][1] if chapter_files else book_name)
         opf = f"""<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="{_EPUB_NS}" version="3.0" unique-identifier="bookid">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
     <dc:identifier id="bookid">{uid}</dc:identifier>
     <dc:title>{html.escape(book_name)}</dc:title>
     <dc:language>zh-CN</dc:language>
-    <dc:creator>千笔一文 Novel</dc:creator>
+    <dc:creator>千笔一文 Novel（人 AI 共写）</dc:creator>
+    <dc:description>由千笔一文 Novel 生成的人 AI 共写作品</dc:description>
     <meta property="dcterms:modified">{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}</meta>
   </metadata>
   <manifest>
@@ -160,9 +205,10 @@ def export_epub(proj: str, out_path: str = "") -> str:
     return out_path
 
 
-def export_project(proj: str, fmt: str = "txt", out_path: str = "") -> str:
-    """统一入口。fmt: txt / epub"""
+def export_project(proj: str, fmt: str = "txt", out_path: str = "",
+                   sep: str = "blank", title_fmt: int = 0) -> str:
+    """统一入口。fmt: txt / epub（排版选项仅对 txt 生效）"""
     fmt = (fmt or "txt").lower()
     if fmt == "epub":
         return export_epub(proj, out_path)
-    return export_txt(proj, out_path)
+    return export_txt(proj, out_path, sep=sep, title_fmt=title_fmt)

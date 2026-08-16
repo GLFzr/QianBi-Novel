@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """QML 桥接层：向界面暴露流水线状态、章节队列、日志流与全部命令"""
+import datetime
+import json
 import logging
 import os
 import re
@@ -21,29 +23,42 @@ logger = logging.getLogger("qianbi.ui")
 # ---------- 局部改写工作线程（选中文本 + 用户想法）----------
 
 class SelectionRewriteWorker(QThread):
-    """独立线程跑局部改写：流式回传增量，不阻塞 UI，不碰流水线"""
+    """独立线程跑局部改写：流式回传增量，不阻塞 UI，不碰流水线
+
+    mode: only=仅选中段 | neighbor=带前后各一段 | full=带全章 | setting=全章+核心设定
+    """
     sig_chunk = Signal(str)
     sig_reasoning = Signal(str)
     sig_done = Signal(str)
     sig_error = Signal(str)
 
     def __init__(self, cfg: dict, before: str, selected: str, after: str,
-                 idea: str, parent=None):
+                 idea: str, mode: str = "neighbor", proj: str = "", parent=None):
         super().__init__(parent)
         self.cfg = cfg
         self.before = before
         self.selected = selected
         self.after = after
         self.idea = idea
+        self.mode = mode or "neighbor"
+        self.proj = proj or ""
         self.router = ModelRouter(cfg)
 
     def run(self):
         try:
+            core = ""
+            if self.mode == "setting" and self.proj:
+                from .. import project as _pj
+                core = _pj.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1500]
+            core_block = (prompts.SELECTION_CORE_SETTING_BLOCK.format(core_setting=core)
+                          if core else "")
             prompt = prompts.SELECTION_REWRITE_PROMPT.format(
                 user_idea=self.idea or "（无具体想法，请按你的判断润色这段）",
                 selected=self.selected,
                 before_context=self.before or "（选中段落在章节开头）",
                 after_context=self.after or "（选中段落在章节末尾）",
+                core_setting=core,
+                core_setting_block=core_block,
             )
             client = self.router.client(cfg_mod.SLOT_WRITING)
             text = clean_llm_output(client.chat_stream(
@@ -379,7 +394,7 @@ class Bridge(QObject):
         if not self.proj:
             return 0
         state = st.load_state(self.proj)
-        return len(state.get("pending_ideas") or [])
+        return len(st.pending_idea_texts(state))
 
     def _get_editor_dirty(self): return self._editor_dirty
 
@@ -507,6 +522,8 @@ class Bridge(QObject):
         self._reset_editor_state()
         # 草稿恢复检测（崩溃/意外退出后留下的未保存草稿）
         self.recoverableDraftChanged.emit()
+        # 每日自动备份（设置开启后，一天最多一次）
+        self._maybe_auto_backup()
         if not silent:
             self.projectOpened.emit()
 
@@ -603,6 +620,10 @@ class Bridge(QObject):
         guidance = (guidance or "").strip()
         for n, name, path in project.list_chapters(self.proj):
             if n == num:
+                # 整章重写安全网：旧正文先归档为版本（重写前快照），放弃重写时可在版本历史回退
+                old = project.read_file(path)
+                if old.strip():
+                    versions.snapshot(self.proj, num, old, "重写前备份")
                 try:
                     os.remove(path)
                 except OSError as e:
@@ -620,9 +641,10 @@ class Bridge(QObject):
 
     # ============ 局部改写（选中文本 + 想法，不动流水线）============
 
-    @Slot(str, str, str, str)
-    def rewriteSelection(self, before: str, selected: str, after: str, idea: str):
-        """AI 只改写选中段落：流式预览 → QML 应用/放弃"""
+    @Slot(str, str, str, str, str)
+    def rewriteSelection(self, before: str, selected: str, after: str, idea: str, mode: str = "neighbor"):
+        """AI 只改写选中段落：流式预览 → QML 应用/放弃
+        mode: only=仅选中段 neighbor=带前后各一段 full=带全章 setting=全章+核心设定"""
         if not selected.strip():
             self.toast.emit("warn", "请先在编辑器中选中要改写的段落")
             return
@@ -635,7 +657,8 @@ class Bridge(QObject):
         self.selectionDraftChanged.emit()
         self.selectionReasoningChanged.emit()
         self.selectionStateChanged.emit()
-        worker = SelectionRewriteWorker(self.cfg, before, selected, after, idea, self)
+        worker = SelectionRewriteWorker(self.cfg, before, selected, after, idea,
+                                        mode=mode, proj=self.proj or "", parent=self)
         worker.sig_chunk.connect(self._on_sel_chunk)
         worker.sig_reasoning.connect(self._on_sel_reasoning)
         worker.sig_done.connect(self._on_sel_done)
@@ -676,16 +699,24 @@ class Bridge(QObject):
 
     @Slot(str)
     def submitIdea(self, text: str):
-        """写作中随时提交创作想法：注入下一章草稿 prompt"""
+        """写作中随时提交创作想法（默认注入下一章草稿 prompt）"""
+        self.submitIdeaScoped(text, "next")
+
+    @Slot(str, str)
+    def submitIdeaScoped(self, text: str, scope: str):
+        """scope: next=下一章 | 通用=通用想法 | 数字=指定第N章"""
         if not self.proj:
             self.toast.emit("warn", "请先打开项目")
             return
-        state = st.load_state(self.proj)
-        if st.add_idea(self.proj, state, text):
-            self.ideaCountChanged.emit()
-            self.toast.emit("ok", "想法已提交，将注入下一章创作")
-        else:
+        text = (text or "").strip()
+        if not text:
             self.toast.emit("warn", "想法不能为空")
+            return
+        state = st.load_state(self.proj)
+        if st.add_idea(self.proj, state, text, scope or "next"):
+            self.ideaCountChanged.emit()
+            label = {"next": "下一章", "通用": "通用想法"}.get(scope, f"第 {scope} 章")
+            self.toast.emit("ok", f"想法已记录，将注入{label}的创作")
 
     # ============ 章节查看/编辑（保存驱动版本语义）============
 
@@ -697,11 +728,13 @@ class Bridge(QObject):
             return
         for n, name, path in project.list_chapters(self.proj):
             if n == num:
+                self._cur_num = num
                 self._chapter_path = path
                 self._chapter_text = project.read_file(path)
                 self._chapter_findings = []
                 self.chapterTextChanged.emit()
                 self.chapterFindingsChanged.emit()
+                self.currentChapterChanged.emit()
                 self._reset_editor_state()
                 return
         self.toast.emit("warn", f"第 {num} 章正文不存在")
@@ -1041,6 +1074,12 @@ class Bridge(QObject):
         self.currentChapterChanged.emit()
         self.tokensChanged.emit()
         self._refresh_progress()
+        # 逐步确认模式：每章定稿后暂停，等人确认（阅读/修改）再点「继续」
+        if (self._running and self.orch
+                and self.cfg.get("writing", {}).get("step_confirm")):
+            self.orch.pause()
+            self._set_paused(True)
+            self.logModel.append("info", f"第 {record.get('num')} 章已定稿（逐步确认模式）：阅读确认后点「继续」")
 
     def _on_finished(self, reason: str):
         self._set_running(False)
@@ -1173,7 +1212,12 @@ class Bridge(QObject):
         try:
             from .. import export as export_mod
             path = export_mod.export_project(self.proj, fmt)
-            self.toast.emit("ok", f"已导出：{os.path.basename(path)}")
+            chapters = len(project.list_chapters(self.proj))
+            words = sum(project.count_chars(project.read_file(p))
+                        for _n, _m, p in project.list_chapters(self.proj))
+            size_kb = os.path.getsize(path) / 1024
+            self.toast.emit("ok", f"已导出 {os.path.basename(path)}：{chapters} 章 · "
+                                  f"{words} 字 · {size_kb:.0f} KB")
             return path
         except ValueError as e:
             self.toast.emit("warn", str(e))
@@ -1187,3 +1231,459 @@ class Bridge(QObject):
         root = os.path.join(os.path.expanduser("~"), "Documents", "千笔一文")
         os.makedirs(root, exist_ok=True)
         return root
+
+    # ============ 阅读器体系（M2 · 读者视角）============
+
+    READER_DEFAULTS = {
+        "theme": "night", "fontScale": 1.0, "lineHeight": 1.8,
+        "serif": True, "paged": False,
+    }
+
+    @Slot(result="QVariantMap")
+    def readerPrefs(self) -> dict:
+        prefs = dict(self.READER_DEFAULTS)
+        prefs.update(self.cfg.get("reader", {}))
+        return prefs
+
+    @Slot(str, "QVariant")
+    def setReaderPref(self, key: str, value):
+        self.cfg.setdefault("reader", {})[key] = value
+        cfg_mod.save_config(self.cfg)
+
+    # ---- 每章阅读数据（标注 / 书签 / 位置）：正文/.annotations/第X章.json ----
+
+    def _read_store(self, proj: str, num: int) -> dict:
+        path = os.path.join(proj, "正文", ".annotations", f"第{num}章.json")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                data.setdefault("annotations", [])
+                data.setdefault("bookmarks", [])
+                data.setdefault("position", 0.0)
+                return data
+        except (OSError, ValueError):
+            pass
+        return {"annotations": [], "bookmarks": [], "position": 0.0}
+
+    def _write_store(self, proj: str, num: int, data: dict):
+        d = os.path.join(proj, "正文", ".annotations")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f"第{num}章.json"), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+
+    @Slot(int, result="QVariantMap")
+    def readStore(self, num: int) -> dict:
+        if not self.proj:
+            return {"annotations": [], "bookmarks": [], "position": 0.0}
+        return self._read_store(self.proj, num)
+
+    @Slot(int, str, str, str, float)
+    def addAnnotation(self, num: int, kind: str, quote: str, note: str, pos: float):
+        """kind: highlight_yellow / highlight_green / highlight_red / comment"""
+        if not self.proj:
+            return
+        data = self._read_store(self.proj, num)
+        data["annotations"].append({
+            "kind": kind, "quote": quote[:120], "note": (note or "").strip(),
+            "pos": float(pos), "ts": datetime.datetime.now().strftime("%m-%d %H:%M"),
+        })
+        self._write_store(self.proj, num, data)
+        self.toast.emit("ok", "批注已保存" if note else "已高亮标注")
+
+    @Slot(int, int)
+    def removeAnnotation(self, num: int, idx: int):
+        if not self.proj:
+            return
+        data = self._read_store(self.proj, num)
+        if 0 <= idx < len(data["annotations"]):
+            data["annotations"].pop(idx)
+            self._write_store(self.proj, num, data)
+
+    @Slot(int, str)
+    def addReaderIdea(self, num: int, text: str):
+        """阅读灵感标记 → 自动进创作笔记（关联章节），注入后续创作"""
+        if not self.proj:
+            return
+        text = (text or "").strip()
+        if not text:
+            self.toast.emit("warn", "灵感内容不能为空")
+            return
+        state = st.load_state(self.proj)
+        if st.add_idea(self.proj, state, f"[第{num}章·阅读灵感] {text}", "next"):
+            self.ideaCountChanged.emit()
+            self.toast.emit("ok", "灵感已记入创作笔记，将注入后续章节")
+
+    @Slot(int, float, str)
+    def addBookmark(self, num: int, pos: float, label: str):
+        if not self.proj:
+            return
+        data = self._read_store(self.proj, num)
+        data["bookmarks"].append({
+            "pos": float(pos), "label": (label or "").strip() or f"第{num}章书签",
+            "ts": datetime.datetime.now().strftime("%m-%d %H:%M"),
+        })
+        self._write_store(self.proj, num, data)
+        self.toast.emit("ok", "已加书签（标注面板可查看跳转）")
+
+    @Slot(int, int)
+    def removeBookmark(self, num: int, idx: int):
+        if not self.proj:
+            return
+        data = self._read_store(self.proj, num)
+        if 0 <= idx < len(data["bookmarks"]):
+            data["bookmarks"].pop(idx)
+            self._write_store(self.proj, num, data)
+
+    @Slot(int, float)
+    def saveReadPosition(self, num: int, pos: float):
+        if self.proj:
+            data = self._read_store(self.proj, num)
+            data["position"] = float(max(0.0, min(1.0, pos)))
+            self._write_store(self.proj, num, data)
+
+    @Slot(result="QVariantList")
+    def readerChapterList(self) -> list:
+        """阅读目录：[{num, title, words}]（有正文的章节）"""
+        if not self.proj:
+            return []
+        result = []
+        for n, name, path in project.list_chapters(self.proj):
+            m = re.match(r"第\d+章_?(.+)\.md", name)
+            result.append({"num": n, "title": m.group(1) if m and m.group(1) else f"第{n}章",
+                           "words": project.count_chars(project.read_file(path))})
+        return result
+
+    @Slot(int, result="QVariantMap")
+    def readerChapter(self, num: int) -> dict:
+        """阅读章节：优先磁盘已保存内容；无正文但编辑器正写此章时给工作副本/流式内容"""
+        text = self.diskTextOf(num)
+        if not text and num == self._cur_num and self._working_text:
+            text = self._working_text
+        return {"num": num, "text": text,
+                "isDraft": bool(num == self._cur_num and self._editor_dirty),
+                "isLive": bool(num == self._cur_num and self._streaming)}
+
+    # ============ 创作驾驶舱（M3 · 阶段卡片）============
+
+    @Slot(result="QVariantList")
+    def stageCards(self) -> list:
+        """阶段卡片：设定/大纲/细纲/正文——状态 + 产物文件 + 完成度"""
+        if not self.proj:
+            return []
+        state = st.load_state(self.proj)
+        chapters = project.list_chapters(self.proj)
+        outlines = project.list_outlines(self.proj)
+        setting_ok = os.path.isfile(os.path.join(self.proj, "设定", "题材定位.md"))
+        outline_ok = os.path.isfile(os.path.join(self.proj, "大纲", "大纲.md"))
+        total = state.get("total_chapters", 0) or len(chapters)
+        stage = state.get("stage", st.STAGE_INIT)
+        cur = self._cur_num if self._running else 0
+
+        def st_of(done, active_key, active):
+            if active:
+                return "active"
+            if done:
+                return "done"
+            return "pending" if stage != st.STAGE_DONE else "pending"
+
+        return [
+            {"key": "setting", "label": "核心设定", "icon": "✦",
+             "status": st_of(setting_ok, st.STAGE_SETTING, self._running and stage == st.STAGE_SETTING),
+             "detail": "设定/题材定位.md",
+             "done": setting_ok, "file": "设定/题材定位.md" if setting_ok else ""},
+            {"key": "outline", "label": "全书大纲", "icon": "❖",
+             "status": st_of(outline_ok, st.STAGE_OUTLINE, self._running and stage == st.STAGE_OUTLINE),
+             "detail": "大纲/大纲.md",
+             "done": outline_ok, "file": "大纲/大纲.md" if outline_ok else ""},
+            {"key": "ch_outline", "label": "章节细纲", "icon": "☰",
+             "status": st_of(bool(outlines), st.STAGE_CH_OUTLINE, self._running and stage == st.STAGE_CH_OUTLINE),
+             "detail": f"{len(outlines)} 章细纲",
+             "done": bool(outlines), "count": len(outlines), "file": ""},
+            {"key": "prose", "label": "正文写作", "icon": "✍",
+             "status": "active" if cur else st_of(bool(chapters), st.STAGE_PROSE, False),
+             "detail": f"{len(chapters)} 章 / 共 {total or '∞'} 章",
+             "done": bool(chapters), "count": len(chapters), "file": ""},
+        ]
+
+    @Slot(str, str)
+    def regenerateStage(self, key: str, guidance: str):
+        """阶段重生成：删除阶段产物 → 点「开始」从该阶段续跑（guidance 可选注入）"""
+        if self._running or not self.proj:
+            self.toast.emit("warn", "请先停止流水线再重生成阶段")
+            return
+        guidance = (guidance or "").strip()
+        try:
+            if key == "setting":
+                os.remove(os.path.join(self.proj, "设定", "题材定位.md"))
+            elif key == "outline":
+                os.remove(os.path.join(self.proj, "大纲", "大纲.md"))
+                # 大纲重生成连带细纲失效（细纲依赖大纲）
+                for n, path in project.list_outlines(self.proj):
+                    os.remove(path)
+            elif key == "ch_outline":
+                nxt = project.next_chapter_num(self.proj)
+                removed = 0
+                for n, path in project.list_outlines(self.proj):
+                    if n >= nxt:
+                        os.remove(path)
+                        removed += 1
+                if removed == 0:
+                    self.toast.emit("warn", "没有可重生成的细纲（后续章细纲为空）")
+                    return
+                self.toast.emit("ok", f"已移除 {removed} 章未写正文的细纲，点「开始」重新生成")
+                return
+            else:
+                self.toast.emit("warn", "正文阶段请用章节面板的「重写」")
+                return
+        except OSError as e:
+            self.toast.emit("warn", f"删除失败: {e}")
+            return
+        if guidance and key in ("setting", "outline"):
+            # 阶段指导：暂存到 state，stage 执行时拼进 prompt（通过 pending_guidance 通道太章级化，直接写文件旁注）
+            p = os.path.join(self.proj, "追踪", "阶段指导.md")
+            project.write_file(p, f"# {key} 阶段重生成指导\n\n{guidance}\n")
+        self.refreshQueue()
+        label = {"setting": "核心设定", "outline": "全书大纲（含细纲）", "ch_outline": "细纲"}[key]
+        self.toast.emit("ok", f"{label}产物已移除，点「开始」从该阶段重新生成")
+
+    # ============ 创作笔记（M3 · 想法 CRUD + 全局写作偏好）============
+
+    @Slot(result="QVariantList")
+    def ideasList(self) -> list:
+        if not self.proj:
+            return []
+        state = st.load_state(self.proj)
+        return list(reversed(st.norm_ideas(state)))   # 新的在前
+
+    @Slot(str)
+    def removeIdea(self, idea_id: str):
+        if not self.proj:
+            return
+        state = st.load_state(self.proj)
+        ideas = st.norm_ideas(state)
+        state["pending_ideas"] = [it for it in ideas if it.get("id") != idea_id]
+        st.save_state(self.proj, state)
+        self.ideaCountChanged.emit()
+
+    @Slot(str, str, str)
+    def updateIdea(self, idea_id: str, text: str, scope: str):
+        if not self.proj:
+            return
+        state = st.load_state(self.proj)
+        for it in st.norm_ideas(state):
+            if it.get("id") == idea_id:
+                if (text or "").strip():
+                    it["text"] = text.strip()
+                it["scope"] = scope or it.get("scope", "next")
+                it["status"] = "pending"
+                break
+        st.save_state(self.proj, state)
+        self.ideaCountChanged.emit()
+        self.toast.emit("ok", "想法已更新")
+
+    @Slot(str)
+    def markIdeaApplied(self, idea_id: str):
+        if not self.proj:
+            return
+        state = st.load_state(self.proj)
+        for it in st.norm_ideas(state):
+            if it.get("id") == idea_id:
+                it["status"] = "applied"
+                break
+        st.save_state(self.proj, state)
+        self.ideaCountChanged.emit()
+
+    @Slot(result="QVariantMap")
+    def writingPrefs(self) -> dict:
+        w = self.cfg.get("writing", {})
+        return {"stylePref": w.get("style_pref", ""), "taboos": w.get("taboos", ""),
+                "pacePref": w.get("pace_pref", ""),
+                "stepConfirm": bool(w.get("step_confirm"))}
+
+    @Slot(str, str, str)
+    def saveGlobalPrefs(self, style: str, taboos: str, pace: str):
+        """全局写作偏好：独立保存，注入所有章节正文 prompt（作者不改代码调全书文风）"""
+        w = self.cfg.setdefault("writing", {})
+        w["style_pref"] = (style or "").strip()
+        w["taboos"] = (taboos or "").strip()
+        w["pace_pref"] = (pace or "").strip()
+        cfg_mod.save_config(self.cfg)
+        self.toast.emit("ok", "全局写作偏好已保存，将从下一章开始注入")
+
+    @Slot(result="QVariantList")
+    def qualityTrend(self) -> list:
+        """质量历史趋势：近 20 章 [{num, words, blocking, advisory, status}]"""
+        if not self.proj:
+            return []
+        state = st.load_state(self.proj)
+        hist = sorted(state.get("history", []), key=lambda h: h.get("num", 0))[-20:]
+        return [{"num": h.get("num", 0), "words": h.get("words", 0),
+                 "blocking": (h.get("deslop_blocking", 0) or 0) + (h.get("review_blocking", 0) or 0),
+                 "advisory": h.get("deslop_advisory", 0) or 0,
+                 "status": h.get("status", "")} for h in hist]
+
+    # ============ 数据与项目管理体系（M4）============
+
+    def _zip_backup(self) -> str:
+        import zipfile
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = os.path.join(os.path.dirname(self.proj.rstrip("/\\")),
+                           f"{os.path.basename(self.proj)}_backup_{ts}.zip")
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, _dirs, files in os.walk(self.proj):
+                for fn in files:
+                    p = os.path.join(root, fn)
+                    zf.write(p, os.path.relpath(p, self.proj))
+        return out
+
+    @Slot(result=str)
+    def backupProject(self) -> str:
+        """一键项目 zip 备份 → 项目同级目录（含设定/大纲/正文/追踪/版本/状态）"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return ""
+        try:
+            out = self._zip_backup()
+            self.cfg.setdefault("backup", {})["last"] = datetime.date.today().isoformat()
+            cfg_mod.save_config(self.cfg)
+            self.toast.emit("ok", f"项目已备份：{os.path.basename(out)}（{os.path.getsize(out) // 1024} KB）")
+            return out
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"备份失败: {e}")
+            return ""
+
+    def _maybe_auto_backup(self):
+        """每日自动备份（设置开启后，打开项目时检查，一天最多一次）"""
+        b = self.cfg.get("backup", {})
+        if not b.get("auto"):
+            return
+        if b.get("last") == datetime.date.today().isoformat():
+            return
+        try:
+            out = self._zip_backup()
+            b["last"] = datetime.date.today().isoformat()
+            cfg_mod.save_config(self.cfg)
+            self.logModel.append("ok", f"每日自动备份完成：{os.path.basename(out)}")
+        except Exception as e:  # noqa: BLE001
+            self.logModel.append("warn", f"自动备份失败: {e}")
+
+    @Slot(bool)
+    def setAutoBackup(self, on: bool):
+        self.cfg.setdefault("backup", {})["auto"] = bool(on)
+        cfg_mod.save_config(self.cfg)
+        self.toast.emit("ok", on and "已开启每日自动备份（打开项目时执行）" or "已关闭自动备份")
+
+    @Slot(result=bool)
+    def autoBackupEnabled(self) -> bool:
+        return bool(self.cfg.get("backup", {}).get("auto"))
+
+    @Slot(result="QVariantMap")
+    def statsSummary(self) -> dict:
+        """统计面板：章节数/全书字数/平均/今日增量/本周增量/累计 token/成本"""
+        if not self.proj:
+            return {}
+        chapters = project.list_chapters(self.proj)
+        words = 0
+        for _n, _name, path in chapters:
+            words += project.count_chars(project.read_file(path))
+        # 增量：按 history 时间戳聚合当日/当周定稿字数
+        today = datetime.date.today()
+        week_start = today - datetime.timedelta(days=today.weekday())
+        today_words = week_words = 0
+        for h in st.load_state(self.proj).get("history", []):
+            ts = h.get("ts", "")
+            try:
+                d = datetime.datetime.strptime(ts[:10], "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            w = h.get("words", 0) or 0
+            if d == today:
+                today_words += w
+            if d >= week_start:
+                week_words += w
+        return {
+            "chapters": len(chapters), "words": words,
+            "avgWords": words // len(chapters) if chapters else 0,
+            "todayWords": today_words, "weekWords": week_words,
+            "tokens": self._get_tokens(), "cost": self._get_cost_text(),
+        }
+
+    @Slot(bool)
+    def setStepConfirm(self, on: bool):
+        """运行模式切换：逐步确认（每章定稿后暂停等人确认）/ 自动续写"""
+        self.cfg.setdefault("writing", {})["step_confirm"] = bool(on)
+        cfg_mod.save_config(self.cfg)
+        self.toast.emit("ok", on and "已切换为逐步确认：每章定稿后暂停等你确认"
+                        or "已切换为自动续写")
+
+    @Slot(result=bool)
+    def stepConfirmEnabled(self) -> bool:
+        return bool(self.cfg.get("writing", {}).get("step_confirm"))
+
+    # ---- 编辑器偏好（M5）----
+
+    EDITOR_DEFAULTS = {"fontScale": 1.0, "narrow": True, "streamSmooth": False}
+
+    @Slot(result="QVariantMap")
+    def editorPrefs(self) -> dict:
+        prefs = dict(self.EDITOR_DEFAULTS)
+        prefs.update(self.cfg.get("editor", {}))
+        return prefs
+
+    @Slot(str, "QVariant")
+    def setEditorPref(self, key: str, value):
+        self.cfg.setdefault("editor", {})[key] = value
+        cfg_mod.save_config(self.cfg)
+
+    @Slot(result=int)
+    def chapterWordTarget(self) -> int:
+        return int(self.cfg.get("writing", {}).get("chapter_word_target", 3000))
+
+    @Slot(int)
+    def setChapterWordTarget(self, v: int):
+        self.cfg.setdefault("writing", {})["chapter_word_target"] = max(500, int(v))
+        cfg_mod.save_config(self.cfg)
+        self._refresh_progress()
+        self.toast.emit("ok", f"章节字数目标已设为 {max(500, int(v))} 字")
+
+    @Slot(result=bool)
+    def reviewEnabled(self) -> bool:
+        return bool(self.cfg.get("gates", {}).get("review_enabled", True))
+
+    @Slot(bool)
+    def setReviewEnabled(self, on: bool):
+        self.cfg.setdefault("gates", {})["review_enabled"] = bool(on)
+        cfg_mod.save_config(self.cfg)
+        self.toast.emit("ok", on and "审校已启用（一致性检查 + 修改轮）" or "审校已停用（写完直接定稿）")
+
+    # ---- 导出（排版选项 + 预览 + 报告）----
+
+    @Slot(str, str, int, result=str)
+    def exportProjectOpts(self, fmt: str, sep: str, titleFmt: int) -> str:
+        """导出全本（带排版选项）。返回导出路径，toast 附导出报告"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return ""
+        try:
+            from .. import export as export_mod
+            path = export_mod.export_project(self.proj, fmt, sep=sep, title_fmt=int(titleFmt))
+            chapters = project.list_chapters(self.proj)
+            words = sum(project.count_chars(project.read_file(p)) for _n, _m, p in chapters)
+            self.toast.emit("ok", f"已导出 {os.path.basename(path)}：{len(chapters)} 章 · "
+                                  f"{words} 字 · {os.path.getsize(path) / 1024:.0f} KB")
+            return path
+        except ValueError as e:
+            self.toast.emit("warn", str(e))
+            return ""
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"导出失败: {e}")
+            return ""
+
+    @Slot(str, int, result=str)
+    def exportPreviewText(self, sep: str, titleFmt: int) -> str:
+        """导出排版预览（前两章实际效果）"""
+        if not self.proj:
+            return "（请先打开项目）"
+        from .. import export as export_mod
+        return export_mod.preview_txt(self.proj, sep=sep, title_fmt=int(titleFmt))

@@ -2,48 +2,52 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    // 背景 · 暖黑五阶（现代深色写作工具：层次分明）
-    readonly property color bgPage: "#0F0E0B"
-    readonly property color bgPanel: "#171512"
-    readonly property color bgCard: "#1F1C17"
-    readonly property color bgHover: "#282419"
-    readonly property color bgActive: "#2E291C"
-    readonly property color bgLog: "#0A0908"
+    // ===== 千笔一文 V0.9.9 设计系统（ZCode 实测复刻版）=====
+    // 实测 ZCode：基底 #161616 中性灰 · 近乎单色 · 白色主操作
+    // 层次 = 表面亮度阶梯 + #2A2A2A 实色发丝线；圆角小（控件4/卡片6）；密度紧凑
+
+    // 背景 · 中性灰阶
+    readonly property color bgPage: "#1A1A1A"    // 编辑区（最亮表面）
+    readonly property color bgPanel: "#161616"   // 图标栏/侧栏面板
+    readonly property color bgCard: "#1F1F1F"    // 卡片/输入
+    readonly property color bgHover: "#262626"   // 悬停
+    readonly property color bgActive: "#2D2D2D"  // 按下/激活
+    readonly property color bgLog: "#111111"     // 日志（最深）
 
     // 文字
-    readonly property color textPrimary: "#EDEAE1"
-    readonly property color textSecondary: "#A8A296"
-    readonly property color textTertiary: "#6F6A5F"
+    readonly property color textPrimary: "#F2F1F0"
+    readonly property color textSecondary: "#9D9D9D"
+    readonly property color textTertiary: "#6E6E6E"
 
-    // 强调与状态 · 收敛五色
-    readonly property color accent: "#E3B35C"   // 琥珀 · 主行动/进行中
-    readonly property color success: "#66C4A9"  // 青玉 · 通过
-    readonly property color danger: "#DB7861"   // 赭红 · 待修/阻断
-    readonly property color info: "#83A5CC"     // 雾蓝 · 信息
-    readonly property color muted: "#6F6A5F"    // 烟灰 · 排队/禁用
+    // 强调与状态（克制用色：主操作=白，状态色只出现在徽章/指示点）
+    readonly property color accent: "#4E9CFF"    // 蓝 · 进行中/链接（少量）
+    readonly property color success: "#3FB68B"
+    readonly property color danger: "#E5534B"
+    readonly property color info: "#8AB4E8"
+    readonly property color muted: "#6E6E6E"
 
-    // 边框（AARRGGBB）
-    readonly property color border: "#14EDEAE1"
-    readonly property color borderStrong: "#26EDEAE1"
+    // 边框 · 实色发丝线（ZCode 用实色，不用透明度描边）
+    readonly property color border: "#2A2A2A"
+    readonly property color borderStrong: "#3D3D3D"
 
-    // 卡片顶部高光（现代深色 UI 层次感）
-    readonly property color cardHighlight: "#12FFFFFF"
+    // 卡片顶部高光：已废弃（兼容旧引用）
+    readonly property color cardHighlight: "transparent"
 
-    // 字体
+    // 字体：UI 全无衬线；衬线只用于「读」的场景
     readonly property string uiFont: "Microsoft YaHei UI"
     readonly property string serifFont: "Source Han Serif SC"
     readonly property string monoFont: "JetBrains Mono"
 
-    // 字号（桌面应用：正文 14px 为基准）
-    readonly property int fsTiny: 12
-    readonly property int fsSmall: 13
-    readonly property int fsBody: 14
-    readonly property int fsTitle: 17
-    readonly property int fsBig: 24
+    // 字号（紧凑层级）
+    readonly property int fsTiny: 11
+    readonly property int fsSmall: 12
+    readonly property int fsBody: 13
+    readonly property int fsTitle: 14
+    readonly property int fsBig: 20
 
-    // 圆角
-    readonly property int rCard: 12
-    readonly property int rBtn: 8
+    // 圆角（ZCode 级：小而克制）
+    readonly property int rCard: 6
+    readonly property int rBtn: 4
     readonly property int rBadge: 99
 
     function stateColor(s) {

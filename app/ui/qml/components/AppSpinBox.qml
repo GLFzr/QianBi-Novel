@@ -19,7 +19,7 @@ SpinBox {
         readOnly: !spin.editable
         validator: spin.validator
         selectionColor: Theme.accent
-        selectedTextColor: "#1D1B17"
+        selectedTextColor: "#0B0E12"
     }
 
     background: Rectangle {

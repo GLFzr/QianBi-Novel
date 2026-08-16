@@ -42,7 +42,7 @@ GridLayout {
             Text {
                 visible: index % 3 !== 2 && index < pills.steps.length - 1
                 text: "→"
-                color: "#3A382F"
+                color: "#333A44"
                 font.pixelSize: Theme.fsTiny
                 anchors.verticalCenter: parent.verticalCenter
             }

@@ -11,6 +11,15 @@ Item {
     signal openChapter(int num)
 
     property int guidanceNum: 0
+    property int confirmNum: 0
+
+    // 驾驶舱「查看」入口：直接打开指定项目文件（设定/大纲）
+    function openProjectFile(rel) {
+        if (rel === "") return
+        fileDialog.currentRel = rel
+        fileEditor.text = bridge.readProjectFile(rel)
+        fileDialog.open()
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -30,8 +39,8 @@ Item {
                     Text {
                         text: "章节"
                         color: Theme.textPrimary
-                        font.family: Theme.serifFont
-                        font.pixelSize: Theme.fsTitle
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
                         font.bold: true
                     }
                     Text {
@@ -72,7 +81,11 @@ Item {
                 words: model.words
                 note: model.note
                 onOpenChapter: function (n) { bridge.openChapter(n); chapterPanel.openChapter(n) }
-                onRewriteChapter: function (n) { bridge.rewriteChapter(n) }
+                onRewriteChapter: function (n) {
+                    // 重写确认：旧正文先归档为「重写前备份」版本，放弃时可回退
+                    chapterPanel.confirmNum = n
+                    rewriteConfirmDialog.open()
+                }
                 onRequestGuidanceRewrite: function (n) {
                     chapterPanel.guidanceNum = n
                     chapterGuidanceDialog.open()
@@ -120,7 +133,7 @@ Item {
         header: Text {
             text: "带指导重写 第 " + chapterPanel.guidanceNum + " 章"
             color: Theme.textPrimary
-            font.family: Theme.serifFont
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
             padding: 18
@@ -197,7 +210,7 @@ Item {
         header: Text {
             text: "项目文件 · " + bridge.bookTitle
             color: Theme.textPrimary
-            font.family: Theme.serifFont
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
             padding: 16
@@ -286,7 +299,7 @@ Item {
                     TextArea {
                         id: fileEditor
                         color: Theme.textPrimary
-                        font.family: Theme.serifFont
+                        font.family: Theme.uiFont
                         font.pixelSize: 15
                         wrapMode: Text.Wrap
                         selectByMouse: true
@@ -304,6 +317,58 @@ Item {
                         onClicked: bridge.saveProjectFile(fileDialog.currentRel, fileEditor.text)
                     }
                 }
+            }
+        }
+    }
+
+    // ---- 整章重写确认（保存驱动语义：旧正文先归档「重写前备份」版本）----
+    Dialog {
+        id: rewriteConfirmDialog
+        parent: Overlay.overlay
+        modal: true
+        width: 460
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+        header: Text {
+            text: "重写第 " + chapterPanel.confirmNum + " 章？"
+            color: Theme.textPrimary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 16
+        }
+        contentItem: Column {
+            spacing: 8
+            width: parent.width
+            Text {
+                width: parent.width
+                text: "当前正文将被移除并重新生成。旧内容会先归档为「重写前备份」版本——重写后不满意，可在「版本历史」中回退（回退只进工作副本，保存才提交）。"
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "取消"
+                kind: "ghost"
+                onClicked: rewriteConfirmDialog.close()
+            }
+            AppButton {
+                text: "确认重写"
+                kind: "primary"
+                onClicked: { bridge.rewriteChapter(chapterPanel.confirmNum); rewriteConfirmDialog.close() }
             }
         }
     }

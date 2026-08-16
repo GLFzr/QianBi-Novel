@@ -2,3 +2,7 @@
 # 安装：pip install -r requirements.txt
 PySide6>=6.5
 httpx>=0.24
+psutil>=5.9        # 内存采样（长跑稳定性监控，缺失时自动降级）
+
+# 打包（可选，仅构建 exe 需要）
+# pyinstaller>=6.0

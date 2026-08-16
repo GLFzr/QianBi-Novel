@@ -28,6 +28,27 @@ class PipelineStopped(Exception):
     pass
 
 
+def _compose_guidance(guidance: str, cfg: dict) -> str:
+    """重写指导 + 全局写作偏好（文风/禁忌/节奏）合成注入正文 prompt
+
+    全局偏好来自 设置→写作偏好，独立保存、注入所有章节，作者不改代码就能调全书文风。
+    """
+    w = cfg.get("writing", {})
+    parts = []
+    if (guidance or "").strip():
+        parts.append(guidance.strip())
+    prefs = []
+    if (w.get("style_pref") or "").strip():
+        prefs.append(f"文风：{w['style_pref'].strip()}")
+    if (w.get("taboos") or "").strip():
+        prefs.append(f"禁忌（绝不出现）：{w['taboos'].strip()}")
+    if (w.get("pace_pref") or "").strip():
+        prefs.append(f"节奏：{w['pace_pref'].strip()}")
+    if prefs:
+        parts.append("【全局写作偏好（每章必须遵守）】\n" + "\n".join(prefs))
+    return "\n\n".join(parts) if parts else "无特殊指导"
+
+
 def _stream(ctx, slot: str, prompt: str, label: str = "") -> str:
     """流式 LLM 调用：增量实时转发到 UI（ctx.stream_chunk），返回完整文本
 
@@ -248,13 +269,19 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:3000] or "（暂无）"
     foreshadows = memory.unfished_foreshadows(proj) or "（暂无）"
     previous_excerpt = ""
+    style_sample = "（本章为第一章，无上一章文风样本）"
     chapters = project.list_chapters(proj)
     if chapters:
         last = chapters[-1]
         if last[0] == num - 1:
             prev_text = project.read_file(last[2])
             previous_excerpt = prev_text[-800:] if len(prev_text) > 800 else prev_text
-    ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 细纲 + 前3章摘要 + 角色状态 + 伏笔）")
+            # 文风锚定：上一章开头样本（跳过标题行），防长篇文风漂移
+            body_start = prev_text.find("\n")
+            sample = prev_text[body_start + 1:body_start + 501] if body_start > 0 else prev_text[:500]
+            if sample.strip():
+                style_sample = sample
+    ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 细纲 + 前3章摘要 + 角色状态 + 伏笔 + 文风样本）")
 
     # ---- ② 草稿生成 ----
     ctx.step(num, st.STEP_DRAFT)
@@ -269,7 +296,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         character_states=character_states,
         foreshadows=foreshadows,
         previous_excerpt=previous_excerpt or "（本章为第一章）",
-        user_guidance=guidance or "无特殊指导",
+        style_sample=style_sample,
+        user_guidance=_compose_guidance(guidance, ctx.cfg),
         user_ideas="\n".join(f"- {t}" for t in (ideas or [])) or "（无）",
         word_target=chapter_words,
     )

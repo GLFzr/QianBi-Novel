@@ -29,7 +29,7 @@ Column {
         bottomPadding: 7
         placeholderTextColor: Theme.textTertiary
         selectionColor: Theme.accent
-        selectedTextColor: "#1D1B17"
+        selectedTextColor: "#0B0E12"
         background: Rectangle {
             radius: Theme.rBtn
             color: Theme.bgHover

@@ -20,10 +20,11 @@ ApplicationWindow {
     color: Theme.bgPage
 
     readonly property var navItems: [
-        { "label": "书架", "icon": "▤", "key": "shelf" },
-        { "label": "流水线", "icon": "▶", "key": "pipeline" },
-        { "label": "章节", "icon": "☰", "key": "chapters" },
-        { "label": "设置", "icon": "⚙", "key": "settings" }
+        { "label": "书架", "icon": "shelf", "key": "shelf" },
+        { "label": "流水线", "icon": "play", "key": "pipeline" },
+        { "label": "章节", "icon": "chapters", "key": "chapters" },
+        { "label": "笔记", "icon": "notes", "key": "notes" },
+        { "label": "设置", "icon": "settings", "key": "settings" }
     ]
     property string activePanel: "shelf"
     property bool logVisible: false
@@ -31,6 +32,77 @@ ApplicationWindow {
     property int selStart: -1            // 局部改写：选中区间
     property int selEnd: -1
     property int pendingChapter: -1      // 未保存确认后待执行动作：>=0 打开该章，-2 关闭窗口
+    property string rewriteCtxMode: "neighbor"   // 改写上下文：only/neighbor/full/setting
+    property var edPrefs: ({ fontScale: 1.0, narrow: true, streamSmooth: false })
+    // 流式速度：即时全文 vs 打字机平滑（S4）——打字机用 33ms 节流渲染增量
+    property string streamFull: ""
+    property string streamShown: ""
+    Timer {
+        id: typewriter
+        interval: 33
+        running: bridge.isStreaming && mainWindow.edPrefs.streamSmooth
+                 && mainWindow.streamShown.length < mainWindow.streamFull.length
+        onTriggered: {
+            var full = mainWindow.streamFull
+            var shown = mainWindow.streamShown
+            // 追帧：每 tick 补 1/6 缺口（既平滑又不落后太多）
+            var n = Math.min(full.length, shown.length + Math.max(2, Math.ceil((full.length - shown.length) / 6)))
+            mainWindow.streamShown = full.substring(0, n)
+        }
+    }
+
+    // 进入沉浸阅读：当前章含未保存工作副本时把编辑器内容一并带入（未定稿徽章）
+    function openReader() {
+        if (!bridge.hasProject) { bridge.showToast("warn", "请先打开项目"); return }
+        var num = bridge.currentChapterNum
+        if (num > 0 && bridge.editorDirty) readerView.open(num, editor.text)
+        else {
+            var chs = bridge.readerChapterList()
+            if (chs.length === 0) { bridge.showToast("warn", "还没有可读的章节"); return }
+            readerView.open(num > 0 ? num : chs[chs.length - 1].num, "")
+        }
+    }
+
+    // ---- 全局快捷键 ----
+    Shortcut {
+        sequence: StandardKey.Save
+        enabled: bridge.editorDirty && !bridge.isStreaming && bridge.chapterPath !== ""
+        onActivated: bridge.saveChapterText(editor.text)
+    }
+    Shortcut {
+        sequence: "F5"
+        enabled: !readerView.visible
+        onActivated: mainWindow.openReader()
+    }
+    Shortcut {
+        sequence: "Escape"
+        enabled: readerView.visible
+        onActivated: readerView.close()
+    }
+    Shortcut {
+        sequence: "Left"
+        enabled: readerView.visible
+        onActivated: readerView.pageStep(-1)
+    }
+    Shortcut {
+        sequence: "Right"
+        enabled: readerView.visible
+        onActivated: readerView.pageStep(1)
+    }
+    Shortcut {
+        sequence: "Ctrl+B"
+        enabled: !bridge.isStreaming && bridge.chapterPath !== ""
+        onActivated: versionsBtn.clicked()
+    }
+    Shortcut {
+        sequence: "Ctrl+E"
+        enabled: !bridge.isStreaming && editor.selectedText !== "" && !bridge.isRewritingSelection
+        onActivated: {
+            mainWindow.selStart = editor.selectionStart
+            mainWindow.selEnd = editor.selectionEnd
+            rewriteDialog.open()
+        }
+    }
 
     // 未保存保护：切换章节 / 关闭窗口前若有未保存修改 → 弹「保存/放弃/取消」
     function tryOpenChapter(n) {
@@ -74,6 +146,8 @@ ApplicationWindow {
         }
     }
     Component.onCompleted: {
+        // 编辑器偏好（字号/限宽/流式速度，设置-外观 可调）
+        edPrefs = bridge.editorPrefs()
         // 兜底：启动时项目可能已加载（信号在 QML 建立前发出）
         if (bridge.hasProject) mainWindow.activePanel = "pipeline"
         // 崩溃/意外退出后的未保存草稿 → 提示恢复（恢复仍是工作副本，保存才成版本）
@@ -95,64 +169,58 @@ ApplicationWindow {
         anchors.bottomMargin: statusBar.height   // 给底部状态栏让位，避免盖住面板底部按钮
         spacing: 0
 
-        // ========== 最左：功能图标栏 ==========
+        // ========== 最左：功能图标栏（ZCode 式 48px 纯图标栏）==========
         Rectangle {
-            Layout.preferredWidth: 52
+            Layout.preferredWidth: 48
             Layout.fillHeight: true
             color: Theme.bgPanel
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.topMargin: 10
-                anchors.bottomMargin: 10
-                spacing: 4
+                anchors.topMargin: 8
+                anchors.bottomMargin: 8
+                spacing: 2
 
-                // Logo
+                // Logo · 极简方标
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 32; height: 32; radius: 8
-                    color: Theme.accent
+                    width: 28; height: 28; radius: 6
+                    color: Theme.textPrimary
                     Text {
                         anchors.centerIn: parent
                         text: "文"
-                        color: "#1D1B17"
-                        font.family: Theme.serifFont
-                        font.pixelSize: 15
+                        color: Theme.bgPanel
+                        font.family: Theme.uiFont
+                        font.pixelSize: 13
                         font.bold: true
                     }
                 }
-                Item { Layout.fillWidth: true; height: 6 }
+                Item { Layout.fillWidth: true; height: 10 }
 
-                // 功能图标
+                // 功能图标（线性图标 + 圆角活动块，无指示条）
                 Repeater {
                     model: mainWindow.navItems
-                    delegate: Rectangle {
+                    delegate: Item {
                         required property var modelData
                         required property int index
                         Layout.alignment: Qt.AlignHCenter
-                        width: 38; height: 38
-                        radius: 10
+                        width: 36; height: 36
                         enabled: modelData.key !== "shelf" ? bridge.hasProject : true
-                        opacity: enabled ? 1.0 : 0.35
-                        color: mainWindow.activePanel === modelData.key ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                             : navHover.containsMouse ? Theme.bgHover : "transparent"
-                        // 选中指示条
+                        opacity: enabled ? 1.0 : 0.3
+
                         Rectangle {
-                            visible: mainWindow.activePanel === modelData.key
-                            width: 3; height: 18
-                            radius: 2
-                            anchors.left: parent.left
-                            anchors.leftMargin: 0
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: Theme.accent
+                            anchors.fill: parent
+                            radius: 8
+                            color: mainWindow.activePanel === modelData.key ? Theme.bgActive
+                                 : navHover.containsMouse ? Theme.bgHover : "transparent"
+                            Behavior on color { ColorAnimation { duration: 100 } }
                         }
-                        Text {
+                        AppIcon {
                             anchors.centerIn: parent
-                            text: modelData.icon
-                            color: mainWindow.activePanel === modelData.key ? Theme.accent : Theme.textSecondary
-                            font.pixelSize: 16
-                            font.bold: mainWindow.activePanel === modelData.key
+                            name: modelData.icon
+                            size: 19
+                            color: mainWindow.activePanel === modelData.key ? Theme.textPrimary : Theme.textSecondary
                         }
                         MouseArea {
                             id: navHover
@@ -170,17 +238,21 @@ ApplicationWindow {
                 Item { Layout.fillHeight: true }
 
                 // 日志开关
-                Rectangle {
+                Item {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 38; height: 38
-                    radius: 9
-                    color: mainWindow.logVisible ? Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.16)
-                         : logHover.containsMouse ? Theme.bgHover : "transparent"
-                    Text {
+                    width: 36; height: 36
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: mainWindow.logVisible ? Theme.bgActive
+                             : logHover.containsMouse ? Theme.bgHover : "transparent"
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                    }
+                    AppIcon {
                         anchors.centerIn: parent
-                        text: "≡"
-                        color: mainWindow.logVisible ? Theme.info : Theme.textSecondary
-                        font.pixelSize: 16
+                        name: "log"
+                        size: 18
+                        color: mainWindow.logVisible ? Theme.textPrimary : Theme.textSecondary
                     }
                     MouseArea {
                         id: logHover
@@ -202,21 +274,28 @@ ApplicationWindow {
             color: Theme.bgPanel
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
-            StackLayout {
+                StackLayout {
                 id: panelStack
                 objectName: "panelStack"
                 anchors.fill: parent
                 currentIndex: mainWindow.activePanel === "shelf" ? 0
                              : mainWindow.activePanel === "pipeline" ? 1
-                             : mainWindow.activePanel === "chapters" ? 2 : 3
+                             : mainWindow.activePanel === "chapters" ? 2
+                             : mainWindow.activePanel === "notes" ? 3 : 4
 
                 BookshelfPanel {}
                 PipelinePanel {
                     onOpenChapter: function (n) { mainWindow.tryOpenChapter(n) }
+                    onOpenProjectFile: function (rel) {
+                        mainWindow.activePanel = "chapters"
+                        chapterPanelProxy.openProjectFile(rel)
+                    }
                 }
                 ChapterPanel {
+                    id: chapterPanelProxy
                     onOpenChapter: function (n) { mainWindow.tryOpenChapter(n) }
                 }
+                NotesPanel {}
                 SettingsPanel {}
             }
         }
@@ -233,36 +312,37 @@ ApplicationWindow {
                 editor.forceActiveFocus()
             }
 
-            // ---- 编辑器顶栏 ----
+            // ---- 编辑器顶栏（44px · 面包屑标题）----
             Rectangle {
                 Layout.fillWidth: true
-                height: 52
+                height: 44
                 color: Theme.bgPanel
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 18
-                    anchors.rightMargin: 14
-                    spacing: 12
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 10
+                    spacing: 10
 
                     Column {
-                        spacing: 1
+                        spacing: 0
                         Text {
                             text: bridge.chapterPath
                                   ? bridge.chapterPath.split(/[\\/]/).pop().replace(".md", "")
                                   : (bridge.isStreaming ? "正在写作…" : "未打开章节")
                             color: Theme.textPrimary
-                            font.family: Theme.serifFont
-                            font.pixelSize: Theme.fsTitle
-                            font.bold: true
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
                             elide: Text.ElideRight
                         }
                         Text {
+                            visible: bridge.bookTitle !== ""
                             text: bridge.bookTitle + (bridge.bookMeta ? " · " + bridge.bookMeta : "")
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.fsTiny
+                            elide: Text.ElideRight
                         }
                     }
                     Item { Layout.fillWidth: true }
@@ -274,19 +354,49 @@ ApplicationWindow {
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fsTiny
                     }
-                    Text {
+                    Row {
                         visible: bridge.isStreaming
-                        text: bridge.streamStageLabel !== "" ? "正在" + bridge.streamStageLabel + "…" : "生成中…"
-                        color: Theme.accent
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsTiny
+                        spacing: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        // S2 thinking 呼吸动画：思考期（有思维链、还没正文）三点呼吸，不空白
+                        Text {
+                            visible: bridge.reasoningText !== "" && bridge.liveDraftText === ""
+                            text: "● ● ●"
+                            color: Theme.info
+                            font.pixelSize: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            SequentialAnimation on opacity {
+                                running: visible; loops: Animation.Infinite
+                                NumberAnimation { to: 0.15; duration: 600 }
+                                NumberAnimation { to: 1; duration: 600 }
+                            }
+                        }
+                        Text {
+                            text: bridge.reasoningText !== "" && bridge.liveDraftText === ""
+                                  ? "思考中"
+                                  : (bridge.streamStageLabel !== "" ? "正在" + bridge.streamStageLabel + "…" : "生成中…")
+                            color: bridge.reasoningText !== "" && bridge.liveDraftText === "" ? Theme.info : Theme.accent
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
                     AppButton {
+                        iconName: "reader"
+                        text: "阅读"
+                        enabled: bridge.hasProject
+                        onClicked: mainWindow.openReader()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "沉浸阅读模式（像读小说一样读自己的稿子）· 三主题/标注/书签"
+                    }
+                    AppButton {
+                        iconName: "scan"
                         text: "扫描 AI 味"
                         enabled: !bridge.isStreaming && editor.text !== ""
                         onClicked: bridge.scanChapterText(editor.text)
                     }
                     AppButton {
+                        iconName: "pen"
                         text: "局部重写"
                         visible: !bridge.isStreaming
                         enabled: !bridge.isStreaming && editor.selectedText !== "" && !bridge.isRewritingSelection
@@ -297,6 +407,7 @@ ApplicationWindow {
                         }
                     }
                     AppButton {
+                        iconName: "save"
                         text: bridge.editorDirty ? "● 保存" : "保存"
                         kind: bridge.editorDirty ? "primary" : "ghost"
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
@@ -310,9 +421,9 @@ ApplicationWindow {
                         width: 9
                         height: 9
                         radius: 4.5
-                        color: "#E8B339"
+                        color: "#E5B84E"
                         border.width: 1
-                        border.color: "#8a6a1c"
+                        border.color: "#6E5620"
                         Layout.alignment: Qt.AlignVCenter
                         MouseArea {
                             id: ma
@@ -323,6 +434,8 @@ ApplicationWindow {
                         }
                     }
                     AppButton {
+                        id: versionsBtn
+                        iconName: "history"
                         text: "版本"
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
                         onClicked: {
@@ -333,24 +446,15 @@ ApplicationWindow {
                             versionsDialog.open()
                         }
                         ToolTip.visible: hovered
-                        ToolTip.text: "版本历史（保存驱动）：查看 / 对比 / 回退"
+                        ToolTip.text: "版本历史（保存驱动）：查看 / 对比 / 回退 · Ctrl+B"
                     }
                     AppButton {
-                        text: "导出…"
+                        iconName: "export"
+                        text: "导出"
                         enabled: bridge.hasProject && !bridge.isStreaming
-                        onClicked: exportMenu.popup()
-                        Menu {
-                            id: exportMenu
-                            palette.window: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            MenuItem {
-                                text: "导出 txt（平台上传标准）"
-                                onTriggered: bridge.exportProject("txt")
-                            }
-                            MenuItem {
-                                text: "导出 epub（阅读器通用）"
-                                onTriggered: bridge.exportProject("epub")
-                            }
+                        onClicked: {
+                            exportDialog.refreshPreview()
+                            exportDialog.open()
                         }
                     }
                     AppButton {
@@ -381,19 +485,21 @@ ApplicationWindow {
 
                 TextArea {
                     id: editor
-                    text: bridge.isStreaming ? bridge.liveDraftText : bridge.chapterText
+                    text: bridge.isStreaming ? (mainWindow.edPrefs.streamSmooth ? mainWindow.streamShown : bridge.liveDraftText) : bridge.chapterText
                     readOnly: bridge.isStreaming
                     color: Theme.textPrimary
                     font.family: Theme.serifFont
-                    font.pixelSize: 17
+                    font.pixelSize: Math.round(17 * (mainWindow.edPrefs.fontScale || 1.0))
                     wrapMode: Text.Wrap
                     selectByMouse: true
                     persistentSelection: true
                     selectionColor: Theme.accent
                     selectedTextColor: "#1D1B17"
-                    // 正文限宽居中（阅读宽度 ~820px，写作工具标准排版）
-                    leftPadding: Math.max(56, Math.min(320, (editorHolder.width - 820) / 2))
-                    rightPadding: Math.max(56, Math.min(320, (editorHolder.width - 820) / 2))
+                    // 正文限宽居中（阅读宽度 ~820px，可在设置-外观关闭）
+                    leftPadding: mainWindow.edPrefs.narrow !== false
+                                  ? Math.max(56, Math.min(320, (editorHolder.width - 820) / 2)) : 40
+                    rightPadding: mainWindow.edPrefs.narrow !== false
+                                  ? Math.max(56, Math.min(320, (editorHolder.width - 820) / 2)) : 40
                     topPadding: 30
                     bottomPadding: 70
                     background: Rectangle { color: Theme.bgPage }
@@ -410,6 +516,19 @@ ApplicationWindow {
                             bridge.markEditorDirty(text)
                         }
                     }
+                    // 选区浮动工具栏（共写：选中即打磨）
+                    onSelectedTextChanged: {
+                        if (!bridge.isStreaming && selectedText.length >= 2 && activeFocus) {
+                            var cr = editor.cursorRectangle
+                            var gp = mapToItem(mainWindow.contentItem, cr.x, cr.y)
+                            selToolbar.x = Math.min(mainWindow.width - selToolbar.width - 20, Math.max(340, gp.x))
+                            selToolbar.y = Math.max(70, Math.min(mainWindow.height - 120, gp.y - 46))
+                            selToolbar.visible = true
+                        } else {
+                            selToolbar.visible = false
+                        }
+                    }
+                    onActiveFocusChanged: if (!activeFocus) selToolbar.visible = false
                 }
             }
 
@@ -569,16 +688,16 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 28
+        height: 24
         color: Theme.bgPanel
         Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.border }
         z: 10
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            spacing: 14
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 12
             Text {
                 text: bridge.progressText !== "" ? "进度 " + bridge.progressText : "未打开项目"
                 color: Theme.textTertiary
@@ -599,6 +718,17 @@ ApplicationWindow {
                 color: Theme.textTertiary
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.monoFont
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        statsData = bridge.statsSummary()
+                        statsDialog.open()
+                    }
+                }
+                ToolTip.visible: containsMouse
+                ToolTip.text: "点击查看统计面板（章节/字数/成本）"
             }
             Text {
                 visible: bridge.isPaused
@@ -610,19 +740,292 @@ ApplicationWindow {
         }
     }
 
+    // ---- 选区浮动工具栏（圆角/阴影/动画 · 四动作直达局部改写）----
+    Rectangle {
+        id: selToolbar
+        parent: mainWindow.contentItem
+        visible: false
+        z: 30
+        width: selRow.implicitWidth + 20
+        height: 36
+        radius: 10
+        color: Theme.bgCard
+        opacity: visible ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 120 } }
+
+        Row {
+            id: selRow
+            anchors.centerIn: parent
+            spacing: 4
+            Repeater {
+                model: [
+                    { label: "改写", idea: "" },
+                    { label: "扩写", idea: "扩写：把这一段写得更厚实，补充细节、动作与心理，不要偏离原意" },
+                    { label: "精简", idea: "精简：删掉冗余，让这一段更干脆有力，保留核心信息" },
+                    { label: "按想法改", idea: "" }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    width: stBtnText.implicitWidth + 16
+                    height: 26
+                    radius: 6
+                    color: stBtnHover.containsMouse ? Theme.bgHover : "transparent"
+                    Text {
+                        id: stBtnText
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: Theme.textPrimary
+                        font.pixelSize: Theme.fsSmall
+                        font.family: Theme.uiFont
+                    }
+                    MouseArea {
+                        id: stBtnHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            mainWindow.selStart = editor.selectionStart
+                            mainWindow.selEnd = editor.selectionEnd
+                            rewriteIdea.text = modelData.idea
+                            selToolbar.visible = false
+                            rewriteDialog.open()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- 沉浸阅读器（M2：三主题/排版/标注/书签/位置记忆）----
+    ReaderView { id: readerView }
+
+    // ---- 导出（M4：排版选项 + 预览 + 报告）----
+    Dialog {
+        id: exportDialog
+        objectName: "exportDialog"
+        parent: Overlay.overlay
+        modal: true
+        width: 680
+        height: 520
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(24, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgCard
+        }
+        property string fmt: "txt"
+        property string sep: "blank"
+        property int titleFmt: 0
+
+        function refreshPreview() {
+            previewArea.text = bridge.exportPreviewText(exportDialog.sep, exportDialog.titleFmt)
+        }
+
+        header: Column {
+            padding: 16
+            spacing: 2
+            Text {
+                text: "导出全本"
+                color: Theme.textPrimary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTitle
+                font.bold: true
+            }
+            Text {
+                text: "排版选项即时预览（前两章实际效果）· 导出后显示报告"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTiny
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+
+            // 格式
+            RowLayout {
+                spacing: 6
+                Text { text: "格式"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                Repeater {
+                    model: [{ t: "txt（平台上传标准）", v: "txt" }, { t: "epub（阅读器通用）", v: "epub" }]
+                    delegate: Rectangle {
+                        required property var modelData
+                        height: 26; radius: 7
+                        width: fmtText.implicitWidth + 18
+                        color: exportDialog.fmt === modelData.v ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        border.width: 1
+                        border.color: exportDialog.fmt === modelData.v ? Theme.accent : Theme.border
+                        Text { id: fmtText; anchors.centerIn: parent; text: modelData.t
+                               color: exportDialog.fmt === modelData.v ? Theme.accent : Theme.textTertiary
+                               font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { exportDialog.fmt = modelData.v; exportDialog.refreshPreview() } }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
+            // 分隔与标题（txt 有效）
+            RowLayout {
+                visible: exportDialog.fmt === "txt"
+                spacing: 6
+                Text { text: "章节分隔"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                Repeater {
+                    model: [{ t: "空行", v: "blank" }, { t: "分隔线", v: "line" }, { t: "分页符", v: "page" }]
+                    delegate: Rectangle {
+                        required property var modelData
+                        height: 24; radius: 6
+                        width: sepText.implicitWidth + 14
+                        color: exportDialog.sep === modelData.v ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        border.width: 1
+                        border.color: exportDialog.sep === modelData.v ? Theme.accent : Theme.border
+                        Text { id: sepText; anchors.centerIn: parent; text: modelData.t
+                               color: exportDialog.sep === modelData.v ? Theme.accent : Theme.textTertiary
+                               font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { exportDialog.sep = modelData.v; exportDialog.refreshPreview() } }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Text { text: "标题格式"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                Repeater {
+                    model: 4
+                    delegate: Rectangle {
+                        required property int index
+                        height: 24; radius: 6
+                        width: tfText.implicitWidth + 14
+                        color: exportDialog.titleFmt === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        border.width: 1
+                        border.color: exportDialog.titleFmt === index ? Theme.accent : Theme.border
+                        Text { id: tfText; anchors.centerIn: parent
+                               text: ["第X章 标题", "第X章·标题", "仅标题", "无标题"][index]
+                               color: exportDialog.titleFmt === index ? Theme.accent : Theme.textTertiary
+                               font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                            onClicked: { exportDialog.titleFmt = index; exportDialog.refreshPreview() } }
+                    }
+                }
+            }
+            // 预览
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: Theme.rBtn
+                color: Theme.bgLog
+                border.width: 1
+                border.color: Theme.border
+                clip: true
+                ScrollView {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    TextArea {
+                        id: previewArea
+                        readOnly: true
+                        color: Theme.textSecondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        wrapMode: Text.Wrap
+                        background: Rectangle { color: "transparent" }
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    visible: previewArea.text === ""
+                    text: "（预览）"
+                    color: Theme.textTertiary
+                }
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "备份项目 zip"
+                onClicked: bridge.backupProject()
+            }
+            AppButton {
+                text: "取消"
+                kind: "ghost"
+                onClicked: exportDialog.close()
+            }
+            AppButton {
+                text: "导出"
+                kind: "primary"
+                onClicked: {
+                    bridge.exportProjectOpts(exportDialog.fmt, exportDialog.sep, exportDialog.titleFmt)
+                    exportDialog.close()
+                }
+            }
+        }
+        onOpened: refreshPreview()
+    }
+
+    // ---- 统计面板（管理者视角：章节/字数/成本）----
+    property var statsData: ({})
+    Dialog {
+        id: statsDialog
+        parent: Overlay.overlay
+        modal: true
+        width: 420
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: Rectangle {
+            radius: Theme.rCard
+            color: Theme.bgCard
+        }
+        header: Text {
+            text: "统计 · " + bridge.bookTitle
+            color: Theme.textPrimary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 16
+        }
+        contentItem: GridLayout {
+            columns: 2
+            columnSpacing: 16
+            rowSpacing: 10
+            Repeater {
+                model: [
+                    { k: "已写章节", v: (mainWindow.statsData.chapters || 0) + " 章" },
+                    { k: "全书字数", v: (mainWindow.statsData.words || 0).toLocaleString() + " 字" },
+                    { k: "平均章节", v: (mainWindow.statsData.avgWords || 0).toLocaleString() + " 字" },
+                    { k: "今日新增", v: (mainWindow.statsData.todayWords || 0).toLocaleString() + " 字" },
+                    { k: "本周新增", v: (mainWindow.statsData.weekWords || 0).toLocaleString() + " 字" },
+                    { k: "累计 token", v: (mainWindow.statsData.tokens || 0).toLocaleString() },
+                    { k: "预估成本", v: mainWindow.statsData.cost || "¥0.00" }
+                ]
+                delegate: Column {
+                    required property var modelData
+                    spacing: 2
+                    Text { text: modelData.k; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                    Text { text: modelData.v; color: Theme.textPrimary; font.pixelSize: Theme.fsBig; font.family: Theme.monoFont }
+                }
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton { text: "关闭"; kind: "ghost"; onClicked: statsDialog.close() }
+            AppButton { text: "备份项目 zip"; kind: "primary"; onClicked: bridge.backupProject() }
+        }
+    }
+
     // ---- 全局 Toast ----
     Rectangle {
         id: toastBar
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 36
-        width: Math.min(560, toastText.implicitWidth + 48)
-        height: 40
-        radius: 20
-        color: Theme.bgHover
+        anchors.bottomMargin: 40
+        width: Math.min(560, toastText.implicitWidth + 44)
+        height: 36
+        radius: Theme.rBtn
+        color: Theme.bgCard
         border.width: 1
-        border.color: toastBar.toastLevel === "error" ? Theme.danger
-                 : toastBar.toastLevel === "warn" ? Theme.accent
+        border.color: toastBar.toastLevel === "error" ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.5)
+                 : toastBar.toastLevel === "warn" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.5)
                  : Theme.borderStrong
         opacity: 0
         visible: opacity > 0
@@ -664,6 +1067,16 @@ ApplicationWindow {
             var chs = bridge.chapterModelProp.rowCount
             if (bridge.lastRecord.num !== undefined) bridge.openChapter(bridge.lastRecord.num)
         }
+        // 打字机流式（S4）：全文进缓冲，非平滑模式直接展示
+        function onLiveDraftChanged() {
+            mainWindow.streamFull = bridge.liveDraftText
+            if (!mainWindow.edPrefs.streamSmooth)
+                mainWindow.streamShown = bridge.liveDraftText
+        }
+        function onStreamStageChanged() {
+            mainWindow.streamFull = ""
+            mainWindow.streamShown = ""
+        }
     }
 
     // ---- 局部重写对话框（选中段落 + 想法 → AI 只改这一段）----
@@ -678,13 +1091,11 @@ ApplicationWindow {
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
         }
         header: Text {
             text: "局部重写选中段落"
             color: Theme.textPrimary
-            font.family: Theme.serifFont
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
             padding: 16
@@ -714,10 +1125,41 @@ ApplicationWindow {
                         text: editor.selectedText !== "" ? editor.selectedText : ""
                         readOnly: true
                         color: Theme.textSecondary
-                        font.family: Theme.serifFont
+                        font.family: Theme.uiFont
                         font.pixelSize: Theme.fsSmall
                         wrapMode: Text.Wrap
                         background: Rectangle { color: "transparent" }
+                    }
+                }
+            }
+            // 改写上下文选项（共写：AI 看多少上下文来改这一段）
+            Text {
+                text: "改写上下文："
+                color: Theme.textTertiary
+                font.pixelSize: Theme.fsTiny
+                font.family: Theme.uiFont
+            }
+            Row {
+                spacing: 6
+                Repeater {
+                    model: [["仅选中段", "only"], ["前后各一段", "neighbor"], ["带全章", "full"], ["全章+设定", "setting"]]
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ctxText.implicitWidth + 18
+                        height: 24
+                        radius: 6
+                        color: mainWindow.rewriteCtxMode === modelData[1] ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        border.width: 1
+                        border.color: mainWindow.rewriteCtxMode === modelData[1] ? Theme.accent : Theme.border
+                        Text {
+                            id: ctxText
+                            anchors.centerIn: parent
+                            text: modelData[0]
+                            color: mainWindow.rewriteCtxMode === modelData[1] ? Theme.accent : Theme.textSecondary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: mainWindow.rewriteCtxMode = modelData[1] }
                     }
                 }
             }
@@ -769,7 +1211,7 @@ ApplicationWindow {
                         text: bridge.selectionDraftText
                         readOnly: true
                         color: Theme.textPrimary
-                        font.family: Theme.serifFont
+                        font.family: Theme.uiFont
                         font.pixelSize: Theme.fsBody
                         wrapMode: Text.Wrap
                         background: Rectangle { color: "transparent" }
@@ -798,10 +1240,21 @@ ApplicationWindow {
                 kind: "primary"
                 visible: !bridge.isRewritingSelection
                 onClicked: {
-                    var before = editor.getText(0, mainWindow.selStart)
+                    // 上下文四档真裁剪：only=无上下文 neighbor=前后各一段 full=全章 setting=全章+核心设定
+                    var mode = mainWindow.rewriteCtxMode
+                    var before = "", after = ""
+                    if (mode === "neighbor") {
+                        // 只取选中段之前/之后的各一个段落（按空行分段）
+                        var b = editor.getText(0, mainWindow.selStart).split(/\n\s*\n/)
+                        var a = editor.getText(mainWindow.selEnd, editor.text.length).split(/\n\s*\n/)
+                        before = b.length > 1 ? b[b.length - 2] : (b[0] || "")
+                        after = a.length > 1 ? a[1] : (a[0] || "")
+                    } else if (mode === "full" || mode === "setting") {
+                        before = editor.getText(0, mainWindow.selStart)
+                        after = editor.getText(mainWindow.selEnd, editor.text.length)
+                    }
                     var sel = editor.getText(mainWindow.selStart, mainWindow.selEnd)
-                    var after = editor.getText(mainWindow.selEnd, editor.text.length)
-                    bridge.rewriteSelection(before, sel, after, rewriteIdea.text)
+                    bridge.rewriteSelection(before, sel, after, rewriteIdea.text, mode)
                 }
             }
             AppButton {
@@ -814,8 +1267,21 @@ ApplicationWindow {
                         bridge.noteEditAction("局部改写")
                         editor.remove(mainWindow.selStart, mainWindow.selEnd)
                         editor.insert(mainWindow.selStart, result)
-                        mainWindow.selStart = -1
-                        mainWindow.selEnd = -1
+                        // 多段连改：应用后自动选中下一段，形成"逐段打磨"工作流
+                        var nextStart = mainWindow.selStart + result.length
+                        var text = editor.text
+                        while (nextStart < text.length && /\s/.test(text[nextStart])) nextStart++
+                        if (nextStart < text.length - 2) {
+                            var paraEnd = text.indexOf("\n", nextStart)
+                            if (paraEnd < 0 || paraEnd > nextStart + 800) paraEnd = Math.min(text.length, nextStart + 800)
+                            editor.select(nextStart, paraEnd)
+                            mainWindow.selStart = nextStart
+                            mainWindow.selEnd = paraEnd
+                            bridge.showToast("ok", "已应用并选中下一段——继续「改写/扩写/精简」即多段连改")
+                        } else {
+                            mainWindow.selStart = -1
+                            mainWindow.selEnd = -1
+                        }
                     }
                     bridge.cancelSelectionRewrite()
                     rewriteDialog.close()
@@ -840,13 +1306,11 @@ ApplicationWindow {
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
         }
         header: Text {
             text: "有未保存的修改"
             color: Theme.textPrimary
-            font.family: Theme.serifFont
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
             padding: 16
@@ -906,8 +1370,6 @@ ApplicationWindow {
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
         }
         header: Column {
             padding: 16
@@ -915,7 +1377,7 @@ ApplicationWindow {
             Text {
                 text: "版本历史 · 第 " + bridge.currentChapterNum + " 章（保存驱动：仅「保存」产生版本）"
                 color: Theme.textPrimary
-                font.family: Theme.serifFont
+                font.family: Theme.uiFont
                 font.pixelSize: Theme.fsTitle
                 font.bold: true
             }
@@ -1024,8 +1486,8 @@ ApplicationWindow {
                             delegate: Text {
                                 width: diffList.width
                                 text: model.text
-                                color: model.op === "del" ? "#E06C6C"
-                                     : model.op === "add" ? "#7BC47F" : Theme.textSecondary
+                                color: model.op === "del" ? Theme.danger
+                                     : model.op === "add" ? Theme.success : Theme.textSecondary
                                 font.family: Theme.monoFont
                                 font.pixelSize: Theme.fsTiny
                                 wrapMode: Text.Wrap
@@ -1098,13 +1560,11 @@ ApplicationWindow {
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
         }
         header: Text {
             text: "发现未保存草稿"
             color: Theme.textPrimary
-            font.family: Theme.serifFont
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
             padding: 16

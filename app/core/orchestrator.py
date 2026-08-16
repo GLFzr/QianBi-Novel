@@ -166,8 +166,8 @@ class Orchestrator(QThread):
                 if guidance:
                     st.save_state(self.proj, state)
                     self.log("info", f"第 {num} 章应用用户重写指导：{guidance[:80]}")
-                # 取走用户提交的创作想法（消费即清空，注入草稿 prompt）
-                ideas = st.take_ideas(state)
+                # 取走用户提交的创作想法（标记已应用，注入草稿 prompt）
+                ideas = st.take_ideas(state, num)
                 if ideas:
                     st.save_state(self.proj, state)
                     self.log("info", f"第 {num} 章应用用户想法 {len(ideas)} 条：{ideas[0][:60]}")

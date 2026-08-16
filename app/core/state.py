@@ -6,6 +6,7 @@
 import json
 import os
 import tempfile
+import time
 
 STATE_FILENAME = "pipeline_state.json"
 
@@ -71,21 +72,56 @@ def take_guidance(state: dict, num: int) -> str:
     return pg.pop(str(num), "")
 
 
-def add_idea(proj: str, state: dict, text: str):
-    """提交一条创作想法（写入 state 并落盘，下一章草稿消费）"""
+def add_idea(proj: str, state: dict, text: str, scope: str = "next"):
+    """提交一条创作想法（结构化：状态/注入范围/时间），下一章或指定章草稿消费
+
+    scope: "next"=下一章 | "通用"=通用想法 | 数字字符串=指定第N章
+    兼容旧格式（纯字符串）——读取时统一转结构化。
+    """
     text = (text or "").strip()
     if not text:
         return False
-    state.setdefault("pending_ideas", []).append(text)
+    import datetime
+    state.setdefault("pending_ideas", []).append({
+        "id": f"idea_{int(time.time() * 1000) % 100000000}_{len(state['pending_ideas'])}",
+        "text": text,
+        "status": "pending",            # pending / applied
+        "scope": scope,
+        "ts": datetime.datetime.now().strftime("%m-%d %H:%M"),
+    })
     save_state(proj, state)
     return True
 
 
-def take_ideas(state: dict) -> list:
-    """取走全部待消费想法（消费即清空）"""
-    ideas = state.get("pending_ideas") or []
-    state["pending_ideas"] = []
-    return ideas
+def norm_ideas(state: dict) -> list:
+    """想法列表规范化：旧格式纯字符串 → 结构化（scope=next）"""
+    result = []
+    for it in state.get("pending_ideas") or []:
+        if isinstance(it, str):
+            it = {"id": f"legacy_{len(result)}", "text": it, "status": "pending",
+                  "scope": "next", "ts": ""}
+        if it.get("text"):
+            result.append(it)
+    return result
+
+
+def take_ideas(state: dict, num: int = 0) -> list:
+    """取走本章待消费想法文本（scope=next / 通用 / ==num），标记 applied 而不删除"""
+    ideas = norm_ideas(state)
+    taken = []
+    for it in ideas:
+        if it.get("status") != "pending":
+            continue
+        scope = str(it.get("scope", "next"))
+        if scope in ("next", "通用") or (num and scope == str(num)):
+            taken.append(it["text"])
+            it["status"] = "applied"
+    state["pending_ideas"] = ideas
+    return taken
+
+
+def pending_idea_texts(state: dict) -> list:
+    return [it["text"] for it in norm_ideas(state) if it.get("status") == "pending"]
 
 
 def state_path(proj: str) -> str:

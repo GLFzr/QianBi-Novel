@@ -34,7 +34,7 @@ Item {
                 Text {
                     text: "书架"
                     color: Theme.textPrimary
-                    font.family: Theme.serifFont
+                    font.family: Theme.uiFont
                     font.pixelSize: Theme.fsTitle
                     font.bold: true
                 }
@@ -88,7 +88,7 @@ Item {
                             anchors.centerIn: parent
                             text: modelData.name.length > 0 ? modelData.name.charAt(0) : "书"
                             color: Theme.accent
-                            font.family: Theme.serifFont
+                            font.family: Theme.uiFont
                             font.pixelSize: 18
                             font.bold: true
                         }
@@ -211,13 +211,11 @@ Item {
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
         }
         header: Text {
             text: "新建项目"
             color: Theme.textPrimary
-            font.family: Theme.serifFont
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
             padding: 16

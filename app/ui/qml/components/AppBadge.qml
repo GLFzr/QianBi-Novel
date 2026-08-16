@@ -7,10 +7,12 @@ Rectangle {
     property color tint: Theme.muted
     property bool pulse: false
 
-    implicitWidth: label.implicitWidth + 18
-    implicitHeight: 22
+    implicitWidth: label.implicitWidth + 16
+    implicitHeight: 20
     radius: Theme.rBadge
-    color: Qt.rgba(tint.r, tint.g, tint.b, 0.13)
+    color: Qt.rgba(tint.r, tint.g, tint.b, 0.12)
+    border.width: 1
+    border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.25)
 
     Text {
         id: label
