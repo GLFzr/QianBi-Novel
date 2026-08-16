@@ -5,16 +5,56 @@ import os
 import re
 
 from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
-                            Property, Signal, Slot, QThread)
+                            Property, Signal, Slot, QThread, QTimer)
 
 from .. import config as cfg_mod
-from .. import project, deslop
-from ..core import state as st
+from .. import project, deslop, prompts
+from ..core import state as st, versions
 from ..core.orchestrator import Orchestrator
-from ..llm import LLMClient, LLMError
+from ..llm import LLMClient, LLMError, ModelRouter
+from ..llm import clean_llm_output
 from ..llm.providers import PROVIDERS, PROVIDER_ORDER
 
 logger = logging.getLogger("qianbi.ui")
+
+
+# ---------- 局部改写工作线程（选中文本 + 用户想法）----------
+
+class SelectionRewriteWorker(QThread):
+    """独立线程跑局部改写：流式回传增量，不阻塞 UI，不碰流水线"""
+    sig_chunk = Signal(str)
+    sig_reasoning = Signal(str)
+    sig_done = Signal(str)
+    sig_error = Signal(str)
+
+    def __init__(self, cfg: dict, before: str, selected: str, after: str,
+                 idea: str, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.before = before
+        self.selected = selected
+        self.after = after
+        self.idea = idea
+        self.router = ModelRouter(cfg)
+
+    def run(self):
+        try:
+            prompt = prompts.SELECTION_REWRITE_PROMPT.format(
+                user_idea=self.idea or "（无具体想法，请按你的判断润色这段）",
+                selected=self.selected,
+                before_context=self.before or "（选中段落在章节开头）",
+                after_context=self.after or "（选中段落在章节末尾）",
+            )
+            client = self.router.client(cfg_mod.SLOT_WRITING)
+            text = clean_llm_output(client.chat_stream(
+                prompt, on_chunk=self.sig_chunk.emit,
+                on_reasoning=self.sig_reasoning.emit))
+            if not text.strip():
+                self.sig_error.emit("模型返回为空，请重试")
+            else:
+                self.sig_done.emit(text)
+        except Exception as e:  # noqa: BLE001
+            self.sig_error.emit(str(e))
 
 
 # ---------- 列表模型 ----------
@@ -240,6 +280,14 @@ class Bridge(QObject):
     lastRecordChanged = Signal()
     liveDraftChanged = Signal()
     streamingChanged = Signal()
+    streamStageChanged = Signal()
+    reasoningChanged = Signal()
+    selectionDraftChanged = Signal()
+    selectionReasoningChanged = Signal()
+    selectionStateChanged = Signal()
+    ideaCountChanged = Signal()
+    editorDirtyChanged = Signal()
+    recoverableDraftChanged = Signal()
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -269,6 +317,21 @@ class Bridge(QObject):
         self._last_record = {}
         self._live_draft = ""
         self._streaming = False
+        self._stream_stage_label = ""
+        self._reasoning_text = ""
+        # 局部改写状态（选中文本 + 想法 → AI 只改选中段）
+        self._sel_draft = ""
+        self._sel_reasoning = ""
+        self._sel_worker = None
+        self._sel_result = ""
+        # 保存驱动版本状态：工作副本 dirty 跟踪 + 草稿暂存（不产生版本）
+        self._editor_dirty = False
+        self._working_text = ""
+        self._last_edit_action = ""            # 最近一次编辑动作来源（局部改写/手动）
+        self._draft_timer = QTimer(self)
+        self._draft_timer.setSingleShot(True)
+        self._draft_timer.setInterval(5000)    # 5s 防抖：只防丢稿，不算版本
+        self._draft_timer.timeout.connect(self._flush_draft)
         self.chapterModel = ChapterListModel(self)
         self.logModel = LogListModel(self)
         self.connectionModel = ConnectionListModel(self)
@@ -307,6 +370,21 @@ class Bridge(QObject):
     def _get_chapter_findings(self): return self._chapter_findings
     def _get_live_draft(self): return self._live_draft
     def _get_streaming(self): return self._streaming
+    def _get_stream_stage(self): return self._stream_stage_label
+    def _get_reasoning(self): return self._reasoning_text
+    def _get_sel_draft(self): return self._sel_draft
+    def _get_sel_reasoning(self): return self._sel_reasoning
+    def _get_sel_rewriting(self): return self._sel_worker is not None and self._sel_worker.isRunning()
+    def _get_pending_ideas(self):
+        if not self.proj:
+            return 0
+        state = st.load_state(self.proj)
+        return len(state.get("pending_ideas") or [])
+
+    def _get_editor_dirty(self): return self._editor_dirty
+
+    def _get_has_recoverable_draft(self):
+        return bool(self.proj and versions.newest_draft(self.proj))
 
     def _get_tokens(self):
         if self.orch:
@@ -345,6 +423,15 @@ class Bridge(QObject):
     lastRecord = Property("QVariantMap", lambda self: self._last_record, notify=lastRecordChanged)
     liveDraftText = Property(str, _get_live_draft, notify=liveDraftChanged)
     isStreaming = Property(bool, _get_streaming, notify=streamingChanged)
+    streamStageLabel = Property(str, _get_stream_stage, notify=streamStageChanged)
+    reasoningText = Property(str, _get_reasoning, notify=reasoningChanged)
+    selectionDraftText = Property(str, _get_sel_draft, notify=selectionDraftChanged)
+    selectionReasoningText = Property(str, _get_sel_reasoning, notify=selectionReasoningChanged)
+    isRewritingSelection = Property(bool, _get_sel_rewriting, notify=selectionStateChanged)
+    pendingIdeas = Property(int, _get_pending_ideas, notify=ideaCountChanged)
+    editorDirty = Property(bool, _get_editor_dirty, notify=editorDirtyChanged)
+    hasRecoverableDraft = Property(bool, _get_has_recoverable_draft,
+                                   notify=recoverableDraftChanged)
     providerOptions = Property("QVariantList", lambda self: [
         {"key": k, "label": PROVIDERS[k]["label"], "baseUrl": PROVIDERS[k]["base_url"],
          "hint": PROVIDERS[k]["hint"], "models": PROVIDERS[k]["models"]}
@@ -417,13 +504,31 @@ class Bridge(QObject):
             self._chapter_findings = []
             self.chapterTextChanged.emit()
             self.chapterFindingsChanged.emit()
+        self._reset_editor_state()
+        # 草稿恢复检测（崩溃/意外退出后留下的未保存草稿）
+        self.recoverableDraftChanged.emit()
         if not silent:
             self.projectOpened.emit()
+
+    def _reset_editor_state(self):
+        """工作副本状态复位：编辑器内容 == 磁盘基准，无未保存修改"""
+        self._editor_dirty = False
+        self._working_text = ""
+        self._last_edit_action = ""
+        self._draft_timer.stop()
+        self.editorDirtyChanged.emit()
+
+    def _flush_draft(self):
+        """5s 防抖草稿暂存（只防丢稿，绝不产生版本）"""
+        if (self.proj and self._cur_num and self._working_text
+                and self._editor_dirty):
+            versions.save_draft(self.proj, self._cur_num, self._working_text)
 
     # ============ 流水线控制 ============
 
     @Slot()
     def startPipeline(self):
+        logger.info("[dbg] startPipeline invoked, proj=%s running=%s", self.proj, self._running)
         if not self.proj:
             self.toast.emit("warn", "请先打开或新建项目")
             return
@@ -448,6 +553,8 @@ class Bridge(QObject):
         self.orch.sig_chapter_started.connect(self._on_chapter_started)
         self.orch.sig_step.connect(self._on_step)
         self.orch.sig_stream_chunk.connect(self._on_stream_chunk)
+        self.orch.sig_stream_stage.connect(self._on_stream_stage)
+        self.orch.sig_stream_reasoning.connect(self._on_stream_reasoning)
         self.orch.sig_chapter_done.connect(self._on_chapter_done)
         self.orch.sig_queue.connect(self.refreshQueue)
         self.orch.sig_finished.connect(self._on_finished)
@@ -511,10 +618,81 @@ class Bridge(QObject):
         else:
             self.toast.emit("ok", f"第 {num} 章正文已移除，点击「开始」将从该章续跑")
 
-    # ============ 章节查看/编辑 ============
+    # ============ 局部改写（选中文本 + 想法，不动流水线）============
+
+    @Slot(str, str, str, str)
+    def rewriteSelection(self, before: str, selected: str, after: str, idea: str):
+        """AI 只改写选中段落：流式预览 → QML 应用/放弃"""
+        if not selected.strip():
+            self.toast.emit("warn", "请先在编辑器中选中要改写的段落")
+            return
+        if self._sel_worker and self._sel_worker.isRunning():
+            self.toast.emit("warn", "上一段改写还在进行中")
+            return
+        self._sel_draft = ""
+        self._sel_reasoning = ""
+        self._sel_result = ""
+        self.selectionDraftChanged.emit()
+        self.selectionReasoningChanged.emit()
+        self.selectionStateChanged.emit()
+        worker = SelectionRewriteWorker(self.cfg, before, selected, after, idea, self)
+        worker.sig_chunk.connect(self._on_sel_chunk)
+        worker.sig_reasoning.connect(self._on_sel_reasoning)
+        worker.sig_done.connect(self._on_sel_done)
+        worker.sig_error.connect(self._on_sel_error)
+        self._sel_worker = worker
+        worker.start()
+        self.selectionStateChanged.emit()
+
+    def _on_sel_chunk(self, text: str):
+        self._sel_draft += text
+        self.selectionDraftChanged.emit()
+
+    def _on_sel_reasoning(self, text: str):
+        self._sel_reasoning += text
+        self.selectionReasoningChanged.emit()
+
+    def _on_sel_done(self, text: str):
+        self._sel_result = text
+        self.selectionStateChanged.emit()
+        self.toast.emit("ok", "改写完成，可「应用」或「放弃」")
+
+    def _on_sel_error(self, msg: str):
+        self.selectionStateChanged.emit()
+        self.toast.emit("error", f"局部改写失败: {msg}")
+
+    @Slot(result=str)
+    def selectionResult(self) -> str:
+        return self._sel_result
+
+    @Slot()
+    def cancelSelectionRewrite(self):
+        if self._sel_worker and self._sel_worker.isRunning():
+            self._sel_worker.requestInterruption()
+        self._sel_worker = None
+        self.selectionStateChanged.emit()
+
+    # ============ 创作想法提交（人和 AI 一起创作）============
+
+    @Slot(str)
+    def submitIdea(self, text: str):
+        """写作中随时提交创作想法：注入下一章草稿 prompt"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        state = st.load_state(self.proj)
+        if st.add_idea(self.proj, state, text):
+            self.ideaCountChanged.emit()
+            self.toast.emit("ok", "想法已提交，将注入下一章创作")
+        else:
+            self.toast.emit("warn", "想法不能为空")
+
+    # ============ 章节查看/编辑（保存驱动版本语义）============
 
     @Slot(int)
     def openChapter(self, num: int):
+        """打开章节到编辑器（工作副本：加载磁盘内容，无未保存修改）
+        注意：QML 端在调用前需先处理当前未保存修改（保存/放弃/取消）"""
         if not self.proj:
             return
         for n, name, path in project.list_chapters(self.proj):
@@ -524,17 +702,129 @@ class Bridge(QObject):
                 self._chapter_findings = []
                 self.chapterTextChanged.emit()
                 self.chapterFindingsChanged.emit()
+                self._reset_editor_state()
                 return
         self.toast.emit("warn", f"第 {num} 章正文不存在")
 
     @Slot(str)
+    def markEditorDirty(self, text: str):
+        """编辑器内容变化时由 QML 调用：比较磁盘基准，置未保存标记 + 启动防抖暂存"""
+        dirty = text != self._chapter_text
+        if dirty != self._editor_dirty:
+            self._editor_dirty = dirty
+            self.editorDirtyChanged.emit()
+        if dirty:
+            self._working_text = text
+            self._draft_timer.start()
+        else:
+            self._working_text = ""
+            self._draft_timer.stop()
+
+    @Slot()
+    def clearEditorDirty(self):
+        """放弃未保存修改（QML 确认对话框「放弃」后调用）"""
+        self._reset_editor_state()
+
+    @Slot(str)
+    def noteEditAction(self, source: str):
+        """登记最近一次编辑动作来源（局部改写应用等），下次保存时作为版本来源标注"""
+        self._last_edit_action = source or ""
+
+    @Slot(str)
     def saveChapterText(self, text: str):
+        """保存驱动版本的唯一提交动作：
+        ① 磁盘旧内容归档为新版本（内容有变化才产生）
+        ② 新内容写正文 ③ 工作副本变干净
+        取消 / 切换章节 / 关闭 / 意外退出 都不会走到这里，因此不会产生版本"""
         if not self._chapter_path:
             return
+        source = self._last_edit_action or versions.SOURCE_MANUAL
+        old = project.read_file(self._chapter_path)
+        v = versions.snapshot(self.proj, self._cur_num, old, source)
         project.write_file(self._chapter_path, text)
         self._chapter_text = text
-        self.toast.emit("ok", f"已保存（{project.count_chars(text)} 字）")
+        self._last_edit_action = ""
+        self._working_text = ""
+        self._draft_timer.stop()
+        if self._editor_dirty:
+            self._editor_dirty = False
+            self.editorDirtyChanged.emit()
+        if self.proj and self._cur_num:
+            versions.discard_draft(self.proj, self._cur_num)
+        self.toast.emit("ok", f"已保存（{project.count_chars(text)} 字）"
+                         + (f" · 版本 v{v} 已归档" if v else " · 内容无变化，未产生新版本"))
         self.refreshQueue()
+
+    # ============ 版本历史（保存驱动 · 查看/diff/回退）============
+
+    @Slot(int, result="QVariantList")
+    def versionsForChapter(self, num: int) -> list:
+        if not self.proj:
+            return []
+        return versions.list_versions(self.proj, num)
+
+    @Slot(int, int, result=str)
+    def readVersion(self, num: int, v: int) -> str:
+        if not self.proj:
+            return ""
+        return versions.read_version(self.proj, num, v)
+
+    @Slot(int, result=str)
+    def diskTextOf(self, num: int) -> str:
+        """磁盘当前（已保存）内容，作为版本 diff 的参照"""
+        if not self.proj:
+            return ""
+        for n, name, path in project.list_chapters(self.proj):
+            if n == num:
+                return project.read_file(path)
+        return ""
+
+    @Slot(int, int, int, result="QVariantList")
+    def diffVersions(self, num: int, v1: int, v2: int) -> list:
+        if not self.proj:
+            return []
+        return versions.diff_versions(self.proj, num, v1, v2)
+
+    @Slot(int, int, result="QVariantList")
+    def diffVersionWithDisk(self, num: int, v: int) -> list:
+        """版本 v vs 磁盘当前内容（回退前预览）"""
+        if not self.proj:
+            return []
+        return versions.diff_texts(versions.read_version(self.proj, num, v),
+                                   self.diskTextOf(num))
+
+    # ============ 草稿恢复（崩溃/意外退出后的未保存内容，仍算工作副本）============
+
+    @Slot(result="QVariantMap")
+    def recoverDraft(self) -> dict:
+        """恢复最新未保存草稿到编辑器（工作副本，未保存；保存才成为版本）。
+        返回 {num, text}；无草稿返回 {}。基准保持磁盘旧内容，dirty 置位。"""
+        nd = versions.newest_draft(self.proj)
+        if not nd:
+            return {}
+        num, content, mtime = nd
+        for n, name, path in project.list_chapters(self.proj):
+            if n == num:
+                self._chapter_path = path
+                break
+        self._cur_num = num
+        self._chapter_findings = []
+        self._editor_dirty = True
+        self._working_text = content
+        self._draft_timer.stop()
+        versions.discard_draft(self.proj, num)
+        self.editorDirtyChanged.emit()
+        self.chapterFindingsChanged.emit()
+        self.toast.emit("ok", f"已恢复第 {num} 章未保存草稿（工作副本，点「保存」提交为新版本）")
+        return {"num": num, "text": content}
+
+    @Slot()
+    def discardDrafts(self):
+        """丢弃全部未保存草稿（用户确认后）"""
+        if self.proj:
+            versions.discard_all_drafts(self.proj)
+        self.recoverableDraftChanged.emit()
+        self.toast.emit("ok", "未保存草稿已丢弃")
 
     @Slot(str)
     def scanChapterText(self, text: str):
@@ -695,9 +985,34 @@ class Bridge(QObject):
     def _on_chapter_started(self, num: int):
         self._cur_num = num
         self._cur_step = ""
+        self._live_draft = ""
+        self._streaming = True
+        self.liveDraftChanged.emit()
+        self.streamingChanged.emit()
+        self.ideaCountChanged.emit()   # 想法可能已被流水线消费，刷新计数
         self.currentChapterChanged.emit()
         self.currentStepChanged.emit()
         self.refreshQueue()
+
+    def _on_stream_chunk(self, text: str):
+        self._live_draft += text
+        self.liveDraftChanged.emit()
+
+    def _on_stream_stage(self, label: str):
+        """流式阶段切换：清空流式区 + 更新阶段标签（人和 AI 一起读）"""
+        self._live_draft = ""
+        self._stream_stage_label = label
+        self._streaming = True
+        self._reasoning_text = ""
+        self.liveDraftChanged.emit()
+        self.streamStageChanged.emit()
+        self.reasoningChanged.emit()
+        self.streamingChanged.emit()
+
+    def _on_stream_reasoning(self, text: str):
+        """思维链增量（默认隐藏，用户主动打开才看）"""
+        self._reasoning_text += text
+        self.reasoningChanged.emit()
 
     def _on_step(self, num: int, step_key: str):
         self._cur_step = step_key
@@ -708,6 +1023,19 @@ class Bridge(QObject):
         self._cur_title = record.get("title", "")
         self._last_record = record
         self._streaming = False
+        self._stream_stage_label = ""
+        self._reasoning_text = ""
+        # 若当前编辑器正显示刚定稿的章：跟随磁盘新内容（工作副本干净，版本基准同步）
+        if self._cur_num == record.get("num") and self.proj:
+            for n, name, path in project.list_chapters(self.proj):
+                if n == record.get("num"):
+                    self._chapter_path = path
+                    self._chapter_text = project.read_file(path)
+                    self.chapterTextChanged.emit()
+                    self._reset_editor_state()
+                    break
+        self.streamStageChanged.emit()
+        self.reasoningChanged.emit()
         self.streamingChanged.emit()
         self.lastRecordChanged.emit()
         self.currentChapterChanged.emit()
@@ -718,6 +1046,10 @@ class Bridge(QObject):
         self._set_running(False)
         self._set_paused(False)
         self._streaming = False
+        self._stream_stage_label = ""
+        self._reasoning_text = ""
+        self.streamStageChanged.emit()
+        self.reasoningChanged.emit()
         self.streamingChanged.emit()
         self._cur_num = 0
         self._cur_step = ""
@@ -731,6 +1063,8 @@ class Bridge(QObject):
         self._set_running(False)
         self._set_paused(False)
         self._streaming = False
+        self._stream_stage_label = ""
+        self.streamStageChanged.emit()
         self.streamingChanged.emit()
         self.logModel.append("error", msg)
         self.toast.emit("error", msg)

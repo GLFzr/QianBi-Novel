@@ -72,7 +72,9 @@ Item {
                 radius: 10
                 color: itemHover.containsMouse ? Theme.bgHover : Theme.bgCard
                 border.width: 1
-                border.color: Theme.border
+                border.color: itemHover.containsMouse ? Theme.borderStrong : Theme.border
+                Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1
+                           color: Theme.cardHighlight }
 
                 RowLayout {
                     anchors.fill: parent
@@ -83,10 +85,12 @@ Item {
                         width: 40; height: 40; radius: 8
                         color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
                         Text {
+                            anchors.centerIn: parent
                             text: modelData.name.length > 0 ? modelData.name.charAt(0) : "书"
                             color: Theme.accent
                             font.family: Theme.serifFont
                             font.pixelSize: 18
+                            font.bold: true
                         }
                     }
                     Column {
@@ -132,6 +136,37 @@ Item {
             }
         }
 
+        // 空状态引导（新用户）
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: shelf.items.length === 0
+            Column {
+                anchors.centerIn: parent
+                spacing: 10
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "▤"
+                    color: Theme.borderStrong
+                    font.pixelSize: 40
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "书架还空着"
+                    color: Theme.textSecondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsBody
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "点下方「新建项目」开始你的第一部作品"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTiny
+                }
+            }
+        }
+
         // 底部操作
         Rectangle {
             Layout.fillWidth: true
@@ -166,10 +201,13 @@ Item {
     Dialog {
         id: newProjectDialog
         objectName: "newProjectDialog"
+        parent: Overlay.overlay
         title: "新建项目"
         modal: true
         width: 440
         padding: 18
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard

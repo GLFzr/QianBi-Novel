@@ -105,9 +105,12 @@ Item {
     Dialog {
         id: chapterGuidanceDialog
         objectName: "chapterGuidanceDialog"
+        parent: Overlay.overlay
         modal: true
         width: 440
         padding: 18
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
@@ -177,10 +180,13 @@ Item {
     Dialog {
         id: fileDialog
         objectName: "fileDialog"
+        parent: Overlay.overlay
         modal: true
         width: 820
         height: 540
         padding: 0
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         property string currentRel: ""
         background: Rectangle {
             radius: Theme.rCard

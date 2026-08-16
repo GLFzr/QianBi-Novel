@@ -136,6 +136,17 @@ class LLMClient:
                             finish = data["choices"][0].get("finish_reason") or ""
                         except (KeyError, IndexError):
                             pass
+                        if self.thinking:
+                            # thinking 模式偶发"只思考不输出"：关闭 thinking 降级重试一次
+                            logger.warning(
+                                "模型返回空内容(finish_reason=%s)，降级重试（关闭 thinking）", finish)
+                            saved_t, saved_e = self.thinking, self.reasoning_effort
+                            self.thinking = None
+                            self.reasoning_effort = None
+                            try:
+                                return self.chat(prompt, system, temperature)
+                            finally:
+                                self.thinking, self.reasoning_effort = saved_t, saved_e
                         if attempt < self.max_retries:
                             last_err = LLMError(
                                 f"模型返回空内容 (finish_reason={finish})", retryable=True)
@@ -263,6 +274,18 @@ class LLMClient:
             self.last_error = str(last_err)
             raise last_err
         if not content and not last_err:
+            if self.thinking:
+                # thinking 模式偶发"只思考不输出"（reasoning_content 有流、content 全空）：
+                # 关闭 thinking 降级重试一次
+                logger.warning("流式返回空内容，降级重试（关闭 thinking）")
+                saved_t, saved_e = self.thinking, self.reasoning_effort
+                self.thinking = None
+                self.reasoning_effort = None
+                try:
+                    return self.chat_stream(prompt, system, temperature,
+                                            on_chunk=on_chunk, on_reasoning=on_reasoning)
+                finally:
+                    self.thinking, self.reasoning_effort = saved_t, saved_e
             raise LLMError("模型返回空内容 (stream)")
         return content
 

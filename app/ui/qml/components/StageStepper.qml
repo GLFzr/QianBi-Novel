@@ -21,23 +21,41 @@ Row {
         model: stepper.stages
         delegate: Row {
             spacing: 0
-            Text {
-                readonly property int myIdx: stepper.order.indexOf(modelData.key)
-                readonly property int curIdx: stepper.order.indexOf(stepper.stageKey)
-                text: modelData.key === "prose" && curIdx === 3 && stepper.proseProgress !== ""
-                      ? "正文 " + stepper.proseProgress : modelData.label
-                color: myIdx < curIdx ? Theme.success
-                     : myIdx === curIdx ? Theme.accent
-                     : Theme.textTertiary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsSmall
-                font.bold: myIdx === curIdx
+
+            // 阶段圆点 + 标签
+            Row {
+                spacing: 5
+                anchors.verticalCenter: parent.verticalCenter
+                Rectangle {
+                    readonly property int myIdx: stepper.order.indexOf(modelData.key)
+                    readonly property int curIdx: stepper.order.indexOf(stepper.stageKey)
+                    width: 7; height: 7; radius: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: myIdx < curIdx ? Theme.success
+                         : myIdx === curIdx ? Theme.accent
+                         : "#3A382F"
+                }
+                Text {
+                    readonly property int myIdx: stepper.order.indexOf(modelData.key)
+                    readonly property int curIdx: stepper.order.indexOf(stepper.stageKey)
+                    text: modelData.key === "prose" && curIdx === 3 && stepper.proseProgress !== ""
+                          ? "正文 " + stepper.proseProgress : modelData.label
+                    color: myIdx < curIdx ? Theme.success
+                         : myIdx === curIdx ? Theme.accent
+                         : Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    font.bold: myIdx === curIdx
+                }
             }
-            Text {
+
+            // 细线连接（非最后一项）
+            Rectangle {
                 visible: index < stepper.stages.length - 1
-                text: " ── "
-                color: "#3A382F"
-                font.pixelSize: Theme.fsSmall
+                width: 18
+                height: 1
+                anchors.verticalCenter: parent.verticalCenter
+                color: "#2E2B22"
             }
         }
     }

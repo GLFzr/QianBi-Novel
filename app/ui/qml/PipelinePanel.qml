@@ -81,7 +81,7 @@ Item {
                     text: "开始"
                     kind: "primary"
                     Layout.fillWidth: true
-                    onClicked: bridge.startPipeline()
+                    onClicked: { console.log("[dbg] 开始按钮 clicked"); bridge.startPipeline() }
                 }
                 AppButton {
                     visible: bridge.isRunning && !bridge.isPaused
@@ -151,6 +151,8 @@ Item {
                         color: Theme.bgCard
                         border.width: 1
                         border.color: Theme.border
+                        Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1
+                                   color: Theme.cardHighlight }
                         Row {
                             anchors.centerIn: parent
                             spacing: 8
@@ -188,7 +190,65 @@ Item {
                     text: "打开最新"
                     enabled: bridge.lastRecord.num !== undefined
                     Layout.fillWidth: true
-                    onClicked: { bridge.openChapter(bridge.lastRecord.num); pipeline.openChapter(bridge.lastRecord.num) }
+                    onClicked: pipeline.openChapter(bridge.lastRecord.num)  // 经主窗 tryOpenChapter：未保存先确认
+                }
+            }
+
+            // 创作想法（人和 AI 一起创作：随时提交，注入下一章草稿）
+            Rectangle {
+                Layout.fillWidth: true
+                radius: Theme.rCard
+                color: Theme.bgCard
+                border.width: 1
+                border.color: bridge.pendingIdeas > 0 ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.5) : Theme.border
+                height: 108
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 6
+                    Row {
+                        width: parent.width
+                        spacing: 6
+                        Text {
+                            text: "创作想法"
+                            color: Theme.textSecondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                            font.bold: true
+                        }
+                        Text {
+                            text: bridge.pendingIdeas > 0 ? "（待注入 " + bridge.pendingIdeas + " 条）" : ""
+                            color: Theme.accent
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                        }
+                    }
+                    TextArea {
+                        id: ideaInput
+                        width: parent.width
+                        height: 42
+                        placeholderText: "告诉 AI 你的想法：下一章让谁出场？这个情节想怎么走？…"
+                        placeholderTextColor: Theme.textTertiary
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        wrapMode: Text.Wrap
+                        background: Rectangle {
+                            radius: Theme.rBtn
+                            color: Theme.bgHover
+                            border.width: 1
+                            border.color: Theme.border
+                        }
+                    }
+                    AppButton {
+                        text: "提交想法"
+                        height: 26
+                        anchors.right: parent.right
+                        onClicked: {
+                            bridge.submitIdea(ideaInput.text)
+                            ideaInput.text = ""
+                        }
+                    }
                 }
             }
         }

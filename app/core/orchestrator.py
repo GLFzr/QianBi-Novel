@@ -32,6 +32,8 @@ class Orchestrator(QThread):
     sig_chapter_started = Signal(int)
     sig_step = Signal(int, str)         # 章号, 微循环步骤 key
     sig_stream_chunk = Signal(str)      # LLM 流式输出增量（写作工作台实时显示）
+    sig_stream_stage = Signal(str)      # 流式阶段切换（草稿/去味/审校…），UI 清空流式区并显示标签
+    sig_stream_reasoning = Signal(str)  # 思维链增量（默认隐藏，用户主动查看）
     sig_chapter_done = Signal(dict)     # 章节记录
     sig_queue = Signal()                # 队列数据变化，通知 UI 刷新
     sig_finished = Signal(str)          # done / stopped
@@ -93,6 +95,14 @@ class Orchestrator(QThread):
     def stream_chunk(self, text: str):
         """LLM 流式增量 → UI（写作工作台实时显示）"""
         self.sig_stream_chunk.emit(text)
+
+    def stream_stage(self, label: str):
+        """流式阶段切换 → UI（清空流式区 + 显示阶段标签）"""
+        self.sig_stream_stage.emit(label)
+
+    def stream_reasoning(self, text: str):
+        """思维链增量 → UI（默认不展示，用户主动打开才看）"""
+        self.sig_stream_reasoning.emit(text)
 
     def checkpoint(self):
         if self._stop:
@@ -156,7 +166,12 @@ class Orchestrator(QThread):
                 if guidance:
                     st.save_state(self.proj, state)
                     self.log("info", f"第 {num} 章应用用户重写指导：{guidance[:80]}")
-                record = stages.chapter_microcycle(self, num, guidance=guidance)
+                # 取走用户提交的创作想法（消费即清空，注入草稿 prompt）
+                ideas = st.take_ideas(state)
+                if ideas:
+                    st.save_state(self.proj, state)
+                    self.log("info", f"第 {num} 章应用用户想法 {len(ideas)} 条：{ideas[0][:60]}")
+                record = stages.chapter_microcycle(self, num, guidance=guidance, ideas=ideas)
                 self.sig_chapter_done.emit(record)
 
                 state = st.load_state(self.proj)

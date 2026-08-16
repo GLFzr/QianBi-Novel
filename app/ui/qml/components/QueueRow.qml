@@ -22,6 +22,8 @@ Rectangle {
          : state === "writing" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
          : state === "needs_fix" ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.05)
          : "transparent"
+    border.width: mouseArea.containsMouse ? 1 : 0
+    border.color: Theme.borderStrong
     opacity: state === "queued" || state === "outline_ready" ? 0.55 : 1.0
 
     Rectangle {

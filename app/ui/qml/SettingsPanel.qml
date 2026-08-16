@@ -121,22 +121,24 @@ Item {
                 required property string name
                 required property string model
                 required property int index
-                width: 128
-                height: 46
-                radius: 8
+                width: 172
+                height: 52
+                radius: 9
                 color: settings.editingId === cid && !settings.isNew ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14)
                      : hover.containsMouse ? Theme.bgHover : Theme.bgCard
                 border.width: 1
                 border.color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.border
+                Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1
+                           color: Theme.cardHighlight }
                 Column {
                     anchors.fill: parent
-                    anchors.margins: 8
-                    spacing: 2
+                    anchors.margins: 9
+                    spacing: 3
                     Text {
                         width: parent.width
                         text: name
                         color: Theme.textPrimary
-                        font.pixelSize: Theme.fsTiny
+                        font.pixelSize: Theme.fsSmall
                         font.family: Theme.uiFont
                         font.bold: true
                         elide: Text.ElideRight
@@ -144,7 +146,7 @@ Item {
                     Text {
                         width: parent.width
                         text: model
-                        color: Theme.textTertiary
+                        color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.textTertiary
                         font.pixelSize: Theme.fsTiny
                         font.family: Theme.monoFont
                         elide: Text.ElideRight

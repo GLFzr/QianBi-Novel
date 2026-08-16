@@ -29,9 +29,20 @@ Rectangle {
                 color: Theme.textTertiary
                 font.family: Theme.monoFont
                 font.pixelSize: Theme.fsTiny
+                width: 72
+                elide: Text.ElideRight
+            }
+            Rectangle {
+                width: 3
+                height: 10
+                radius: 2
+                anchors.verticalCenter: parent.verticalCenter
+                visible: model.level !== "info"
+                color: Theme.levelColor(model.level)
+                opacity: 0.8
             }
             Text {
-                width: list.width - 90
+                width: list.width - 100
                 text: model.text
                 color: Theme.levelColor(model.level)
                 font.family: Theme.monoFont

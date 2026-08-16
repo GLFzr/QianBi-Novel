@@ -24,10 +24,14 @@ Button {
     background: Rectangle {
         radius: Theme.rBtn
         color: !btn.enabled ? "transparent"
-             : btn.kind === "primary" ? (btn.pressed ? "#C99B4A" : btn.hovered ? "#EFC271" : Theme.accent)
-             : (btn.hovered ? Theme.bgHover : "transparent")
+             : btn.kind === "primary" ? (btn.pressed ? "#C2913F" : btn.hovered ? "#EFC271" : Theme.accent)
+             : btn.kind === "danger" ? (btn.pressed ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.22) : btn.hovered ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.12) : "transparent")
+             : (btn.pressed ? Theme.bgActive : btn.hovered ? Theme.bgHover : "transparent")
         border.width: btn.kind === "primary" || btn.kind === "ghost" ? 0 : 1
-        border.color: btn.kind === "danger" ? "#73D9755C" : Theme.borderStrong
-        Behavior on color { ColorAnimation { duration: 120 } }
+        border.color: btn.kind === "danger"
+             ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, btn.hovered ? 0.55 : 0.35)
+             : (btn.activeFocus ? Theme.accent : Theme.borderStrong)
+        Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on border.color { ColorAnimation { duration: 110 } }
     }
 }

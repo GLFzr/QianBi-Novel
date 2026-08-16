@@ -31,3 +31,9 @@ Thumbs.db
 
 # ---- 运行日志 ----
 *.log
+
+# ---- 真机截图 ----
+shots/
+shots_review/
+pipeline_debug/
+

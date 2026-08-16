@@ -55,6 +55,7 @@ DEFAULT_STATE = {
     "paused": False,
     "history": [],              # [{num,title,words,deslop_blocking,deslop_advisory,status,ts}]
     "pending_guidance": {},     # {章号: 重写指导语}：用户"带指导重写"时暂存，续跑时消费
+    "pending_ideas": [],        # 用户创作想法队列（写作中随时提交，下一章草稿注入）
 }
 
 
@@ -68,6 +69,23 @@ def take_guidance(state: dict, num: int) -> str:
     """取走某章的待用指导（消费即删除）"""
     pg = state.get("pending_guidance") or {}
     return pg.pop(str(num), "")
+
+
+def add_idea(proj: str, state: dict, text: str):
+    """提交一条创作想法（写入 state 并落盘，下一章草稿消费）"""
+    text = (text or "").strip()
+    if not text:
+        return False
+    state.setdefault("pending_ideas", []).append(text)
+    save_state(proj, state)
+    return True
+
+
+def take_ideas(state: dict) -> list:
+    """取走全部待消费想法（消费即清空）"""
+    ideas = state.get("pending_ideas") or []
+    state["pending_ideas"] = []
+    return ideas
 
 
 def state_path(proj: str) -> str:

@@ -16,7 +16,7 @@ import re
 from .. import config as cfg_mod
 from .. import project, prompts, deslop
 from ..llm import clean_llm_output
-from . import gates, memory, state as st
+from . import gates, memory, state as st, versions
 
 
 class StageError(Exception):
@@ -28,11 +28,20 @@ class PipelineStopped(Exception):
     pass
 
 
-def _stream(ctx, slot: str, prompt: str) -> str:
-    """流式 LLM 调用：增量实时转发到 UI（ctx.stream_chunk），返回完整文本"""
+def _stream(ctx, slot: str, prompt: str, label: str = "") -> str:
+    """流式 LLM 调用：增量实时转发到 UI（ctx.stream_chunk），返回完整文本
+
+    label 非空时先通知 UI 阶段切换（清空流式区并显示阶段标签），
+    实现"人和 AI 一起读"的全程流式创作视图。
+    """
+    if label:
+        ctx.stream_stage(label)
     def on_chunk(c):
         ctx.stream_chunk(c)
-    return clean_llm_output(ctx.router.client(slot).chat_stream(prompt, on_chunk=on_chunk))
+    def on_reasoning(r):
+        ctx.stream_reasoning(r)
+    return clean_llm_output(ctx.router.client(slot).chat_stream(
+        prompt, on_chunk=on_chunk, on_reasoning=on_reasoning))
 
 
 # ============ 阶段①：核心设定 ============
@@ -51,7 +60,7 @@ def stage_core_setting(ctx) -> str:
         emotion="（由你根据题材推荐）",
     )
     ctx.last_prompt = prompt
-    result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt)
+    result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="核心设定")
     if not result:
         raise StageError("核心设定生成失败：模型返回为空")
     path = os.path.join(ctx.proj, "设定", "题材定位.md")
@@ -79,7 +88,7 @@ def stage_volume_outline(ctx, total_words_wan: int = 0) -> str:
         chapter_words=chapter_words,
     )
     ctx.last_prompt = prompt
-    result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt)
+    result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="全书大纲")
     if not result:
         raise StageError("全书大纲生成失败：模型返回为空")
     project.write_file(os.path.join(ctx.proj, "大纲", "大纲.md"), result)
@@ -159,7 +168,7 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
     )
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
-        result = _stream(ctx, cfg_mod.SLOT_HELPER, prompt)
+        result = _stream(ctx, cfg_mod.SLOT_HELPER, prompt, label="细纲")
         outlines = parse_outlines(result)
         valid = [o for o in outlines if o[0] in todo]
         if not valid:
@@ -213,7 +222,7 @@ def _outline_title(content: str, num: int) -> str:
 
 # ============ 阶段④：章节微循环（每章 6 步）============
 
-def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
+def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
     proj = ctx.proj
     chapter_words = ctx.cfg.get("writing", {}).get("chapter_word_target", 3000)
@@ -261,10 +270,11 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
         foreshadows=foreshadows,
         previous_excerpt=previous_excerpt or "（本章为第一章）",
         user_guidance=guidance or "无特殊指导",
+        user_ideas="\n".join(f"- {t}" for t in (ideas or [])) or "（无）",
         word_target=chapter_words,
     )
     ctx.last_prompt = prompt
-    prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt)
+    prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章")
     if not prose.strip():
         raise StageError(f"第 {num} 章草稿生成失败：模型返回为空")
     actual = project.count_chars(prose)
@@ -279,7 +289,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
         enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
                                                      target=chapter_words, prose=prose)
         ctx.last_prompt = enrich_prompt
-        prose = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt)
+        prose = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label="扩写")
         word_ok, actual = gates.check_words(prose, chapter_words, tolerance)
         ctx.log("ok" if word_ok else "warn",
                 f"扩写后 {actual} 字" + ("，达标" if word_ok else "，仍不足，标记不阻断"))
@@ -300,7 +310,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
         findings_text = deslop.findings_to_prompt_text(blocking + advisory)
         rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose)
         ctx.last_prompt = rewrite_prompt
-        rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt)
+        rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮")
         if rewritten.strip():
             prose = rewritten
         blocking, advisory = gates.scan_deslop(prose)
@@ -316,6 +326,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
     # ---- ④.5 审校（一致性检查，可开关；用审校槽）----
     review_enabled = gates_cfg.get("review_enabled", True)
     if review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
+        ctx.stream_stage(f"审校 第{num}章")
         blocking_review, advisory_review = _chapter_review(ctx, num, prose)
         gr.review_blocking = blocking_review
         review_rounds = 0
@@ -328,7 +339,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
             fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
                 chapter_num=num, findings="\n".join(blocking_review), prose=prose)
             ctx.last_prompt = fix_prompt
-            rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt)
+            rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt, label=f"审校修改 第{review_rounds}轮")
             if not rewritten.strip():
                 ctx.log("warn", f"第 {num} 章 审校修复返回为空，保留原稿")
                 break
@@ -362,6 +373,13 @@ def chapter_microcycle(ctx, num: int, guidance: str = "") -> dict:
     if m:
         title = m.group(1).strip()
     chapter_path = project.get_chapter_path(proj, num, title)
+    # 保存驱动版本体系：定稿落库归档（重写场景归档旧正文；首版则存 v1=定稿）
+    old_text = project.read_file(chapter_path)
+    if not versions.list_versions(proj, num):
+        # 首版：定稿内容本身即 v1（AI 的"保存"动作）
+        versions.snapshot(proj, num, prose, versions.SOURCE_FINALIZE)
+    elif old_text and old_text != prose:
+        versions.snapshot(proj, num, old_text, versions.SOURCE_REREWRITE)
     project.write_file(chapter_path, prose)
 
     # 追踪四文件
@@ -425,7 +443,8 @@ def _chapter_review(ctx, num: int, prose: str) -> tuple:
     )
     ctx.last_prompt = prompt
     try:
-        result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_REVIEW).chat(prompt))
+        result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_REVIEW)
+                                  .chat_stream(prompt, on_chunk=ctx.stream_chunk))
     except Exception as e:
         ctx.log("warn", f"第 {num} 章 审校调用失败（不阻断）：{e}")
         return [], []
