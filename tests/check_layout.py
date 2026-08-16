@@ -7,6 +7,10 @@ import os
 import sys
 import tempfile
 
+# 隔离用户配置：测试不得写入 ~/.qianbi_novel（防书架被污染）
+_FH = tempfile.mkdtemp(prefix="qbn_fakehome_")
+os.environ["USERPROFILE"] = _FH
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")

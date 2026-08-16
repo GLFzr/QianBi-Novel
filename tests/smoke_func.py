@@ -2,6 +2,10 @@
 """功能冒烟测试：不触网，验证 Bridge/项目/状态机/队列模型"""
 import os, sys, shutil, tempfile
 
+# 隔离用户配置：测试不得写入 ~/.qianbi_novel（防书架被污染）
+_FH = tempfile.mkdtemp(prefix="qbn_fakehome_")
+os.environ["USERPROFILE"] = _FH
+
 sys.path.insert(0, os.getcwd())
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

@@ -387,6 +387,15 @@ class Bridge(QObject):
         self.bookTitleChanged.emit()
         self.bookMetaChanged.emit()
         self.hasProjectChanged.emit()
+        # 打开项目即加载最新一章到中央编辑器（写作软件直觉：打开就有内容可读）
+        chapters = project.list_chapters(path)
+        if chapters:
+            self._cur_num = chapters[-1][0]
+            self._chapter_path = chapters[-1][2]
+            self._chapter_text = project.read_file(chapters[-1][2])
+            self._chapter_findings = []
+            self.chapterTextChanged.emit()
+            self.chapterFindingsChanged.emit()
         if not silent:
             self.projectOpened.emit()
 
