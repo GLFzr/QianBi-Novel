@@ -69,7 +69,7 @@ Item {
                 required property int index
                 width: ListView.view.width - 20
                 height: 62
-                radius: 10
+                radius: Theme.rCard
                 color: itemHover.containsMouse ? Theme.bgHover : Theme.bgCard
                 border.width: 1
                 border.color: itemHover.containsMouse ? Theme.borderStrong : Theme.border

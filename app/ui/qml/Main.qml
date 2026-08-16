@@ -323,7 +323,7 @@ ApplicationWindow {
                     anchors.fill: parent
                     anchors.leftMargin: 14
                     anchors.rightMargin: 10
-                    spacing: 10
+                    spacing: 6
 
                     Column {
                         spacing: 0
@@ -347,9 +347,10 @@ ApplicationWindow {
                     }
                     Item { Layout.fillWidth: true }
 
+                    Rectangle { visible: editor.text !== ""; width: 1; height: 16; color: Theme.border }
                     Text {
                         visible: editor.text !== ""
-                        text: "字数：" + editor.text.replace(/\s/g, "").length
+                        text: editor.text.replace(/\s/g, "").length + " 字"
                         color: Theme.textTertiary
                         font.family: Theme.monoFont
                         font.pixelSize: Theme.fsTiny
@@ -704,6 +705,7 @@ ApplicationWindow {
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.monoFont
             }
+            Rectangle { width: 1; height: 12; color: Theme.border }
             Text {
                 text: bridge.slotsText
                 color: Theme.textTertiary
@@ -712,6 +714,7 @@ ApplicationWindow {
                 elide: Text.ElideRight
                 Layout.maximumWidth: 420
             }
+            Rectangle { width: 1; height: 12; color: Theme.border }
             Item { Layout.fillWidth: true }
             Text {
                 text: "累计 " + bridge.totalTokens.toLocaleString() + " tokens · ≈ " + bridge.estCost
@@ -810,10 +813,7 @@ ApplicationWindow {
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(24, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         property string fmt: "txt"
         property string sep: "blank"
         property int titleFmt: 0
@@ -909,14 +909,12 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                radius: Theme.rBtn
+                radius: Theme.rCard
                 color: Theme.bgLog
-                border.width: 1
-                border.color: Theme.border
                 clip: true
                 ScrollView {
                     anchors.fill: parent
-                    anchors.margins: 8
+                    anchors.margins: 2
                     TextArea {
                         id: previewArea
                         readOnly: true
@@ -964,16 +962,14 @@ ApplicationWindow {
     property var statsData: ({})
     Dialog {
         id: statsDialog
+        objectName: "statsDialog"
         parent: Overlay.overlay
         modal: true
         width: 420
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         header: Text {
             text: "统计 · " + bridge.bookTitle
             color: Theme.textPrimary
@@ -1082,16 +1078,14 @@ ApplicationWindow {
     // ---- 局部重写对话框（选中段落 + 想法 → AI 只改这一段）----
     Dialog {
         id: rewriteDialog
+        objectName: "rewriteDialog"
         parent: Overlay.overlay
         modal: true
         width: 620
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         header: Text {
             text: "局部重写选中段落"
             color: Theme.textPrimary
@@ -1114,7 +1108,7 @@ ApplicationWindow {
                 width: parent.width
                 height: 90
                 radius: Theme.rBtn
-                color: Theme.bgLog
+                color: Theme.bgHover
                 border.width: 1
                 border.color: Theme.border
                 clip: true
@@ -1297,16 +1291,14 @@ ApplicationWindow {
     // ---- 未保存保护：切换章节 / 关闭窗口前的「保存/放弃/取消」----
     Dialog {
         id: unsavedDialog
+        objectName: "unsavedDialog"
         parent: Overlay.overlay
         modal: true
         width: 480
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         header: Text {
             text: "有未保存的修改"
             color: Theme.textPrimary
@@ -1360,6 +1352,7 @@ ApplicationWindow {
     // ---- 版本历史（保存驱动）：查看 / 对比 / 回退 ----
     Dialog {
         id: versionsDialog
+        objectName: "versionsDialog"
         parent: Overlay.overlay
         modal: true
         width: 820
@@ -1367,10 +1360,7 @@ ApplicationWindow {
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(24, Math.round((parent.height - height) / 2)) : 0
         padding: 0
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         header: Column {
             padding: 16
             spacing: 2
@@ -1551,16 +1541,14 @@ ApplicationWindow {
     // ---- 崩溃/意外退出后的未保存草稿恢复 ----
     Dialog {
         id: recoverDialog
+        objectName: "recoverDialog"
         parent: Overlay.overlay
         modal: true
         width: 480
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         header: Text {
             text: "发现未保存草稿"
             color: Theme.textPrimary

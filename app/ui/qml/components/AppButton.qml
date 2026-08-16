@@ -23,7 +23,7 @@ Button {
             name: btn.iconName
             size: btn.iconSize
             color: !btn.enabled ? Theme.textTertiary
-                 : btn.kind === "primary" ? "#161616"
+                 : btn.kind === "primary" ? "#FFFFFF"
                  : btn.kind === "danger" ? Theme.danger
                  : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
                  : Theme.textSecondary
@@ -32,7 +32,7 @@ Button {
         Text {
             text: btn.text
             color: !btn.enabled ? Theme.textTertiary
-                 : btn.kind === "primary" ? "#161616"
+                 : btn.kind === "primary" ? "#FFFFFF"
                  : btn.kind === "danger" ? Theme.danger
                  : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
                  : Theme.textSecondary
@@ -44,7 +44,7 @@ Button {
     background: Rectangle {
         radius: Theme.rBtn
         color: !btn.enabled ? "transparent"
-             : btn.kind === "primary" ? (btn.pressed ? "#D9D9D9" : btn.hovered ? "#FFFFFF" : "#F2F1F0")
+             : btn.kind === "primary" ? (btn.pressed ? "#2563AB" : btn.hovered ? "#3C8DEF" : "#2F81F7")
              : btn.kind === "danger" ? (btn.pressed ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.22) : btn.hovered ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.12) : "transparent")
              : (btn.pressed ? Theme.bgActive : btn.hovered ? Theme.bgHover : "transparent")
         border.width: btn.kind === "primary" || btn.kind === "ghost" ? 0 : 1

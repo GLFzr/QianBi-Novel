@@ -401,16 +401,14 @@ Item {
     // ---- 阶段重生成对话框（查看产物 / 带指导重生成）----
     Dialog {
         id: regenDialog
+        objectName: "regenDialog"
         parent: Overlay.overlay
         modal: true
         width: 480
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-        }
+        background: DialogBg {}
         header: Text {
             text: pipeline.regenKey.indexOf("chapter:") === 0
                   ? "重写 " + pipeline.regenLabel + "？"

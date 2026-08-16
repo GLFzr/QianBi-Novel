@@ -1280,12 +1280,17 @@ class Bridge(QObject):
 
     @Slot(int, str, str, str, float)
     def addAnnotation(self, num: int, kind: str, quote: str, note: str, pos: float):
-        """kind: highlight_yellow / highlight_green / highlight_red / comment"""
+        """kind: highlight_yellow / highlight_green / highlight_red / comment（同引文同类型去重）"""
         if not self.proj:
             return
         data = self._read_store(self.proj, num)
+        quote = quote[:120]
+        for ann in data["annotations"]:
+            if ann.get("kind") == kind and ann.get("quote") == quote:
+                self.toast.emit("info", "该内容已有相同标注")
+                return
         data["annotations"].append({
-            "kind": kind, "quote": quote[:120], "note": (note or "").strip(),
+            "kind": kind, "quote": quote, "note": (note or "").strip(),
             "pos": float(pos), "ts": datetime.datetime.now().strftime("%m-%d %H:%M"),
         })
         self._write_store(self.proj, num, data)

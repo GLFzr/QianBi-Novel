@@ -124,12 +124,7 @@ Item {
         padding: 18
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
-        }
+        background: DialogBg {}
         header: Text {
             text: "带指导重写 第 " + chapterPanel.guidanceNum + " 章"
             color: Theme.textPrimary
@@ -324,18 +319,14 @@ Item {
     // ---- 整章重写确认（保存驱动语义：旧正文先归档「重写前备份」版本）----
     Dialog {
         id: rewriteConfirmDialog
+        objectName: "rewriteConfirmDialog"
         parent: Overlay.overlay
         modal: true
         width: 460
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         padding: 18
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.borderStrong
-        }
+        background: DialogBg {}
         header: Text {
             text: "重写第 " + chapterPanel.confirmNum + " 章？"
             color: Theme.textPrimary

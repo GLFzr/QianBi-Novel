@@ -141,29 +141,36 @@ Item {
                 }
             }
 
-            // 标签栏
+            // 标签栏（下划线式 · 现代 tab）
             Row {
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 6
+                anchors.bottomMargin: 0
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 4
+                spacing: 2
                 Repeater {
                     model: ["连接与模型", "写作偏好", "外观", "系统"]
-                    delegate: Rectangle {
+                    delegate: Item {
                         required property string modelData
                         required property int index
-                        height: 24; radius: 7
-                        width: tabLabel.implicitWidth + 18
-                        color: settings.settingsTab === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16) : "transparent"
-                        border.width: 1
-                        border.color: settings.settingsTab === index ? Theme.accent : Theme.border
+                        height: 30
+                        width: tabLabel.implicitWidth + 16
                         Text {
                             id: tabLabel
                             anchors.centerIn: parent
                             text: parent.modelData
-                            color: settings.settingsTab === index ? Theme.accent : Theme.textTertiary
-                            font.pixelSize: Theme.fsTiny
+                            color: settings.settingsTab === index ? Theme.textPrimary : Theme.textTertiary
+                            font.pixelSize: Theme.fsSmall
                             font.family: Theme.uiFont
+                            font.bold: settings.settingsTab === index
+                        }
+                        Rectangle {
+                            visible: settings.settingsTab === index
+                            anchors.bottom: parent.bottom
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width - 8
+                            height: 2
+                            radius: 1
+                            color: Theme.accent
                         }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: settings.settingsTab = index }
                     }
@@ -580,7 +587,7 @@ Item {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Item { Layout.fillWidth: true }
-                                CheckBox {
+                                AppCheck {
                                     id: reviewSwitch
                                     text: checked ? "已启用" : "已停用"
                                     font.pixelSize: Theme.fsSmall
@@ -606,7 +613,7 @@ Item {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Item { Layout.fillWidth: true }
-                                CheckBox {
+                                AppCheck {
                                     id: stepSwitch
                                     checked: settings.wp.stepConfirm === true
                                     text: checked ? "逐步确认" : "自动续写"
@@ -686,7 +693,7 @@ Item {
                             }
 
                             Text { text: "正文限宽居中（约 820px 阅读宽度）"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
-                            CheckBox {
+                            AppCheck {
                                 checked: settings.ep.narrow !== false
                                 text: checked ? "开启限宽" : "全宽"
                                 font.pixelSize: Theme.fsSmall
@@ -695,7 +702,7 @@ Item {
                             }
 
                             Text { text: "流式输出速度（S4 打字机/即时）"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
-                            CheckBox {
+                            AppCheck {
                                 checked: settings.ep.streamSmooth === true
                                 text: checked ? "打字机（平滑逐字）" : "即时（全文直出）"
                                 font.pixelSize: Theme.fsSmall
@@ -757,7 +764,7 @@ Item {
                                 color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
                                 wrapMode: Text.Wrap; Layout.fillWidth: true
                             }
-                            CheckBox {
+                            AppCheck {
                                 id: autoBackupSwitch
                                 text: checked ? "每日自动备份（打开项目时执行）" : "每日自动备份已关闭"
                                 font.pixelSize: Theme.fsSmall

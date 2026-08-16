@@ -810,24 +810,22 @@ Rectangle {
         property bool active: false
         property bool dimmed: false
         signal clicked()
-        height: 32
-        radius: 8
-        width: row2.implicitWidth + 18
+        height: 30
+        radius: 6
+        width: row2.implicitWidth + 16
         opacity: dimmed ? 0.4 : 1
-        color: active ? Qt.rgba(0.89, 0.70, 0.36, 0.14)
-             : rbMa.containsMouse ? Qt.rgba(0.5, 0.5, 0.5, 0.14) : "transparent"
-        border.width: active || rbMa.containsMouse ? 1 : 0
-        border.color: reader.th.border
+        color: active ? Qt.rgba(0.6, 0.6, 0.6, 0.18)
+             : rbMa.containsMouse ? Qt.rgba(0.6, 0.6, 0.6, 0.12) : "transparent"
         Row {
             id: row2
             anchors.centerIn: parent
             spacing: 5
-            Text {
-                text: rb.icon
-                color: rb.accent ? reader.th.accent : reader.th.dim
-                font.pixelSize: rb.icon.length > 1 ? 12 : 16
-                font.family: rb.icon === "Aa" ? Theme.serifFont : Theme.uiFont
-                font.bold: rb.icon.length <= 1
+            AppIcon {
+                name: rb.icon
+                size: 15
+                stroke: 1.5
+                color: rb.accent ? reader.th.accent
+                     : rb.active ? reader.th.text : reader.th.dim
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {

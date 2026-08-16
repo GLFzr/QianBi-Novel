@@ -17,14 +17,14 @@ QtObject {
     // 文字
     readonly property color textPrimary: "#F2F1F0"
     readonly property color textSecondary: "#9D9D9D"
-    readonly property color textTertiary: "#6E6E6E"
+    readonly property color textTertiary: "#7E7E7E"
 
     // 强调与状态（克制用色：主操作=白，状态色只出现在徽章/指示点）
     readonly property color accent: "#4E9CFF"    // 蓝 · 进行中/链接（少量）
     readonly property color success: "#3FB68B"
     readonly property color danger: "#E5534B"
     readonly property color info: "#8AB4E8"
-    readonly property color muted: "#6E6E6E"
+    readonly property color muted: "#7E7E7E"
 
     // 边框 · 实色发丝线（ZCode 用实色，不用透明度描边）
     readonly property color border: "#2A2A2A"

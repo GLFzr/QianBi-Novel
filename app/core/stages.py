@@ -48,6 +48,59 @@ def _compose_guidance(guidance: str, cfg: dict) -> str:
         parts.append("【全局写作偏好（每章必须遵守）】\n" + "\n".join(prefs))
     return "\n\n".join(parts) if parts else "无特殊指导"
 
+# ---- 动态口头禅黑名单（封禁式去味的"禁A生B"打地鼠解法：统计实际高频词限量）----
+
+_TIC_LEXICON = [
+    "指腹", "攥", "没说话", "顿了顿", "指节发白", "台灯", "眯起眼", "深吸一口气",
+    "勾起", "眸", "睫毛", "喉咙", "后颈", "指节", "垂下眼", "颔首", "挑眉", "咬了咬牙",
+    "心中一凛", "呼吸一滞", "眼皮跳了跳", "抱着手臂", "捏了捏眉心",
+]
+
+
+def _tic_blacklist(proj: str, last_n: int = 10) -> str:
+    """统计最近 N 章正文里高频身体动作/口头禅词，生成限量黑名单注入 prompt"""
+    chapters = project.list_chapters(proj)[-last_n:]
+    if not chapters:
+        return "（样本不足，暂无）"
+    text = "".join(project.read_file(p2) for _n, _m, p2 in chapters)
+    hits = []
+    per_chapter = len(chapters)
+    for word in _TIC_LEXICON:
+        cnt = text.count(word)
+        if cnt >= max(4, per_chapter * 0.8):
+            hits.append(f"{word}（近期{cnt}次）")
+    if not hits:
+        return "（近期无过量口头禅）"
+    return "以下词近期已过量，本章每词最多出现1次：" + "、".join(hits)
+
+
+def _used_setpieces(proj: str) -> str:
+    """从追踪/上下文 提取已用名场面清单"""
+    ctx = project.read_file(project.get_tracking_path(proj, "上下文"))
+    if "已用名场面" in ctx:
+        start = ctx.find("已用名场面")
+        return ctx[start:start + 300]
+    return "（暂无名场面登记——本章若出现全书级大意象，属首次使用）"
+
+
+def _roster(proj: str) -> str:
+    """核心设定的主要角色表（花名册基准，追踪更新不得丢角色）"""
+    core = project.read_file(os.path.join(proj, "设定", "题材定位.md"))
+    m = re.search(r"##\s*主要角色表(.*?)(?=\n##\s|\Z)", core, re.S)
+    return m.group(1).strip()[:1500] if m else "（设定中未找到主要角色表）"
+
+
+def _unit_contract(proj: str, start: int) -> str:
+    """从大纲抽取覆盖当前章节区间的单元段落（对账基准）"""
+    outline = project.read_file(os.path.join(proj, "大纲", "大纲.md"))
+    if not outline:
+        return "（无大纲）"
+    blocks = re.split(r"\n(?=##\s)", outline)
+    hit = [b for b in blocks if re.search(rf"第\s*{start}\s*章|{start}\s*[-—~]\s*\d+\s*章|\d+\s*[-—~]\s*{start}\s*章", b)]
+    text = "\n\n".join(hit)[:1200] if hit else outline[:1200]
+    return text + "\n（若以上单元含承诺事件，本批细纲必须逐章对账）"
+
+
 
 def _stream(ctx, slot: str, prompt: str, label: str = "") -> str:
     """流式 LLM 调用：增量实时转发到 UI（ctx.stream_chunk），返回完整文本
@@ -200,6 +253,7 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         next_chapter=start + 1,
         previous_ending=previous_ending or "（无）",
         foreshadows=foreshadows or "（无）",
+        unit_contract=_unit_contract(ctx.proj, start),
     )
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
@@ -316,6 +370,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         user_guidance=_compose_guidance(guidance, ctx.cfg),
         user_ideas="\n".join(f"- {t}" for t in (ideas or [])) or "（无）",
         word_target=chapter_words,
+        tic_blacklist=_tic_blacklist(proj),
+        used_setpieces=_used_setpieces(proj),
     )
     ctx.last_prompt = prompt
     prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章")
@@ -331,7 +387,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.log("warn", f"第 {num} 章 字数不足（{actual}），自动扩写…")
         ctx.checkpoint()
         enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
-                                                     target=chapter_words, prose=prose)
+                                                     target=chapter_words, prose=prose,
+                                                     tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = enrich_prompt
         prose = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label="扩写")
         word_ok, actual = gates.check_words(prose, chapter_words, tolerance)
@@ -352,7 +409,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.log("warn", f"第 {num} 章 阻断 {len(blocking)} 处 → 去味改写（第 {rounds} 轮）…")
         ctx.checkpoint()
         findings_text = deslop.findings_to_prompt_text(blocking + advisory)
-        rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose)
+        rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose,
+                                                               tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = rewrite_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮")
         if rewritten.strip():
@@ -539,6 +597,7 @@ def _update_tracking(ctx, num: int, prose: str) -> dict:
     proj = ctx.proj
     prompt = prompts.TRACKING_UPDATE_PROMPT.format(
         chapter_num=num,
+        roster=_roster(proj),
         prose=prose[:6000],
         character_state=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000],
         foreshadow_table=project.read_file(project.get_tracking_path(proj, "伏笔"))[:2000],
