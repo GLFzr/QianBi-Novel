@@ -275,6 +275,34 @@ class _IdeaWorker(QThread):
             self.done.emit(False, str(e))
 
 
+class _BlurbWorker(QThread):
+    """发布物料生成（题材定位 + 全书大纲 → 标签 + 简介）：用辅助槽，后台执行"""
+    done = Signal(bool, str)                    # ok, result_or_error
+
+    def __init__(self, cfg: dict, proj: str, parent=None):
+        super().__init__(parent)
+        self.cfg, self.proj = cfg, proj
+
+    def run(self):
+        from .. import prompts
+        from ..llm import ModelRouter, clean_llm_output
+        try:
+            info = project.read_idea_info(self.proj)
+            core = (project.read_file(os.path.join(self.proj, "设定", "题材定位.md")) or "")[:2000] or "（未提供）"
+            outline = (project.read_file(os.path.join(self.proj, "大纲", "大纲.md")) or "")[:4000] or "（未提供）"
+            prompt = prompts.BLURB_AND_TAGS_PROMPT.format(
+                book_name=os.path.basename(self.proj),
+                genre=info.get("genre") or "（不限）",
+                platform=info.get("platform") or "番茄",
+                core_setting=core,
+                volume_outline=outline,
+            )
+            result = clean_llm_output(ModelRouter(self.cfg).client(cfg_mod.SLOT_HELPER).chat(prompt))
+            self.done.emit(bool(result), result or "模型返回为空")
+        except Exception as e:
+            self.done.emit(False, str(e))
+
+
 # ---------- 主桥 ----------
 
 class Bridge(QObject):
@@ -309,6 +337,8 @@ class Bridge(QObject):
     connTestResult = Signal(str, bool, str)     # cid, ok, msg
     modelsFetched = Signal(str, list)           # cid, models
     ideaExpanded = Signal(bool, str)            # ok, result_or_error
+    blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
+    gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -577,6 +607,7 @@ class Bridge(QObject):
         self.orch.sig_finished.connect(self._on_finished)
         self.orch.sig_failed.connect(self._on_failed)
         self.orch.sig_auto_paused.connect(self._on_auto_paused)
+        self.orch.sig_gate.connect(self._on_gate)
         self._set_running(True)
         self._set_paused(False)
         self.logModel.append("info", "流水线启动")
@@ -602,6 +633,74 @@ class Bridge(QObject):
         if self.orch and self._running:
             self.orch.stop()
             self.logModel.append("warn", "已请求停止…")
+
+    # ============ 步骤决策门（Step Gates）============
+
+    GATE_META = [
+        {"key": "G1", "label": "G1 设定完成", "desc": "核心设定生成后确认，可回退重拟设定"},
+        {"key": "G2", "label": "G2 大纲完成", "desc": "全书大纲生成后确认，可回退重拟大纲（连带清空细纲）"},
+        {"key": "G3", "label": "G3 细纲批完成", "desc": "每批细纲（2章）生成后确认"},
+        {"key": "G4", "label": "G4 素材组装后", "desc": "草稿开写前确认投入材料"},
+        {"key": "G5L", "label": "G5 草稿开始前", "desc": "第N章开写前确认，可带想法（软门：无产物可回退）"},
+        {"key": "G6", "label": "G6 扫描完成", "desc": "AI 味扫描结果确认"},
+        {"key": "G7", "label": "G7 去味完成", "desc": "去味改写前后对比确认"},
+        {"key": "G8", "label": "G8 审校完成", "desc": "一致性审校发现问题时确认处理方式"},
+        {"key": "G9", "label": "G9 定稿完成", "desc": "每章定稿后确认，可回退重写本章（版本历史保留）"},
+    ]
+
+    @Slot(result="QVariantList")
+    def gateMetaList(self) -> list:
+        return [dict(m) for m in self.GATE_META]
+
+    @Slot(result=str)
+    def runMode(self) -> str:
+        return str(self.cfg.get("writing", {}).get("run_mode", "auto"))
+
+    @Slot(str)
+    def setRunMode(self, mode: str):
+        m = mode if mode in ("auto", "step", "border") else "auto"
+        self.cfg.setdefault("writing", {})["run_mode"] = m
+        self.cfg["writing"]["step_confirm"] = (m == "step")
+        cfg_mod.save_config(self.cfg)
+        names = {"auto": "全自动", "step": "逐步确认", "border": "边界确认"}
+        self.toast.emit("ok", f"运行模式已切换为「{names[m]}」")
+
+    @Slot(str, result=bool)
+    def gateEnabled(self, key: str) -> bool:
+        w = self.cfg.get("writing", {})
+        if self.cfg.get("writing", {}).get("run_mode", "auto") == "step":
+            return True
+        return key in w.get("gate_hard", []) or key in w.get("gate_soft", [])
+
+    @Slot(str, bool)
+    def setGateEnabled(self, key: str, on: bool):
+        w = self.cfg.setdefault("writing", {})
+        hard_keys = {"G1", "G2", "G3", "G5L", "G8", "G9"}
+        hard = set(w.get("gate_hard", []))
+        soft = set(w.get("gate_soft", []))
+        if on:
+            (hard if key in hard_keys else soft).add(key)
+        else:
+            hard.discard(key)
+            soft.discard(key)
+        w["gate_hard"] = sorted(hard)
+        w["gate_soft"] = sorted(soft)
+        cfg_mod.save_config(self.cfg)
+
+    def _on_gate(self, key: str, chapter: int, summary: str):
+        self.gateAsked.emit(key, chapter, summary)
+        self.logModel.append("info", f"⏸ 决策门 {key}（第{chapter}章）：{summary}")
+
+    @Slot(str, str)
+    def resolveStepGate(self, action: str, idea: str):
+        """决策条调用：action = next / return；idea 为可选的用户想法"""
+        if self.orch and self._running and not self.orch.resolve_gate(action or "next", idea or ""):
+            self.toast.emit("warn", "当前没有等待中的决策门")
+            return
+        level = "info" if action != "return" else "warn"
+        suffix = f"，并附想法：{idea[:60]}" if (idea or "").strip() else ""
+        act = "回退重做" if action == "return" else "继续"
+        self.logModel.append(level, f"决策门已{act}{suffix}")
 
     @Slot(int)
     def rewriteChapter(self, num: int):
@@ -1074,8 +1173,9 @@ class Bridge(QObject):
         self.currentChapterChanged.emit()
         self.tokensChanged.emit()
         self._refresh_progress()
-        # 逐步确认模式：每章定稿后暂停，等人确认（阅读/修改）再点「继续」
+        # 逐步确认模式：每章定稿后暂停（新版由决策门 G9 承担；此处仅兼容旧配置：auto 模式+step_confirm）
         if (self._running and self.orch
+                and self.cfg.get("writing", {}).get("run_mode", "auto") == "auto"
                 and self.cfg.get("writing", {}).get("step_confirm")):
             self.orch.pause()
             self._set_paused(True)
@@ -1163,6 +1263,39 @@ class Bridge(QObject):
         w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
         self._workers.append(w)
         w.start()
+
+    # ---- 发布物料：标签 + 简介（据大纲/设定生成）----
+
+    @Slot(result=str)
+    def blurbText(self) -> str:
+        """已保存的发布物料内容（设定/简介与标签.md），未生成返回空串"""
+        if not self.proj:
+            return ""
+        return project.read_file(os.path.join(self.proj, "设定", "简介与标签.md"))
+
+    @Slot()
+    def generateBlurb(self):
+        """据题材定位 + 全书大纲 后台生成标签与简介；结果经 blurbGenerated 返回并自动保存"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        if not os.path.exists(os.path.join(self.proj, "大纲", "大纲.md")):
+            self.toast.emit("warn", "还没有全书大纲，先生成大纲再生成发布物料")
+            return
+        self.toast.emit("info", "正在生成发布标签与简介（辅助槽，约 30-60 秒）…")
+        w = _BlurbWorker(self.cfg, self.proj, self)
+        w.done.connect(self._on_blurb_done)
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        w.start()
+
+    def _on_blurb_done(self, ok: bool, text: str):
+        self.blurbGenerated.emit(ok, text)
+        if ok:
+            project.write_file(os.path.join(self.proj, "设定", "简介与标签.md"), text)
+            self.toast.emit("ok", "发布物料已生成并保存 → 设定/简介与标签.md")
+        else:
+            self.toast.emit("error", f"发布物料生成失败: {text}")
 
     @Slot(result="QVariantList")
     def projectFiles(self) -> list:
@@ -1626,6 +1759,44 @@ class Bridge(QObject):
     def stepConfirmEnabled(self) -> bool:
         return bool(self.cfg.get("writing", {}).get("step_confirm"))
 
+
+    # ============ 题材预设（主干题材无关，题材差异走预设层）============
+
+    @Slot(result="QVariantList")
+    def genrePresets(self) -> list:
+        from .. import presets as genre_presets
+        return genre_presets.list_presets()
+
+    @Slot(result=str)
+    def projectPreset(self) -> str:
+        if not self.proj:
+            return ""
+        return st.load_state(self.proj).get("genre_preset", "")
+
+    @Slot(str)
+    def setProjectPreset(self, preset_id: str):
+        """切换题材预设：随时可切，下一章生成生效（正文/细纲/审校三处注入）"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        from .. import presets as genre_presets
+        state = st.load_state(self.proj)
+        state["genre_preset"] = preset_id or ""
+        st.save_state(self.proj, state)
+        name = genre_presets.load_preset(preset_id).get("name", "通用") if preset_id else "通用（无预设）"
+        self.toast.emit("ok", f"题材预设已切换为「{name}」，下一章生效")
+
+    @Slot(str, result="QVariantMap")
+    def importGenrePreset(self, path: str) -> dict:
+        """导入预设文件（json）到用户预设目录"""
+        from .. import presets as genre_presets
+        if path.startswith("file:///"):
+            from PySide6.QtCore import QUrl
+            path = QUrl(path).toLocalFile()
+        result = genre_presets.import_preset(path)
+        self.toast.emit("ok" if result["ok"] else "warn", result["msg"])
+        return result
+
     # ---- 编辑器偏好（M5）----
 
     EDITOR_DEFAULTS = {"fontScale": 1.0, "narrow": True, "streamSmooth": False}
@@ -1672,10 +1843,10 @@ class Bridge(QObject):
             return ""
         try:
             from .. import export as export_mod
-            path = export_mod.export_project(self.proj, fmt, sep=sep, title_fmt=int(titleFmt))
+            path = os.path.abspath(export_mod.export_project(self.proj, fmt, sep=sep, title_fmt=int(titleFmt)))
             chapters = project.list_chapters(self.proj)
             words = sum(project.count_chars(project.read_file(p)) for _n, _m, p in chapters)
-            self.toast.emit("ok", f"已导出 {os.path.basename(path)}：{len(chapters)} 章 · "
+            self.toast.emit("ok", f"已导出 → {path}：{len(chapters)} 章 · "
                                   f"{words} 字 · {os.path.getsize(path) / 1024:.0f} KB")
             return path
         except ValueError as e:
@@ -1692,3 +1863,28 @@ class Bridge(QObject):
             return "（请先打开项目）"
         from .. import export as export_mod
         return export_mod.preview_txt(self.proj, sep=sep, title_fmt=int(titleFmt))
+
+    @Slot(str)
+    def revealPath(self, path: str):
+        """在系统文件管理器中定位文件（Windows 用 explorer /select 选中）"""
+        if not path:
+            self.toast.emit("warn", "还没有导出文件")
+            return
+        if path.startswith("file:///"):
+            from PySide6.QtCore import QUrl
+            path = QUrl(path).toLocalFile()
+        if not os.path.exists(path):
+            self.toast.emit("warn", "文件不存在或已被移动")
+            return
+        try:
+            import subprocess
+            import sys
+            if sys.platform == "win32":
+                subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+            else:
+                from PySide6.QtCore import QUrl
+                from PySide6.QtGui import QDesktopServices
+                QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(os.path.abspath(path))))
+            self.toast.emit("ok", "已在文件管理器中定位导出文件")
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"无法打开文件管理器: {e}")

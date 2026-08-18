@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "."
 import "components"
 
@@ -330,6 +331,80 @@ Item {
                     }
                 }
 
+                // ---- 题材预设（主干题材无关，题材差异走预设层；随时切换下一章生效）----
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: Theme.rCard
+                    color: Theme.bgCard
+                    height: presetCol.implicitHeight + 20
+                    ColumnLayout {
+                        id: presetCol
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 8
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Text {
+                                text: "题材预设"
+                                color: Theme.textSecondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.bold: true
+                            }
+                            AppBadge {
+                                visible: presetCombo.currentIndex > 0
+                                text: "已启用"
+                                tint: Theme.accent
+                            }
+                            Item { Layout.fillWidth: true }
+                            AppButton {
+                                text: "导入预设…"
+                                height: 24
+                                onClicked: presetFileDlg.open()
+                            }
+                        }
+                        ComboBox {
+                            id: presetCombo
+                            Layout.fillWidth: true
+                            model: bridge.genrePresets()
+                            textRole: "name"
+                            palette.window: Theme.bgCard
+                            palette.text: Theme.textPrimary
+                            palette.buttonText: Theme.textPrimary
+                            font.pixelSize: Theme.fsSmall
+                            background: Rectangle {
+                                radius: Theme.rBtn
+                                color: Theme.bgHover
+                                border.width: 1
+                                border.color: presetCombo.activeFocus ? Theme.accent : Theme.border
+                            }
+                            Component.onCompleted: {
+                                var cur = bridge.projectPreset()
+                                for (var i = 0; i < count; i++)
+                                    if ((model.get ? model.get(i) : model[i]).id === cur) currentIndex = i
+                            }
+                            onActivated: {
+                                var it = model.get ? model.get(index) : model[index]
+                                if (it) bridge.setProjectPreset(it.id)
+                            }
+                        }
+                        Text {
+                            id: presetDesc
+                            Layout.fillWidth: true
+                            text: {
+                                var it = presetCombo.model.length ? presetCombo.model[presetCombo.currentIndex] : null
+                                return it && it.description ? it.description : "主干提示词服务所有题材；启用预设后，题材专项约束将注入正文 / 细纲 / 审校（下一章生效，写作中随时可切）"
+                            }
+                            color: Theme.textTertiary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                            wrapMode: Text.Wrap
+                            lineHeight: 1.4
+                        }
+                    }
+                }
+
                 // ---- 全局写作偏好 ----
                 Rectangle {
                     Layout.fillWidth: true
@@ -385,6 +460,22 @@ Item {
                 }
 
                 Item { height: 8 }
+            }
+        }
+    }
+    // ---- 导入预设文件对话框 ----
+    FileDialog {
+        id: presetFileDlg
+        objectName: "presetFileDlg"
+        title: "选择预设文件（JSON）"
+        nameFilters: ["预设文件 (*.json)"]
+        onAccepted: {
+            var r = bridge.importGenrePreset(selectedFile.toString())
+            if (r && r.ok) {
+                // 刷新下拉并选中新导入项
+                presetCombo.model = bridge.genrePresets()
+                for (var i = 0; i < presetCombo.count; i++)
+                    if (presetCombo.model.get(i).id === r.id) presetCombo.currentIndex = i
             }
         }
     }

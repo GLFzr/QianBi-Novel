@@ -537,6 +537,33 @@ ApplicationWindow {
                 }
             }
 
+            // ---- 步骤决策门（人 AI 共写指挥台：每步确认 / 想法 / 回退）----
+            StepGateBar {
+                id: gateBar
+                Layout.fillWidth: true
+            }
+            Connections {
+                target: bridge
+                function onGateAsked(key, chapter, summary) {
+                    gateBar.showGate(key, chapter, summary)
+                }
+            }
+            Shortcut {
+                sequence: "Return"
+                enabled: gateBar.waiting
+                onActivated: gateBar.doNext()
+            }
+            Shortcut {
+                sequence: "Ctrl+Return"
+                enabled: gateBar.waiting
+                onActivated: gateBar.doNext()
+            }
+            Shortcut {
+                sequence: "R"
+                enabled: gateBar.waiting && gateBar.rollbackable
+                onActivated: gateBar.doReturn()
+            }
+
             // ---- 思维链面板（默认隐藏，用户点「显示思考」才展开）----
             Rectangle {
                 Layout.fillWidth: true
@@ -823,6 +850,7 @@ ApplicationWindow {
         property string fmt: "txt"
         property string sep: "blank"
         property int titleFmt: 0
+        property string lastExport: ""
 
         function refreshPreview() {
             previewArea.text = bridge.exportPreviewText(exportDialog.sep, exportDialog.titleFmt)
@@ -938,6 +966,38 @@ ApplicationWindow {
                     color: Theme.textTertiary
                 }
             }
+            // 导出结果（成功后显示完整路径 + 文件管理器定位入口）
+            RowLayout {
+                Layout.fillWidth: true
+                visible: exportDialog.lastExport !== ""
+                spacing: 8
+                Text {
+                    text: "已导出"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTiny
+                }
+                Text {
+                    id: exportPathText
+                    Layout.fillWidth: true
+                    text: exportDialog.lastExport
+                    color: Theme.accent
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    wrapMode: Text.WrapAnywhere
+                    maximumLineCount: 2
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: bridge.revealPath(exportDialog.lastExport)
+                    }
+                }
+                AppButton {
+                    text: "打开所在文件夹"
+                    height: 24
+                    onClicked: bridge.revealPath(exportDialog.lastExport)
+                }
+            }
         }
         footer: Row {
             spacing: 8
@@ -956,12 +1016,15 @@ ApplicationWindow {
                 text: "导出"
                 kind: "primary"
                 onClicked: {
-                    bridge.exportProjectOpts(exportDialog.fmt, exportDialog.sep, exportDialog.titleFmt)
-                    exportDialog.close()
+                    // 导出后不立即关闭：显示完整路径，可一键定位到文件
+                    exportDialog.lastExport = bridge.exportProjectOpts(exportDialog.fmt, exportDialog.sep, exportDialog.titleFmt)
                 }
             }
         }
-        onOpened: refreshPreview()
+        onOpened: {
+            lastExport = ""
+            refreshPreview()
+        }
     }
 
     // ---- 统计面板（管理者视角：章节/字数/成本）----

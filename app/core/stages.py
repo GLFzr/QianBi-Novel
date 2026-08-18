@@ -17,6 +17,7 @@ from .. import config as cfg_mod
 from .. import project, prompts, deslop
 from ..llm import clean_llm_output
 from . import gates, memory, state as st, versions
+from .. import presets as genre_presets
 
 
 class StageError(Exception):
@@ -55,6 +56,21 @@ _TIC_LEXICON = [
     "勾起", "眸", "睫毛", "喉咙", "后颈", "指节", "垂下眼", "颔首", "挑眉", "咬了咬牙",
     "心中一凛", "呼吸一滞", "眼皮跳了跳", "抱着手臂", "捏了捏眉心",
 ]
+
+
+def _genre_block(proj: str) -> str:
+    """项目当前题材预设 → 注入正文/细纲 prompt（从 pipeline_state 现读，切换后下一章生效）"""
+    try:
+        return genre_presets.genre_block(st.load_state(proj).get("genre_preset", ""))
+    except Exception:
+        return "（本书未启用题材预设，按通用网文规范写作）"
+
+
+def _genre_review_extra(proj: str) -> str:
+    try:
+        return genre_presets.review_extra(st.load_state(proj).get("genre_preset", "")) or "（无题材专项检查）"
+    except Exception:
+        return "（无题材专项检查）"
 
 
 def _tic_blacklist(proj: str, last_n: int = 10) -> str:
@@ -254,6 +270,8 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         previous_ending=previous_ending or "（无）",
         foreshadows=foreshadows or "（无）",
         unit_contract=_unit_contract(ctx.proj, start),
+        genre_block=_genre_block(ctx.proj),
+        user_directive=ctx.consume_gate_idea() or "（无）",
     )
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
@@ -372,6 +390,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         word_target=chapter_words,
         tic_blacklist=_tic_blacklist(proj),
         used_setpieces=_used_setpieces(proj),
+        genre_block=_genre_block(proj),
     )
     ctx.last_prompt = prompt
     prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章")
@@ -535,6 +554,7 @@ def _chapter_review(ctx, num: int, prose: str) -> tuple:
     proj = ctx.proj
     prompt = prompts.REVIEW_PROMPT.format(
         chapter_num=num,
+        genre_review_extra=_genre_review_extra(proj),
         prose=prose[:6000],
         core_setting=(project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1200]
                       or "（未提供）"),

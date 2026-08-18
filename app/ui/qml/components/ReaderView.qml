@@ -827,7 +827,6 @@ Rectangle {
                 stroke: 1.5
                 color: rb.accent ? reader.th.accent
                      : rb.active ? reader.th.text : reader.th.dim
-                anchors.verticalCenter: parent.verticalCenter
             }
             Text {
                 visible: rb.label !== ""

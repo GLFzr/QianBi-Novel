@@ -14,31 +14,35 @@ Button {
     font.family: Theme.uiFont
     font.pixelSize: Theme.fsBody
 
-    contentItem: Row {
-        spacing: btn.iconName !== "" ? 6 : 0
-        anchors.centerIn: parent
+    contentItem: Item {
+        // 外层 Item 上报真实内容尺寸，避免「contentItem 带锚点 → 控件放弃按内容定宽」塌缩
+        implicitWidth: row.implicitWidth
+        implicitHeight: row.implicitHeight
+        Row {
+            id: row
+            anchors.centerIn: parent
+            spacing: btn.iconName !== "" ? 6 : 0
 
-        AppIcon {
-            visible: btn.iconName !== ""
-            name: btn.iconName
-            size: btn.iconSize
-            color: !btn.enabled ? Theme.textTertiary
-                 : btn.kind === "primary" ? "#FFFFFF"
-                 : btn.kind === "danger" ? Theme.danger
-                 : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
-                 : Theme.textSecondary
-            anchors.verticalCenter: parent.verticalCenter
-        }
-        Text {
-            text: btn.text
-            color: !btn.enabled ? Theme.textTertiary
-                 : btn.kind === "primary" ? "#FFFFFF"
-                 : btn.kind === "danger" ? Theme.danger
-                 : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
-                 : Theme.textSecondary
-            font: btn.font
-            anchors.verticalCenter: parent.verticalCenter
-            Behavior on color { ColorAnimation { duration: 110 } }
+            AppIcon {
+                visible: btn.iconName !== ""
+                name: btn.iconName
+                size: btn.iconSize
+                color: !btn.enabled ? Theme.textTertiary
+                     : btn.kind === "primary" ? "#FFFFFF"
+                     : btn.kind === "danger" ? Theme.danger
+                     : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
+                     : Theme.textSecondary
+            }
+            Text {
+                text: btn.text
+                color: !btn.enabled ? Theme.textTertiary
+                     : btn.kind === "primary" ? "#FFFFFF"
+                     : btn.kind === "danger" ? Theme.danger
+                     : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
+                     : Theme.textSecondary
+                font: btn.font
+                Behavior on color { ColorAnimation { duration: 110 } }
+            }
         }
     }
     background: Rectangle {

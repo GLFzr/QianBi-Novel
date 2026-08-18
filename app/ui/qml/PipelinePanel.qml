@@ -19,6 +19,8 @@ Item {
     property int trendMaxWords: 1
     property string regenKey: ""
     property string regenLabel: ""
+    property string blurb: ""          // 发布物料（标签+简介）
+    property bool blurbBusy: false     // 后台生成中
 
     function refresh() {
         cards = bridge.stageCards()
@@ -26,6 +28,7 @@ Item {
         var mx = 1
         for (var i = 0; i < trend.length; i++) mx = Math.max(mx, trend[i].words)
         trendMaxWords = mx
+        blurb = bridge.blurbText()
     }
     Component.onCompleted: refresh()
     Connections {
@@ -34,6 +37,10 @@ Item {
         function onLastRecordChanged() { pipeline.refresh() }
         function onRunningChanged() { pipeline.refresh() }
         function onProjectOpened() { pipeline.refresh() }
+        function onBlurbGenerated(ok, text) {
+            pipeline.blurbBusy = false
+            if (ok) pipeline.blurb = text
+        }
     }
 
     ColumnLayout {
@@ -73,16 +80,23 @@ Item {
                         width: parent.width
                     }
                 }
-                // 运行模式切换（自动续写 / 逐步确认）
+                // 运行模式切换（全自动 / 边界确认 / 逐步确认）
                 Rectangle {
                     id: modeChip
                     visible: bridge.isRunning || bridge.isPaused
-                    width: 118; height: 26; radius: 13
+                    width: 132; height: 26; radius: 13
                     color: Theme.bgHover
                     border.width: 1
                     border.color: modeChip.stepOn ? Theme.accent : Theme.border
                     property bool stepOn: false
-                    Component.onCompleted: modeChip.stepOn = bridge.stepConfirmEnabled()
+                    property var modes: ["auto", "border", "step"]
+                    property int modeIdx: 0
+                    property var modeNames: { "auto": "全自动", "border": "边界确认", "step": "逐步确认" }
+                    Component.onCompleted: {
+                        var m = bridge.runMode()
+                        modeIdx = Math.max(0, modes.indexOf(m))
+                        stepOn = (m === "step")
+                    }
                     Row {
                         anchors.centerIn: parent
                         spacing: 6
@@ -98,7 +112,7 @@ Item {
                             }
                         }
                         Text {
-                            text: modeChip.stepOn ? "逐步确认中" : "自动续写"
+                            text: modeChip.modeNames[modeChip.modes[modeChip.modeIdx]]
                             color: modeChip.stepOn ? Theme.accent : Theme.textTertiary
                             font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
                         }
@@ -107,12 +121,22 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            modeChip.stepOn = !modeChip.stepOn
-                            bridge.setStepConfirm(modeChip.stepOn)
+                            modeChip.modeIdx = (modeChip.modeIdx + 1) % modeChip.modes.length
+                            var m = modeChip.modes[modeChip.modeIdx]
+                            modeChip.stepOn = (m === "step")
+                            bridge.setRunMode(m)
                         }
                     }
                     ToolTip.visible: containsMouse
-                    ToolTip.text: "点击切换：逐步确认 = 每章定稿后暂停，等你阅读确认再点「继续」"
+                    ToolTip.text: "全自动=每步自动过 · 边界确认=只停大纲/草稿/定稿等大节点 · 逐步确认=每个决策门都停靠你确认"
+                }
+                AppButton {
+                    visible: bridge.isRunning || bridge.isPaused
+                    text: "门"
+                    height: 26
+                    onClicked: gatesDialog.open()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "决策门清单：勾选哪些步骤要停下等你确认"
                 }
             }
         }
@@ -371,6 +395,82 @@ Item {
                     }
                 }
 
+                // ---- 发布物料：标签 + 简介（据全书大纲/核心设定生成）----
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: bridge.hasProject
+                    radius: Theme.rCard
+                    color: Theme.bgCard
+                    height: blurbCol.implicitHeight + 20
+                    ColumnLayout {
+                        id: blurbCol
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 8
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Text {
+                                text: "发布物料 · 标签与简介"
+                                color: Theme.textPrimary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.bold: true
+                            }
+                            AppBadge {
+                                visible: pipeline.blurb !== ""
+                                text: "已保存"
+                                tint: Theme.success
+                            }
+                            Item { Layout.fillWidth: true }
+                            AppButton {
+                                text: pipeline.blurb === "" ? "生成" : "重新生成"
+                                height: 24
+                                enabled: !bridge.isRunning && !pipeline.blurbBusy
+                                onClicked: {
+                                    pipeline.blurbBusy = true
+                                    bridge.generateBlurb()
+                                }
+                            }
+                            AppButton {
+                                text: "打开文件"
+                                height: 24
+                                kind: "ghost"
+                                visible: pipeline.blurb !== ""
+                                onClicked: pipeline.openProjectFile("设定/简介与标签.md")
+                            }
+                        }
+                        Text {
+                            visible: pipeline.blurbBusy
+                            text: "生成中…（辅助槽，约 30-60 秒）"
+                            color: Theme.accent
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                        }
+                        Rectangle {
+                            visible: pipeline.blurb !== "" && !pipeline.blurbBusy
+                            Layout.fillWidth: true
+                            height: 150
+                            radius: Theme.rBtn
+                            color: Theme.bgLog
+                            clip: true
+                            ScrollView {
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                TextArea {
+                                    readOnly: true
+                                    text: pipeline.blurb
+                                    color: Theme.textSecondary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsTiny
+                                    wrapMode: Text.Wrap
+                                    background: Rectangle { color: "transparent" }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 快捷操作
                 RowLayout {
                     Layout.fillWidth: true
@@ -485,6 +585,97 @@ Item {
                     regenGuidance.text = ""
                     regenDialog.close()
                 }
+            }
+        }
+    }
+
+    // ---- 决策门清单（哪些步骤要停等你确认；border/step 模式生效）----
+    Dialog {
+        id: gatesDialog
+        objectName: "gatesDialog"
+        parent: Overlay.overlay
+        modal: true
+        width: 420
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: DialogBg {}
+        header: Text {
+            text: "决策门清单（步骤确认点）"
+            color: Theme.textPrimary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 16
+        }
+        contentItem: Column {
+            spacing: 6
+            width: parent.width
+            Text {
+                width: parent.width
+                text: "border 模式按此清单硬停/软停；step 模式全部硬停；auto 全部自动过。"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTiny
+                wrapMode: Text.Wrap
+            }
+            Repeater {
+                model: bridge.gateMetaList()
+                delegate: Rectangle {
+                    required property var modelData
+                    width: parent.width
+                    height: 34
+                    radius: 6
+                    color: Theme.bgHover
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 8
+                        CheckBox {
+                            Layout.preferredWidth: 22
+                            checked: bridge.gateEnabled(modelData.key)
+                            onToggled: bridge.setGateEnabled(modelData.key, checked)
+                            indicator: Rectangle {
+                                implicitWidth: 16; implicitHeight: 16
+                                radius: 4
+                                color: parent.checked ? Theme.accent : "transparent"
+                                border.width: 1
+                                border.color: parent.checked ? Theme.accent : Theme.border
+                                Rectangle {
+                                    anchors.centerIn: parent
+                                    width: 8; height: 8; radius: 2
+                                    color: "#FFFFFF"
+                                    visible: parent.parent.checked
+                                }
+                            }
+                        }
+                        Text {
+                            text: modelData.label
+                            color: Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData.desc
+                            color: Theme.textTertiary
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "关闭"
+                kind: "primary"
+                onClicked: gatesDialog.close()
             }
         }
     }

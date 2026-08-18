@@ -256,6 +256,22 @@ Item {
             Column {
                 spacing: 6
                 width: parent.width
+                Text { text: "题材预设（题材专项约束注入正文/细纲/审校，写作中可随时切换）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                ComboBox {
+                    id: newPresetCombo
+                    width: parent.width
+                    model: bridge.genrePresets()
+                    textRole: "name"
+                    font.pixelSize: Theme.fsSmall
+                    palette.window: Theme.bgCard
+                    palette.text: Theme.textPrimary
+                    palette.buttonText: Theme.textPrimary
+                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
+                }
+            }
+            Column {
+                spacing: 6
+                width: parent.width
                 Text { text: "预计总字数（万字）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                 AppSpinBox { id: totalWanSpin; width: parent.width; from: 20; to: 2000; stepSize: 10; value: 100 }
             }

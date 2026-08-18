@@ -14,7 +14,6 @@ Canvas {
 
     width: size
     height: size
-    anchors.centerIn: parent ? parent : undefined
     antialiasing: true
 
     onNameChanged: requestPaint()
