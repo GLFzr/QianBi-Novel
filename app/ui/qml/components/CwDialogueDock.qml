@@ -97,6 +97,16 @@ Rectangle {
                     ToolTip.visible: hovered
                     ToolTip.text: "软切回世界书阶段修订（不级联删除），确定后写回并返回"
                 }
+                AppButton {
+                    text: "校验细纲"
+                    kind: "ghost"
+                    height: 28
+                    visible: cwDock.viewIsCurrent && bridge.cwStageKey === "cw_unit" && bridge.cwUnitHasOutlines
+                    enabled: !cwDock.busy
+                    onClicked: bridge.validateCwOutlines()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "确定细纲：Agent 重读校验衔接/世界书/正则/单元范围；无阻塞自动进入正文写作"
+                }
                 Item { Layout.fillWidth: true }
                 Text {
                     visible: cwDock.busy
@@ -132,6 +142,68 @@ Rectangle {
                 font.family: Theme.uiFont
                 font.pixelSize: 10
                 elide: Text.ElideRight
+            }
+        }
+
+        // ---- 单元细纲表单（cw_unit 阶段：定范围/主题，±10 章由批次生成校验）----
+        Rectangle {
+            Layout.fillWidth: true
+            visible: bridge.cwStageKey === "cw_unit" && cwDock.viewIsCurrent
+            height: 46
+            color: Theme.bgLog
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 6
+                Text {
+                    text: "单元范围"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: 10
+                }
+                AppSpinBox {
+                    id: unitStartBox
+                    from: 1; to: 9999; stepSize: 1
+                    value: bridge.cwUnitInfo.start > 0 ? bridge.cwUnitInfo.start : 1
+                }
+                Text {
+                    text: "~"
+                    color: Theme.textTertiary
+                    font.pixelSize: 10
+                }
+                AppSpinBox {
+                    id: unitEndBox
+                    from: 1; to: 9999; stepSize: 1
+                    value: bridge.cwUnitInfo.target_end > 0 ? bridge.cwUnitInfo.target_end : 1
+                }
+                TextField {
+                    id: unitTopic
+                    Layout.fillWidth: true
+                    height: 26
+                    placeholderText: "单元主题（如：开篇单元·改命初显）"
+                    placeholderTextColor: Theme.textTertiary
+                    color: Theme.textPrimary
+                    font.family: Theme.uiFont
+                    font.pixelSize: 10
+                    text: bridge.cwUnitInfo.topic !== undefined ? bridge.cwUnitInfo.topic : ""
+                    selectByMouse: true
+                    background: Rectangle {
+                        radius: Theme.rBtn
+                        color: Theme.bgHover
+                        border.width: 1
+                        border.color: unitTopic.activeFocus ? Theme.accent : Theme.border
+                    }
+                }
+                AppButton {
+                    text: "登记"
+                    height: 26
+                    kind: "primary"
+                    onClicked: bridge.setCwUnitRange(unitStartBox.value, unitEndBox.value, unitTopic.text)
+                    ToolTip.visible: hovered
+                    ToolTip.text: "登记单元范围与主题（完结章 ±10 内可浮动），然后点「确定」生成单元总纲与下一批 5 章细纲"
+                }
             }
         }
 

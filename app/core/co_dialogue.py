@@ -232,3 +232,115 @@ class SummarizeWorker(QThread):
             self.done.emit(text)
         except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
+
+
+# ---------- M3：章细纲滚动生成（确定单元后，helper 槽，≈200 字/章）----------
+
+class OutlineBatchWorker(QThread):
+    """滚动生成下一批 5 章细纲并落盘 大纲/细纲_第N章.md"""
+    done = Signal(list)      # [(num, title, content)]
+    error = Signal(str)
+
+    def __init__(self, cfg: dict, proj: str, batch: list, unit: dict,
+                 router=None, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.batch = list(batch or [])
+        self.unit = dict(unit or {})
+        self.router = router or ModelRouter(cfg)
+        self.last_prompt = ""
+        self.result = []
+
+    def run(self):
+        from . import stages as stages_mod
+        from .. import presets as genre_presets
+        try:
+            if not self.batch:
+                self.error.emit("本批为空（细纲可能已全部生成）")
+                return
+            state = st.load_state(self.proj)
+            nearby = []
+            for n, p in project.list_outlines(self.proj):
+                if self.batch[0] - 2 <= n <= self.batch[-1] + 2:
+                    nearby.append(project.read_file(p)[:400])
+            prev_ending = "（本章为第一章）"
+            chapters = project.list_chapters(self.proj)
+            if chapters:
+                last = chapters[-1]
+                if last[0] == self.batch[0] - 1:
+                    prev_ending = project.read_file(last[2])[-400:]
+            prompt = prompts.CO_UNIT_OUTLINE_PROMPT.format(
+                unit_block=prompts.unit_text(self.unit),
+                handoff=prev_handoff(state, st.STAGE_CW_UNIT),
+                worldbook_block=project.worldbook_text(self.proj, 1500),
+                regex_block=project.regex_block(self.proj, "logic", 1200),
+                genre_block=genre_presets.genre_block(state.get("genre_preset", "")),
+                nearby_outlines="\n\n".join(nearby) or "（无相邻细纲）",
+                previous_ending=prev_ending,
+                start=self.batch[0], end=self.batch[-1], count=len(self.batch),
+            )
+            self.last_prompt = prompt
+            text = clean_llm_output(self.router.client(cfg_mod.SLOT_HELPER)
+                                    .chat_stream(prompt, on_chunk=lambda c: None))
+            outlines = stages_mod.parse_outlines(text)
+            valid = [o for o in outlines if o[0] in self.batch]
+            for num, _title, content in valid:
+                project.write_file(project.get_outline_path(self.proj, num), content)
+            self.result = valid
+            if not valid:
+                self.error.emit(f"细纲解析失败：未能按格式解析出目标章 {self.batch}")
+                return
+            self.done.emit(valid)
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e))
+
+
+# ---------- M3：确定细纲 = Agent 重读校验（衔接/世界书/正则/单元范围）----------
+
+class ReviewOutlinesWorker(QThread):
+    """重读用户修改后的细纲并校验衔接，输出 BLOCKING/ADVISORY 两段"""
+    done = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, cfg: dict, proj: str, nums: list, unit: dict,
+                 router=None, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.nums = list(nums or [])
+        self.unit = dict(unit or {})
+        self.router = router or ModelRouter(cfg)
+        self.last_prompt = ""
+        self.result_text = ""
+
+    def run(self):
+        try:
+            state = st.load_state(self.proj)
+            parts = []
+            for n in self.nums:
+                c = project.read_file(project.get_outline_path(self.proj, n))
+                if c:
+                    parts.append(f"===第{n}章===\n{c}")
+            outlines = "\n\n".join(parts) or "（无细纲）"
+            prev_ending = "（本章为第一章）"
+            chapters = project.list_chapters(self.proj)
+            if chapters:
+                last = chapters[-1]
+                prev_ending = project.read_file(last[2])[-400:] if last[0] < (self.nums or [1])[0] else prev_ending
+            prompt = prompts.CO_OUTLINE_REVIEW_PROMPT.format(
+                outlines=outlines,
+                worldbook_block=project.worldbook_text(self.proj, 1500),
+                regex_block=project.regex_block(self.proj, "logic", 1200),
+                previous_ending=prev_ending,
+                unit_block=prompts.unit_text(self.unit),
+            )
+            self.last_prompt = prompt
+            text = clean_llm_output(self.router.client(cfg_mod.SLOT_HELPER).chat(prompt))
+            if not text.strip():
+                self.error.emit("校验返回为空，请重试")
+                return
+            self.result_text = text
+            self.done.emit(text)
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e))

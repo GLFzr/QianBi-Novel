@@ -10,6 +10,7 @@ import datetime
 import os
 import shutil
 
+from .. import project
 from . import state as st
 from .co_dialogue import prev_handoff, transcript_text
 
@@ -185,3 +186,36 @@ class CoWriting:
     def transcript_tail(self, state: dict, stage: str = None, max_chars: int = 4000) -> str:
         stage = stage or st.ensure_cw(state).get("stage")
         return transcript_text(state, stage, max_chars)
+
+    # ---------- 单元细纲（M3：滚动批次 ±10 章）----------
+
+    def unit(self, state: dict) -> dict:
+        return dict(st.ensure_cw(state).get("unit", {}) or {})
+
+    def set_unit(self, state: dict, start: int, target_end: int, topic: str) -> dict:
+        """登记单元范围/主题（±10 章由批次生成时校验）"""
+        u = st.ensure_cw(state).setdefault("unit", {})
+        u["start"] = max(1, int(start or 0))
+        u["target_end"] = max(0, int(target_end or 0))
+        u["topic"] = (topic or "").strip()
+        return u
+
+    def next_outline_batch(self, state: dict, batch_size: int = 5) -> list:
+        """滚动批次：已写正文下一章起（或单元起始章），取下一批缺失细纲的章
+
+        ±10 章约束：批次完结章 ≤ 单元目标完结章 + 10；未设单元时不限。
+        """
+        unit = st.ensure_cw(state).get("unit", {}) or {}
+        start = max(1, int(unit.get("start") or 0))
+        n = max(start, project.next_chapter_num(self.proj))
+        existing = {n2 for n2, _ in project.list_outlines(self.proj)}
+        while n in existing:
+            n += 1
+        target_end = int(unit.get("target_end") or 0)
+        limit = (target_end + 10) if target_end else n + batch_size * 8
+        batch = []
+        for k in range(batch_size):
+            if n + k > limit:
+                break
+            batch.append(n + k)
+        return batch

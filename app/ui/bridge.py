@@ -508,6 +508,8 @@ class Bridge(QObject):
     cwStreamingText = Property(str, lambda self: self._cw_reply, notify=cwStreamingChanged)
     cwSummary = Property("QVariantMap", lambda self: self._get_cw_summary(), notify=cwStageChanged)
     cwStageCards = Property("QVariantList", lambda self: self._get_cw_stage_cards(), notify=cwStageChanged)
+    cwUnitInfo = Property("QVariantMap", lambda self: self._get_cw_unit(), notify=cwStageChanged)
+    cwUnitHasOutlines = Property(bool, lambda self: self._get_cw_unit_has_outlines(), notify=cwStageChanged)
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
@@ -1680,6 +1682,14 @@ class Bridge(QObject):
                           "status": status, "detail": detail})
         return cards
 
+    def _get_cw_unit(self) -> dict:
+        if not self._cw:
+            return {"start": 0, "target_end": 0, "topic": ""}
+        return self._cw.unit(self._cw.load())
+
+    def _get_cw_unit_has_outlines(self) -> bool:
+        return bool(self.proj and project.list_outlines(self.proj))
+
     def _cw_save_state(self, state: dict):
         st.save_state(self.proj, state)
 
@@ -1792,7 +1802,10 @@ class Bridge(QObject):
             self._cw_worker = None
         if self._cw_sum_worker is w:
             self._cw_sum_worker = None
-        self._set_cw_busy(False)
+        running = ((self._cw_worker and self._cw_worker.isRunning())
+                   or (self._cw_sum_worker and self._cw_sum_worker.isRunning()))
+        if not running:
+            self._set_cw_busy(False)
 
     def _set_cw_busy(self, v: bool):
         if v != self._cw_busy:
@@ -1845,6 +1858,102 @@ class Bridge(QObject):
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_sum_worker = worker
         worker.start()
+
+    # ---- M3：单元细纲（单元范围/主题 + 滚动批次 + 确定细纲校验）----
+
+    @Slot(int, int, str)
+    def setCwUnitRange(self, start: int, targetEnd: int, topic: str):
+        """登记单元范围/主题（±10 章约束在批次生成时校验）"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        self._cw.set_unit(state, int(start or 0), int(targetEnd or 0), topic or "")
+        self._cw_save_state(state)
+        self.cwStageChanged.emit()
+        hint = ""
+        if int(targetEnd or 0) and int(start or 0) > int(targetEnd or 0):
+            hint = "（起始章大于目标完结章，请检查）"
+        self.toast.emit("ok", f"单元已登记：第 {start} 章 ~ 第 {targetEnd} 章{hint}，点「确定」生成单元总纲")
+
+    @Slot()
+    def validateCwOutlines(self):
+        """确定细纲：Agent 重读校验本批细纲衔接；无阻塞 → 自动进入正文写作"""
+        if not self.proj or not self._cw:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在工作中，稍后再校验")
+            return
+        stage = self._get_cw_stage_key()
+        if stage != st.STAGE_CW_UNIT or self._cw_view != stage:
+            self.toast.emit("warn", "请先回到单元细纲阶段")
+            return
+        nums = [n for n, _p in project.list_outlines(self.proj)]
+        if not nums:
+            self.toast.emit("warn", "还没有细纲可校验，先点「确定」生成单元总纲与细纲")
+            return
+        state = self._cw.load()
+        unit = self._cw.unit(state)
+        self._set_cw_busy(True)
+        worker = co_dialogue.ReviewOutlinesWorker(self.cfg, self.proj, nums, unit, parent=self)
+        worker.done.connect(self._on_cw_validate_done)
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_sum_worker = worker
+        worker.start()
+        self.toast.emit("info", "细纲校验中（重读衔接/世界书/正则/单元范围）…")
+
+    def _on_cw_validate_done(self, text: str):
+        from ..core.stages import parse_review_findings
+        blocking, advisory = parse_review_findings(text)
+        state = self._cw.load()
+        if blocking:
+            msg = ("🔍 细纲校验发现 %d 处阻塞：\n%s\n请修改细纲（可直接编辑或对话区提出）后再次点「确定细纲」。"
+                   % (len(blocking), "\n".join(f"- {b}" for b in blocking)))
+            co_dialogue.transcript_append(state, st.STAGE_CW_UNIT, "agent", msg)
+            self._cw_save_state(state)
+            self.cwMessagesChanged.emit()
+            self.toast.emit("warn", f"细纲校验未通过：{len(blocking)} 处阻塞")
+            return
+        co_dialogue.transcript_append(
+            state, st.STAGE_CW_UNIT, "agent",
+            "✅ 细纲校验通过：衔接、世界书/正则契约与单元范围均无阻塞"
+            + (f"；{len(advisory)} 条建议（见上）" if advisory else "") + "。进入正文写作。")
+        nxt = self._cw.advance(state)
+        self._cw_save_state(state)
+        self._cw_view = self._get_cw_stage_key()
+        self._cw_open_product(nxt)
+        self.cwMessagesChanged.emit()
+        self._cw_refresh()
+        self.refreshQueue()
+        self.toast.emit("ok", "细纲校验通过，进入「正文写作」")
+
+    def _start_cw_outline_batch(self, state: dict):
+        """确定单元后：滚动生成下一批 5 章细纲（helper 槽，≈200 字/章）"""
+        batch = self._cw.next_outline_batch(state)
+        if not batch:
+            self.toast.emit("info", "本单元细纲已全部生成，可直接修改或点「确定细纲」校验")
+            return
+        unit = self._cw.unit(state)
+        self._set_cw_busy(True)
+        worker = co_dialogue.OutlineBatchWorker(self.cfg, self.proj, batch, unit, parent=self)
+        worker.done.connect(self._on_cw_batch_done)
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_worker = worker
+        worker.start()
+
+    def _on_cw_batch_done(self, outlines: list):
+        state = self._cw.load()
+        nums = [o[0] for o in outlines]
+        co_dialogue.transcript_append(
+            state, st.STAGE_CW_UNIT, "agent",
+            f"✅ 本批细纲已生成：第 {nums[0]}-{nums[-1]} 章（{len(nums)} 章，≈200 字/章）。"
+            "可直接在编辑器修改细纲，或对话区提出由我改；确认后点「确定细纲」校验衔接。")
+        self._cw_save_state(state)
+        self.cwMessagesChanged.emit()
+        self.refreshQueue()
+        self.toast.emit("ok", f"细纲已生成：第 {nums[0]}-{nums[-1]} 章")
+        self._cw_open_product(self._get_cw_stage_key())
 
     def _confirm_cw_project(self):
         state = self._cw.load()
@@ -1905,10 +2014,12 @@ class Bridge(QObject):
         co_dialogue.store_handoff(state, stage, handoff)
         if not handoff:
             self.toast.emit("warn", "模型未输出「→ 下阶段交接」小节，下一阶段上下文将不完整")
-        # 回看回边：写回世界书/正则后返回原阶段；否则前进
+        # 回看回边：写回世界书/正则后返回原阶段；cw_unit 确定后滚动生成细纲；否则前进
         if st.ensure_cw(state).get("reopening"):
             ret = self._cw.confirm_reopen_return(state)
             self.toast.emit("ok", "世界书/正则已写回，返回「%s」阶段" % st.CW_STAGE_LABELS.get(ret, ret))
+        elif stage == st.STAGE_CW_UNIT:
+            self.toast.emit("ok", "「单元细纲」已确定定稿，正在滚动生成下一批 5 章细纲…")
         else:
             nxt = self._cw.advance(state)
             self.toast.emit("ok", "「%s」已确定定稿，进入「%s」"
@@ -1918,6 +2029,8 @@ class Bridge(QObject):
         self._cw_open_product(self._get_cw_stage_key())
         self._cw_refresh()
         self.refreshQueue()
+        if stage == st.STAGE_CW_UNIT and not st.ensure_cw(state).get("reopening"):
+            self._start_cw_outline_batch(state)
 
     def _write_cw_products(self, stage: str, product: str):
         """按阶段落盘产物：core→题材定位 / outline→大纲 / worldbook→世界书+正则 / unit→单元总纲"""
