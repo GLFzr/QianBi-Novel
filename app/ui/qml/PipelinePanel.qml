@@ -80,10 +80,10 @@ Item {
                         width: parent.width
                     }
                 }
-                // 运行模式切换（全自动 / 边界确认 / 逐步确认 / 共写）
+                // 运行模式切换（全自动 / 边界确认 / 逐步确认 / 共写）——有项目即常显
                 Rectangle {
                     id: modeChip
-                    visible: bridge.isRunning || bridge.isPaused || bridge.cwMode === "cw"
+                    visible: bridge.hasProject
                     width: 132; height: 26; radius: 13
                     color: Theme.bgHover
                     border.width: 1

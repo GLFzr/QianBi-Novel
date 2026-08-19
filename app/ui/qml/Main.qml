@@ -276,7 +276,7 @@ ApplicationWindow {
 
         // ========== 次左：功能面板 ==========
         Rectangle {
-            Layout.preferredWidth: 300
+            Layout.preferredWidth: 340
             Layout.fillHeight: true
             color: Theme.bgPanel
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
