@@ -22,6 +22,33 @@ PRESET_FIELDS = [
     ("review_extra", "题材审校补充"),
 ]
 
+# 共写参考字段（grow_*）：仅供共写档阶段 Agent 参考、不得锁定死；不进 genre_block
+GROW_FIELDS = [
+    ("grow_core_template", "同类型核心设定的优秀设计参考"),
+    ("grow_outline_template", "同类型大纲的体量划分/卷级/终局储备范式"),
+    ("grow_worldbook_direction", "同类型世界书应覆盖的板块方向"),
+    ("grow_unit_logic", "同类型小单元细纲逻辑（开-承-转-合模板）"),
+    ("grow_regex_direction", "同类型适合固化为必须成立约束的规则方向"),
+]
+
+
+def grow_block(preset_id: str, field: str) -> str:
+    """共写档阶段 Agent 参考块（方案 §2）：grow_* 仅参考不锁定
+
+    - 无预设 / 缺字段 / 旧 JSON → 占位「该预设未提供此参考」，不报错
+    - 不进 genre_block：只由共写档经本函数读取
+    """
+    if not preset_id:
+        return "（通用流程无题材预设：按通用网文规范给出参考即可）"
+    p = load_preset(preset_id)
+    if not p:
+        return "（该预设未提供此参考）"
+    val = (p.get(field) or "").strip()
+    if not val:
+        return "（该预设未提供此参考）"
+    label = dict(GROW_FIELDS).get(field, field)
+    return f"【同类型参考：{label}（仅供参考、不得锁定死）】\n{val}"
+
 
 def user_dir() -> str:
     d = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "presets")

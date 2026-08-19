@@ -29,6 +29,15 @@ class PipelineStopped(Exception):
     pass
 
 
+def _worldbook_regex_blocks(ctx) -> tuple:
+    """世界书/正则注入块（方案 §4.1：.format 注入 + 空串回退占位）
+
+    语义按设置 writing.regex_semantics：logic=逻辑约束规则集（默认）/ regex=字面正则样本。
+    """
+    sem = ctx.cfg.get("writing", {}).get("regex_semantics", "logic")
+    return (project.worldbook_text(ctx.proj), project.regex_block(ctx.proj, sem))
+
+
 def _compose_guidance(guidance: str, cfg: dict) -> str:
     """重写指导 + 全局写作偏好（文风/禁忌/节奏）合成注入正文 prompt
 
@@ -201,6 +210,8 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
     start, end = todo[0], todo[-1]
     ctx.log("info", f"阶段③ 生成第 {start}-{end} 章细纲…")
 
+    wb_block, rg_block = _worldbook_regex_blocks(ctx)
+
     core_setting = project.read_file(os.path.join(ctx.proj, "设定", "题材定位.md"))
     if not core_setting:
         parts = []
@@ -271,6 +282,8 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         foreshadows=foreshadows or "（无）",
         unit_contract=_unit_contract(ctx.proj, start),
         genre_block=_genre_block(ctx.proj),
+        worldbook_block=wb_block,
+        regex_block=rg_block,
         user_directive=ctx.consume_gate_idea() or "（无）",
     )
     ctx.last_prompt = prompt  # 失败现场 dump 用
@@ -374,6 +387,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # ---- ② 草稿生成 ----
     ctx.step(num, st.STEP_DRAFT)
     ctx.checkpoint()
+    wb_block, rg_block = _worldbook_regex_blocks(ctx)
     prompt = prompts.PROSE_WRITING_PROMPT.format(
         chapter_num=num,
         core_setting=core_setting,
@@ -391,6 +405,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         tic_blacklist=_tic_blacklist(proj),
         used_setpieces=_used_setpieces(proj),
         genre_block=_genre_block(proj),
+        worldbook_block=wb_block,
+        regex_block=rg_block,
     )
     ctx.last_prompt = prompt
     prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章")
@@ -552,6 +568,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
 def _chapter_review(ctx, num: int, prose: str) -> tuple:
     """调用审校槽做一致性检查，返回 (blocking_list, advisory_list)"""
     proj = ctx.proj
+    wb_block, rg_block = _worldbook_regex_blocks(ctx)
     prompt = prompts.REVIEW_PROMPT.format(
         chapter_num=num,
         genre_review_extra=_genre_review_extra(proj),
@@ -562,6 +579,8 @@ def _chapter_review(ctx, num: int, prose: str) -> tuple:
         character_states=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000] or "（暂无）",
         foreshadows=memory.unfished_foreshadows(proj) or "（暂无）",
         timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500] or "（暂无）",
+        worldbook_block=wb_block,
+        regex_block=rg_block,
     )
     ctx.last_prompt = prompt
     try:

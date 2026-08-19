@@ -1923,12 +1923,7 @@ class Bridge(QObject):
         """按阶段落盘产物：core→题材定位 / outline→大纲 / worldbook→世界书+正则 / unit→单元总纲"""
         if stage == st.STAGE_CW_WORLDBOOK:
             # 世界书全文 + 正则段拆分（「## 正则」小节独立成 设定/正则.md）
-            m = re.search(r"##\s*正则.*?(?=\n##\s|\Z)", product, re.S)
-            wb = product
-            regex_part = ""
-            if m:
-                regex_part = m.group(0).strip()
-                wb = product[:m.start()].rstrip()
+            wb, regex_part = project.split_worldbook_product(product)
             project.write_file(os.path.join(self.proj, "设定", "世界书.md"), wb)
             project.write_file(os.path.join(self.proj, "设定", "正则.md"),
                                regex_part or "## 正则（逻辑约束规则集）\n（确定时未拆分出独立正则段，见世界书）")
@@ -2226,12 +2221,25 @@ class Bridge(QObject):
     @Slot(result=bool)
     def reviewEnabled(self) -> bool:
         return bool(self.cfg.get("gates", {}).get("review_enabled", True))
-
     @Slot(bool)
     def setReviewEnabled(self, on: bool):
         self.cfg.setdefault("gates", {})["review_enabled"] = bool(on)
         cfg_mod.save_config(self.cfg)
         self.toast.emit("ok", on and "审校已启用（一致性检查 + 修改轮）" or "审校已停用（写完直接定稿）")
+
+    # ---- 「正则」语义（M2：默认逻辑约束规则集；字面正则样本为备选，只影响解析与写入结构）----
+
+    @Slot(result=str)
+    def regexSemantics(self) -> str:
+        return str(self.cfg.get("writing", {}).get("regex_semantics", "logic"))
+
+    @Slot(str)
+    def setRegexSemantics(self, mode: str):
+        m = mode if mode in ("logic", "regex") else "logic"
+        self.cfg.setdefault("writing", {})["regex_semantics"] = m
+        cfg_mod.save_config(self.cfg)
+        name = {"logic": "逻辑约束规则集", "regex": "字面正则样本"}[m]
+        self.toast.emit("ok", f"「正则」语义已切换为「{name}」（影响解析与写入结构，不阻塞核心路径）")
 
     # ---- 导出（排版选项 + 预览 + 报告）----
 

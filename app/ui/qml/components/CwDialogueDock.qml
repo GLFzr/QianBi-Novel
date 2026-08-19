@@ -114,6 +114,27 @@ Rectangle {
             }
         }
 
+        // ---- 世界书阶段提示（「正则」语义默认逻辑约束规则集，可后改）----
+        Rectangle {
+            Layout.fillWidth: true
+            visible: bridge.cwStageKey === "cw_worldbook" && cwDock.viewIsCurrent
+            height: 30
+            color: Theme.bgLog
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            Text {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                text: "「正则」默认=逻辑约束规则集（必须成立的规则清单，每条 level: must/should）——如需字面正则样本，在 设置→写作偏好 切换语义。"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: 10
+                elide: Text.ElideRight
+            }
+        }
+
         // ---- 消息流（转写）----
         ListView {
             id: msgList

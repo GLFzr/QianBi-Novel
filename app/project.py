@@ -176,6 +176,80 @@ def write_idea_info(proj: str, genre: str, platform: str, idea: str, total_words
     write_file(os.path.join(proj, "设定", "选题信息.md"), doc)
 
 
+# ---------- 世界书与正则（共写档产物 · M2：默认「逻辑约束规则集」）----------
+
+WORLDBOOK_PATH = "设定/世界书.md"
+REGEX_PATH = "设定/正则.md"
+
+
+def worldbook_text(proj: str, max_chars: int = 2000) -> str:
+    """世界书全文（注入 prompt 用，空串回退占位）"""
+    doc = read_file(os.path.join(proj, WORLDBOOK_PATH))
+    if not doc.strip():
+        return "（本书尚未生成世界书——按核心设定写作，后续在世界书阶段补充）"
+    if len(doc) > max_chars:
+        return doc[:max_chars] + "…（截断）"
+    return doc
+
+
+def regex_rules(proj: str, semantics: str = "logic") -> list:
+    """「正则」抽象接口（方案 §4.1）：返回 [{rule, level: must/should, scope}]
+
+    - 默认 semantics="logic"（逻辑约束规则集）：解析 设定/正则.md 的
+      `- 规则：…｜level：must/should｜scope：…` 条目
+    - semantics="regex"（字面正则样本，备选）：只取行内反引号包裹的 pattern 作 rule
+    - 文件缺失/为空 → 空列表（组装方负责占位回退）
+    """
+    doc = read_file(os.path.join(proj, REGEX_PATH))
+    if not doc.strip():
+        return []
+    rules = []
+    for line in doc.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        line = line.lstrip("-•* ").strip()
+        if not line:
+            continue
+        if semantics == "regex":
+            m = re.search(r"`([^`]+)`", line)
+            rule = m.group(1) if m else line
+            rules.append({"rule": rule[:300], "level": "must", "scope": "样本"})
+            continue
+        level, scope = "should", "全书"
+        m = re.search(r"level\s*[:：]\s*(must|should)", line)
+        if m:
+            level = m.group(1)
+        m = re.search(r"scope\s*[:：]\s*([^｜|]+)", line)
+        if m:
+            scope = m.group(1).strip()
+        rules.append({"rule": line[:300], "level": level, "scope": scope[:60]})
+    return rules
+
+
+def regex_block(proj: str, semantics: str = "logic", max_chars: int = 1500) -> str:
+    """组装注入 prompt 的正则块（空串回退占位，不抛 KeyError）"""
+    rules = regex_rules(proj, semantics)
+    if not rules:
+        return "（本书尚未生成正则约束规则集）"
+    lines = [f"- {r['rule']}（level: {r['level']} · scope: {r['scope']}）" for r in rules]
+    text = "\n".join(lines)
+    if len(text) > max_chars:
+        text = text[:max_chars] + "…（截断）"
+    return text
+
+
+def split_worldbook_product(product: str) -> tuple:
+    """共写世界书总结产物 → (世界书正文, 正则段)
+
+    「## 正则」小节独立成 设定/正则.md；未拆出独立正则段时返回 (全文, "")。
+    """
+    m = re.search(r"##\s*正则.*?(?=\n##\s|\Z)", product or "", re.S)
+    if not m:
+        return (product or "").strip(), ""
+    return product[:m.start()].rstrip(), m.group(0).strip()
+
+
 def planned_chapters(proj: str, chapter_word_target: int = 3000) -> int:
     """计划总章数：预计总字数 ÷ 每章目标字数；未设置返回 0（不限）"""
     wan = read_idea_info(proj).get("total_words_wan", 0)

@@ -14,6 +14,7 @@ Item {
     property int settingsTab: 0
     property var wp: ({})
     property var ep: ({ fontScale: 1.0, narrow: true })
+    property string regexSem: "logic"
 
     ListModel { id: modelList }
 
@@ -23,6 +24,7 @@ Item {
         wordTargetSpin.value = bridge.chapterWordTarget()
         reviewSwitch.checked = bridge.reviewEnabled()
         autoBackupSwitch.checked = bridge.autoBackupEnabled()
+        regexSem = bridge.regexSemantics()
     }
     Component.onCompleted: {
         refreshPrefs()
@@ -620,6 +622,50 @@ Item {
                                     font.pixelSize: Theme.fsSmall
                                     palette.text: Theme.textPrimary
                                     onCheckedChanged: if (activeFocus) bridge.setStepConfirm(checked)
+                                }
+                            }
+                        }
+                    }
+
+                    // 「正则」语义（共写档世界书阶段产物；默认逻辑约束规则集）
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: 92
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+                            Text { text: "「正则」语义"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
+                            Text { text: "逻辑约束规则集=必须成立的规则清单（默认，推荐）；字面正则样本=正则表达式样本。只影响解析与写入结构，不阻塞核心路径。"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            Row {
+                                spacing: 6
+                                Layout.fillWidth: true
+                                Repeater {
+                                    model: [["逻辑约束规则集", "logic"], ["字面正则样本", "regex"]]
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        height: 26
+                                        width: rgText.implicitWidth + 18
+                                        radius: 7
+                                        color: settings.regexSem === modelData[1] ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                                        border.width: 1
+                                        border.color: settings.regexSem === modelData[1] ? Theme.accent : Theme.border
+                                        Text {
+                                            id: rgText
+                                            anchors.centerIn: parent
+                                            text: modelData[0]
+                                            color: settings.regexSem === modelData[1] ? Theme.accent : Theme.textTertiary
+                                            font.pixelSize: Theme.fsTiny
+                                            font.family: Theme.uiFont
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: bridge.setRegexSemantics(modelData[1])
+                                        }
+                                    }
                                 }
                             }
                         }

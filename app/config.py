@@ -43,8 +43,9 @@ DEFAULT_CONFIG = {
               "review_enabled": True, "review_max_rounds": 1},
     "llm": {"max_retries": 2, "backoff_base": 2.0},
     "writing": {"chapter_word_target": 3000, "default_genre": "", "default_platform": "番茄",
-                "run_mode": "auto",             # auto=全自动 / step=逐步确认 / border=边界确认
+                "run_mode": "auto",             # auto=全自动 / step=逐步确认 / border=边界确认 / cw=共写
                 "step_confirm": False,          # 兼容旧开关（逐步确认=step 模式启用且全硬停）
+                "regex_semantics": "logic",     # 正则语义：logic=逻辑约束规则集（默认）/ regex=字面正则样本
                 "gate_hard": ["G2", "G5L", "G9"],
                 "gate_soft": ["G1", "G3", "G4", "G6", "G7", "G8"]},
     "last_project": "",

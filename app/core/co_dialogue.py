@@ -89,38 +89,64 @@ def store_handoff(state: dict, stage: str, handoff: str):
 
 # ---------- 参考块（本阶段只注入的上下文）----------
 
-def compose_reference_block(proj: str, stage: str) -> str:
-    """各阶段参考块：只注入上一环节产物/世界书/细纲/上文结尾（M2 追加 grow_*）"""
+def _grow(preset_id: str, field: str) -> str:
+    """grow_* 参考块（M2：仅共写档阶段 Agent 读取，不进 genre_block）"""
+    try:
+        from .. import presets as genre_presets
+        return genre_presets.grow_block(preset_id, field)
+    except Exception:
+        return "（该预设未提供此参考）"
+
+
+def compose_reference_block(proj: str, stage: str, preset_id: str = "") -> str:
+    """各阶段参考块：上一环节产物 + grow_* 参考 + 世界书/正则（M2 注入）"""
     def rd(*rel):
         return project.read_file(os.path.join(proj, *rel))
 
     if stage == st.STAGE_CW_CORE:
         info = project.read_idea_info(proj)
-        return (f"【选题信息】题材：{info['genre'] or '（不限）'} · 平台：{info['platform']} · "
+        base = (f"【选题信息】题材：{info['genre'] or '（不限）'} · 平台：{info['platform']} · "
                 f"预计 {info['total_words_wan']} 万字\n灵感：{info['idea'] or '（无）'}")
+        return base + "\n\n" + _grow(preset_id, "grow_core_template")
     if stage == st.STAGE_CW_OUTLINE:
         core = rd("设定", "题材定位.md")[:4000]
-        return f"【核心设定（已确定）】\n{core or '（尚未确定，先请作者确定设定）'}"
+        return (f"【核心设定（已确定）】\n{core or '（尚未确定，先请作者确定设定）'}\n\n"
+                + _grow(preset_id, "grow_outline_template"))
     if stage == st.STAGE_CW_WORLDBOOK:
         core = rd("设定", "题材定位.md")[:2000] or "（无）"
         outline = rd("大纲", "大纲.md")[:2000] or "（无）"
-        return f"【核心设定摘要】\n{core}\n\n【全书大纲摘要】\n{outline}"
+        wb = project.worldbook_text(proj, 1500)
+        rg = project.regex_block(proj, "logic", 1200)
+        return (f"【核心设定摘要】\n{core}\n\n【全书大纲摘要】\n{outline}\n\n"
+                f"【现有世界书】\n{wb}\n\n【现有正则】\n{rg}\n\n"
+                + _grow(preset_id, "grow_worldbook_direction") + "\n\n"
+                + _grow(preset_id, "grow_regex_direction"))
     if stage == st.STAGE_CW_UNIT:
         outline = rd("大纲", "大纲.md")[:2000] or "（无）"
-        wb = rd("设定", "世界书.md")[:1500] or "（无）"
-        return f"【全书大纲摘要】\n{outline}\n\n【世界书摘要】\n{wb}"
+        wb = project.worldbook_text(proj, 1200)
+        rg = project.regex_block(proj, "logic", 1000)
+        return (f"【全书大纲摘要】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
+                + _grow(preset_id, "grow_unit_logic"))
     if stage == st.STAGE_CW_PROSE:
         num = project.next_chapter_num(proj)
         outline = rd("大纲", f"细纲_第{num:03d}章.md") or "（本章细纲尚未生成）"
-        wb = rd("设定", "世界书.md")[:1500] or "（无）"
+        wb = project.worldbook_text(proj, 1200)
+        rg = project.regex_block(proj, "logic", 1000)
         prev_ending = "（本章为第一章）"
         chapters = project.list_chapters(proj)
         if chapters:
             last_text = project.read_file(chapters[-1][2])
             prev_ending = last_text[-500:]
-        return (f"【本章细纲】\n{outline}\n\n【世界书摘要】\n{wb}\n\n"
+        return (f"【本章细纲】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
                 f"【上一章结尾】\n{prev_ending}")
     return "（本阶段无参考块）"
+
+
+def _preset_id(proj: str) -> str:
+    """项目当前预设（共写档 preset 优先，回退 genre_preset）"""
+    state = st.load_state(proj)
+    cw = st.ensure_cw(state)
+    return cw.get("preset") or state.get("genre_preset") or ""
 
 
 # ---------- 一次性对话 worker ----------
@@ -154,7 +180,7 @@ class DialogueWorker(QThread):
                 role_desc=role["role"],
                 agent_name=role["agent"],
                 handoff=prev_handoff(state, self.stage),
-                reference_block=compose_reference_block(self.proj, self.stage),
+                reference_block=compose_reference_block(self.proj, self.stage, _preset_id(self.proj)),
                 transcript=transcript_text(state, self.stage),
                 user_message=self.user_text,
             )

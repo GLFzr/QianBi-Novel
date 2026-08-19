@@ -123,6 +123,11 @@ CHAPTER_OUTLINE_PROMPT = """你是网络小说细纲设计师。为第 {chapter_
 ## 题材预设（本书题材的专项约束，细纲设计必须遵守）
 {genre_block}
 
+## 世界书与正则（契约基准：细纲排期不得与已定契约冲突）
+{worldbook_block}
+
+{regex_block}
+
 ## 已确定的细纲（前后衔接参考）
 {nearby_outlines}
 

@@ -133,6 +133,32 @@ V1.0.0 正式版前最后一个版本：人 AI 共写工作台整体升级（六
 - 本仓库不包含任何真实 API Key；所有测试凭据经环境变量注入
 - 打包产物（exe）不纳入版本控制，由 `build_exe.py` 本地生成
 
+## [0.11.1] - 2026-08-19
+
+### 新增功能
+
+- **共写档 M2：预设 grow_* 参考字段 + 世界书/正则落地**：
+  - 预设新增 5 个共写参考字段（grow_core_template / grow_outline_template / grow_worldbook_direction / grow_unit_logic / grow_regex_direction），内置仙侠/都市两套补齐；`presets.grow_block()` 为共写档阶段 Agent 唯一读取入口——仅参考、不得锁定死，不进 genre_block（六字段回归不破），旧 JSON 缺字段返回占位不报错
+  - 「正则」抽象接口 `project.regex_rules(proj)`：默认「逻辑约束规则集」（每条 rule/level: must/should/scope），字面正则样本为备选结构；设置面板「正则语义」单选（logic/regex），只影响解析与写入结构
+  - 世界书/正则注入正文、审校、细纲三段 prompt：`.format` 组装 + 空串回退占位（旧项目无文件不抛 KeyError）
+  - 跨档契约强化：CO_PRODUCT_STRUCTURES 强制保留 `## 主要角色表` 表头、`第N章/N-~M章` 章节区间块、`预计总字数` 字段（cw↔自动档互续）
+  - 共写参考块升级：世界书/正则 + grow_* 方向注入各阶段 Agent；世界书总结产物经 `project.split_worldbook_product` 拆分为 设定/世界书.md + 设定/正则.md
+- **回归探针**：tests/probe_worldbook_format.py（三段 prompt 组装/空串回退/缺参对照/规则解析）+ probe_worldbook_format_co.py（共写三 prompt + grow_block）+ probe_cw_to_auto_compat.py（cw 产物喂自动档读取器）
+
+### 变更
+
+- 正文/审校/细纲 prompt 增加世界书与正则约束块（占位注入，空串回退，不改变既有参数）
+
+### 修复
+
+- （无功能修复；本轮为共写 M2 增量落地）
+
+### 验证
+
+- assert_v099 18/18 ｜ smoke_func ALL_FUNC_OK ｜ 门流回归 4/4 ｜ 门 UI 探针 8/8（无新增 QML 告警）
+- 世界书格式探针 16/16 ｜ 共写世界书探针 14/14 ｜ cw↔自动档互续探针 7/7
+- 共写状态机探针 23/23 ｜ 共写对话探针 19/19（M1 探针保持全绿）
+
 ## [0.11.0] - 2026-08-19
 
 ### 新增功能
