@@ -29,6 +29,7 @@ from .co_writing import (
     unit_text,
     CO_UNIT_OUTLINE_PROMPT,
     CO_OUTLINE_REVIEW_PROMPT,
+    CO_READBACK_PROMPT,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "CO_ROLES", "CO_DIALOGUE_PROMPT", "CO_SUMMARIZE_PROMPT",
     "CO_PRODUCT_STRUCTURES", "HANDOFF_MARKER",
     "unit_text", "CO_UNIT_OUTLINE_PROMPT", "CO_OUTLINE_REVIEW_PROMPT",
+    "CO_READBACK_PROMPT",
 ]

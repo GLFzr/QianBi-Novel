@@ -9,6 +9,7 @@
 """
 import os
 import re
+import tempfile
 
 PROJECT_DIRS = ["设定", "大纲", "正文", "追踪"]
 SETTING_SUBDIRS = ["世界观", "角色", "势力"]
@@ -248,6 +249,71 @@ def split_worldbook_product(product: str) -> tuple:
     if not m:
         return (product or "").strip(), ""
     return product[:m.start()].rstrip(), m.group(0).strip()
+
+
+# ---------- 章节终稿锁定（M4 · 锁读写全部下沉 project.py，worker 与 UI 同进程读取）----------
+
+def _annotation_path(proj: str, num: int) -> str:
+    return os.path.join(proj, "正文", ".annotations", f"第{num}章.json")
+
+
+def _read_annotation(proj: str, num: int) -> dict:
+    """读取章节标注仓（annotations/bookmarks/position/locked），缺省补全"""
+    import json
+    data = {"annotations": [], "bookmarks": [], "position": 0.0, "locked": False}
+    try:
+        with open(_annotation_path(proj, num), "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        if isinstance(raw, dict):
+            data.update(raw)
+    except (OSError, ValueError):
+        pass
+    data.setdefault("annotations", [])
+    data.setdefault("bookmarks", [])
+    data.setdefault("position", 0.0)
+    data.setdefault("locked", False)
+    return data
+
+
+def _write_annotation(proj: str, num: int, data: dict):
+    import json
+    d = os.path.join(proj, "正文", ".annotations")
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=d)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, _annotation_path(proj, num))
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def is_chapter_locked(proj: str, num: int) -> bool:
+    """终稿锁定判定（只读；文件缺失=未锁，旧项目容错）"""
+    if not num:
+        return False
+    return bool(_read_annotation(proj, num).get("locked"))
+
+
+def set_chapter_locked(proj: str, num: int, locked: bool):
+    """设置锁定标记（保留标注/书签/位置字段；锁定=内容不再改动）"""
+    if not num:
+        return
+    data = _read_annotation(proj, num)
+    data["locked"] = bool(locked)
+    _write_annotation(proj, num, data)
+
+
+def attempt_unlock(proj: str, num: int) -> bool:
+    """显式解锁：唯一放行通道（解锁前终稿仍留 .versions/ 版本历史）"""
+    if not num:
+        return False
+    if not is_chapter_locked(proj, num):
+        return False
+    set_chapter_locked(proj, num, False)
+    return True
 
 
 def planned_chapters(proj: str, chapter_word_target: int = 3000) -> int:

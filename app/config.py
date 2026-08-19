@@ -46,6 +46,8 @@ DEFAULT_CONFIG = {
                 "run_mode": "auto",             # auto=全自动 / step=逐步确认 / border=边界确认 / cw=共写
                 "step_confirm": False,          # 兼容旧开关（逐步确认=step 模式启用且全硬停）
                 "regex_semantics": "logic",     # 正则语义：logic=逻辑约束规则集（默认）/ regex=字面正则样本
+                "readback_on_save": True,       # 读改揣摩：保存有变时触发 1 次（复用 review 槽）
+                "readback_min_diff": 200,       # 最小改动量阈值（低于不触发；0=每次都触发）
                 "gate_hard": ["G2", "G5L", "G9"],
                 "gate_soft": ["G1", "G3", "G4", "G6", "G7", "G8"]},
     "last_project": "",

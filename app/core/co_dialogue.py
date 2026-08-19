@@ -234,6 +234,49 @@ class SummarizeWorker(QThread):
             self.error.emit(str(e))
 
 
+# ---------- M4：读改揣摩（保存后有变 → review 槽读一遍改动，揣摩意图）----------
+
+class ReadbackWorker(QThread):
+    """读改揣摩：通读用户改动 → 对话区简短输出理解（复用 review 槽）"""
+    done = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, cfg: dict, proj: str, num: int, old_text: str, new_text: str,
+                 router=None, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.num = num
+        self.old_text = old_text or ""
+        self.new_text = new_text or ""
+        self.router = router or ModelRouter(cfg)
+        self.last_prompt = ""
+        self.result_text = ""
+
+    def run(self):
+        from ..core import versions as ver_mod
+        try:
+            diffs = ver_mod.diff_texts(self.old_text, self.new_text)
+            diff_text = "\n".join(f"{'-' if d.get('op') == 'del' else '+'} {d.get('text', '')}"
+                                  for d in diffs if d.get("op") in ("del", "add"))[:2000] or "（无）"
+            diff_summary = (f"改动 {len(diffs)} 处；删除 {sum(len(d.get('text','')) for d in diffs if d.get('op')=='del')} 字，"
+                            f"新增 {sum(len(d.get('text','')) for d in diffs if d.get('op')=='add')} 字")
+            prompt = prompts.CO_READBACK_PROMPT.format(
+                diff_summary=diff_summary,
+                diff_text=diff_text or "（无行级差异）",
+                chapter_text=self.new_text[:1500],
+            )
+            self.last_prompt = prompt
+            text = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat(prompt))
+            if not text.strip():
+                self.error.emit("读改返回为空，请重试")
+                return
+            self.result_text = text
+            self.done.emit(text)
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e))
+
+
 # ---------- M3：章细纲滚动生成（确定单元后，helper 槽，≈200 字/章）----------
 
 class OutlineBatchWorker(QThread):

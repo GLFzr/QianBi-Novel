@@ -165,6 +165,10 @@ class Orchestrator(QThread):
                 # 大纲回退后把细纲已删除，需同步清空状态中的相关计划提示
                 self.log("warn", "G2 回退：全书大纲与全部细纲已归档并清除，将重新生成")
             elif key == "G9":  # 回退重写本章：归档章节文件，版本历史保留（v1 仍在）
+                # M4 锁守卫：locked 章直接拒绝（「该章已锁定，请先在共写档显式解锁」）
+                if project.is_chapter_locked(self.proj, chapter):
+                    self.log("warn", f"G9 回退拒绝：第 {chapter} 章已终稿锁定，请先在共写档显式解锁")
+                    return
                 os.makedirs(roll, exist_ok=True)
                 for n, name, path in project.list_chapters(self.proj):
                     if n == chapter:

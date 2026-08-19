@@ -73,6 +73,7 @@ ApplicationWindow {
     Shortcut {
         sequence: StandardKey.Save
         enabled: bridge.editorDirty && !bridge.isStreaming && bridge.chapterPath !== ""
+                 && !(bridge.cwMode === "cw" && bridge.chapterLocked)
         onActivated: mainWindow.saveEditor()
     }
     Shortcut {
@@ -422,9 +423,48 @@ ApplicationWindow {
                         text: bridge.editorDirty ? "● 保存" : "保存"
                         kind: bridge.editorDirty ? "primary" : "ghost"
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
+                                 && !(bridge.cwMode === "cw" && bridge.chapterLocked)
                         onClicked: mainWindow.saveEditor()
                         ToolTip.visible: hovered
                         ToolTip.text: bridge.editorDirty ? "有未保存修改，保存后产生新版本" : "保存正文并生成新版本"
+                    }
+                    // 终稿锁定徽章 + 解锁（M4：章节确定=锁定；显式解锁唯一放行通道）
+                    Rectangle {
+                        visible: bridge.cwMode === "cw" && bridge.chapterLocked
+                        height: 22
+                        radius: 11
+                        color: Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.15)
+                        border.width: 1
+                        border.color: Theme.success
+                        Layout.alignment: Qt.AlignVCenter
+                        Text {
+                            anchors.centerIn: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            text: "✓ 已确定（终稿锁定）"
+                            color: Theme.success
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                        }
+                    }
+                    AppButton {
+                        visible: bridge.cwMode === "cw" && bridge.chapterLocked
+                        text: "解锁"
+                        kind: "ghost"
+                        height: 26
+                        onClicked: bridge.unlockChapter()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "显式解锁唯一放行通道；解锁前终稿仍留版本历史"
+                    }
+                    AppButton {
+                        visible: bridge.cwMode === "cw" && bridge.cwStageKey === "cw_prose"
+                                 && !bridge.chapterLocked
+                        text: "读一遍"
+                        kind: "ghost"
+                        height: 26
+                        onClicked: bridge.readbackChapter()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "读改揣摩：Agent 通读本章改动、揣摩你的修改意图（review 槽）"
                     }
                     Rectangle {
                         // 未保存标记：黄色圆点（内容有改动即出现）
@@ -533,7 +573,7 @@ ApplicationWindow {
                 TextArea {
                     id: editor
                     text: bridge.isStreaming ? (mainWindow.edPrefs.streamSmooth ? mainWindow.streamShown : bridge.liveDraftText) : bridge.chapterText
-                    readOnly: bridge.isStreaming
+                    readOnly: bridge.isStreaming || (bridge.cwMode === "cw" && bridge.chapterLocked)
                     color: Theme.textPrimary
                     font.family: Theme.serifFont
                     font.pixelSize: Math.round(17 * (mainWindow.edPrefs.fontScale || 1.0))

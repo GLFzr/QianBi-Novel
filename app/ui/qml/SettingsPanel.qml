@@ -671,6 +671,37 @@ Item {
                         }
                     }
 
+                    // 读改揣摩（M4：共写档保存有变 → review 槽读一遍揣摩意图）
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        height: 96
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 4
+                            Text { text: "读改揣摩（共写档）"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
+                            Text { text: "保存正文有改动时，Agent 读一遍改动、揣摩你的修改意图（复用审校槽，默认开）。改动量低于阈值不触发；可手动「读一遍」。"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                AppCheck {
+                                    id: readbackSwitch
+                                    checked: bridge.readbackEnabled
+                                    text: checked ? "已开启" : "已关闭"
+                                    font.pixelSize: Theme.fsSmall
+                                    palette.text: Theme.textPrimary
+                                    onCheckedChanged: if (activeFocus) bridge.setReadbackOnSave(checked)
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text { text: "最小改动量"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                                AppSpinBox { id: readbackDiffSpin; from: 0; to: 2000; stepSize: 50; value: bridge.readbackMinDiff }
+                                AppButton { text: "应用"; kind: "primary"; height: 26; onClicked: bridge.setReadbackMinDiff(readbackDiffSpin.value) }
+                            }
+                        }
+                    }
+
                     // 全局写作偏好入口（在创作笔记面板）
                     Text {
                         Layout.fillWidth: true

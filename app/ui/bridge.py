@@ -339,6 +339,7 @@ class Bridge(QObject):
     cwBusyChanged = Signal()
     cwMessagesChanged = Signal()
     cwStreamingChanged = Signal()
+    cwLockedChanged = Signal()
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -510,6 +511,11 @@ class Bridge(QObject):
     cwStageCards = Property("QVariantList", lambda self: self._get_cw_stage_cards(), notify=cwStageChanged)
     cwUnitInfo = Property("QVariantMap", lambda self: self._get_cw_unit(), notify=cwStageChanged)
     cwUnitHasOutlines = Property(bool, lambda self: self._get_cw_unit_has_outlines(), notify=cwStageChanged)
+    chapterLocked = Property(bool, lambda self: self._get_chapter_locked(), notify=cwLockedChanged)
+    readbackEnabled = Property(bool, lambda self: bool(self.cfg.get("writing", {}).get("readback_on_save", True)),
+                               notify=cwLockedChanged)
+    readbackMinDiff = Property(int, lambda self: int(self.cfg.get("writing", {}).get("readback_min_diff", 200)),
+                               notify=cwLockedChanged)
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
@@ -914,8 +920,12 @@ class Bridge(QObject):
         """保存驱动版本的唯一提交动作：
         ① 磁盘旧内容归档为新版本（内容有变化才产生）
         ② 新内容写正文 ③ 工作副本变干净
-        取消 / 切换章节 / 关闭 / 意外退出 都不会走到这里，因此不会产生版本"""
+        取消 / 切换章节 / 关闭 / 意外退出 都不会走到这里，因此不会产生版本
+        共写档：locked 章拒绝保存；保存有变且读改节流通过 → 触发读改揣摩（review 槽）"""
         if not self._chapter_path:
+            return
+        if project.is_chapter_locked(self.proj, self._cur_num):
+            self.toast.emit("warn", "该章已终稿锁定，请先在共写档显式解锁")
             return
         source = self._last_edit_action or versions.SOURCE_MANUAL
         old = project.read_file(self._chapter_path)
@@ -933,6 +943,10 @@ class Bridge(QObject):
         self.toast.emit("ok", f"已保存（{project.count_chars(text)} 字）"
                          + (f" · 版本 v{v} 已归档" if v else " · 内容无变化，未产生新版本"))
         self.refreshQueue()
+        # 读改揣摩（M4）：共写档 + 内容有变 + 开关开 + 改动量达阈值 → review 槽读一遍
+        if (self._get_cw_mode() == "cw" and self._cur_num
+                and old != text and self._get_cw_stage_key() == st.STAGE_CW_PROSE):
+            self._maybe_readback(old, text)
 
     # ============ 版本历史（保存驱动 · 查看/diff/回退）============
 
@@ -1610,7 +1624,8 @@ class Bridge(QObject):
                 nxt = project.next_chapter_num(self.proj)
                 removed = 0
                 for n, path in project.list_outlines(self.proj):
-                    if n >= nxt:
+                    # M4 锁守卫：locked 章的细纲视为已定契约，不删除
+                    if n >= nxt and not project.is_chapter_locked(self.proj, n):
                         os.remove(path)
                         removed += 1
                 if removed == 0:
@@ -1690,6 +1705,11 @@ class Bridge(QObject):
     def _get_cw_unit_has_outlines(self) -> bool:
         return bool(self.proj and project.list_outlines(self.proj))
 
+    def _get_chapter_locked(self) -> bool:
+        if not self.proj:
+            return False
+        return project.is_chapter_locked(self.proj, self._cur_num)
+
     def _cw_save_state(self, state: dict):
         st.save_state(self.proj, state)
 
@@ -1724,6 +1744,7 @@ class Bridge(QObject):
         self.chapterTextChanged.emit()
         self.chapterFindingsChanged.emit()
         self.currentChapterChanged.emit()
+        self.cwLockedChanged.emit()
 
     # ---- 档位切换（受控：仅阶段空闲）----
 
@@ -1849,7 +1870,8 @@ class Bridge(QObject):
             self._confirm_cw_project()
             return
         if stage == st.STAGE_CW_PROSE:
-            self.toast.emit("info", "正文「章节确定=终稿锁定」将在 M4 里程碑落地；当前可用「保存」暂存草稿")
+            # 章节确定 = 终稿锁定（M4：两级提交的「确定」侧；状态机为终态不前进）
+            self.confirmChapterLocked()
             return
         self._set_cw_busy(True)
         worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
@@ -1954,6 +1976,89 @@ class Bridge(QObject):
         self.refreshQueue()
         self.toast.emit("ok", f"细纲已生成：第 {nums[0]}-{nums[-1]} 章")
         self._cw_open_product(self._get_cw_stage_key())
+
+    # ---- M4：章节确定锁定（两级提交：保存=临时草稿 / 章节确定=终稿锁定）----
+
+    @Slot()
+    def confirmChapterLocked(self):
+        """✓ 章节内容确定 = 终稿锁定：内容不再改动，编辑器只读"""
+        if not self.proj or not self._cur_num:
+            self.toast.emit("warn", "请先打开要锁定的章节")
+            return
+        if project.is_chapter_locked(self.proj, self._cur_num):
+            self.toast.emit("info", "该章已终稿锁定")
+            return
+        project.set_chapter_locked(self.proj, self._cur_num, True)
+        self.cwLockedChanged.emit()
+        self.refreshQueue()
+        self.toast.emit("ok", f"第 {self._cur_num} 章已确定（终稿锁定）：内容不再改动；"
+                              "解锁后可继续编辑（终稿仍留版本历史）")
+
+    @Slot()
+    def unlockChapter(self):
+        """显式解锁：唯一放行通道"""
+        if not self.proj or not self._cur_num:
+            return
+        if project.attempt_unlock(self.proj, self._cur_num):
+            self.cwLockedChanged.emit()
+            self.refreshQueue()
+            self.toast.emit("ok", f"第 {self._cur_num} 章已解锁（原终稿仍在版本历史）")
+        else:
+            self.toast.emit("info", "该章未锁定")
+
+    @Slot()
+    def readbackChapter(self):
+        """手动「读一遍」：通读当前章改动，揣摩意图（无视改动量阈值）"""
+        if not self.proj or not self._cur_num or not self._chapter_path:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在工作中…")
+            return
+        self._start_readback(project.read_file(self._chapter_path), self._chapter_text)
+
+    def _maybe_readback(self, old: str, new: str):
+        """保存有变 → 读改节流检查（readback_on_save 默认开 + readback_min_diff 阈值）"""
+        w = self.cfg.get("writing", {})
+        if not w.get("readback_on_save", True) or self._cw_busy:
+            return
+        diff_len = sum(len(d.get("text", "")) for d in versions.diff_texts(old, new)
+                        if d.get("op") in ("del", "add"))
+        min_diff = int(w.get("readback_min_diff", 200) or 0)
+        if min_diff and diff_len < min_diff:
+            return
+        self._start_readback(old, new)
+
+    def _start_readback(self, old: str, new: str):
+        self._set_cw_busy(True)
+        worker = co_dialogue.ReadbackWorker(self.cfg, self.proj, self._cur_num, old, new, parent=self)
+        worker.done.connect(self._on_cw_readback_done)
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_worker = worker
+        worker.start()
+
+    def _on_cw_readback_done(self, text: str):
+        state = self._cw.load()
+        co_dialogue.transcript_append(state, st.STAGE_CW_PROSE, "agent", "（读改揣摩）" + text)
+        self._cw_save_state(state)
+        self.cwMessagesChanged.emit()
+        self.toast.emit("ok", "读改揣摩完成（已进对话区）")
+
+    # ---- 读改节流设置（设置面板）----
+
+    @Slot(bool)
+    def setReadbackOnSave(self, on: bool):
+        self.cfg.setdefault("writing", {})["readback_on_save"] = bool(on)
+        cfg_mod.save_config(self.cfg)
+        self.cwLockedChanged.emit()
+        self.toast.emit("ok", on and "读改揣摩已开启（保存有变且达阈值时触发）" or "读改揣摩已关闭（可手动「读一遍」）")
+
+    @Slot(int)
+    def setReadbackMinDiff(self, v: int):
+        self.cfg.setdefault("writing", {})["readback_min_diff"] = max(0, int(v))
+        cfg_mod.save_config(self.cfg)
+        self.cwLockedChanged.emit()
+        self.toast.emit("ok", f"读改最小改动量阈值 = {max(0, int(v))} 字（低于不触发；0=每次都触发）")
 
     def _confirm_cw_project(self):
         state = self._cw.load()
@@ -2086,6 +2191,9 @@ class Bridge(QObject):
     def saveCwProduct(self, text: str):
         """共写档产物保存（编辑器直接改产物后保存修改：不走版本快照）"""
         if not self._chapter_path or not self.proj:
+            return
+        if self._cur_num and project.is_chapter_locked(self.proj, self._cur_num):
+            self.toast.emit("warn", "该章已终稿锁定，请先显式解锁")
             return
         project.write_file(self._chapter_path, text or self._chapter_text)
         self._chapter_text = text or self._chapter_text
