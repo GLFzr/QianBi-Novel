@@ -129,8 +129,10 @@ def cw_defaults() -> dict:
         "transcript": {},            # {阶段key: [{role: user/agent, text}]} 对话转写
         "handoff": {},               # {阶段key: "→ 下阶段交接"小节（≤800字）} 唯一属主
         "reopening": "",             # 非空 = 回看回边中（目标阶段key，重确定后返回原阶段）
-        "locked": {},                # {章号: 锁定时间戳} 终稿锁定（M4）
+        "locked": {},                # {章号: 锁定时间戳} 终稿锁定（M4 落 annotations，此处留痕）
         "unit": {},                  # 单元信息（M3）
+        "supervised": {},            # {章号: 主 Agent 衔接比对时间戳}（M5 触发点①）
+        "report": {},                # {ts, num, text} 主 Agent 报告（M5 报告区）
     }
 
 

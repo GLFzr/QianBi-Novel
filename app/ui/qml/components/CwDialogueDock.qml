@@ -207,6 +207,54 @@ Rectangle {
             }
         }
 
+        // ---- 主 Agent 报告区（M5：定稿前衔接比对 / 世界书变更提示；与审校 Findings 分开展示）----
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.margins: 8
+            visible: bridge.cwReportText !== ""
+            height: 120
+            radius: 8
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.info
+            clip: true
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 6
+                spacing: 2
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "主 Agent 报告" + (bridge.cwReportTs !== "" ? " · " + bridge.cwReportTs : "")
+                        color: Theme.info
+                        font.family: Theme.uiFont
+                        font.pixelSize: 10
+                        font.bold: true
+                    }
+                    Item { Layout.fillWidth: true }
+                    AppButton {
+                        text: "×"
+                        kind: "ghost"
+                        height: 18
+                        onClicked: bridge.clearCwReport()
+                    }
+                }
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    TextArea {
+                        text: bridge.cwReportText
+                        readOnly: true
+                        color: Theme.textSecondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
+                        background: Rectangle { color: "transparent" }
+                    }
+                }
+            }
+        }
+
         // ---- 消息流（转写）----
         ListView {
             id: msgList

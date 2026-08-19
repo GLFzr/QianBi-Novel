@@ -340,6 +340,7 @@ class Bridge(QObject):
     cwMessagesChanged = Signal()
     cwStreamingChanged = Signal()
     cwLockedChanged = Signal()
+    cwReportChanged = Signal()
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -516,6 +517,8 @@ class Bridge(QObject):
                                notify=cwLockedChanged)
     readbackMinDiff = Property(int, lambda self: int(self.cfg.get("writing", {}).get("readback_min_diff", 200)),
                                notify=cwLockedChanged)
+    cwReportText = Property(str, lambda self: self._get_cw_report_text(), notify=cwReportChanged)
+    cwReportTs = Property(str, lambda self: self._get_cw_report_ts(), notify=cwReportChanged)
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
@@ -1710,6 +1713,16 @@ class Bridge(QObject):
             return False
         return project.is_chapter_locked(self.proj, self._cur_num)
 
+    def _get_cw_report_text(self) -> str:
+        if not self._cw:
+            return ""
+        return str(st.ensure_cw(self._cw.load()).get("report", {}).get("text", ""))
+
+    def _get_cw_report_ts(self) -> str:
+        if not self._cw:
+            return ""
+        return str(st.ensure_cw(self._cw.load()).get("report", {}).get("ts", ""))
+
     def _cw_save_state(self, state: dict):
         st.save_state(self.proj, state)
 
@@ -1870,8 +1883,20 @@ class Bridge(QObject):
             self._confirm_cw_project()
             return
         if stage == st.STAGE_CW_PROSE:
-            # 章节确定 = 终稿锁定（M4：两级提交的「确定」侧；状态机为终态不前进）
-            self.confirmChapterLocked()
+            if not self._cur_num:
+                self.toast.emit("warn", "请先打开要确定的章节")
+                return
+            state = self._cw.load()
+            supervised = st.ensure_cw(state).get("supervised", {})
+            if supervised.get(str(self._cur_num)):
+                # 主 Agent 已比对过本章：确认即锁定
+                self.confirmChapterLocked()
+                return
+            # 触发点①：每章定稿前先跑主 Agent 衔接比对（报告进报告区），再点确定即锁定
+            if self._cw_busy:
+                self.toast.emit("warn", "AI 正在工作中…")
+                return
+            self._start_cw_supervisor()
             return
         self._set_cw_busy(True)
         worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
@@ -2060,6 +2085,54 @@ class Bridge(QObject):
         self.cwLockedChanged.emit()
         self.toast.emit("ok", f"读改最小改动量阈值 = {max(0, int(v))} 字（低于不触发；0=每次都触发）")
 
+    # ---- M5：主 Agent（Supervisor）——定稿前衔接比对 + 世界书变更影响提示 ----
+
+    def _start_cw_supervisor(self):
+        self._set_cw_busy(True)
+        worker = co_dialogue.SupervisorWorker(self.cfg, self.proj, self._cur_num, parent=self)
+        worker.done.connect(self._on_cw_supervisor_done)
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_worker = worker
+        worker.start()
+        self.toast.emit("info", f"主 Agent 正在做第 {self._cur_num} 章定稿前衔接比对（review 槽）…")
+
+    def _on_cw_supervisor_done(self, text: str):
+        import datetime as _dt
+        state = self._cw.load()
+        cw = st.ensure_cw(state)
+        cw.setdefault("supervised", {})[str(self._cur_num)] = _dt.datetime.now().strftime("%m-%d %H:%M")
+        cw["report"] = {"ts": _dt.datetime.now().strftime("%m-%d %H:%M"),
+                        "num": self._cur_num, "text": text}
+        self._cw_save_state(state)
+        self.cwReportChanged.emit()
+        self.toast.emit("ok", f"主 Agent 衔接比对完成（第 {self._cur_num} 章，见报告区）"
+                              "——确认无问题再点「确定」锁定")
+
+    def _cw_worldbook_changed_notice(self, state: dict) -> bool:
+        """触发点②：世界书变更后影响提示（不发 LLM）；locked 章建议显式解锁后重核"""
+        locked = [n for n, _name, _p in project.list_chapters(self.proj)
+                  if project.is_chapter_locked(self.proj, n)]
+        cw = st.ensure_cw(state)
+        if locked:
+            names = "、".join(f"第 {n} 章" for n in locked[:3])
+            cw["report"] = {"ts": "世界书变更", "num": 0,
+                            "text": f"⚠️ 世界书/正则已修订写回。已锁定章节不会自动修改：影响 {names}，"
+                                    "建议显式解锁后重核衔接（解锁前终稿仍留版本历史）。"}
+        else:
+            cw["report"] = {"ts": "世界书变更", "num": 0,
+                            "text": "ℹ️ 世界书/正则已修订写回；未锁定章节将按新契约续写。"}
+        return bool(locked)
+
+    @Slot()
+    def clearCwReport(self):
+        if not self._cw:
+            return
+        state = self._cw.load()
+        st.ensure_cw(state)["report"] = {}
+        self._cw_save_state(state)
+        self.cwReportChanged.emit()
+
     def _confirm_cw_project(self):
         state = self._cw.load()
         info = project.read_idea_info(self.proj)
@@ -2123,6 +2196,8 @@ class Bridge(QObject):
         if st.ensure_cw(state).get("reopening"):
             ret = self._cw.confirm_reopen_return(state)
             self.toast.emit("ok", "世界书/正则已写回，返回「%s」阶段" % st.CW_STAGE_LABELS.get(ret, ret))
+            if self._cw_worldbook_changed_notice(state):
+                self.toast.emit("warn", "世界书已变更：已锁定章节不会自动修改，建议解锁重核（见报告区）")
         elif stage == st.STAGE_CW_UNIT:
             self.toast.emit("ok", "「单元细纲」已确定定稿，正在滚动生成下一批 5 章细纲…")
         else:
@@ -2133,6 +2208,7 @@ class Bridge(QObject):
         self._cw_view = self._get_cw_stage_key()
         self._cw_open_product(self._get_cw_stage_key())
         self._cw_refresh()
+        self.cwReportChanged.emit()
         self.refreshQueue()
         if stage == st.STAGE_CW_UNIT and not st.ensure_cw(state).get("reopening"):
             self._start_cw_outline_batch(state)

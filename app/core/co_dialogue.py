@@ -277,6 +277,57 @@ class ReadbackWorker(QThread):
             self.error.emit(str(e))
 
 
+# ---------- M5：主 Agent（Supervisor）——每章定稿前衔接比对报告（复用 review 槽）----------
+
+class SupervisorWorker(QThread):
+    """主 Agent 触发点①：每章定稿前衔接比对（上章结尾↔本章↔下章细纲）
+
+    只出报告（进对话区报告区），绝不产正文；上下文 ≤6k 字。
+    """
+    done = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, cfg: dict, proj: str, num: int, router=None, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.num = num
+        self.router = router or ModelRouter(cfg)
+        self.last_prompt = ""
+        self.result_text = ""
+
+    def run(self):
+        from . import memory
+        try:
+            chapters = project.list_chapters(self.proj)
+            prev_ending = "（本章为第一章）"
+            if chapters and chapters[-1][0] == self.num - 1:
+                prev_ending = project.read_file(chapters[-1][2])[-800:]
+            chapter_text = project.read_file(project.get_chapter_path(self.proj, self.num))[:3000]
+            if not chapter_text.strip():
+                # 正文可能尚未落盘（编辑器工作副本）：读细纲兜底
+                chapter_text = project.read_file(project.get_outline_path(self.proj, self.num))[:3000]
+            next_brief = project.read_file(project.get_outline_path(self.proj, self.num + 1))[:600] \
+                or "（本章为当前最后一章细纲）"
+            prompt = prompts.CO_SUPERVISOR_PROMPT.format(
+                global_summary=(memory.read_global_summary(self.proj) or "（尚未开始）")[:800],
+                previous_ending=prev_ending,
+                chapter_text=chapter_text or "（本章正文尚在工作副本中）",
+                next_outline_brief=next_brief,
+                worldbook_block=project.worldbook_text(self.proj, 1200),
+                regex_block=project.regex_block(self.proj, "logic", 1000),
+            )
+            self.last_prompt = prompt
+            text = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat(prompt))
+            if not text.strip():
+                self.error.emit("主 Agent 报告为空，请重试")
+                return
+            self.result_text = text
+            self.done.emit(text)
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e))
+
+
 # ---------- M3：章细纲滚动生成（确定单元后，helper 槽，≈200 字/章）----------
 
 class OutlineBatchWorker(QThread):
