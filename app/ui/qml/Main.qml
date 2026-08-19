@@ -542,9 +542,9 @@ ApplicationWindow {
 
                 CwDialogueDock {
                     id: cwDock
-                    Layout.preferredWidth: 400
+                    Layout.preferredWidth: 480
                     Layout.fillHeight: true
-                    Layout.maximumWidth: 520
+                    Layout.maximumWidth: 560
                     visible: bridge.cwMode === "cw"
                 }
                 Rectangle {

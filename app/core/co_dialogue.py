@@ -179,6 +179,7 @@ class DialogueWorker(QThread):
             prompt = prompts.CO_DIALOGUE_PROMPT.format(
                 role_desc=role["role"],
                 agent_name=role["agent"],
+                stage_label=st.CW_STAGE_LABELS.get(self.stage, self.stage),
                 handoff=prev_handoff(state, self.stage),
                 reference_block=compose_reference_block(self.proj, self.stage, _preset_id(self.proj)),
                 transcript=transcript_text(state, self.stage),

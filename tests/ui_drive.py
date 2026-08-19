@@ -121,6 +121,39 @@ def click(sx, sy, n=3):
     post_click(sx, sy, n=n)
 
 
+# ---------- 文本输入 ----------
+
+def set_foreground():
+    """把应用窗口带到前台（输入前需要真实焦点）"""
+    user32.SetForegroundWindow(_app_hwnd)
+    time.sleep(0.35)
+
+
+def type_text(text, pause=0.02):
+    """前台逐字符 SendInput 输入（支持中文/回车 \n）"""
+    from pywinauto import keyboard
+    set_foreground()
+    keyboard.send_keys(text, with_spaces=True, pause=pause)
+
+
+def press(key):
+    """发送按键，如 'ENTER' / 'TAB' / 'ESC' / '^a' / '{BACKSPACE}'"""
+    from pywinauto import keyboard
+    set_foreground()
+    keyboard.send_keys(key, pause=0.05)
+
+
+def set_field_text(text):
+    """UIA ValuePattern 直写输入框文本（若控件支持）；失败返回 False"""
+    try:
+        win = _desktop().window(handle=_app_hwnd)
+        el = win.child_window(control_type="Edit", focused=True)
+        el.set_edit_text(text)
+        return True
+    except Exception:
+        return False
+
+
 # ---------- UIA ----------
 
 def _desktop():

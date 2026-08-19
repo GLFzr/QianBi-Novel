@@ -16,6 +16,7 @@ Rectangle {
 
     property bool viewIsCurrent: bridge.cwViewStage === bridge.cwStageKey
     property bool busy: bridge.cwBusy
+    property bool rollbackOpen: false   // 打回目标选择展开（#5 跨阶段打回）
 
     function send() {
         var t = cwInput.text.trim()
@@ -23,6 +24,10 @@ Rectangle {
         cwInput.text = ""
         bridge.submitCwMessage(t)
         msgList.positionViewAtEnd()
+    }
+
+    function toggleRollback() {
+        rollbackOpen = !rollbackOpen
     }
 
     ColumnLayout {
@@ -84,9 +89,9 @@ Rectangle {
                     height: 28
                     visible: bridge.cwSummary.rollbackable
                     enabled: cwDock.viewIsCurrent && !cwDock.busy && bridge.cwSummary.rollbackable
-                    onClicked: bridge.rollbackCwStage()
+                    onClicked: cwDock.toggleRollback()
                     ToolTip.visible: hovered
-                    ToolTip.text: "级联失效下游产物并归档到 pipeline_debug/rollback/，重议本阶段"
+                    ToolTip.text: "选择要打回的阶段（当前/历史），级联失效下游产物并归档"
                 }
                 AppButton {
                     text: "回看世界书"
@@ -110,7 +115,7 @@ Rectangle {
                 Item { Layout.fillWidth: true }
                 Text {
                     visible: cwDock.busy
-                    text: "AI 回复中…"
+                    text: "AI 回复中… 已等待 " + bridge.cwBusySeconds + " 秒"
                     color: Theme.accent
                     font.family: Theme.uiFont
                     font.pixelSize: 10
@@ -121,6 +126,126 @@ Rectangle {
                         NumberAnimation { to: 1; duration: 600 }
                     }
                 }
+                AppButton {
+                    text: "取消"
+                    kind: "ghost"
+                    height: 26
+                    visible: cwDock.busy
+                    onClicked: bridge.cancelCwWorker()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "取消在途请求（结果将被丢弃）"
+                }
+            }
+        }
+
+        // ---- 打回目标选择（#5：跨阶段打回）----
+        Rectangle {
+            Layout.fillWidth: true
+            visible: cwDock.rollbackOpen && bridge.cwSummary.rollbackable
+            height: 34
+            color: Theme.bgLog
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 6
+                Text {
+                    text: "打回到："
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: 10
+                }
+                Repeater {
+                    model: bridge.cwReachedStages
+                    delegate: Rectangle {
+                        required property var modelData
+                        height: 24
+                        radius: 6
+                        width: rlText.implicitWidth + 14
+                        color: rlHot.containsMouse ? Theme.bgHover : Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
+                        Text {
+                            id: rlText
+                            anchors.centerIn: parent
+                            text: modelData.label
+                            color: Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                        }
+                        MouseArea {
+                            id: rlHot
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                bridge.rollbackCwStageTo(modelData.key)
+                                cwDock.rollbackOpen = false
+                            }
+                        }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: "打回会级联失效下游产物并归档"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: 10
+                }
+            }
+        }
+
+        // ---- 创建项目阶段：题材预设选择（#2）----
+        Rectangle {
+            Layout.fillWidth: true
+            visible: bridge.cwStageKey === "cw_project" && cwDock.viewIsCurrent
+            height: 40
+            color: Theme.bgLog
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 6
+                Text {
+                    text: "题材预设："
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: 10
+                }
+                Repeater {
+                    model: bridge.genrePresets()
+                    delegate: Rectangle {
+                        required property var modelData
+                        height: 24
+                        radius: 6
+                        width: pstText.implicitWidth + 14
+                        color: bridge.cwPreset === modelData.id
+                               ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : Theme.bgCard
+                        border.width: 1
+                        border.color: bridge.cwPreset === modelData.id ? Theme.accent : Theme.border
+                        Text {
+                            id: pstText
+                            anchors.centerIn: parent
+                            text: modelData.name
+                            color: bridge.cwPreset === modelData.id ? Theme.accent : Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                            elide: Text.ElideRight
+                        }
+                        MouseArea {
+                            id: pstHot
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: bridge.setCwPreset(modelData.id)
+                        }
+                        ToolTip.visible: pstHot.hovered && modelData.description !== ""
+                        ToolTip.text: modelData.description
+                    }
+                }
+                Item { Layout.fillWidth: true }
             }
         }
 

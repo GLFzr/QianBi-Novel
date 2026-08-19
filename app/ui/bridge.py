@@ -391,9 +391,15 @@ class Bridge(QObject):
         self._cw = None
         self._cw_view = ""                     # 对话区查看的阶段（回看历史用，机器阶段不动）
         self._cw_busy = False
+        self._cw_confirming = False            # 确定按钮重入锁（#3）
+        self._cw_cancelled = False             # 用户取消在途请求（#8）
+        self._cw_busy_seconds = 0
         self._cw_reply = ""                    # 本轮 agent 流式回复缓冲
         self._cw_worker = None
         self._cw_sum_worker = None
+        self._cw_busy_timer = QTimer(self)
+        self._cw_busy_timer.setInterval(1000)
+        self._cw_busy_timer.timeout.connect(self._on_cw_busy_tick)
         self.chapterModel = ChapterListModel(self)
         self.logModel = LogListModel(self)
         self.connectionModel = ConnectionListModel(self)
@@ -519,6 +525,9 @@ class Bridge(QObject):
                                notify=cwLockedChanged)
     cwReportText = Property(str, lambda self: self._get_cw_report_text(), notify=cwReportChanged)
     cwReportTs = Property(str, lambda self: self._get_cw_report_ts(), notify=cwReportChanged)
+    cwBusySeconds = Property(int, lambda self: self._cw_busy_seconds, notify=cwBusyChanged)
+    cwPreset = Property(str, lambda self: self._get_cw_preset(), notify=cwStageChanged)
+    cwReachedStages = Property("QVariantList", lambda self: self._get_cw_reached_stages(), notify=cwStageChanged)
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
@@ -705,7 +714,9 @@ class Bridge(QObject):
             state = st.load_state(self.proj)
             if st.ensure_cw(state).get("mode") == "cw":
                 return "cw"
-        return str(self.cfg.get("writing", {}).get("run_mode", "auto"))
+        # config 的 'cw' 只在项目已迁移时有效；未迁移时按 auto 显示（防脱同步，#1）
+        m = str(self.cfg.get("writing", {}).get("run_mode", "auto"))
+        return "auto" if m == "cw" else m
 
     @Slot(str)
     def setRunMode(self, mode: str):
@@ -1723,6 +1734,21 @@ class Bridge(QObject):
             return ""
         return str(st.ensure_cw(self._cw.load()).get("report", {}).get("ts", ""))
 
+    def _get_cw_preset(self) -> str:
+        if not self._cw:
+            return ""
+        return str(st.ensure_cw(self._cw.load()).get("preset", ""))
+
+    def _get_cw_reached_stages(self) -> list:
+        """已到达的阶段（含当前）：供「打回」目标选择（排除创建项目，#5）"""
+        if not self._cw:
+            return []
+        state = self._cw.load()
+        idx = self._cw.stage_index(self._get_cw_stage_key())
+        return [{"key": k, "label": st.CW_STAGE_LABELS.get(k, k)}
+                for i, k in enumerate(st.CW_STAGE_ORDER)
+                if i <= idx and k != st.STAGE_CW_PROJECT]
+
     def _cw_save_state(self, state: dict):
         st.save_state(self.proj, state)
 
@@ -1844,13 +1870,40 @@ class Bridge(QObject):
     def _set_cw_busy(self, v: bool):
         if v != self._cw_busy:
             self._cw_busy = v
+            self._cw_busy_seconds = 0
+            if v:
+                self._cw_busy_timer.start()
+            else:
+                self._cw_busy_timer.stop()
             self.cwBusyChanged.emit()
+
+    def _on_cw_busy_tick(self):
+        """busy 计时（#8：让用户看到等待时长）"""
+        self._cw_busy_seconds += 1
+        self.cwBusyChanged.emit()
+
+    @Slot()
+    def cancelCwWorker(self):
+        """取消在途共写请求（#8：中断尽力而为，结果丢弃）"""
+        if not self._cw_busy:
+            return
+        self._cw_cancelled = True
+        for w in (self._cw_worker, self._cw_sum_worker):
+            if w and w.isRunning():
+                w.requestInterruption()
+        self._set_cw_busy(False)
+        self.toast.emit("warn", "已请求取消（当前请求可能无法立即中断，结果将被丢弃）")
 
     def _on_cw_chunk(self, text: str):
         self._cw_reply += text
         self.cwStreamingChanged.emit()
 
     def _on_cw_done(self, text: str):
+        if self._cw_cancelled:
+            self._cw_cancelled = False
+            self._cw_reply = ""
+            self.cwStreamingChanged.emit()
+            return
         stage = self._get_cw_stage_key()
         state = self._cw.load()
         co_dialogue.transcript_append(state, stage, "agent", text)
@@ -1868,43 +1921,53 @@ class Bridge(QObject):
 
     @Slot()
     def confirmCwStage(self):
+        """✓ 确定（#3/#4 修复：重入锁 + 空转写拦截）"""
         if not self.proj or not self._cw:
             return
         if self._get_cw_mode() != "cw":
             return
-        if self._cw_busy:
-            self.toast.emit("warn", "AI 正在回复中，稍后再确定")
+        if self._cw_busy or self._cw_confirming:
+            self.toast.emit("warn", "上一个操作还没完成，稍后再点「确定」")
             return
-        stage = self._get_cw_stage_key()
-        if self._cw_view != stage:
-            self.toast.emit("warn", "正在回看历史阶段，回到当前阶段再确定")
-            return
-        if stage == st.STAGE_CW_PROJECT:
-            self._confirm_cw_project()
-            return
-        if stage == st.STAGE_CW_PROSE:
-            if not self._cur_num:
-                self.toast.emit("warn", "请先打开要确定的章节")
+        self._cw_confirming = True
+        try:
+            stage = self._get_cw_stage_key()
+            if self._cw_view != stage:
+                self.toast.emit("warn", "正在回看历史阶段，回到当前阶段再确定")
                 return
+            if stage == st.STAGE_CW_PROJECT:
+                self._confirm_cw_project()
+                return
+            if stage == st.STAGE_CW_PROSE:
+                if not self._cur_num:
+                    self.toast.emit("warn", "请先打开要确定的章节")
+                    return
+                state = self._cw.load()
+                supervised = st.ensure_cw(state).get("supervised", {})
+                if supervised.get(str(self._cur_num)):
+                    # 主 Agent 已比对过本章：确认即锁定
+                    self.confirmChapterLocked()
+                    return
+                # 触发点①：每章定稿前先跑主 Agent 衔接比对（报告进报告区），再点确定即锁定
+                if self._cw_busy:
+                    self.toast.emit("warn", "AI 正在工作中…")
+                    return
+                self._start_cw_supervisor()
+                return
+            # 需要总结定稿的阶段：空转写拦截（#4）
             state = self._cw.load()
-            supervised = st.ensure_cw(state).get("supervised", {})
-            if supervised.get(str(self._cur_num)):
-                # 主 Agent 已比对过本章：确认即锁定
-                self.confirmChapterLocked()
+            if not co_dialogue.transcript_text(state, stage).strip():
+                self.toast.emit("warn", "对话区还没有讨论内容——先和 Agent 聊几句再点「确定」")
                 return
-            # 触发点①：每章定稿前先跑主 Agent 衔接比对（报告进报告区），再点确定即锁定
-            if self._cw_busy:
-                self.toast.emit("warn", "AI 正在工作中…")
-                return
-            self._start_cw_supervisor()
-            return
-        self._set_cw_busy(True)
-        worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
-        worker.done.connect(self._on_cw_sum_done)
-        worker.error.connect(self._on_cw_error)
-        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
-        self._cw_sum_worker = worker
-        worker.start()
+            self._set_cw_busy(True)
+            worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
+            worker.done.connect(self._on_cw_sum_done)
+            worker.error.connect(self._on_cw_error)
+            worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+            self._cw_sum_worker = worker
+            worker.start()
+        finally:
+            self._cw_confirming = False
 
     # ---- M3：单元细纲（单元范围/主题 + 滚动批次 + 确定细纲校验）----
 
@@ -1990,6 +2053,9 @@ class Bridge(QObject):
         worker.start()
 
     def _on_cw_batch_done(self, outlines: list):
+        if self._cw_cancelled:
+            self._cw_cancelled = False
+            return
         state = self._cw.load()
         nums = [o[0] for o in outlines]
         co_dialogue.transcript_append(
@@ -2175,11 +2241,15 @@ class Bridge(QObject):
         if preset_id:
             state["genre_preset"] = preset_id
         self._cw_save_state(state)
+        self.cwStageChanged.emit()   # 刷新预设 chips 选中态
         from .. import presets as genre_presets
         name = genre_presets.load_preset(preset_id).get("name", "通用") if preset_id else "通用（无预设）"
         self.toast.emit("ok", f"共写档选用预设「{name}」（仅作参考，不锁定）")
 
     def _on_cw_sum_done(self, text: str):
+        if self._cw_cancelled:
+            self._cw_cancelled = False
+            return
         stage = self._get_cw_stage_key()
         state = self._cw.load()
         product, handoff = co_dialogue.build_handoff(stage, text)
@@ -2236,6 +2306,23 @@ class Bridge(QObject):
         if self._cw_view != stage:
             self.toast.emit("warn", "回到当前阶段再打回")
             return
+        self._rollback_to(stage)
+
+    @Slot(str)
+    def rollbackCwStageTo(self, key: str):
+        """打回到指定已到达阶段（#5：支持跨阶段打回）"""
+        if not self.proj or not self._cw:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在回复中，稍后再打回")
+            return
+        reached = {r["key"] for r in self._get_cw_reached_stages()}
+        if key not in reached:
+            self.toast.emit("warn", "该阶段不可打回")
+            return
+        self._rollback_to(key)
+
+    def _rollback_to(self, stage: str):
         state = self._cw.load()
         result = self._cw.rollback(state, stage)
         self._cw_save_state(state)

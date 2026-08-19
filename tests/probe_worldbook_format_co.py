@@ -42,19 +42,23 @@ check("参考块含 grow_regex_direction", "必须成立约束" in ref)
 role = prompts.CO_ROLES[st.STAGE_CW_WORLDBOOK]
 prompt1 = prompts.CO_DIALOGUE_PROMPT.format(
     role_desc=role["role"], agent_name=role["agent"],
+    stage_label=st.CW_STAGE_LABELS[st.STAGE_CW_WORLDBOOK],
     handoff="关键事实：力量体系=对等代价",
     reference_block=ref,
     transcript="作者：力量体系再细化",
     user_message="把宗门规则也写进去",
 )
 check("对话 prompt 组装不抛", "宗门规则" in prompt1 and "世界书 Agent" in prompt1)
+check("阶段边界提示注入", "阶段边界" in prompt1)
 
 # 空串回退：无世界书/正则文件的项目
 proj_old = project.create_project(tempfile.mkdtemp(prefix="qbn_wbfco_old_"), "旧项目")
 ref_old = co_dialogue.compose_reference_block(proj_old, st.STAGE_CW_WORLDBOOK, "cultivation")
 check("空串回退占位", "尚未生成世界书" in ref_old and "尚未生成正则" in ref_old)
 prompt_old = prompts.CO_DIALOGUE_PROMPT.format(
-    role_desc=role["role"], agent_name=role["agent"], handoff="（无）",
+    role_desc=role["role"], agent_name=role["agent"],
+    stage_label=st.CW_STAGE_LABELS[st.STAGE_CW_WORLDBOOK],
+    handoff="（无）",
     reference_block=ref_old, transcript="（空）", user_message="hi")
 check("旧项目对话组装不抛", "hi" in prompt_old)
 
