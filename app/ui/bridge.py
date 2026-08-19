@@ -13,6 +13,8 @@ from .. import config as cfg_mod
 from .. import project, deslop, prompts
 from ..core import state as st, versions
 from ..core.orchestrator import Orchestrator
+from ..core.co_writing import CoWriting
+from ..core import co_dialogue
 from ..llm import LLMClient, LLMError, ModelRouter
 from ..llm import clean_llm_output
 from ..llm.providers import PROVIDERS, PROVIDER_ORDER
@@ -331,6 +333,12 @@ class Bridge(QObject):
     ideaCountChanged = Signal()
     editorDirtyChanged = Signal()
     recoverableDraftChanged = Signal()
+    # 共写档（co-write）状态
+    cwModeChanged = Signal()
+    cwStageChanged = Signal()
+    cwBusyChanged = Signal()
+    cwMessagesChanged = Signal()
+    cwStreamingChanged = Signal()
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -377,6 +385,13 @@ class Bridge(QObject):
         self._draft_timer.setSingleShot(True)
         self._draft_timer.setInterval(5000)    # 5s 防抖：只防丢稿，不算版本
         self._draft_timer.timeout.connect(self._flush_draft)
+        # 共写档状态（CoWriting 状态机 + 一次性 worker）
+        self._cw = None
+        self._cw_view = ""                     # 对话区查看的阶段（回看历史用，机器阶段不动）
+        self._cw_busy = False
+        self._cw_reply = ""                    # 本轮 agent 流式回复缓冲
+        self._cw_worker = None
+        self._cw_sum_worker = None
         self.chapterModel = ChapterListModel(self)
         self.logModel = LogListModel(self)
         self.connectionModel = ConnectionListModel(self)
@@ -482,6 +497,17 @@ class Bridge(QObject):
          "hint": PROVIDERS[k]["hint"], "models": PROVIDERS[k]["models"]}
         for k in PROVIDER_ORDER], constant=True)
     slotLabels = Property("QVariantMap", lambda self: dict(cfg_mod.SLOT_LABELS), constant=True)
+    # ---- 共写档属性（M1）----
+    cwMode = Property(str, lambda self: self._get_cw_mode(), notify=cwModeChanged)
+    cwStageKey = Property(str, lambda self: self._get_cw_stage_key(), notify=cwStageChanged)
+    cwStageLabel = Property(str, lambda self: self._get_cw_stage_label(), notify=cwStageChanged)
+    cwAgent = Property(str, lambda self: self._get_cw_agent(), notify=cwStageChanged)
+    cwViewStage = Property(str, lambda self: self._get_cw_view(), notify=cwStageChanged)
+    cwBusy = Property(bool, lambda self: self._cw_busy, notify=cwBusyChanged)
+    cwMessages = Property("QVariantList", lambda self: self._get_cw_messages(), notify=cwMessagesChanged)
+    cwStreamingText = Property(str, lambda self: self._cw_reply, notify=cwStreamingChanged)
+    cwSummary = Property("QVariantMap", lambda self: self._get_cw_summary(), notify=cwStageChanged)
+    cwStageCards = Property("QVariantList", lambda self: self._get_cw_stage_cards(), notify=cwStageChanged)
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
@@ -527,6 +553,12 @@ class Bridge(QObject):
         meta_parts = [p for p in [info["genre"], info["platform"],
                                   f"目标 {info['total_words_wan']} 万字" if info["total_words_wan"] else ""] if p]
         self._book_meta = " · ".join(meta_parts)
+        # 共写档状态机（按项目粘性档位初始化；回看视图=机器阶段）
+        self._cw = CoWriting(path)
+        self._cw_view = self._get_cw_stage_key()
+        self.cwModeChanged.emit()
+        self.cwStageChanged.emit()
+        self.cwMessagesChanged.emit()
         # 恢复最近一次定稿记录（质量格/快捷按钮的数据源）
         _state = st.load_state(path)
         _hist = _state.get("history") or []
@@ -580,6 +612,9 @@ class Bridge(QObject):
             self.toast.emit("warn", "请先打开或新建项目")
             return
         if self._running:
+            return
+        if self._get_cw_mode() == "cw":
+            self.toast.emit("warn", "当前为共写档：先完成共写阶段或切换回自动档再启动流水线")
             return
         # api key 检查
         missing = []
@@ -654,15 +689,25 @@ class Bridge(QObject):
 
     @Slot(result=str)
     def runMode(self) -> str:
+        # 项目级档位粘性优先：共写档状态 cw.mode == 'cw' 时即显示共写
+        if self.proj:
+            state = st.load_state(self.proj)
+            if st.ensure_cw(state).get("mode") == "cw":
+                return "cw"
         return str(self.cfg.get("writing", {}).get("run_mode", "auto"))
 
     @Slot(str)
     def setRunMode(self, mode: str):
-        m = mode if mode in ("auto", "step", "border") else "auto"
+        m = mode if mode in ("auto", "step", "border", "cw") else "auto"
         self.cfg.setdefault("writing", {})["run_mode"] = m
         self.cfg["writing"]["step_confirm"] = (m == "step")
         cfg_mod.save_config(self.cfg)
-        names = {"auto": "全自动", "step": "逐步确认", "border": "边界确认"}
+        # cw ↔ 自动档为受控切换（仅阶段空闲可切）：同步项目级粘性
+        if m == "cw":
+            self.setCwMode(True)
+        elif self._get_cw_mode() == "cw":
+            self.setCwMode(False)
+        names = {"auto": "全自动", "step": "逐步确认", "border": "边界确认", "cw": "共写"}
         self.toast.emit("ok", f"运行模式已切换为「{names[m]}」")
 
     @Slot(str, result=bool)
@@ -1584,6 +1629,361 @@ class Bridge(QObject):
         self.refreshQueue()
         label = {"setting": "核心设定", "outline": "全书大纲（含细纲）", "ch_outline": "细纲"}[key]
         self.toast.emit("ok", f"{label}产物已移除，点「开始」从该阶段重新生成")
+
+    # ============ 共写档（co-write · M1：六阶段状态机 + 对话区 + 确定/打回/回看）============
+
+    def _get_cw_mode(self) -> str:
+        if not self.proj:
+            return "auto"
+        return st.ensure_cw(st.load_state(self.proj)).get("mode", "auto")
+
+    def _get_cw_stage_key(self) -> str:
+        if not self.proj:
+            return st.STAGE_CW_PROJECT
+        return st.ensure_cw(st.load_state(self.proj)).get("stage", st.STAGE_CW_PROJECT)
+
+    def _get_cw_stage_label(self) -> str:
+        return st.CW_STAGE_LABELS.get(self._get_cw_stage_key(), "")
+
+    def _get_cw_agent(self) -> str:
+        if not self._cw:
+            return ""
+        return self._cw.current_agent(self._cw.load())
+
+    def _get_cw_view(self) -> str:
+        return self._cw_view or self._get_cw_stage_key()
+
+    def _get_cw_messages(self) -> list:
+        if not self._cw:
+            return []
+        return self._cw.transcript(self._cw.load(), self._get_cw_view())
+
+    def _get_cw_summary(self) -> dict:
+        if not self._cw:
+            return {"key": st.STAGE_CW_PROJECT, "label": "", "index": 0,
+                    "products": [], "rollbackable": False, "canReopen": False, "reopening": False}
+        return self._cw.stage_summary(self._cw.load())
+
+    def _get_cw_stage_cards(self) -> list:
+        if not self._cw:
+            return []
+        state = self._cw.load()
+        cw = st.ensure_cw(state)
+        idx = self._cw.stage_index(cw.get("stage", st.STAGE_CW_PROJECT))
+        cards = []
+        for i, key in enumerate(st.CW_STAGE_ORDER):
+            status = "done" if i < idx else ("active" if i == idx else "pending")
+            detail = " · ".join(st.CW_STAGE_PRODUCTS.get(key, []))
+            if key == st.STAGE_CW_PROSE:
+                detail = f"{len(project.list_chapters(self.proj))} 章正文"
+            cards.append({"key": key, "label": st.CW_STAGE_LABELS.get(key, key),
+                          "status": status, "detail": detail})
+        return cards
+
+    def _cw_save_state(self, state: dict):
+        st.save_state(self.proj, state)
+
+    def _cw_refresh(self):
+        self.cwModeChanged.emit()
+        self.cwStageChanged.emit()
+        self.cwMessagesChanged.emit()
+        self.cwStreamingChanged.emit()
+
+    def _cw_open_product(self, stage: str):
+        """阶段切换：编辑器载入对应产物文件（cw_prose=最新一章）"""
+        if stage == st.STAGE_CW_PROSE:
+            chapters = project.list_chapters(self.proj)
+            if chapters:
+                self._cur_num = chapters[-1][0]
+                self._chapter_path = chapters[-1][2]
+                self._chapter_text = project.read_file(chapters[-1][2])
+            else:
+                self._chapter_path = ""
+                self._chapter_text = ""
+        else:
+            rels = st.CW_STAGE_PRODUCTS.get(stage, [])
+            if rels:
+                p = os.path.join(self.proj, rels[0])
+                self._chapter_path = p if os.path.isfile(p) else ""
+                self._chapter_text = project.read_file(p)
+            else:
+                self._chapter_path = ""
+                self._chapter_text = ""
+        self._chapter_findings = []
+        self._reset_editor_state()
+        self.chapterTextChanged.emit()
+        self.chapterFindingsChanged.emit()
+        self.currentChapterChanged.emit()
+
+    # ---- 档位切换（受控：仅阶段空闲）----
+
+    @Slot(bool)
+    def setCwMode(self, on: bool):
+        if self._running:
+            self.toast.emit("warn", "流水线运行中不能切换档位，请先停止")
+            return
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        self._cw.migrate_mode(state, bool(on))
+        self._cw_save_state(state)
+        self._cw_view = self._get_cw_stage_key()
+        self._cw_open_product(self._get_cw_stage_key())
+        self._cw_refresh()
+        self.refreshQueue()
+        if on:
+            self.toast.emit("ok", "已切换到共写档：六阶段人机共写，每阶段讨论后点「确定」定稿")
+        else:
+            self.toast.emit("ok", "已切换回自动档（共写产物原样保留）")
+
+    @Slot(str)
+    def selectCwStage(self, key: str):
+        """回看导航：只能回到已到达的阶段（机器阶段不动），编辑器载入对应产物"""
+        if not self._cw or key not in st.CW_STAGE_ORDER:
+            return
+        state = self._cw.load()
+        if self._cw.stage_index(key) > self._cw.stage_index(self._get_cw_stage_key()):
+            self.toast.emit("warn", "该阶段还没到，先把当前阶段确定")
+            return
+        self._cw_view = key
+        self._cw_open_product(key)
+        self._cw_refresh()
+
+    # ---- 对话（每轮输入 → 一次性 DialogueWorker）----
+
+    @Slot(str)
+    def submitCwMessage(self, text: str):
+        if not self.proj or not self._cw:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        if self._get_cw_mode() != "cw":
+            self.toast.emit("warn", "当前不在共写档，先切换到共写")
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在回复中…")
+            return
+        text = (text or "").strip()
+        if not text:
+            self.toast.emit("warn", "输入不能为空")
+            return
+        stage = self._get_cw_stage_key()
+        if self._cw_view != stage:
+            self.toast.emit("warn", "正在回看历史阶段，点当前阶段卡片回到讨论")
+            return
+        if stage == st.STAGE_CW_PROJECT:
+            self.toast.emit("warn", "创建项目阶段请填写左侧选题表单后点「确定」")
+            return
+        state = self._cw.load()
+        co_dialogue.transcript_append(state, stage, "user", text)
+        self._cw_save_state(state)
+        self._cw_reply = ""
+        self._set_cw_busy(True)
+        worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self)
+        worker.chunk.connect(self._on_cw_chunk)
+        worker.done.connect(self._on_cw_done)
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_worker = worker
+        worker.start()
+        self.cwMessagesChanged.emit()
+
+    def _release_cw_worker(self, w):
+        if self._cw_worker is w:
+            self._cw_worker = None
+        if self._cw_sum_worker is w:
+            self._cw_sum_worker = None
+        self._set_cw_busy(False)
+
+    def _set_cw_busy(self, v: bool):
+        if v != self._cw_busy:
+            self._cw_busy = v
+            self.cwBusyChanged.emit()
+
+    def _on_cw_chunk(self, text: str):
+        self._cw_reply += text
+        self.cwStreamingChanged.emit()
+
+    def _on_cw_done(self, text: str):
+        stage = self._get_cw_stage_key()
+        state = self._cw.load()
+        co_dialogue.transcript_append(state, stage, "agent", text)
+        self._cw_save_state(state)
+        self._cw_reply = ""
+        self.cwMessagesChanged.emit()
+        self.cwStreamingChanged.emit()
+
+    def _on_cw_error(self, msg: str):
+        self._cw_reply = ""
+        self.cwStreamingChanged.emit()
+        self.toast.emit("error", f"对话失败: {msg}")
+
+    # ---- 确定（总结定稿）/ 打回 / 回看世界书 ----
+
+    @Slot()
+    def confirmCwStage(self):
+        if not self.proj or not self._cw:
+            return
+        if self._get_cw_mode() != "cw":
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在回复中，稍后再确定")
+            return
+        stage = self._get_cw_stage_key()
+        if self._cw_view != stage:
+            self.toast.emit("warn", "正在回看历史阶段，回到当前阶段再确定")
+            return
+        if stage == st.STAGE_CW_PROJECT:
+            self._confirm_cw_project()
+            return
+        if stage == st.STAGE_CW_PROSE:
+            self.toast.emit("info", "正文「章节确定=终稿锁定」将在 M4 里程碑落地；当前可用「保存」暂存草稿")
+            return
+        self._set_cw_busy(True)
+        worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
+        worker.done.connect(self._on_cw_sum_done)
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_sum_worker = worker
+        worker.start()
+
+    def _confirm_cw_project(self):
+        state = self._cw.load()
+        info = project.read_idea_info(self.proj)
+        if not info["idea"]:
+            self.toast.emit("warn", "选题信息为空：请先在左侧填写灵感，或打开书架重新立项")
+            return
+        # 创建项目 = 选预设/自定义主题 + 写选题信息（表单已写则原样保留）
+        project.write_idea_info(self.proj, info["genre"], info["platform"],
+                                info["idea"], info["total_words_wan"])
+        cw = st.ensure_cw(state)
+        if cw.get("preset"):
+            state["genre_preset"] = cw["preset"]
+        self._cw.advance(state)
+        self._cw_save_state(state)
+        self._cw_view = self._get_cw_stage_key()
+        self._cw_open_product(st.STAGE_CW_CORE)
+        self._cw_refresh()
+        self.toast.emit("ok", "项目创建完成，进入「核心设定」：与设定 Agent 讨论后点确定")
+
+    @Slot(str, str, str, int)
+    def saveCwIdeaInfo(self, genre: str, platform: str, idea: str, totalWan: int):
+        """共写档创建项目表单：写选题信息（确定前的可编辑阶段）"""
+        if not self.proj:
+            return
+        project.write_idea_info(self.proj, (genre or "").strip(),
+                                (platform or "").strip() or "番茄",
+                                (idea or "").strip(), int(totalWan or 0))
+        self._book_meta = " · ".join(p for p in [(genre or "").strip(),
+                                                 (platform or "").strip() or "番茄"] if p)
+        self.bookMetaChanged.emit()
+        self.toast.emit("ok", "选题信息已保存，点「确定」进入核心设定")
+
+    @Slot(str)
+    def setCwPreset(self, preset_id: str):
+        """共写档选题表单：选用题材预设（写入 state['cw']['preset'] 与 genre_preset）"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        st.ensure_cw(state)["preset"] = preset_id or ""
+        if preset_id:
+            state["genre_preset"] = preset_id
+        self._cw_save_state(state)
+        from .. import presets as genre_presets
+        name = genre_presets.load_preset(preset_id).get("name", "通用") if preset_id else "通用（无预设）"
+        self.toast.emit("ok", f"共写档选用预设「{name}」（仅作参考，不锁定）")
+
+    def _on_cw_sum_done(self, text: str):
+        stage = self._get_cw_stage_key()
+        state = self._cw.load()
+        product, handoff = co_dialogue.build_handoff(stage, text)
+        if not product.strip():
+            self.toast.emit("error", "总结产物为空，请在对话区继续讨论后重试")
+            return
+        # 落盘该阶段产物（世界书/正则按小节拆分）
+        self._write_cw_products(stage, product)
+        # 交接块存 state（唯一属主 = build_handoff）
+        co_dialogue.store_handoff(state, stage, handoff)
+        if not handoff:
+            self.toast.emit("warn", "模型未输出「→ 下阶段交接」小节，下一阶段上下文将不完整")
+        # 回看回边：写回世界书/正则后返回原阶段；否则前进
+        if st.ensure_cw(state).get("reopening"):
+            ret = self._cw.confirm_reopen_return(state)
+            self.toast.emit("ok", "世界书/正则已写回，返回「%s」阶段" % st.CW_STAGE_LABELS.get(ret, ret))
+        else:
+            nxt = self._cw.advance(state)
+            self.toast.emit("ok", "「%s」已确定定稿，进入「%s」"
+                            % (st.CW_STAGE_LABELS.get(stage, stage), st.CW_STAGE_LABELS.get(nxt, nxt)))
+        self._cw_save_state(state)
+        self._cw_view = self._get_cw_stage_key()
+        self._cw_open_product(self._get_cw_stage_key())
+        self._cw_refresh()
+        self.refreshQueue()
+
+    def _write_cw_products(self, stage: str, product: str):
+        """按阶段落盘产物：core→题材定位 / outline→大纲 / worldbook→世界书+正则 / unit→单元总纲"""
+        if stage == st.STAGE_CW_WORLDBOOK:
+            # 世界书全文 + 正则段拆分（「## 正则」小节独立成 设定/正则.md）
+            m = re.search(r"##\s*正则.*?(?=\n##\s|\Z)", product, re.S)
+            wb = product
+            regex_part = ""
+            if m:
+                regex_part = m.group(0).strip()
+                wb = product[:m.start()].rstrip()
+            project.write_file(os.path.join(self.proj, "设定", "世界书.md"), wb)
+            project.write_file(os.path.join(self.proj, "设定", "正则.md"),
+                               regex_part or "## 正则（逻辑约束规则集）\n（确定时未拆分出独立正则段，见世界书）")
+            return
+        for rel in st.CW_STAGE_PRODUCTS.get(stage, []):
+            project.write_file(os.path.join(self.proj, rel), product)
+
+    @Slot()
+    def rollbackCwStage(self):
+        if not self.proj or not self._cw:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在回复中，稍后再打回")
+            return
+        stage = self._get_cw_stage_key()
+        if self._cw_view != stage:
+            self.toast.emit("warn", "回到当前阶段再打回")
+            return
+        state = self._cw.load()
+        result = self._cw.rollback(state, stage)
+        self._cw_save_state(state)
+        self._cw_view = stage
+        self._cw_open_product(stage)
+        self._cw_refresh()
+        self.refreshQueue()
+        n = len(result.get("archived", []))
+        self.toast.emit("warn", f"「{st.CW_STAGE_LABELS.get(stage, stage)}」已打回，"
+                        + (f"级联失效并归档 {n} 个下游产物" if n else "本阶段产物将重议"))
+
+    @Slot()
+    def reopenCwWorldbook(self):
+        """回看世界书（软切）：cw_unit / cw_prose 阶段入口，不级联删除"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        if not self._cw.can_reopen(state):
+            self.toast.emit("warn", "当前阶段不能回看世界书")
+            return
+        self._cw.reopen(state)
+        self._cw_save_state(state)
+        self._cw_view = self._get_cw_stage_key()
+        self._cw_open_product(st.STAGE_CW_WORLDBOOK)
+        self._cw_refresh()
+        self.toast.emit("ok", "已回看世界书（软切，下游产物保留）：修订后点「确定」写回并返回原阶段")
+
+    @Slot(str)
+    def saveCwProduct(self, text: str):
+        """共写档产物保存（编辑器直接改产物后保存修改：不走版本快照）"""
+        if not self._chapter_path or not self.proj:
+            return
+        project.write_file(self._chapter_path, text or self._chapter_text)
+        self._chapter_text = text or self._chapter_text
+        self._reset_editor_state()
+        self.toast.emit("ok", f"已保存 {os.path.basename(self._chapter_path)}")
+        self.refreshQueue()
 
     # ============ 创作笔记（M3 · 想法 CRUD + 全局写作偏好）============
 

@@ -28,6 +28,66 @@ STAGE_LABELS = {
 }
 STAGE_ORDER = [STAGE_SETTING, STAGE_OUTLINE, STAGE_CH_OUTLINE, STAGE_PROSE, STAGE_DONE]
 
+# ---------- 共写档（co-write）：六阶段状态机（与自动档键完全分离）----------
+# 只写 state['cw']['stage']，绝不碰自动档 state['stage']；项目打开按 state['cw']['mode'] 判定档位粘性。
+STAGE_CW_PROJECT = "cw_project"       # 创建项目（选预设/自定义主题 → 选题信息）
+STAGE_CW_CORE = "cw_core"             # 核心设定（预设范例 → 讨论 → 确定=总结定稿）
+STAGE_CW_OUTLINE = "cw_outline"       # 剧情总大纲（简纲+主题 → 讨论 → 确定=自动总结）
+STAGE_CW_WORLDBOOK = "cw_worldbook"   # 世界书与正则（生成 → 逐条讨论 → 确定落盘）
+STAGE_CW_UNIT = "cw_unit"             # 单元细纲（±10 章 → 讨论单元 → 确定单元总纲 → 章细纲滚动）
+STAGE_CW_PROSE = "cw_prose"           # 正文写作（草稿 → 保存=临时 / 章节确定=终稿锁定）
+
+CW_STAGE_ORDER = [
+    STAGE_CW_PROJECT, STAGE_CW_CORE, STAGE_CW_OUTLINE,
+    STAGE_CW_WORLDBOOK, STAGE_CW_UNIT, STAGE_CW_PROSE,
+]
+
+CW_STAGE_LABELS = {
+    STAGE_CW_PROJECT: "创建项目",
+    STAGE_CW_CORE: "核心设定",
+    STAGE_CW_OUTLINE: "剧情总大纲",
+    STAGE_CW_WORLDBOOK: "世界书与正则",
+    STAGE_CW_UNIT: "单元细纲",
+    STAGE_CW_PROSE: "正文写作",
+}
+
+# 各阶段产物落盘文件（相对项目根；cw_prose 为章节目录，动态定位）
+CW_STAGE_PRODUCTS = {
+    STAGE_CW_PROJECT: ["设定/选题信息.md"],
+    STAGE_CW_CORE: ["设定/题材定位.md"],
+    STAGE_CW_OUTLINE: ["大纲/大纲.md"],
+    STAGE_CW_WORLDBOOK: ["设定/世界书.md", "设定/正则.md"],
+    STAGE_CW_UNIT: ["大纲/单元总纲.md"],
+    STAGE_CW_PROSE: [],
+}
+
+# 独立跳转表：cw_unit 属主裁决 —— 单元总纲唯一属主 = cw_unit，worldbook 只产两文件
+CW_NEXT = {
+    STAGE_CW_PROJECT: STAGE_CW_CORE,
+    STAGE_CW_CORE: STAGE_CW_OUTLINE,
+    STAGE_CW_OUTLINE: STAGE_CW_WORLDBOOK,
+    STAGE_CW_WORLDBOOK: STAGE_CW_UNIT,
+    STAGE_CW_UNIT: STAGE_CW_PROSE,
+    STAGE_CW_PROSE: STAGE_CW_PROSE,   # 终态：章节确定=锁定，不前进
+}
+
+CW_PREV = {v: k for k, v in CW_NEXT.items() if k != STAGE_CW_PROSE}
+
+# 打回级联矩阵：{打回阶段: 需失效（归档后删除）的产物模式列表}
+# 模式支持精确相对路径或以 ".md" 结尾的前缀扫描（如 细纲_）
+CW_ROLLBACK_CASCADE = {
+    STAGE_CW_CORE: [
+        "大纲/大纲.md", "细纲_", "设定/世界书.md", "设定/正则.md", "大纲/单元总纲.md",
+    ],
+    STAGE_CW_OUTLINE: ["细纲_", "大纲/单元总纲.md"],
+    STAGE_CW_WORLDBOOK: ["细纲_", "大纲/单元总纲.md"],
+    STAGE_CW_UNIT: ["细纲_"],
+    STAGE_CW_PROSE: [],   # M4：重写本章（锁定语义）
+}
+
+# 可回看世界书回边（reopen 软切）的阶段
+CW_REOPEN_SOURCES = [STAGE_CW_UNIT, STAGE_CW_PROSE]
+
 # 章节微循环步骤
 STEP_ASSEMBLE = "assemble"
 STEP_DRAFT = "draft"
@@ -58,6 +118,31 @@ DEFAULT_STATE = {
     "pending_guidance": {},     # {章号: 重写指导语}：用户"带指导重写"时暂存，续跑时消费
     "pending_ideas": [],        # 用户创作想法队列（写作中随时提交，下一章草稿注入）
 }
+
+
+def cw_defaults() -> dict:
+    """共写档状态结构（state['cw']）：档位粘性 + 六阶段机 + 转写/交接块/锁定"""
+    return {
+        "mode": "auto",              # auto=自动档 / cw=共写档（项目级粘性）
+        "stage": STAGE_CW_PROJECT,   # 当前共写阶段
+        "preset": "",                # cw_preset：共写档选用的题材预设
+        "transcript": {},            # {阶段key: [{role: user/agent, text}]} 对话转写
+        "handoff": {},               # {阶段key: "→ 下阶段交接"小节（≤800字）} 唯一属主
+        "reopening": "",             # 非空 = 回看回边中（目标阶段key，重确定后返回原阶段）
+        "locked": {},                # {章号: 锁定时间戳} 终稿锁定（M4）
+        "unit": {},                  # 单元信息（M3）
+    }
+
+
+def ensure_cw(state: dict) -> dict:
+    """补齐 state['cw'] 缺省字段（旧项目无此键时使用）"""
+    cw = state.get("cw")
+    if not isinstance(cw, dict):
+        cw = {}
+    merged = cw_defaults()
+    merged.update(cw)
+    state["cw"] = merged
+    return merged
 
 
 def set_guidance(proj: str, state: dict, num: int, text: str):
@@ -139,6 +224,7 @@ def load_state(proj: str) -> dict:
                 state[k] = v
         except Exception:
             pass
+    ensure_cw(state)
     return state
 
 

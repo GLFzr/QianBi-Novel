@@ -80,18 +80,18 @@ Item {
                         width: parent.width
                     }
                 }
-                // 运行模式切换（全自动 / 边界确认 / 逐步确认）
+                // 运行模式切换（全自动 / 边界确认 / 逐步确认 / 共写）
                 Rectangle {
                     id: modeChip
-                    visible: bridge.isRunning || bridge.isPaused
+                    visible: bridge.isRunning || bridge.isPaused || bridge.cwMode === "cw"
                     width: 132; height: 26; radius: 13
                     color: Theme.bgHover
                     border.width: 1
                     border.color: modeChip.stepOn ? Theme.accent : Theme.border
                     property bool stepOn: false
-                    property var modes: ["auto", "border", "step"]
+                    property var modes: ["auto", "border", "step", "cw"]
                     property int modeIdx: 0
-                    property var modeNames: { "auto": "全自动", "border": "边界确认", "step": "逐步确认" }
+                    property var modeNames: { "auto": "全自动", "border": "边界确认", "step": "逐步确认", "cw": "共写" }
                     Component.onCompleted: {
                         var m = bridge.runMode()
                         modeIdx = Math.max(0, modes.indexOf(m))
@@ -128,7 +128,7 @@ Item {
                         }
                     }
                     ToolTip.visible: containsMouse
-                    ToolTip.text: "全自动=每步自动过 · 边界确认=只停大纲/草稿/定稿等大节点 · 逐步确认=每个决策门都停靠你确认"
+                    ToolTip.text: "全自动=每步自动过 · 边界确认=只停大纲/草稿/定稿等大节点 · 逐步确认=每个决策门都停靠你确认 · 共写=六阶段人机共写（对话讨论+确定定稿）"
                 }
                 AppButton {
                     visible: bridge.isRunning || bridge.isPaused

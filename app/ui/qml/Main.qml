@@ -63,11 +63,17 @@ ApplicationWindow {
         }
     }
 
+    // 统一保存入口：共写档=产物保存（不走版本快照）；自动档=正文保存（保存驱动版本）
+    function saveEditor() {
+        if (bridge.cwMode === "cw") bridge.saveCwProduct(editor.text)
+        else bridge.saveChapterText(editor.text)
+    }
+
     // ---- 全局快捷键 ----
     Shortcut {
         sequence: StandardKey.Save
         enabled: bridge.editorDirty && !bridge.isStreaming && bridge.chapterPath !== ""
-        onActivated: bridge.saveChapterText(editor.text)
+        onActivated: mainWindow.saveEditor()
     }
     Shortcut {
         sequence: "F5"
@@ -117,7 +123,7 @@ ApplicationWindow {
 
     // 未保存确认对话框的回调：doSave=true 保存并继续，false 放弃修改
     function afterUnsavedChoice(doSave) {
-        if (doSave) bridge.saveChapterText(editor.text)
+        if (doSave) mainWindow.saveEditor()
         else bridge.clearEditorDirty()
         var act = mainWindow.pendingChapter
         mainWindow.pendingChapter = -1
@@ -416,7 +422,7 @@ ApplicationWindow {
                         text: bridge.editorDirty ? "● 保存" : "保存"
                         kind: bridge.editorDirty ? "primary" : "ghost"
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
-                        onClicked: bridge.saveChapterText(editor.text)
+                        onClicked: mainWindow.saveEditor()
                         ToolTip.visible: hovered
                         ToolTip.text: bridge.editorDirty ? "有未保存修改，保存后产生新版本" : "保存正文并生成新版本"
                     }
@@ -472,10 +478,46 @@ ApplicationWindow {
                 }
             }
 
-            // ---- 正文编辑区（主体） ----
-            ScrollView {
+            // ---- 共写档阶段导航（六卡；自动档不占位）----
+            Rectangle {
+                Layout.fillWidth: true
+                visible: bridge.cwMode === "cw"
+                height: 36
+                color: Theme.bgPanel
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+                StageStepperCW {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    anchors.topMargin: 3
+                    anchors.bottomMargin: 3
+                }
+            }
+
+            // ---- 主编辑列（M1）：共写档 = 对话区 + 编辑器并排；自动档 = 纯编辑区 ----
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                spacing: 0
+
+                CwDialogueDock {
+                    id: cwDock
+                    Layout.preferredWidth: 400
+                    Layout.fillHeight: true
+                    Layout.maximumWidth: 520
+                    visible: bridge.cwMode === "cw"
+                }
+                Rectangle {
+                    visible: bridge.cwMode === "cw"
+                    Layout.fillHeight: true
+                    width: 1
+                    color: Theme.border
+                }
+
+                // ---- 正文编辑区（主体） ----
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
                     width: 10
@@ -536,6 +578,8 @@ ApplicationWindow {
                     onActiveFocusChanged: if (!activeFocus) selToolbar.visible = false
                 }
             }
+
+            }   // RowLayout（主编辑列：CwDialogueDock + 编辑器）
 
             // ---- 步骤决策门（人 AI 共写指挥台：每步确认 / 想法 / 回退）----
             StepGateBar {
