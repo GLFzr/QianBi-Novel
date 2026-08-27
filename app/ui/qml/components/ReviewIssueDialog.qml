@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
-import "."
+import ".."
 
 // ============================================================
 // 6 维审校问题对话框（v0.13）：A/B/C 三选一

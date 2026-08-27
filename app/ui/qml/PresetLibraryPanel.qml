@@ -27,11 +27,6 @@ Item {
 
     Component.onCompleted: refresh()
 
-    Connections {
-        target: bridge
-        function onGenrePresetsChanged() { library.refresh() }
-    }
-
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 14
