@@ -14,6 +14,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 
+from . import __version__
 from .logger import setup_logging
 from .ui.bridge import Bridge
 
@@ -32,8 +33,9 @@ def main():
     app = QGuiApplication(sys.argv)
     app.setApplicationName("QianBiNovel")
     app.setApplicationDisplayName("千笔一文 Novel")
+    app.setApplicationVersion(__version__)
     app.setOrganizationName("QianBiNovel")
-    logger.info("应用启动")
+    logger.info("应用启动 v%s", __version__)
 
     engine = QQmlApplicationEngine()
     bridge = Bridge()
