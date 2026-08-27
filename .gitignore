@@ -21,6 +21,8 @@ tmpt2tjun0o/
 smoke_tmp/
 .fake_home/
 *.exe.bak
+projects/
+.workbuddy/
 
 # ---- IDE / 系统 ----
 .idea/
