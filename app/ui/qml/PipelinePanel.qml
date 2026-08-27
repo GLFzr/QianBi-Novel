@@ -623,10 +623,12 @@ Item {
                 model: bridge.gateMetaList()
                 delegate: Rectangle {
                     required property var modelData
+                    readonly property bool wired: modelData.wired !== false
                     width: parent.width
                     height: 34
                     radius: 6
                     color: Theme.bgHover
+                    opacity: wired ? 1.0 : 0.5
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 8
@@ -634,6 +636,7 @@ Item {
                         spacing: 8
                         CheckBox {
                             Layout.preferredWidth: 22
+                            enabled: wired
                             checked: bridge.gateEnabled(modelData.key)
                             onToggled: bridge.setGateEnabled(modelData.key, checked)
                             indicator: Rectangle {
@@ -657,8 +660,15 @@ Item {
                             font.pixelSize: Theme.fsSmall
                         }
                         Text {
+                            visible: !wired
+                            text: "规划中"
+                            color: Theme.textTertiary
+                            font.family: Theme.uiFont
+                            font.pixelSize: 9
+                        }
+                        Text {
                             Layout.fillWidth: true
-                            text: modelData.desc
+                            text: modelData.desc + (wired ? "" : "（见 plan_step_gates_v1 阶段 2）")
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
                             font.pixelSize: 10
