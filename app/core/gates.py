@@ -46,6 +46,19 @@ def check_words(text: str, target: int, tolerance: float = 0.1) -> tuple:
     return actual >= int(target * (1 - tolerance)), actual
 
 
+def check_word_bounds(text: str, target: int, tolerance: float = 0.2) -> tuple:
+    """字数双界检查：返回 (low_ok, high_ok, actual)
+
+    low_ok  = actual >= target*(1-tolerance)         （不足需扩写）
+    high_ok = actual <= target*(1+tolerance)         （超出需压缩）
+    tolerance 默认 0.2：超 20% 视为超标（与写作 prompt 口径一致）。
+    """
+    actual = project.count_chars(text)
+    low_ok = actual >= int(target * (1 - tolerance))
+    high_ok = actual <= int(target * (1 + tolerance))
+    return low_ok, high_ok, actual
+
+
 def scan_deslop(text: str) -> tuple:
     """返回 (blocking_findings, advisory_findings)"""
     findings = deslop.scan_text(text)

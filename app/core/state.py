@@ -108,6 +108,93 @@ STEP_LABELS = {
 }
 STEP_ORDER = [STEP_ASSEMBLE, STEP_DRAFT, STEP_SCAN, STEP_DESLOP, STEP_REVIEW, STEP_FINALIZE]
 
+# ---- v2：6 阶段特化提示词键（与 app/presets/__init__.py STAGE_HINT_KEYS 对齐）----
+# 顺序固定：core_setting → outline → unit_outline → prose → worldbook → review
+STAGE_KEYS = (
+    "core_setting",  # 核心设定阶段
+    "outline",        # 大纲阶段
+    "unit_outline",   # 细纲阶段
+    "prose",          # 正文阶段（文风锚）
+    "worldbook",      # 世界书阶段
+    "review",         # 审校阶段
+)
+STAGE_KEY_SET = frozenset(STAGE_KEYS)
+
+
+# ---- v2 6 维最终审核（review_findings 持久化）----
+
+def save_review_findings(proj: str, state: dict, num: int, verdict: str,
+                         items: list, blocking: list = None, advisory: list = None):
+    """v2 6 维审校结果落盘到 state['review_findings'][num]。
+
+    Args:
+        num: 章节号
+        verdict: PASS / PASS_WITH_NOTES / REJECT / REJECT-HARD
+        items: 解析 FINAL_REVIEW_PROMPT 输出的 issue 列表 [{dim, level, text, quote, root_layer}, ...]
+        blocking: 阻断级（兼容 v1 解析）
+        advisory: 建议级（兼容 v1 解析）
+    """
+    import datetime
+    rf = state.setdefault("review_findings", {})
+    rf[str(num)] = {
+        "verdict": verdict,
+        "items": items or [],
+        "blocking": blocking or [],
+        "advisory": advisory or [],
+        "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    save_state(proj, state)
+
+
+def load_review_findings(state: dict, num: int) -> dict:
+    """读取某章 v2 6 维审校结果（缺则返回空 dict）"""
+    rf = state.get("review_findings") or {}
+    return rf.get(str(num), {})
+
+
+def append_review_chain(proj: str, state: dict, num: int, issues: list,
+                        reworks: list, verdict: str, round_no: int):
+    """v3 反馈闭环：记录每轮 issue/重做/裁决（保留最近 3 轮历史）。"""
+    import datetime
+    chain = state.setdefault("review_chain", {})
+    ch = chain.setdefault(str(num), {
+        "issues": [],
+        "reworks": [],
+        "verdict_history": [],
+        "rounds": 0,
+    })
+    ch["issues"] = (ch.get("issues") or []) + list(issues or [])
+    ch["reworks"] = (ch.get("reworks") or []) + list(reworks or [])
+    ch["verdict_history"] = (ch.get("verdict_history") or []) + [
+        {"verdict": verdict, "round": round_no,
+         "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    ]
+    ch["rounds"] = (ch.get("rounds", 0)) + 1
+    save_state(proj, state)
+
+
+def clear_review_chain(proj: str, state: dict, num: int):
+    """chapter_done 时清空（防 50 章长篇 state 膨胀）"""
+    chain = state.get("review_chain") or {}
+    if str(num) in chain:
+        chain.pop(str(num), None)
+        state["review_chain"] = chain
+        save_state(proj, state)
+
+
+def mark_chapter_need_human(proj: str, state: dict, num: int):
+    """标记某章需人工介入（3 次 REJECT 不收敛时调用）"""
+    import datetime
+    nhh = state.setdefault("chapter_need_human", {})
+    nhh[str(num)] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_state(proj, state)
+
+
+def is_chapter_need_human(state: dict, num: int) -> bool:
+    """查询某章是否已标 human（流水线跳过）"""
+    nhh = state.get("chapter_need_human") or {}
+    return str(num) in nhh
+
 DEFAULT_STATE = {
     "stage": STAGE_INIT,
     "current_chapter": 0,       # 最近定稿的章号
@@ -117,6 +204,9 @@ DEFAULT_STATE = {
     "history": [],              # [{num,title,words,deslop_blocking,deslop_advisory,status,ts}]
     "pending_guidance": {},     # {章号: 重写指导语}：用户"带指导重写"时暂存，续跑时消费
     "pending_ideas": [],        # 用户创作想法队列（写作中随时提交，下一章草稿注入）
+    "review_findings": {},      # {章号: [{verdict, items, ts, blocking, advisory, ...}]} v2 6 维审校结果
+    "review_chain": {},         # {章号: {issues, reworks, rounds, verdict_history}} v3 反馈闭环状态
+    "chapter_need_human": {},   # {章号: ts} 3 次 REJECT 不收敛时标 human，跳过本轮继续
 }
 
 

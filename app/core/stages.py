@@ -10,6 +10,7 @@ ctx 约定属性：
   step(num, step_key): 微循环步骤回调
   checkpoint(): 暂停/停止检查点（在每次 LLM 调用前后调用）
 """
+import logging
 import os
 import re
 
@@ -67,10 +68,27 @@ _TIC_LEXICON = [
 ]
 
 
-def _genre_block(proj: str) -> str:
-    """项目当前题材预设 → 注入正文/细纲 prompt（从 pipeline_state 现读，切换后下一章生效）"""
+def _genre_block(proj: str, stage: str = "prose") -> str:
+    """项目当前题材预设 → 注入正文/细纲 prompt（从 pipeline_state 现读，切换后下一章生效）
+
+    Args:
+        stage: v2 分环节特化键（core_setting/outline/unit_outline/prose/worldbook/review）
+               无效或空 → 走 v1 genre_block 全量注入（向后兼容）
+    """
     try:
-        return genre_presets.genre_block(st.load_state(proj).get("genre_preset", ""))
+        pid = st.load_state(proj).get("genre_preset", "")
+    except Exception:
+        pid = ""
+    if not pid:
+        return "（本书未启用题材预设，按通用网文规范写作）"
+    if stage and stage in st.STAGE_KEY_SET:
+        try:
+            return genre_presets.genre_block_for(pid, stage)
+        except Exception:
+            pass
+    # 兜底：v1 全量注入
+    try:
+        return genre_presets.genre_block(pid)
     except Exception:
         return "（本书未启用题材预设，按通用网文规范写作）"
 
@@ -157,6 +175,7 @@ def stage_core_setting(ctx) -> str:
         platform=info["platform"],
         idea=info["idea"],
         emotion="（由你根据题材推荐）",
+        total_words=info.get("total_words_wan", 0) or 100,
     )
     ctx.last_prompt = prompt
     result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="核心设定")
@@ -242,7 +261,8 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
 
     outlines = _generate_outline_batch(ctx, todo, chapter_words,
                                        core_setting, volume_outline, nearby_text,
-                                       previous_ending, foreshadows)
+                                       previous_ending, foreshadows,
+                                       wb_block, rg_block)
     saved = []
     for num, title, content in outlines:
         if num in existing:
@@ -258,7 +278,8 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
 def _generate_outline_batch(ctx, todo: list, chapter_words: int,
                             core_setting: str, volume_outline: str,
                             nearby_text: str, previous_ending: str = "",
-                            foreshadows: str = "") -> list:
+                            foreshadows: str = "",
+                            wb_block_text: str = "", rg_block_text: str = "") -> list:
     """一次调用生成一批细纲；解析失败或调用失败 → 拆半递归；单章失败跳过
 
     todo: 待生成章号列表（有序）。返回 [(num, title, content)]，失败章不在其中。
@@ -281,9 +302,9 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         previous_ending=previous_ending or "（无）",
         foreshadows=foreshadows or "（无）",
         unit_contract=_unit_contract(ctx.proj, start),
-        genre_block=_genre_block(ctx.proj),
-        worldbook_block=wb_block,
-        regex_block=rg_block,
+        genre_block=_genre_block(ctx.proj, "unit_outline"),
+        worldbook_block=wb_block_text,
+        regex_block=rg_block_text,
         user_directive=ctx.consume_gate_idea() or "（无）",
     )
     ctx.last_prompt = prompt  # 失败现场 dump 用
@@ -304,10 +325,12 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         mid = len(todo) // 2
         left = _generate_outline_batch(ctx, todo[:mid], chapter_words,
                                        core_setting, volume_outline, nearby_text,
-                                       previous_ending, foreshadows)
+                                       previous_ending, foreshadows,
+                                       wb_block_text, rg_block_text)
         right = _generate_outline_batch(ctx, todo[mid:], chapter_words,
                                         core_setting, volume_outline, nearby_text,
-                                        previous_ending, foreshadows)
+                                        previous_ending, foreshadows,
+                                        wb_block_text, rg_block_text)
         return left + right
 
 
@@ -344,10 +367,31 @@ def _outline_title(content: str, num: int) -> str:
 
 # ============ 阶段④：章节微循环（每章 6 步）============
 
+def _outline_word_target(proj: str, num: int, default: int) -> int:
+    """正文目标字数优先取本章细纲登记的字数目标（C2 联动）；缺省回退默认。
+
+    防模型幻觉：细纲文本里的「字数目标」若与默认值偏差超过 50%，视为模型
+    自造数字（曾出现细纲写 3000 而配置为 300 的污染），一律回退默认值。
+    """
+    try:
+        text = project.read_file(project.get_outline_path(proj, num))
+        m = re.search(r"字数目标\s*[：:]\s*(\d+)", text or "")
+        if m:
+            target = int(m.group(1))
+            if abs(target - default) <= default * 0.5:
+                return target
+            logging.getLogger("qianbi.stages").warning(
+                "细纲字数目标 %s 与配置 %s 偏差过大，按配置执行（防模型幻觉）", target, default)
+    except Exception:  # noqa: BLE001
+        pass
+    return default
+
+
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
     proj = ctx.proj
-    chapter_words = ctx.cfg.get("writing", {}).get("chapter_word_target", 3000)
+    chapter_words = _outline_word_target(
+        proj, num, ctx.cfg.get("writing", {}).get("chapter_word_target", 3000))
     gates_cfg = ctx.cfg.get("gates", {})
     tolerance = gates_cfg.get("word_tolerance", 0.1)
     max_deslop_rounds = gates_cfg.get("deslop_max_rounds", 2)
@@ -404,7 +448,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         word_target=chapter_words,
         tic_blacklist=_tic_blacklist(proj),
         used_setpieces=_used_setpieces(proj),
-        genre_block=_genre_block(proj),
+        genre_block=_genre_block(proj, "prose"),
         worldbook_block=wb_block,
         regex_block=rg_block,
     )
@@ -415,9 +459,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     actual = project.count_chars(prose)
     ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
 
-    # ---- 字数闸门：不足自动扩写一次 ----
-    word_ok, actual = gates.check_words(prose, chapter_words, tolerance)
-    if not word_ok:
+    # ---- 字数闸门：不足自动扩写一次 / 超标自动压缩一次 ----
+    low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+    if not low_ok:
         ctx.step(num, st.STEP_ENRICH)
         ctx.log("warn", f"第 {num} 章 字数不足（{actual}），自动扩写…")
         ctx.checkpoint()
@@ -426,9 +470,28 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                                      tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = enrich_prompt
         prose = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label="扩写")
-        word_ok, actual = gates.check_words(prose, chapter_words, tolerance)
-        ctx.log("ok" if word_ok else "warn",
-                f"扩写后 {actual} 字" + ("，达标" if word_ok else "，仍不足，标记不阻断"))
+        low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+        ctx.log("ok" if low_ok else "warn",
+                f"扩写后 {actual} 字" + ("，达标" if low_ok else "，仍不足，标记不阻断"))
+    elif not high_ok:
+        ctx.step(num, st.STEP_ENRICH)
+        ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），自动压缩…")
+        ctx.checkpoint()
+        pre_prose, pre_actual = prose, actual
+        cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
+        trim_prompt = prompts.TRIM_PROMPT.format(chapter_num=num, actual=actual,
+                                                 target=chapter_words, cut_pct=cut_pct,
+                                                 prose=prose, tic_blacklist=_tic_blacklist(proj))
+        ctx.last_prompt = trim_prompt
+        prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩")
+        low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+        if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
+            # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
+            prose, actual = pre_prose, pre_actual
+            ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
+        else:
+            ctx.log("ok" if high_ok else "warn",
+                    f"压缩后 {actual} 字" + ("，达标" if high_ok else "，仍超标，标记不阻断"))
 
     # ---- ③ AI 味扫描（本地，零成本）----
     ctx.step(num, st.STEP_SCAN)
@@ -460,31 +523,63 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         if rounds:
             ctx.log("ok", f"第 {num} 章 去味完成，复扫通过")
 
-    # ---- ④.5 审校（一致性检查，可开关；用审校槽）----
+    # ---- ④.5 审校（v2 6 维最终审核，可开关；用审校槽）----
     review_enabled = gates_cfg.get("review_enabled", True)
     if review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
         ctx.stream_stage(f"审校 第{num}章")
-        blocking_review, advisory_review = _chapter_review(ctx, num, prose)
+        blocking_review, advisory_review, verdict_review = _chapter_review(ctx, num, prose)
         gr.review_blocking = blocking_review
         review_rounds = 0
-        while blocking_review and review_rounds < gates_cfg.get("review_max_rounds", 1):
+        # v2 反馈环触发：verdict == REJECT/REJECT-HARD 且未达 3 次熔断
+        max_review_rounds = max(gates_cfg.get("review_max_rounds", 1), 3)
+        while blocking_review and review_rounds < max_review_rounds:
             review_rounds += 1
             prev_n = len(blocking_review)
             ctx.step(num, st.STEP_REVIEW)
-            ctx.log("warn", f"第 {num} 章 审校发现 {prev_n} 处阻塞 → 修改（第 {review_rounds} 轮）…")
+            ctx.log("warn",
+                    f"第 {num} 章 6 维审校 {verdict_review} → 修复（第 {review_rounds} 轮）· 阻塞 {prev_n} 处")
             ctx.checkpoint()
+            # v2 反馈环：若 REJECT 且 review_rounds >= 2 → 调 ROOT_CAUSE_PROMPT 重新生成问题列表
+            if verdict_review in ("REJECT", "REJECT-HARD") and review_rounds >= 2:
+                try:
+                    issues = parse_final_review_v2(
+                        ctx.last_prompt or ""  # 最近一次 6 维输出
+                    ).get("items", [])
+                    anchors = prompts.build_upstream_anchors(proj, num)
+                    issues_brief = prompts.build_issues_brief(issues)
+                    root_prompt = prompts.ROOT_CAUSE_PROMPT.format(
+                        issues_brief=issues_brief
+                    )
+                    ctx.last_prompt = root_prompt
+                    root_result = clean_llm_output(
+                        ctx.router.client(cfg_mod.SLOT_REVIEW).chat_stream(
+                            root_prompt, on_chunk=ctx.stream_chunk
+                        )
+                    )
+                    # 记录根因
+                    try:
+                        st.append_review_chain(proj, st.load_state(proj), num,
+                                               issues, [root_result[:200]],
+                                               verdict_review, review_rounds)
+                    except Exception:
+                        pass
+                    ctx.log("info", f"第 {num} 章 根因溯源完成（{len(issues)} issue · 详见 review_chain）")
+                except Exception as e:
+                    ctx.log("warn", f"第 {num} 章 根因溯源失败：{e}")
+            # 普通修改（v1 REVIEW_FIX_PROMPT + worst_segment_quotes）
             fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
                 chapter_num=num, findings="\n".join(blocking_review), prose=prose)
             ctx.last_prompt = fix_prompt
-            rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt, label=f"审校修改 第{review_rounds}轮")
+            rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt,
+                               label=f"审校修改 第{review_rounds}轮")
             if not rewritten.strip():
                 ctx.log("warn", f"第 {num} 章 审校修复返回为空，保留原稿")
                 break
-            # 回滚保护：修复后复扫，未改善（阻塞不减反增）则保留原稿，防止越修越糟
-            new_blocking, new_advisory = _chapter_review(ctx, num, rewritten)
+            # 回滚保护：修复后复扫，未改善（阻塞不减反增）则保留原稿
+            new_blocking, new_advisory, new_verdict = _chapter_review(ctx, num, rewritten)
             if len(new_blocking) < prev_n:
                 prose = rewritten
-                blocking_review, advisory_review = new_blocking, new_advisory
+                blocking_review, advisory_review, verdict_review = new_blocking, new_advisory, new_verdict
                 gr.review_blocking = new_blocking
             else:
                 ctx.log("warn", f"第 {num} 章 审校修复未改善（{prev_n}→{len(new_blocking)} 处），保留原稿")
@@ -493,13 +588,22 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 break
         gr.review_rounds_used = review_rounds
         if blocking_review:
-            ctx.log("warn", f"第 {num} 章 审校 {review_rounds} 轮后仍有 {len(blocking_review)} 处阻塞")
+            # 3 次不收敛 → 标 human
+            if review_rounds >= max_review_rounds:
+                try:
+                    st.mark_chapter_need_human(proj, st.load_state(proj), num)
+                    ctx.log("warn",
+                            f"第 {num} 章 审校 {review_rounds} 轮后仍 {len(blocking_review)} 处阻塞 → 标 chapter_need_human，跳过本轮")
+                except Exception:
+                    pass
+            else:
+                ctx.log("warn", f"第 {num} 章 审校 {review_rounds} 轮后仍有 {len(blocking_review)} 处阻塞")
             gates.resolve_failed(ctx, f"第 {num} 章审校未通过（{len(blocking_review)} 处阻塞）", gr)
             _save_review_findings(proj, num, blocking_review)
         elif review_rounds:
-            ctx.log("ok", f"第 {num} 章 审校通过（复检 {review_rounds} 轮）")
+            ctx.log("ok", f"第 {num} 章 审校通过（复检 {review_rounds} 轮 · verdict={verdict_review}）")
         else:
-            ctx.log("ok", f"第 {num} 章 审校通过（无阻塞问题）")
+            ctx.log("ok", f"第 {num} 章 审校通过（verdict={verdict_review or 'PASS'}）")
     else:
         ctx.log("info", "审校已跳过（未启用或审校槽未绑定连接）")
 
@@ -563,37 +667,60 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     return record
 
 
-# ============ 审校（一致性检查）============
+# ============ 审校（v1 一致性检查 + v2 6 维最终审核）============
 
 def _chapter_review(ctx, num: int, prose: str) -> tuple:
-    """调用审校槽做一致性检查，返回 (blocking_list, advisory_list)"""
+    """v2 6 维最终审核（用 FINAL_REVIEW_PROMPT 替换原 REVIEW_PROMPT）
+
+    Returns:
+        (blocking, advisory, verdict) 三元组
+        - blocking: 阻断级 issue 列表（兼容 v1 解析）
+        - advisory: 建议级 issue 列表
+        - verdict: PASS / PASS_WITH_NOTES / REJECT / REJECT-HARD / ''（解析失败）
+
+    v1 fallback: 若 LLM 没按 v2 格式输出（含 ===VERDICT=== 段）→ 自动回退 v1 解析
+    """
     proj = ctx.proj
     wb_block, rg_block = _worldbook_regex_blocks(ctx)
-    prompt = prompts.REVIEW_PROMPT.format(
-        chapter_num=num,
-        genre_review_extra=_genre_review_extra(proj),
-        prose=prose[:6000],
-        core_setting=(project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1200]
-                      or "（未提供）"),
-        global_summary=memory.read_global_summary(proj) or "（尚未开始）",
-        character_states=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000] or "（暂无）",
-        foreshadows=memory.unfished_foreshadows(proj) or "（暂无）",
-        timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500] or "（暂无）",
-        worldbook_block=wb_block,
-        regex_block=rg_block,
-    )
-    ctx.last_prompt = prompt
     try:
+        prompt = prompts.FINAL_REVIEW_PROMPT.format(
+            prose=prose[:6000],
+            core_setting=(project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1200]
+                          or "（未提供）"),
+            global_summary=memory.read_global_summary(proj) or "（尚未开始）",
+            character_states=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000] or "（暂无）",
+            foreshadows=memory.unfished_foreshadows(proj) or "（暂无）",
+            timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500] or "（暂无）",
+            worldbook_block=wb_block,
+            regex_block=rg_block,
+            genre_review_extra=_genre_review_extra(proj),
+            outline=(project.read_file(project.get_outline_path(proj, num))[:1000] or "（未提供）"),
+        )
+        ctx.last_prompt = prompt
         result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_REVIEW)
                                   .chat_stream(prompt, on_chunk=ctx.stream_chunk))
     except Exception as e:
-        ctx.log("warn", f"第 {num} 章 审校调用失败（不阻断）：{e}")
-        return [], []
-    return parse_review_findings(result)
+        ctx.log("warn", f"第 {num} 章 6 维审校调用失败（不阻断）：{e}")
+        return [], [], ""
+
+    # v2 解析（6 维 + verdict）
+    v2 = parse_final_review_v2(result)
+    if v2["verdict"]:
+        # 落盘 v2 结果
+        try:
+            st.save_review_findings(proj, st.load_state(proj), num,
+                                    v2["verdict"], v2["items"],
+                                    v2["blocking"], v2["advisory"])
+        except Exception:
+            pass
+        return v2["blocking"], v2["advisory"], v2["verdict"]
+    # fallback: v1 解析
+    blocking, advisory = parse_review_findings(result)
+    return blocking, advisory, ""
 
 
 def parse_review_findings(text: str) -> tuple:
-    """解析审校输出（===BLOCKING=== / ===ADVISORY=== 两段），返回 (blocking, advisory) 文本列表"""
+    """v1 解析（===BLOCKING=== / ===ADVISORY=== 两段），返回 (blocking, advisory) 文本列表"""
     blocking, advisory = [], []
     section = None
     for line in (text or "").splitlines():
@@ -616,6 +743,159 @@ def parse_review_findings(text: str) -> tuple:
         elif section == "advisory":
             advisory.append(item)
     return blocking, advisory
+
+
+# ---- v2 6 维最终审核解析 ----
+
+_DIM_MAP = {
+    "===A_GOLDEN_OPEN===": "A_GOLDEN_OPEN",
+    "===B_PAYOFF===": "B_PAYOFF",
+    "===C_FINGER===": "C_FINGER",
+    "===D_PLOT===": "D_PLOT",
+    "===E_CHARACTER===": "E_CHARACTER",
+    "===F_HOOK===": "F_HOOK",
+}
+
+
+def parse_final_review_v2(text: str) -> dict:
+    """v2 6 维解析 FINAL_REVIEW_PROMPT 输出。
+
+    Returns:
+        {
+            "verdict": "PASS" | "PASS_WITH_NOTES" | "REJECT" | "REJECT-HARD" | "",
+            "items": [
+                {"dim": "A_GOLDEN_OPEN", "level": "pass|marginal|fail", "text": "...",
+                 "quote": "...", "root_layer": "ROOT_PROSE|...", "line": "..."}, ...
+            ],
+            "blocking": [issue_text, ...],   # fail 维度的 text
+            "advisory": [issue_text, ...],   # marginal 维度的 text
+            "summary": {"pass": N, "marginal": M, "fail": K},
+        }
+    """
+    text = text or ""
+    items = []
+    blocking = []
+    advisory = []
+    summary = {"pass": 0, "marginal": 0, "fail": 0}
+    verdict = ""
+
+    # 阶段 1：解析 6 维 ===X_xxx=== 段
+    cur_dim = None
+    cur_level = None
+    cur_text_parts = []
+    cur_quote = ""
+    cur_root = ""
+
+    def _flush():
+        nonlocal cur_dim, cur_level, cur_text_parts, cur_quote, cur_root
+        if cur_dim and cur_level:
+            text_joined = " ".join(cur_text_parts).strip()
+            items.append({
+                "dim": cur_dim,
+                "level": cur_level,
+                "text": text_joined,
+                "quote": cur_quote,
+                "root_layer": cur_root or ("ROOT_PROSE" if cur_level == "fail" else ""),
+                "line": "",  # 行号定位（暂未启用）
+            })
+            if cur_level == "fail":
+                blocking.append(text_joined)
+                summary["fail"] += 1
+            elif cur_level == "marginal":
+                advisory.append(text_joined)
+                summary["marginal"] += 1
+            elif cur_level == "pass":
+                summary["pass"] += 1
+        cur_dim = None
+        cur_level = None
+        cur_text_parts = []
+        cur_quote = ""
+        cur_root = ""
+
+    for line in text.splitlines():
+        raw = line.rstrip()
+        stripped = raw.strip()
+        # 6 维标记行
+        matched_dim = None
+        for marker, dim_name in _DIM_MAP.items():
+            if stripped.startswith(marker):
+                matched_dim = dim_name
+                break
+        if matched_dim:
+            _flush()  # 上一维结束
+            cur_dim = matched_dim
+            rest = stripped
+            for marker in _DIM_MAP:
+                rest = rest.replace(marker, "").strip()
+            # rest 形如 "[pass/marginal/fail] + 1 句理由 + 【原文引证："..."】 + → root: ..."
+            cur_level = ""
+            if rest.startswith("pass") or " pass " in rest or rest.strip() == "pass":
+                cur_level = "pass"
+                rest = rest.replace("pass", "", 1).strip()
+            elif rest.startswith("marginal") or " marginal " in rest or rest.strip() == "marginal":
+                cur_level = "marginal"
+                rest = rest.replace("marginal", "", 1).strip()
+            elif rest.startswith("fail") or " fail " in rest or rest.strip() == "fail":
+                cur_level = "fail"
+                rest = rest.replace("fail", "", 1).strip()
+            cur_text_parts = [rest]
+            # 抽引证
+            if "【原文引证：" in rest:
+                q = rest.split("【原文引证：", 1)[1]
+                if "】" in q:
+                    cur_quote = q.split("】")[0].strip('"').strip()
+            # 抽根因
+            if "→ root:" in rest or "→ root " in rest:
+                r = re.search(r"→\s*root[:\s]+(ROOT_\w+)", rest)
+                if r:
+                    cur_root = r.group(1)
+            continue
+        # ===WORST_QUOTES=== / ===TOTAL=== / ===END=== 触发 flush
+        if stripped.startswith("===WORST_QUOTES===") or \
+           stripped.startswith("===TOTAL===") or \
+           stripped.startswith("===END==="):
+            _flush()
+            continue
+        # 追加到当前维度（多行场景：→ root: ROOT_xxx 在后续行）
+        if cur_dim is not None:
+            cur_text_parts.append(raw)
+            # 顺带扫后续行的根因标记
+            if not cur_root:
+                m = re.search(r"→\s*root[:\s]+(ROOT_\w+)", raw)
+                if m:
+                    cur_root = m.group(1)
+    _flush()  # 末尾
+
+    # 阶段 2：解析 verdict（===VERDICT=== 段，优先于 ===TOTAL===）
+    m = re.search(r"===VERDICT===\s*\n?\s*(\w+)", text)
+    if m:
+        v = m.group(1).strip().upper()
+        if v in ("PASS", "PASS_WITH_NOTES", "REJECT", "REJECT-HARD"):
+            verdict = v
+    # 若无 ===VERDICT=== 段，按总评门禁推断
+    if not verdict:
+        if summary["fail"] == 0 and summary["marginal"] <= 1:
+            verdict = "PASS"
+        elif summary["fail"] == 1 or summary["marginal"] >= 3:
+            verdict = "PASS_WITH_NOTES"
+        elif summary["fail"] >= 2:
+            verdict = "REJECT"
+    # 任何阶段都做一次 REJECT → REJECT-HARD 升级检查（设定硬伤/金手指/因果/上游/世界书）
+    if verdict in ("REJECT", "REJECT-HARD"):
+        _HARD_ROOTS = ("ROOT_CORE", "ROOT_GLOBAL_SUMMARY", "ROOT_OUTLINE",
+                       "ROOT_OUTLINE_UNIT", "ROOT_WORLDBOOK", "ROOT_REGEX")
+        for it in items:
+            if it["level"] == "fail" and it.get("root_layer") in _HARD_ROOTS:
+                verdict = "REJECT-HARD"
+                break
+
+    return {
+        "verdict": verdict,
+        "items": items,
+        "blocking": blocking,
+        "advisory": advisory,
+        "summary": summary,
+    }
 
 
 def _save_review_findings(proj: str, num: int, findings: list):
@@ -648,12 +928,40 @@ def _update_tracking(ctx, num: int, prose: str) -> dict:
     applied = {}
     for name, content in updates.items():
         path = project.get_tracking_path(proj, name)
+        # C3 幽灵数字校验：角色状态更新中的数字必须能在正文/既有状态中找到出处，
+        # 否则追加校验提示（不阻断，仅暴露矛盾）
+        if name == "角色状态":
+            prev_state = project.read_file(path)
+            content = _verify_tracking_numbers(prose, prev_state, content)
         if name == "上下文":
             project.write_file(path, f"# 写作上下文\n\n{content}\n")
         else:
             project.write_file(path, content)
         applied[name] = content
     return applied
+
+
+_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+_NUM_CTX_RE = re.compile(
+    r"(?:余额|剩余|当前|现存|已消耗|已用|还有|仅剩|共|总)\s*[为是：:至]?\s*(\d+(?:\.\d+)?)")
+
+
+def _verify_tracking_numbers(prose: str, prev_state: str, content: str) -> str:
+    """校验角色状态更新中的数字：必须在正文原文或既有状态中出现过，否则标注存疑"""
+    prose_nums = set(_NUM_RE.findall(prose or ""))
+    prev_nums = set(_NUM_RE.findall(prev_state or ""))
+    known = prose_nums | prev_nums
+    suspicious = []
+    for num in _NUM_CTX_RE.findall(content or ""):
+        if num not in known:
+            suspicious.append(num)
+    if suspicious:
+        flag = ("\n\n> ⚠️ 数字校验：以下数值（%s）未在正文原文或既有状态中出现，"
+                "疑似推算/编造，请人工核对后修正。" % "、".join(sorted(set(suspicious))))
+        content = (content or "") + flag
+        logging.getLogger("qianbi.stages").warning(
+            "追踪数字校验：角色状态出现幽灵数字 %s（本章 %s）", sorted(set(suspicious)), len(prose_nums))
+    return content
 
 
 def parse_tracking_updates(text: str) -> dict:
