@@ -31,6 +31,61 @@ GROW_FIELDS = [
     ("grow_regex_direction", "同类型适合固化为必须成立约束的规则方向"),
 ]
 
+# ---- v2：分环节特化提示词（每个创作环节一个专属块，题材特化但不固定情节）----
+
+STAGE_HINT_KEYS = [
+    # (stage_key, 中文说明)
+    ("core_setting", "核心设定环节特化"),
+    ("outline", "大纲环节特化"),
+    ("unit_outline", "细纲环节特化"),
+    ("prose", "正文环节特化（文风锚）"),
+    ("worldbook", "世界书环节特化"),
+    ("review", "审校环节特化"),
+]
+
+# 各环节额外携带的 v1 共享字段（文风/世界规则等按相关性分配）
+_STAGE_SHARED_FIELDS = {
+    "core_setting": ["world_rules", "plot_conventions", "taboos"],
+    "outline": ["world_rules", "plot_conventions", "taboos"],
+    "unit_outline": ["world_rules", "plot_conventions", "taboos"],
+    "prose": ["style_hint", "world_rules", "taboos"],
+    "worldbook": ["world_rules"],
+    "review": [],
+}
+
+
+def stage_hint(preset_id: str, stage: str) -> str:
+    """v2 分环节特化提示词块（无预设/旧 JSON 返回空串，不报错）"""
+    if not preset_id or stage not in dict(STAGE_HINT_KEYS):
+        return ""
+    p = load_preset(preset_id)
+    hints = p.get("stage_hints") or {}
+    val = (hints.get(stage) or "").strip()
+    if not val:
+        return ""
+    label = dict(STAGE_HINT_KEYS).get(stage, stage)
+    return f"【{label}（题材专属指导：约束框架与文风，不限定具体情节）】\n{val}"
+
+
+def genre_block_for(preset_id: str, stage: str) -> str:
+    """按环节组装题材预设块（v2）：环节特化 hint 打头 + 相关共享字段随后。
+
+    v1 预设（无 stage_hints）退化为原 genre_block 全量注入（向后兼容）。
+    """
+    if not preset_id:
+        return "（本书未启用题材预设，按通用网文规范写作）"
+    hint = stage_hint(preset_id, stage)
+    if not hint:
+        return genre_block(preset_id)
+    p = load_preset(preset_id)
+    parts = [f"【题材预设：{p.get('name', preset_id)} · {dict(STAGE_HINT_KEYS).get(stage, stage)}】", hint]
+    labels = dict(PRESET_FIELDS)
+    for key in _STAGE_SHARED_FIELDS.get(stage, []):
+        val = (p.get(key) or "").strip()
+        if val:
+            parts.append(f"### {labels.get(key, key)}\n{val}")
+    return "\n\n".join(parts)
+
 
 def grow_block(preset_id: str, field: str) -> str:
     """共写档阶段 Agent 参考块（方案 §2）：grow_* 仅参考不锁定
@@ -82,6 +137,8 @@ def list_presets() -> list:
             data = _load_file(p)
             if not data or data.get("id") in seen:
                 continue
+            # v0.13：v1 文件自动迁移到 v2（确保 list 拿到的元数据是 v2）
+            data = _migrate_v1_to_v2(data)
             seen.add(data.get("id"))
             result.append({
                 "id": data.get("id", ""),
@@ -92,13 +149,30 @@ def list_presets() -> list:
     return result
 
 
+def _migrate_v1_to_v2(data: dict) -> dict:
+    """v1 → v2 自动迁移：把 v1 共享字段塞入 stage_hints['prose'] fallback。
+
+    - 不修改原始 JSON（内存层）
+    - 添加 _v2_migrated 标记，供调用方 toast 告知用户
+    """
+    if data.get("version", 1) >= 2:
+        return data
+    style = (data.get("style_hint") or "").strip()
+    if style and "stage_hints" not in data:
+        data = dict(data)
+        data["stage_hints"] = {"prose": style}
+        data["_v2_migrated"] = True
+    data["version"] = 2
+    return data
+
+
 def load_preset(preset_id: str) -> dict:
     for d in (user_dir(), BUILTIN_DIR):  # 用户导入的同名覆盖内置
         p = os.path.join(d, f"{preset_id}.json")
         if os.path.isfile(p):
             data = _load_file(p)
             if data:
-                return data
+                return _migrate_v1_to_v2(data)
     return {}
 
 
