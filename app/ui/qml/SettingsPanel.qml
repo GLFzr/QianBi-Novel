@@ -724,6 +724,88 @@ Item {
                     spacing: 12
                     Layout.margins: 12
 
+                    // ---- v0.13：主题切换（夜间/羊皮纸/纯白）----
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        Layout.preferredHeight: themeCol.implicitHeight + 20
+                        ColumnLayout {
+                            id: themeCol
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 8
+                            Text {
+                                text: "界面主题（v0.13 新增 3 主题）"
+                                color: Theme.textPrimary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsBody
+                                font.bold: true
+                            }
+                            Text {
+                                text: "切换实时生效；快捷键 Ctrl+T 在三主题间循环"
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Repeater {
+                                    model: [
+                                        { id: "qianbi_night", label: "夜间", desc: "默认·中性灰" },
+                                        { id: "qianbi_parchment", label: "羊皮纸", desc: "亮色·暖黄" },
+                                        { id: "qianbi_plain", label: "纯白", desc: "亮色·冷白" }
+                                    ]
+                                    delegate: AppButton {
+                                        required property var modelData
+                                        text: modelData.label
+                                        kind: bridge.currentTheme() === modelData.id ? "primary" : "default"
+                                        Layout.fillWidth: true
+                                        height: 32
+                                        onClicked: bridge.setTheme(modelData.id)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---- v0.13：预设库入口快捷跳转 ----
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        Layout.preferredHeight: 60
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 10
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text {
+                                    text: "预设库（独立面板）"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsBody
+                                    font.bold: true
+                                }
+                                Text {
+                                    text: "浏览 9 套 v2 题材预设 · 6 阶段 hint 预览 · 导入/导出"
+                                    color: Theme.textTertiary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsTiny
+                                }
+                            }
+                            AppButton {
+                                text: "打开预设库 →"
+                                kind: "primary"
+                                height: 32
+                                onClicked: mainWindow.activePanel = "library"
+                            }
+                        }
+                    }
+
                     Text {
                         text: "编辑器外观"
                         color: Theme.textPrimary

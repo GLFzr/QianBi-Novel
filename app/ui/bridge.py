@@ -333,6 +333,9 @@ class Bridge(QObject):
     ideaCountChanged = Signal()
     editorDirtyChanged = Signal()
     recoverableDraftChanged = Signal()
+    # v2 新增：6 维审校 issues + 主题切换
+    reviewIssuesChanged = Signal()
+    themeChanged = Signal()
     # 共写档（co-write）状态
     cwModeChanged = Signal()
     cwStageChanged = Signal()
@@ -2575,6 +2578,150 @@ class Bridge(QObject):
         result = genre_presets.import_preset(path)
         self.toast.emit("ok" if result["ok"] else "warn", result["msg"])
         return result
+
+    # ---- v2 题材预设库增强（plan v2 模块 A）----
+
+    @Slot(result="QVariantList")
+    def presetList(self) -> list:
+        """v2 预设列表（含 v2 stage_hints 标记，供独立面板用）"""
+        from .. import presets as genre_presets
+        result = []
+        for p in genre_presets.list_presets():
+            data = genre_presets.load_preset(p["id"]) if p["id"] else {}
+            result.append({
+                "id": p["id"],
+                "name": p["name"],
+                "description": p.get("description", ""),
+                "builtin": p.get("builtin", False),
+                "version": data.get("version", 1),
+                "genre": data.get("genre", ""),
+                "has_stage_hints": bool(data.get("stage_hints")),
+                "stages_with_hints": [
+                    k for k, v in (data.get("stage_hints") or {}).items() if v
+                ],
+            })
+        return result
+
+    @Slot(str, result="QVariantMap")
+    def presetDetails(self, preset_id: str) -> dict:
+        """v2 预设详情：含 6 阶段 hint + v1 共享字段（独立面板预览用）"""
+        from .. import presets as genre_presets
+        if not preset_id:
+            return {"id": "", "name": "通用（无预设）", "fields": {}, "stage_hints": {}}
+        p = genre_presets.load_preset(preset_id)
+        if not p:
+            return {"id": preset_id, "name": "(未找到)", "fields": {}, "stage_hints": {}}
+        # v1 共享字段
+        fields = {}
+        for key, label in genre_presets.PRESET_FIELDS:
+            val = (p.get(key) or "").strip()
+            if val:
+                fields[key] = {"label": label, "value": val}
+        # v2 stage hints
+        hints = p.get("stage_hints") or {}
+        stage_hints = {}
+        for stage_key, stage_label in genre_presets.STAGE_HINT_KEYS:
+            val = (hints.get(stage_key) or "").strip()
+            if val:
+                stage_hints[stage_key] = {"label": stage_label, "value": val}
+        return {
+            "id": preset_id,
+            "name": p.get("name", preset_id),
+            "description": p.get("description", ""),
+            "version": p.get("version", 1),
+            "genre": p.get("genre", ""),
+            "fields": fields,
+            "stage_hints": stage_hints,
+        }
+
+    @Slot(str, str, result=bool)
+    def exportPreset(self, preset_id: str, out_path: str) -> bool:
+        """v2 导出预设到指定路径（无 UI 按钮时用 TUI 命令面板）"""
+        from .. import presets as genre_presets
+        if out_path.startswith("file:///"):
+            from PySide6.QtCore import QUrl
+            out_path = QUrl(out_path).toLocalFile()
+        ok = genre_presets.export_preset(preset_id, out_path)
+        if ok:
+            self.toast.emit("ok", f"预设「{preset_id}」已导出到 {out_path}")
+        else:
+            self.toast.emit("warn", f"预设「{preset_id}」导出失败：未找到")
+        return ok
+
+    @Slot(result=str)
+    def currentTheme(self) -> str:
+        """当前主题名（qianbi_night / qianbi_parchment / qianbi_plain）"""
+        return self.cfg.get("ui_theme", "qianbi_night")
+
+    @Slot(str)
+    def setTheme(self, theme: str):
+        """切换主题（实时写入 cfg 并发信号给 QML 重新加载 Theme.qml 单例）"""
+        valid = ("qianbi_night", "qianbi_parchment", "qianbi_plain")
+        if theme not in valid:
+            self.toast.emit("warn", f"未知主题：{theme}")
+            return
+        if self.cfg.get("ui_theme") == theme:
+            return
+        self.cfg["ui_theme"] = theme
+        from app import config as cfg_mod
+        cfg_mod.save_config(self.cfg)
+        self.themeChanged.emit()
+        cn = {"qianbi_night": "夜间", "qianbi_parchment": "羊皮纸", "qianbi_plain": "纯白"}[theme]
+        self.toast.emit("ok", f"主题已切换为「{cn}」")
+
+    # ---- v2 6 维审校 issues（plan v2 模块 B）----
+
+    @Slot(result="QVariantList")
+    def reviewIssues(self) -> list:
+        """当前章最近一次 6 维审校的 issues（UI ReviewIssueDialog 渲染用）"""
+        if not self.proj:
+            return []
+        s = st.load_state(self.proj)
+        # 取最近一次 review（current_chapter + 上 N 章）
+        rf = s.get("review_findings") or {}
+        # 优先取 current_chapter
+        cur = str(s.get("current_chapter", 0))
+        if cur in rf:
+            return rf[cur].get("items", [])
+        # 否则取最近一次
+        if not rf:
+            return []
+        latest_num = max(rf.keys(), key=lambda k: rf[k].get("ts", ""))
+        return rf.get(latest_num, {}).get("items", [])
+
+    @Slot(str)
+    def resolveReviewIssue(self, choice: str):
+        """用户在 ReviewIssueDialog 选择 A/B/C 后的回执
+
+        Args:
+            choice: "upstream" | "local" | "ignore"
+                - upstream: 返上游重做（标记 review_chain）
+                - local: 仅本地改稿（不阻断）
+                - ignore: 忽略通过（标记 human）
+        """
+        if not self.proj:
+            return
+        s = st.load_state(self.proj)
+        cur = s.get("current_chapter", 0)
+        if not cur:
+            return
+        if choice == "ignore":
+            st.mark_chapter_need_human(self.proj, s, cur)
+            self.toast.emit("info", f"第 {cur} 章已忽略，标 human")
+        elif choice == "upstream":
+            # 触发新一轮 review_chain（实际传染由 stages.py 检测到后做）
+            st.append_review_chain(self.proj, s, cur,
+                                   issues=[], reworks=["upstream_requested"],
+                                   verdict="UPSTREAM_REQUEST", round_no=999)
+            self.toast.emit("info", f"第 {cur} 章将触发上游重做（下次审校自动跑）")
+        else:  # local
+            self.toast.emit("info", f"第 {cur} 章选择本地改稿（不传染上游）")
+        self.reviewIssuesChanged.emit()
+
+    @Slot()
+    def clearReviewIssues(self):
+        """清空 review_issues 显示（用户已处理完）"""
+        self.reviewIssuesChanged.emit()
 
     # ---- 编辑器偏好（M5）----
 

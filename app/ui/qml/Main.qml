@@ -19,11 +19,20 @@ ApplicationWindow {
     title: "千笔一文 Novel"
     color: Theme.bgPage
 
+    // v0.13 主题切换：从 C++ 端 cfg.ui_theme 读取，同步到 Theme 单例
+    Connections {
+        target: bridge
+        function onThemeChanged() {
+            Theme.setActive(bridge.currentTheme())
+        }
+    }
+
     readonly property var navItems: [
         { "label": "书架", "icon": "shelf", "key": "shelf" },
         { "label": "流水线", "icon": "play", "key": "pipeline" },
         { "label": "章节", "icon": "chapters", "key": "chapters" },
         { "label": "笔记", "icon": "notes", "key": "notes" },
+        { "label": "预设库", "icon": "library", "key": "library" },
         { "label": "设置", "icon": "settings", "key": "settings" }
     ]
     property string activePanel: "shelf"
@@ -153,6 +162,8 @@ ApplicationWindow {
         }
     }
     Component.onCompleted: {
+        // v0.13 主题同步：先于其他设置，让 Theme 单例就位
+        Theme.setActive(bridge.currentTheme())
         // 编辑器偏好（字号/限宽/流式速度，设置-外观 可调）
         edPrefs = bridge.editorPrefs()
         // 兜底：启动时项目可能已加载（信号在 QML 建立前发出）
@@ -288,7 +299,8 @@ ApplicationWindow {
                 currentIndex: mainWindow.activePanel === "shelf" ? 0
                              : mainWindow.activePanel === "pipeline" ? 1
                              : mainWindow.activePanel === "chapters" ? 2
-                             : mainWindow.activePanel === "notes" ? 3 : 4
+                             : mainWindow.activePanel === "notes" ? 3
+                             : mainWindow.activePanel === "library" ? 4 : 5
 
                 BookshelfPanel {}
                 PipelinePanel {
@@ -303,6 +315,7 @@ ApplicationWindow {
                     onOpenChapter: function (n) { mainWindow.tryOpenChapter(n) }
                 }
                 NotesPanel {}
+                PresetLibraryPanel {}
                 SettingsPanel {}
             }
         }
@@ -1750,6 +1763,51 @@ ApplicationWindow {
                     recoverDialog.close()
                 }
             }
+        }
+    }
+
+    // ---- v0.13：6 维审校问题对话框（A/B/C 三选一）----
+    ReviewIssueDialog {
+        id: reviewIssueDialog
+        objectName: "reviewIssueDialog"
+        issues: bridge.reviewIssues()
+        verdict: {
+            // 从 issues 反推 verdict（无法直接读 state.review_findings）
+            var items = bridge.reviewIssues()
+            if (!items || items.length === 0) return ""
+            var fail = 0, hard = false
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].level === "fail") {
+                    fail++
+                    if (items[i].root_layer === "ROOT_CORE" || items[i].root_layer === "ROOT_OUTLINE") {
+                        hard = true
+                    }
+                }
+            }
+            if (hard) return "REJECT-HARD"
+            if (fail >= 2) return "REJECT"
+            return "REJECT"
+        }
+    }
+    Connections {
+        target: bridge
+        function onReviewIssuesChanged() {
+            var items = bridge.reviewIssues()
+            if (items && items.length > 0) {
+                reviewIssueDialog.issues = items
+                reviewIssueDialog.open()
+            }
+        }
+    }
+
+    // ---- v0.13：Ctrl+T 切换主题快捷键（夜间/羊皮纸/纯白）----
+    Shortcut {
+        sequence: "Ctrl+T"
+        onActivated: {
+            var cur = bridge.currentTheme()
+            var next = cur === "qianbi_night" ? "qianbi_parchment"
+                     : cur === "qianbi_parchment" ? "qianbi_plain" : "qianbi_night"
+            bridge.setTheme(next)
         }
     }
 }
