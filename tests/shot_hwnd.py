@@ -59,7 +59,10 @@ def capture(hwnd, out, scale=1.0):
         bmi.biHeight = -h
         data = ctypes.create_string_buffer(w * h * 4)
         gdi32.GetDIBits(mdc, bmp, 0, h, data, ctypes.byref(bmi), 0)
+        # GetDIBits 32bpp 返回 BGRA 字节序，需换回 RGB（否则整图 R/B 反转）
         img = Image.frombytes("RGBA", (w, h), data.raw).convert("RGB")
+        r, g, b = img.split()
+        img = Image.merge("RGB", (b, g, r))
         if scale != 1.0:
             img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
         img.save(out)

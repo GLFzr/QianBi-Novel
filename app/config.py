@@ -8,7 +8,7 @@ import os
 import shutil
 import uuid
 
-CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".qianbi_novel")
+CONFIG_DIR = os.environ.get("QIANBI_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".qianbi_novel")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 _LEGACY_DIR = os.path.join(os.path.expanduser("~"), ".oh_story_desktop")
 
@@ -169,9 +169,13 @@ def new_connection_id() -> str:
 
 
 def push_recent_project(cfg: dict, path: str):
-    recent = cfg.get("recent_projects", [])
-    if path in recent:
-        recent.remove(path)
-    recent.insert(0, path)
+    """规范化路径后写入最近项目（防混合斜杠/重复条目）"""
+    norm = os.path.normpath(path or "")
+    if not norm:
+        return
+    recent = [os.path.normpath(p) for p in cfg.get("recent_projects", []) if p]
+    if norm in recent:
+        recent.remove(norm)
+    recent.insert(0, norm)
     cfg["recent_projects"] = recent[:10]
-    cfg["last_project"] = path
+    cfg["last_project"] = norm

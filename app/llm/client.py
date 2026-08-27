@@ -251,6 +251,20 @@ class LLMClient:
                                 on_reasoning(r)
                 usage = getattr(resp, "_usage", None) if False else None
                 # stream 模式 usage 通常在最后一块；未能解析也不影响
+                if not parts:
+                    # 流式全程无内容：thinking 模式先降级重试；否则记入可重试错误
+                    if self.thinking:
+                        logger.warning("流式返回空内容，降级重试（关闭 thinking）")
+                        saved_t, saved_e = self.thinking, self.reasoning_effort
+                        self.thinking = None
+                        self.reasoning_effort = None
+                        try:
+                            return self.chat_stream(prompt, system, temperature,
+                                                    on_chunk=on_chunk, on_reasoning=on_reasoning)
+                        finally:
+                            self.thinking, self.reasoning_effort = saved_t, saved_e
+                    last_err = LLMError("模型返回空内容 (stream)", retryable=True)
+                    continue
                 break
             except httpx.TimeoutException:
                 last_err = LLMError("请求超时，请检查网络或增大 timeout", retryable=True)
@@ -286,7 +300,9 @@ class LLMClient:
                                             on_chunk=on_chunk, on_reasoning=on_reasoning)
                 finally:
                     self.thinking, self.reasoning_effort = saved_t, saved_e
-            raise LLMError("模型返回空内容 (stream)")
+            # 空流（服务端生成为空/中断）：非 thinking 时也允许在重试预算内重试一次，
+            # 避免偶发空流直接中断整条流水线
+            raise LLMError("模型返回空内容 (stream)", retryable=True)
         return content
 
     def test_connection(self) -> str:
