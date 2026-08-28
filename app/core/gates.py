@@ -19,6 +19,8 @@ class GateResult:
         self.advisory_findings = []
         self.deslop_rounds_used = 0
         self.review_blocking = []       # 审校阻塞问题（文本）
+        self.review_advisory = []        # 审校建议（文本）
+        self.review_verdict = ""         # 最终审核 Agent 总评：PASS/PASS_WITH_NOTES/REJECT/REJECT_HARD
         self.review_rounds_used = 0
         self.final_status = "pass"   # pass / needs_fix
 

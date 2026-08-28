@@ -211,8 +211,8 @@ class LLMClient:
 
         t0 = time.monotonic()
         last_err = None
-        parts = []
         for attempt in range(self.max_retries + 1):
+            parts = []   # 每次尝试重置：断流重试不得拼接两次的部分内容
             try:
                 with httpx.Client(timeout=self.timeout) as client:
                     with client.stream("POST", self._chat_url(), json=payload, headers=headers) as resp:
@@ -273,7 +273,9 @@ class LLMClient:
                     raise
                 last_err = e
             except Exception as e:
-                # 流中断（连接断开等）视为可重试，但已产生的增量不回收
+                # 流中断（连接断开等）视为可重试。返回值已按"每次尝试重置 parts"防拼接；
+                # 但 on_chunk 已投递给 UI 的旧增量无法回收——UI 流式区在重试期间可能短暂
+                # 显示重复尾巴，最终落盘内容以本函数返回值为准（正确）。
                 last_err = LLMError(f"流式读取中断: {e}", retryable=True)
             if attempt < self.max_retries:
                 delay = self.backoff_base * (2 ** attempt)

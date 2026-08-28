@@ -248,6 +248,10 @@ REVISION_TARGETS_PROMPT = """你是编辑，给作者"最便宜"的修改指认�
 
 每条 ≤50 字，定位精确到"第 N 段/某角色出场后第三句"等。不要重复整章。"""
 
+# 兼容别名：保持 v1 接口（自动档/共写档仍可调）
+REVIEW_PROMPT = FINAL_REVIEW_PROMPT
+REVIEW_FIX_PROMPT = REVISION_TARGETS_PROMPT
+
 
 # ========== 根因溯源 Agent（v3 反馈闭环 · 阶段 2）==========
 
@@ -324,10 +328,43 @@ L3: - 规则：资源守恒｜level：must
 - 若某症状存在但根因不可定位（无任何上游产物能解释）→ root_evidence 写"无法定位"，默认归 ROOT_PROSE
 - ROOT_PROSE 占比若 >50% → 视为疑似聚拢，**自我降级为更严阈值重新判定**
 
+## 三个 few-shot 样例（K1 边界覆盖）
+
+【样例 1（症状: 金手指超日上限透支但无代价描写 → ROOT_CORE）】
+  维度: C_FINGER fail
+  症状: "赵乾连用三次破绽之眼未头痛"（原文 L23）
+  → root: ROOT_CORE
+  → root_evidence: 核心设定/金手指规则:L4（"日上限 2 次，第三次起剧烈头痛十分钟"）
+  → upstream_feedback:
+    必改字段: 金手指规则
+    必做/必删: 补充第 3 次使用的"透支代价梯度"（视野发黑≥十息/失明≥三十分钟）
+    必保留: 现有激活条件/对象白名单
+    与上游协调: 大纲/细纲不变
+
+【样例 2（症状: 细纲承诺三招切磋但正文未演 → ROOT_OUTLINE_UNIT）】
+  维度: B_PAYOFF fail
+  症状: "三招切磋无任何描写"（原文 L15-L40 整段是赵乾试探线）
+  → root: ROOT_OUTLINE_UNIT
+  → root_evidence: 细纲/第3章:L3（"核心事件: 主角与王麻子三招切磋"）
+  → upstream_feedback:
+    必改字段: 故事内容
+    必做/必删: 必演"三招切磋"≥250字正拍（压抑铺垫+反转动作+围观反应三拍）
+    必保留: 丹药毒线作为前章伏笔承接
+    与上游协调: 核心设定/大纲约束不变
+
+【样例 3（症状: 金手指副作用前后矛盾 → ROOT_CORE 跨已锁章节）】
+  维度: C_FINGER fail
+  症状: "陆承右手因神识透支而全身发抖"（原文 L18）
+  → root: ROOT_CORE
+  → root_evidence: 已锁第1章/正文:L8（"陆承用完神识后头疼欲裂，双手抱头"）
+  → upstream_feedback:
+    必改字段: 金手指规则（副作用症状）
+    必做/必删: 将"全身发抖"统一为"头疼欲裂+双手抱头"
+    必保留: 副作用触发阈值与持续时间
+    与上游协调: 第 1 章已锁不动，本规则需向后兼容追溯；自动加入"过渡例外条款"记录已锁章节与新设定的差异点
+
 记住：每条 issue 必须有 root_layer；没有 root_layer 视为 ROOT_PROSE 兜底。"""
 
-
-# ========== 辅助函数（行号锚定块 + issues 紧凑化）==========
 
 def build_upstream_anchors(proj, num):
     """构建上游产物行号锚定块（供 ROOT_CAUSE_PROMPT 注入）。
