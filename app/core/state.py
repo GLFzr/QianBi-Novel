@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import time
+from typing import TypedDict
 
 STATE_FILENAME = "pipeline_state.json"
 
@@ -195,7 +196,38 @@ def is_chapter_need_human(state: dict, num: int) -> bool:
     nhh = state.get("chapter_need_human") or {}
     return str(num) in nhh
 
-DEFAULT_STATE = {
+# ---- T3.2 类型加固：运行时仍是普通 dict（JSON 序列化兼容），TypedDict 仅作静态标注与校验依据 ----
+class CWStateTD(TypedDict, total=False):
+    """state['cw'] 子树键型（cw_defaults 为唯一默认源；未知键允许存在）"""
+    mode: str            # auto=自动档 / cw=共写档（项目级粘性）
+    stage: str           # 当前共写阶段
+    preset: str
+    transcript: dict     # {阶段key: [{role, text}]}
+    handoff: dict        # {阶段key: 交接小节}
+    reopening: str
+    locked: dict
+    unit: dict
+    supervised: dict
+    report: dict
+
+
+class PipelineStateTD(TypedDict, total=False):
+    """pipeline_state.json 顶层键型（GUI/TUI 共享契约）"""
+    stage: str
+    current_chapter: int
+    chapter_step: str
+    total_chapters: int
+    paused: bool
+    history: list
+    pending_guidance: dict
+    pending_ideas: list
+    review_findings: dict
+    review_chain: dict
+    chapter_need_human: dict
+    cw: CWStateTD
+
+
+DEFAULT_STATE: PipelineStateTD = {
     "stage": STAGE_INIT,
     "current_chapter": 0,       # 最近定稿的章号
     "chapter_step": "",         # 当前章执行到微循环哪一步（断点用）
@@ -210,7 +242,73 @@ DEFAULT_STATE = {
 }
 
 
-def cw_defaults() -> dict:
+# 已知键的运行时类型（校验依据；未知键一律保留不拒绝——真实存档含 genre_preset 等扩展键）
+_STATE_KEY_TYPES = {
+    "stage": str,
+    "current_chapter": int,
+    "chapter_step": str,
+    "total_chapters": int,
+    "paused": bool,
+    "history": list,
+    "pending_guidance": dict,
+    "pending_ideas": list,
+    "review_findings": dict,
+    "review_chain": dict,
+    "chapter_need_human": dict,
+    "cw": dict,
+}
+_CW_KEY_TYPES = {
+    "mode": str, "stage": str, "preset": str, "transcript": dict,
+    "handoff": dict, "reopening": str, "locked": dict, "unit": dict,
+    "supervised": dict, "report": dict,
+}
+_EMPTY_BY_TYPE = {str: "", int: 0, bool: False, list: [], dict: {}}
+
+
+class StateValidationError(ValueError):
+    """pipeline_state.json 已知键类型损坏——早报错，防半损坏状态流入写入路径"""
+
+
+def _type_ok(v, typ) -> bool:
+    if typ is int:
+        return isinstance(v, int) and not isinstance(v, bool)  # bool 是 int 子类，需特判
+    return isinstance(v, typ)
+
+
+def _null_default(k: str):
+    """旧存档显式 null 的就地修复值"""
+    if k == "cw":
+        return {}
+    d = DEFAULT_STATE.get(k)
+    return d if d is not None else _EMPTY_BY_TYPE[_STATE_KEY_TYPES[k]]
+
+
+def validate_state(state: dict) -> dict:
+    """最小键校验：已知键类型必须正确；None 修复为默认空值；未知键保留。
+    load/save 入口调用，损坏抛 StateValidationError。"""
+    for k, typ in _STATE_KEY_TYPES.items():
+        if k not in state:
+            continue
+        if state[k] is None:
+            state[k] = _null_default(k)
+            continue
+        if not _type_ok(state[k], typ):
+            raise StateValidationError(
+                f"pipeline_state 键 {k!r} 类型损坏：期望 {typ.__name__}，"
+                f"实际 {type(state[k]).__name__}")
+    cw = state.get("cw")
+    if isinstance(cw, dict):
+        for k, typ in _CW_KEY_TYPES.items():
+            if k not in cw or cw[k] is None:
+                continue
+            if not _type_ok(cw[k], typ):
+                raise StateValidationError(
+                    f"pipeline_state 键 cw['{k}'] 类型损坏：期望 {typ.__name__}，"
+                    f"实际 {type(cw[k]).__name__}")
+    return state
+
+
+def cw_defaults() -> CWStateTD:
     """共写档状态结构（state['cw']）：档位粘性 + 六阶段机 + 转写/交接块/锁定"""
     return {
         "mode": "auto",              # auto=自动档 / cw=共写档（项目级粘性）
@@ -316,12 +414,14 @@ def load_state(proj: str) -> dict:
                 state[k] = v
         except Exception:
             pass
+    validate_state(state)   # T3.2：损坏早报错，不静默降级
     ensure_cw(state)
     return state
 
 
 def save_state(proj: str, state: dict):
-    """原子写入：先临时文件再替换，防中途崩溃损坏状态"""
+    """原子写入：先临时文件再替换，防中途崩溃损坏状态；写前最小键校验（T3.2）"""
+    validate_state(state)
     path = state_path(proj)
     fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=proj)
     try:
