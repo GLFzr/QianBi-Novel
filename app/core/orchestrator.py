@@ -47,6 +47,7 @@ class Orchestrator(QThread):
         self.cfg = cfg
         self.router = ModelRouter(cfg)
         self._pause = threading.Event()
+        self._resume_evt = threading.Event()   # 暂停唤醒事件（T3.3：去 0.15s 轮询）
         self._stop = False
         # 步骤决策门（Step Gates）：每一决策点等待人确认 → 继续/带想法继续/回退重做
         self._gate_evt = threading.Event()     # 门等待事件（置位=人已决策）
@@ -69,9 +70,11 @@ class Orchestrator(QThread):
 
     def pause(self):
         self._pause.set()
+        self._resume_evt.clear()
 
     def resume(self):
         self._pause.clear()
+        self._resume_evt.set()
 
     @property
     def paused(self) -> bool:
@@ -80,6 +83,9 @@ class Orchestrator(QThread):
     def stop(self):
         self._stop = True
         self._pause.clear()
+        # 唤醒所有直等中的阻塞点（T3.3）：暂停等待/门等待立即退出并走停止分支
+        self._resume_evt.set()
+        self._gate_evt.set()
 
     def auto_pause(self, reason: str):
         """质量闸门自动暂停（strict 策略）：置暂停位 + 通知 UI，等人处理后续跑"""
@@ -114,10 +120,12 @@ class Orchestrator(QThread):
         self._gate_pending = key
         self.log("info", f"决策门 {key}（第{chapter}章）等待你的决定：{summary[:60]}")
         self.sig_gate.emit(key, chapter, summary)
-        # 等待（可随时被 停止 打断；不支持在门内暂停，stop 即终止）
-        while not self._gate_evt.wait(0.15):
+        # 直等决策（T3.3）：stop() 会置位 _gate_evt 立即唤醒；1s 超时仅兜底
+        while not self._gate_evt.wait(1.0):
             if self._stop:
                 raise PipelineStopped()
+        if self._stop:
+            raise PipelineStopped()
         self._gate_pending = ""
         idea = self._gate_idea
         self._gate_idea = ""
@@ -216,9 +224,12 @@ class Orchestrator(QThread):
         if self._stop:
             raise PipelineStopped()
         while self._pause.is_set():
+            # 直等唤醒（T3.3）：resume()/stop() 置位 _resume_evt；1s 超时兜底
+            self._resume_evt.wait(1.0)
             if self._stop:
                 raise PipelineStopped()
-            time.sleep(0.15)
+        if self._stop:   # stop() 唤醒时 _pause 已被清，出循环后再查一次
+            raise PipelineStopped()
 
     # ---------- 主流程 ----------
 
