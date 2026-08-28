@@ -698,11 +698,11 @@ class Bridge(QObject):
         {"key": "G1", "label": "G1 设定完成", "desc": "核心设定生成后确认，可回退重拟设定", "wired": False},
         {"key": "G2", "label": "G2 大纲完成", "desc": "全书大纲生成后确认，可回退重拟大纲（连带清空细纲）", "wired": True},
         {"key": "G3", "label": "G3 细纲批完成", "desc": "每批细纲（2章）生成后确认", "wired": False},
-        {"key": "G4", "label": "G4 素材组装后", "desc": "草稿开写前确认投入材料", "wired": False},
+        {"key": "G4", "label": "G4 素材组装后", "desc": "草稿开写前确认投入材料，可带想法或回退重组装", "wired": True},
         {"key": "G5L", "label": "G5 草稿开始前", "desc": "第N章开写前确认，可带想法（软门：无产物可回退）", "wired": True},
-        {"key": "G6", "label": "G6 扫描完成", "desc": "AI 味扫描结果确认", "wired": False},
-        {"key": "G7", "label": "G7 去味完成", "desc": "去味改写前后对比确认", "wired": False},
-        {"key": "G8", "label": "G8 审校完成", "desc": "一致性审校发现问题时确认处理方式", "wired": False},
+        {"key": "G6", "label": "G6 扫描完成", "desc": "AI 味扫描结果确认，可带想法或回退保留原稿跳过去味", "wired": True},
+        {"key": "G7", "label": "G7 去味完成", "desc": "去味改写前后对比确认，回退=还原去味前原稿", "wired": True},
+        {"key": "G8", "label": "G8 审校完成", "desc": "审校结论确认，回退=还原审校前原稿（G9 仍把关）", "wired": True},
         {"key": "G9", "label": "G9 定稿完成", "desc": "每章定稿后确认，可回退重写本章（版本历史保留）", "wired": True},
     ]
 

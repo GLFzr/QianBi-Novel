@@ -186,6 +186,9 @@ class Orchestrator(QThread):
                         os.remove(path)
                         self.log("warn", f"G9 回退：第 {chapter} 章已归档并清除（版本历史保留），将重写本章")
                         break
+            elif key in ("G4", "G6", "G7", "G8"):
+                # 内侧门（T4.1）：回退由章节微循环内部处理（重新组装/保留原稿），此处不动物料
+                self.log("info", f"门 {key} 回退：由章节微循环内部处理（重新组装/保留原稿语义）")
             else:
                 self.log("warn", f"门 {key} 暂不支持回退，已按继续处理")
         except Exception as e:  # noqa: BLE001

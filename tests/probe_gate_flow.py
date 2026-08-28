@@ -59,6 +59,25 @@ def case_soft_gate_blocks_in_border():
     r = o.gate("G3", "细纲批完成", 1)
     return r == ""  # 软门在 border 模式下也等待（轻提示，回车继续）
 
+def case_inner_gate_return_keeps_products():
+    """T4.1 内侧门回退：不删任何产物（微循环内保留原稿），想法进 carry 由微循环消费"""
+    project.write_file(chapter_path, "# 第1章 开场\n\n正文内容。")   # 前序 G9 用例已删章，恢复
+    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G7"], "gate_soft": []}}
+    o = orch.Orchestrator(proj, cfg)
+    threading.Timer(0.3, lambda: o.resolve_gate("return", "去味改坏了，保留原稿")).start()
+    r = o.gate("G7", "去味改写完成", 1)
+    chapter_ok = os.path.exists(chapter_path)          # 内侧门回退不得删章节
+    carry = o.consume_gate_idea()
+    return r is None and chapter_ok and carry == "去味改坏了，保留原稿"
+
+def case_inner_gate_idea_continue():
+    """T4.1 内侧门带想法继续：想法原样返回给微循环注入下一步"""
+    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G6"], "gate_soft": []}}
+    o = orch.Orchestrator(proj, cfg)
+    threading.Timer(0.3, lambda: o.resolve_gate("next", "保留口语腔调")).start()
+    r = o.gate("G6", "扫描完成", 1)
+    return r == "保留口语腔调"
+
 # 送回退损坏的项目部件
 project.write_file(os.path.join(proj, "大纲", "大纲.md"), "# 全书大纲\n\n阶段总览…")
 project.write_file(project.get_outline_path(proj, 1), "### 第 1 章：开场\n- 核心事件…")
@@ -67,6 +86,8 @@ results.append(("auto 模式全门跳过", case_auto_skip()))
 results.append(("border 模式 G2 硬停+带想法继续", case_next_with_idea()))
 results.append(("step 模式 G9 回退归档+想法携带", case_return_archives_and_carries()))
 results.append(("border 模式 G3 软门等待", case_soft_gate_blocks_in_border()))
+results.append(("T4.1 内侧门 G7 回退不删产物+想法携带", case_inner_gate_return_keeps_products()))
+results.append(("T4.1 内侧门 G6 带想法继续", case_inner_gate_idea_continue()))
 
 print("=== Step Gate 流回归 ===")
 ok = True

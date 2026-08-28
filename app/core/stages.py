@@ -387,6 +387,31 @@ def _outline_word_target(proj: str, num: int, default: int) -> int:
     return default
 
 
+def _archive_inner_rollback(ctx, proj: str, num: int, gate_key: str, prose: str):
+    """内侧门回退数据安全（plan_step_gates_v1 §4）：将被丢弃的正文快照归档"""
+    import datetime
+    if not prose:
+        return
+    ts = datetime.datetime.now().strftime("%m%d_%H%M%S")
+    d = os.path.join(proj, "pipeline_debug", "rollback", f"{gate_key}_ch{num}_{ts}")
+    try:
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "正文.md"), "w", encoding="utf-8") as f:
+            f.write(prose)
+        ctx.log("info", f"{gate_key} 回退快照已归档：{os.path.basename(d)}")
+    except Exception as e:  # noqa: BLE001
+        ctx.log("warn", f"{gate_key} 回退快照归档失败（不阻断）：{e}")
+
+
+def _store_inner_gate_idea(ctx, proj: str, num: int, gate_key: str, idea: str):
+    """内侧门带的想法落 pending_guidance（下次重写本章时经 G5L 指导通道注入）"""
+    state = st.load_state(proj)
+    prev = (state.get("pending_guidance") or {}).get(str(num), "")
+    combined = (prev + "\n" if prev else "") + f"[{gate_key}] {idea}"
+    st.set_guidance(proj, state, num, combined)
+    ctx.log("info", f"{gate_key} 想法已登记（重写本章时注入）：{idea[:60]}")
+
+
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
     proj = ctx.proj
@@ -398,35 +423,47 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     gr = gates.GateResult()
     gr.word_target = chapter_words
 
-    # ---- ① 上下文组装 ----
-    ctx.step(num, st.STEP_ASSEMBLE)
-    outline_path = project.get_outline_path(proj, num)
-    outline = project.read_file(outline_path)
-    if not outline:
-        raise StageError(f"第 {num} 章细纲不存在")
+    # ---- ① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）----
+    draft_extra_ideas: list = []
+    while True:
+        ctx.step(num, st.STEP_ASSEMBLE)
+        outline_path = project.get_outline_path(proj, num)
+        outline = project.read_file(outline_path)
+        if not outline:
+            raise StageError(f"第 {num} 章细纲不存在")
 
-    next_outline = project.read_file(project.get_outline_path(proj, num + 1))
-    next_brief = next_outline[:600] if next_outline else "（本章为当前最后一章细纲）"
-    core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
-                    or "（未提供）")
-    global_summary = memory.read_global_summary(proj) or "（全书尚未开始或暂无摘要）"
-    recent_summaries = memory.read_recent_summaries(proj, num, n=3) or "（无更近章节摘要）"
-    character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:3000] or "（暂无）"
-    foreshadows = memory.unfished_foreshadows(proj) or "（暂无）"
-    previous_excerpt = ""
-    style_sample = "（本章为第一章，无上一章文风样本）"
-    chapters = project.list_chapters(proj)
-    if chapters:
-        last = chapters[-1]
-        if last[0] == num - 1:
-            prev_text = project.read_file(last[2])
-            previous_excerpt = prev_text[-800:] if len(prev_text) > 800 else prev_text
-            # 文风锚定：上一章开头样本（跳过标题行），防长篇文风漂移
-            body_start = prev_text.find("\n")
-            sample = prev_text[body_start + 1:body_start + 501] if body_start > 0 else prev_text[:500]
-            if sample.strip():
-                style_sample = sample
-    ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 细纲 + 前3章摘要 + 角色状态 + 伏笔 + 文风样本）")
+        next_outline = project.read_file(project.get_outline_path(proj, num + 1))
+        next_brief = next_outline[:600] if next_outline else "（本章为当前最后一章细纲）"
+        core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
+                        or "（未提供）")
+        global_summary = memory.read_global_summary(proj) or "（全书尚未开始或暂无摘要）"
+        recent_summaries = memory.read_recent_summaries(proj, num, n=3) or "（无更近章节摘要）"
+        character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:3000] or "（暂无）"
+        foreshadows = memory.unfished_foreshadows(proj) or "（暂无）"
+        previous_excerpt = ""
+        style_sample = "（本章为第一章，无上一章文风样本）"
+        chapters = project.list_chapters(proj)
+        if chapters:
+            last = chapters[-1]
+            if last[0] == num - 1:
+                prev_text = project.read_file(last[2])
+                previous_excerpt = prev_text[-800:] if len(prev_text) > 800 else prev_text
+                # 文风锚定：上一章开头样本（跳过标题行），防长篇文风漂移
+                body_start = prev_text.find("\n")
+                sample = prev_text[body_start + 1:body_start + 501] if body_start > 0 else prev_text[:500]
+                if sample.strip():
+                    style_sample = sample
+        ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 细纲 + 前3章摘要 + 角色状态 + 伏笔 + 文风样本）")
+        # 决策门 G4：素材组装后（软门：默认轻提示）
+        g4_idea = ctx.gate("G4", f"材料就绪：细纲 + 前3章摘要 + 角色状态 + 伏笔表 + 文风样本（草稿目标 {chapter_words} 字）",
+                           chapter=num)
+        if g4_idea is None:
+            g4_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+            ctx.log("warn", "G4 回退：重新组装（可趁隙修改设定/细纲/追踪文件）")
+            continue
+        if g4_idea:
+            draft_extra_ideas.append(g4_idea)   # 带想法继续 → 注入草稿 user_ideas
+        break
 
     # ---- ② 草稿生成 ----
     ctx.step(num, st.STEP_DRAFT)
@@ -444,7 +481,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         previous_excerpt=previous_excerpt or "（本章为第一章）",
         style_sample=style_sample,
         user_guidance=_compose_guidance(guidance, ctx.cfg),
-        user_ideas="\n".join(f"- {t}" for t in (ideas or [])) or "（无）",
+        user_ideas="\n".join(f"- {t}" for t in ((ideas or []) + draft_extra_ideas)) or "（无）",
         word_target=chapter_words,
         tic_blacklist=_tic_blacklist(proj),
         used_setpieces=_used_setpieces(proj),
@@ -499,14 +536,28 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     gr.blocking_findings, gr.advisory_findings = blocking, advisory
     ctx.log("info", f"第 {num} 章 本地扫描：阻断 {len(blocking)} 处 / 建议 {len(advisory)} 处")
 
+    # ---- ③.5 决策门 G6：扫描完成后（T4.1 内侧门；回退=保留原稿跳过去味）----
+    deslop_extra_text = ""
+    g6_idea = ctx.gate("G6", f"AI 味扫描完成：阻断 {len(blocking)} / 建议 {len(advisory)}"
+                             f"（下一步去味改写，最多 {max_deslop_rounds} 轮）", chapter=num)
+    if g6_idea is None:
+        g6_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+        ctx.log("warn", f"G6 回退：保留原稿继续（{len(blocking)} 处阻断按人工裁决保留，跳过去味）")
+        advisory = advisory + blocking
+        blocking = []
+        gr.blocking_findings, gr.advisory_findings = blocking, advisory
+    elif g6_idea:
+        deslop_extra_text = f"\n【人工补充要求（G6 想法）】{g6_idea}"
+
     # ---- ④ 去味改写（仅阻断级触发，最多 max_deslop_rounds 轮）----
+    pre_deslop_prose = prose   # G7 回退还原点
     rounds = 0
     while blocking and rounds < max_deslop_rounds:
         rounds += 1
         ctx.step(num, st.STEP_DESLOP)
         ctx.log("warn", f"第 {num} 章 阻断 {len(blocking)} 处 → 去味改写（第 {rounds} 轮）…")
         ctx.checkpoint()
-        findings_text = deslop.findings_to_prompt_text(blocking + advisory)
+        findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
         rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose,
                                                                tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = rewrite_prompt
@@ -523,9 +574,32 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         if rounds:
             ctx.log("ok", f"第 {num} 章 去味完成，复扫通过")
 
+    # ---- ④.4 决策门 G7：去味完成后（T4.1 内侧门；回退=保留原稿=还原去味前文本）----
+    g7_idea = ctx.gate("G7", f"去味改写完成：{rounds} 轮 · 复扫{'通过' if not blocking else f'仍 {len(blocking)} 处阻断'}"
+                             f"（当前 {project.count_chars(prose)} 字，下一步审校）", chapter=num)
+    if g7_idea is None:
+        g7_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+        ctx.log("warn", "G7 回退：保留去味前原稿继续")
+        if rounds and prose != pre_deslop_prose:
+            _archive_inner_rollback(ctx, proj, num, "G7", prose)   # 去味稿归档
+            prose = pre_deslop_prose                                # 还原原稿
+            blocking, advisory = gates.scan_deslop(prose)
+            gr.blocking_findings, gr.advisory_findings = blocking, advisory
+            gr.deslop_rounds_used = 0
+        if blocking:
+            ctx.log("warn", f"G7：原稿 {len(blocking)} 处阻断按人工裁决保留（降级为建议）")
+            gr.advisory_findings = gr.advisory_findings + blocking
+            gr.blocking_findings = blocking = []
+            gr.final_status = "pass"   # 人工裁决保留原稿 = 本步通过
+    elif g7_idea:
+        _store_inner_gate_idea(ctx, proj, num, "G7", g7_idea)
+
     # ---- ④.5 审校（v2 6 维最终审核，可开关；用审校槽）----
+    verdict_review, blocking_review, review_ran = "", [], False
+    pre_review_prose = prose   # G8 回退还原点
     review_enabled = gates_cfg.get("review_enabled", True)
     if review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
+        review_ran = True
         ctx.stream_stage(f"审校 第{num}章")
         blocking_review, advisory_review, verdict_review = _chapter_review(ctx, num, prose)
         gr.review_blocking = blocking_review
@@ -606,6 +680,23 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             ctx.log("ok", f"第 {num} 章 审校通过（verdict={verdict_review or 'PASS'}）")
     else:
         ctx.log("info", "审校已跳过（未启用或审校槽未绑定连接）")
+
+    # ---- ④.9 决策门 G8：审校完成后（T4.1 内侧门；回退=保留原稿=还原审校前文本）----
+    if review_ran:
+        g8_idea = ctx.gate("G8", f"审校完成：verdict {verdict_review or 'PASS'} · 阻塞 {len(blocking_review)} 处"
+                                 f"（下一步定稿落库，G9 仍会把关）", chapter=num)
+        if g8_idea is None:
+            g8_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+            ctx.log("warn", "G8 回退：保留审校前原稿继续")
+            if prose != pre_review_prose:
+                _archive_inner_rollback(ctx, proj, num, "G8", prose)   # 审校修改稿归档
+                prose = pre_review_prose                                # 还原原稿
+            if blocking_review:
+                ctx.log("warn", f"G8：{len(blocking_review)} 处审校阻塞按人工裁决保留（定稿照常进行，G9 把关）")
+                gr.review_blocking = []
+                gr.final_status = "pass"
+        elif g8_idea:
+            _store_inner_gate_idea(ctx, proj, num, "G8", g8_idea)
 
     # ---- ⑤ 定稿落库：正文 + 追踪四文件 + 摘要链 ----
     ctx.step(num, st.STEP_FINALIZE)

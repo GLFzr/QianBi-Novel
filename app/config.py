@@ -48,8 +48,8 @@ DEFAULT_CONFIG = {
                 "regex_semantics": "logic",     # 正则语义：logic=逻辑约束规则集（默认）/ regex=字面正则样本
                 "readback_on_save": True,       # 读改揣摩：保存有变时触发 1 次（复用 review 槽）
                 "readback_min_diff": 200,       # 最小改动量阈值（低于不触发；0=每次都触发）
-                "gate_hard": ["G2", "G5L", "G9"],
-                "gate_soft": ["G1", "G3", "G4", "G6", "G7", "G8"]},
+                "gate_hard": ["G2", "G5L", "G8", "G9"],   # G8 审校门入硬停（plan_step_gates_v1 §2 默认）
+                "gate_soft": ["G1", "G3", "G4", "G6", "G7"]},
     "last_project": "",
     "recent_projects": [],
 }
