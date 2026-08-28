@@ -10,16 +10,17 @@
 6. 关闭窗口（干净状态应直接关闭）
 """
 import ctypes
+import os
 import sys
 import time
 
-sys.path.insert(0, r"G:\ai\酒馆\qianbi-novel")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import tests.ui_drive as ui
 from ctypes import wintypes
 from pywinauto.keyboard import send_keys
 
 STEP = 0
-SHOTS = r"G:\ai\酒馆\qianbi-novel\tests_output"
+SHOTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests_output")
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 

@@ -6,11 +6,11 @@
 
 用法（PowerShell）：
   @"
-  import sys; sys.path.insert(0, r'G:\ai\酒馆\qianbi-novel\.venv\Lib\site-packages')
+  import sys; sys.path.insert(0, r'<repo root>\tests\..')
   import tests.ui_drive as ui
   ui.find_app()
   ui.click(462, 219)
-  ui.shot('G:/ai/酒馆/qianbi-novel/tests_output/xxx.png')
+  ui.shot('<repo root>/tests_output/xxx.png')
   ui.find_button('开始')
   "@ | .venv\Scripts\python.exe -
 
