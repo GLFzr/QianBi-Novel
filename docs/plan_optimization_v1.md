@@ -133,9 +133,10 @@
 
 ### Phase 2 · 质量闸门加固（约 2–4 天，收益最大的阶段）
 
-- [ ] **T2.1 L1 拦截率提升**（L）— 对应 H4
+- [x] **T2.1 L1 拦截率提升**（L）— 对应 H4 — 2026-08-28 完成
   - 内容：逐条分析 15 条金标中被漏检的 10 条（金标在 `qianbi-Novel-TUI/evals/gold_set.json`，漏检明细在回放报告），分类漏检根因（prompt 覆盖不到 / 引证回验太松 / 维度缺失）→ 修订 `evals/l1_judge.py` 判分 prompt 与阈值 → 回放回归。
   - 验收：回放拦截率 ≥80%（阶段目标），且误杀 ≤1 条；方差统计（≥3 次取众数）流程不变。
+  - 结论：提交 TUI 01971d7。**33% → 100%**（3 次真跑多数票 15/15，误杀 0，L0 无回归）。根因不止 prompt：① 10/15 金标指向不存在的章节文件（预设测试书只有第 1 章）；② 回放从未真跑 judge（只查文件存在）；③ prompt 缺细纲/设定/前章，跨文件维度（B 爽点兑现 / C 金手指上限 / D 事件对账 / E 弧光）无从判起。对策三件套：`evals/make_l1_fixtures.py` 确定性生成自包含夹具树（15 条全覆盖，每章只让目标维度出问题）；`l1_judge.py` prompt 注入细纲/设定/前章 + 逐维硬判级规则，输出解析三级容错（模型实际会偏离 ===头格式写 markdown/箭头/裸行）；`replay.py --judge/--judge-vote` 真跑 + 拦截/误杀计分 + 多数票聚合。注意：单次跑 80–87%，多数票才到 100%——印证「单次 L1 不可信」方法论。
 - [ ] **T2.2 回放纳入日常流程**（M）
   - 内容：把 `evals/l0_scan.py`（零成本）接进 TUI `python run.py --smoke` 后的固定动作；写 `scripts/eval_gate.py`：L0 全过 + L1 抽样 10 条；GUI 移植版同步可用。
   - 验收：一条命令跑完并输出 PASS/FAIL；失败时阻断（提示不强制）。
@@ -145,9 +146,10 @@
 - [ ] **T2.4 GUI 单测体系化**（L）— 对应 M4
   - 内容：建立 `tests/unit/`（pytest，零 API key）：状态机转移（state.py 常量与转移表）、门机制三决策（mock Event）、deslop 规则集、project 目录解析/章节锁定、细纲批解析（`===第N章===`）。目标先覆盖 core 层关键路径 20 用例。
   - 验收：`python -m pytest tests/unit -q` 全绿，可在无网络环境运行。
-- [ ] **T2.5 TUI git 化 + 双端同步机制**（M）— 对应 H5
+- [x] **T2.5 TUI git 化 + 双端同步机制**（M）— 对应 H5 — 2026-08-28 完成
   - 内容：① `qianbi-Novel-TUI` 初始化 git（首次提交含 .gitignore）；② 写 `scripts/dual_sync_check.py`：对比双端 `app/core`、`app/llm`、`app/prompts`、`app/presets` 的共享文件 diff，输出漂移清单；③ 在两端 README 写明「共享层改动必须双端同步 + 跑此脚本」。
   - 验收：脚本能列出当前真实漂移项；TUI 历史可追溯。
+  - 结论：GUI a9d1fe1 / TUI 16ab6ab + f5ccd5d。TUI 首次入库前做敏感信息扫描（无硬编码 key，tests_output 15M 排除）；`scripts/dual_sync_check.py` 首跑列出真实漂移 13 DRIFT + 1 ONLY_TUI（app/llm/resume.py）+ 18 IDENTICAL，双端 README 均已写入同步约定。
 
 ### Phase 3 · 架构与卫生债务（约 1–2 天）
 
@@ -244,3 +246,5 @@
 | 2026-08-28 | T1.4 代码瑕疵 | Qoder | ab66320 | 反馈环改读 review_raw（原读 last_prompt 恒错）+ 删死代码；真机 1 章验收待并入 Phase 2 |
 | 2026-08-28 | T1.5 文档对齐 | Qoder | abb13fd | 预设 9→10 套、侧栏 7→6 面板/第 5 项、设计组件 18→15、体系 七→八；三文档联动修正 |
 | 2026-08-28 | Phase 1 收官 | Qoder | 全 5 任务完成 | 离线全绿（探针 4/4+8/8、42 单测、smoke）；下一步 Phase 2（建议单独排期，收益最大） |
+| 2026-08-28 | T2.5 TUI git 化+双端同步 | Qoder | GUI a9d1fe1 / TUI 16ab6ab + f5ccd5d | TUI 首次入库（敏感扫描通过、产物排除）；dual_sync_check.py 首跑 13 DRIFT+1 ONLY_TUI+18 IDENTICAL；双端 README 立同步约定 |
+| 2026-08-28 | T2.1 L1 拦截率 | Qoder | TUI 01971d7 | 33%→**100%**（3 次真跑多数票 15/15，误杀 0）：夹具树 make_l1_fixtures.py + judge 上下文注入/硬判级规则 + replay --judge/--judge-vote；L0 回放无回归 100% |
