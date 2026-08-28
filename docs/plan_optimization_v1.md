@@ -110,21 +110,26 @@
 
 ### Phase 1 · 快速修复（约 1 天，可与 Phase 0 同日完成）
 
-- [ ] **T1.1 根目录清理 + .gitignore**（S）— 对应 L1/L2/L3
+- [x] **T1.1 根目录清理 + .gitignore**（S）— 2026-08-28 完成
   - 内容：删除 `=0.24`、`cmp_*.png`、`rail_zoom.png`、`smoke_tmp_*.log`、`app_run*.log`（删除前 `git status` 确认均为未跟踪/可弃）；补全 `.gitignore`（`*.log`、`smoke_tmp_*`、`__pycache__/`、`_archive/`、`pipeline_debug/`、`tests_output/` 按需）。
   - 验收：根目录只剩源码/资源/文档类文件；`git status` 不再出现日志类噪音。
-- [ ] **T1.2 版本单一来源**（M）— 对应 H3
+  - 结论：提交 358bef9。删除调试截图/杂物日志（均为未跟踪文件，删前已确认）；`.gitignore` 增补 `projects/`、`.workbuddy/` 等测试残留项；`git status` 已无日志类噪音。
+- [x] **T1.2 版本单一来源**（M）— 2026-08-28 完成
   - 内容：新增 `app/__init__.py: __version__`；设置页「关于」与导出页读取该常量；重排 `CHANGELOG.md`（按真实时间序修复倒挂）；同步 `README.md` 版本与《改命笔记》章数（54 章）；按 T0.3 结论打 tag。
   - 验收：全仓只有一处声明版本；`git tag` 与 README/CHANGELOG 一致。
-- [ ] **T1.3 死开关处置**（S）— 对应 H2（低成本方案）
+  - 结论：提交 6147052，打 tag `v0.13.0`。`app/__init__.py: __version__ = "0.13.0"` 为唯一来源；main.py 接入 `setApplicationVersion` + 启动日志；CHANGELOG 重排修复倒挂（0.13.0 置顶、0.12.0 由 0.12.0-dev 改名、0.11.4–0.10.0 归位）；README 4 处 `-dev` 清除，章数 54 已核实无误。
+- [x] **T1.3 死开关处置**（S）— 2026-08-28 完成
   - 内容：设置页门清单中未接线的 G1/G3/G4/G6/G7/G8 置灰并标注「规划中（见 plan_step_gates_v1 阶段 2）」；`GATE_META` 加 `wired: bool` 字段，UI 据此渲染。**注意：此任务只修展示层，不改流水线**；真正的接线在 T4.1。
   - 验收：设置页不再出现可点但无效的开关。
-- [ ] **T1.4 代码瑕疵清理**（M）— 对应 M2/M6
+  - 结论：提交 92210bc（GATE_META wired 字段 + PipelinePanel 门清单置灰/禁用/「规划中」标注，仅展示层）。验证中发现并顺带修复两处迁移遗留 QML 缺陷（提交 d78ce75）：ReviewIssueDialog `import "."` 导致 Theme 未定义 → 改 `import ".."`；PresetLibraryPanel Connections 监听不存在的 `genrePresetsChanged` 信号 → 删除死块。probe_gate_ui 由 7/8 恢复为 8/8、零 QML 告警。
+- [x] **T1.4 代码瑕疵清理**（M）— 2026-08-28 完成
   - 内容：① `stages.py:543-548` 改为在生成六维输出时显式保存原文到独立字段（如 `ctx.review_raw`），不再反解析 `last_prompt`；② 删 `client.py:252` 死代码与 `orchestrator.py:329-330` 无效 `else`；③ 给 `OUTLINE_BATCH=2` 补一行 why 注释（5 章批被输出预算吃光的实测结论）。
   - 验收：六维审校 + 根因反馈环真机跑 1 章通过；无行为回归。
-- [ ] **T1.5 文档对齐**（S）— 对应 M5
+  - 结论：提交 ab66320。① `Orchestrator.review_raw` 新字段 + `_chapter_review` 写入 + 反馈环改读（原代码读 `last_prompt` 恒为输入 prompt，根因 items 必为空——比预估的「脆弱」更严重，是恒错）；② 死代码两处已删；③ `OUTLINE_BATCH` 核查发现 why 注释已存在于 `orchestrator.py:24`（迁移提交自带），无需改动。**验收差异（如实记录）**：真机 1 章未跑（需 API key 与时长），离线证据=三文件 py_compile + probe_gate_flow 4/4 + probe_gate_ui 8/8 + 42 项单测（13/15/14）+ smoke 全绿；改动为两处一行读写接线，静态风险低，建议并入 Phase 2 真机验证。
+- [x] **T1.5 文档对齐**（S）— 2026-08-28 完成
   - 内容：README 功能清单、示例章数、测试命令与当前代码核对一遍，过时处修正。
   - 验收：抽查 5 处文档陈述均与代码一致。
+  - 结论：提交 abb13fd。发现并修正 4 类系统性过时陈述（README/CHANGELOG/升级报告三份文档联动）：① 预设「9 套」→实际 **10 套**（`list_presets()` 实证，`urban_superpower` 被漏计，报告自身也列了 10 个 ID 却写 9），连带派生数字 +7→+8 套、+350%→+400%、流派 9→10；② 侧栏「7 面板/第 7 项」→实际 **6 面板、预设库第 5 项**（navItems 实证）；③ 「18 个设计系统组件」→实际 **15 个**（18 个 QML 含 ReaderView/CwDialogueDock/ReviewIssueDialog 三个功能视图）；④ 「七大体系」→实际列了**八节**。另补门机制现状标注（G2/G5L/G9 已接线、其余规划中）。抽查 5+ 处与代码一致：示例 54 章 ✓、`MAX_VERSIONS=30`（versions.py:21）✓、Ctrl+T（Main.qml:1805）✓、smoke 7 项 ALL_FUNC_OK ✓、测试命令 13/15/14 全绿 ✓。
 
 ### Phase 2 · 质量闸门加固（约 2–4 天，收益最大的阶段）
 
@@ -233,3 +238,9 @@
 | 2026-08-28 | T0.1 移植验收 | Qoder | 通过 | 清单齐套、无敏感信息、42 项单测全过、真机证据充分；偏差 2 项已记录（见任务条目） |
 | 2026-08-28 | T0.2 模块化提交 | Qoder | 01fb7ef / c7e0e29 / 026393b / 74ba597 / 1c1d4c4 / fac0cbe | 6 提交（预设/核心审校+场景卡/UI 接线/鲁棒性修复/e2e 驱动/文档），提交后编译验证通过 |
 | 2026-08-28 | T0.3 版本基准 | 用户 | 定版 **0.13.0** | Phase 0 全部完成，基线建立；下一步 Phase 1 |
+| 2026-08-28 | T1.1 清理+.gitignore | Qoder | 358bef9 | 删调试截图/杂物日志；.gitignore 增补 projects/.workbuddy |
+| 2026-08-28 | T1.2 版本单一来源 | Qoder | 6147052 + tag v0.13.0 | app/__init__.py 常量 + Qt applicationVersion 接入 + CHANGELOG 重排修倒挂 + README 去 dev |
+| 2026-08-28 | T1.3 死开关置灰 | Qoder | 92210bc / d78ce75 | GATE_META wired 字段+未接线门置灰；顺带修两处迁移遗留 QML 缺陷；probe_gate_ui 8/8 零告警 |
+| 2026-08-28 | T1.4 代码瑕疵 | Qoder | ab66320 | 反馈环改读 review_raw（原读 last_prompt 恒错）+ 删死代码；真机 1 章验收待并入 Phase 2 |
+| 2026-08-28 | T1.5 文档对齐 | Qoder | abb13fd | 预设 9→10 套、侧栏 7→6 面板/第 5 项、设计组件 18→15、体系 七→八；三文档联动修正 |
+| 2026-08-28 | Phase 1 收官 | Qoder | 全 5 任务完成 | 离线全绿（探针 4/4+8/8、42 单测、smoke）；下一步 Phase 2（建议单独排期，收益最大） |
