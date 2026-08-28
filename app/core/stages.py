@@ -650,8 +650,13 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             ctx.last_prompt = fix_prompt
             rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt,
                                label=f"审校修改 第{review_rounds}轮")
-            if not rewritten.strip():
-                ctx.log("warn", f"第 {num} 章 审校修复返回为空，保留原稿")
+            # 修复稿健全性守卫（真机缺陷修复：模型可能返回 ===REVISIONS=== 修订计划
+            # 而非改后正文；采纳会把整章替换成指令清单，且空文本复检阻塞更少被误判改善）
+            looks_like_plan = rewritten.lstrip().startswith("===")
+            too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))
+            if not rewritten.strip() or looks_like_plan or too_short:
+                ctx.log("warn", f"第 {num} 章 审校修复返回非正文"
+                                f"（{'空' if not rewritten.strip() else '修订计划' if looks_like_plan else '长度骤减'}），保留原稿")
                 break
             # 回滚保护：修复后复扫，未改善（阻塞不减反增）则保留原稿
             new_blocking, new_advisory, new_verdict = _chapter_review(ctx, num, rewritten)
