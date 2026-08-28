@@ -381,14 +381,20 @@ def norm_ideas(state: dict) -> list:
 
 
 def take_ideas(state: dict, num: int = 0) -> list:
-    """取走本章待消费想法文本（scope=next / 通用 / ==num），标记 applied 而不删除"""
+    """取走本章待消费想法文本，按 scope 注入策略（T4.2 想法沉淀）：
+    - next / ==num：一次性，take 后标记 applied
+    - 通用：跨章持续注入——每章草稿都带上且不自动标记 applied
+      （停止注入 = 面板「标记已应用」/删除，见 plan_step_gates_v1 §8）
+    """
     ideas = norm_ideas(state)
     taken = []
     for it in ideas:
         if it.get("status") != "pending":
             continue
         scope = str(it.get("scope", "next"))
-        if scope in ("next", "通用") or (num and scope == str(num)):
+        if scope == "通用":
+            taken.append(it["text"])          # 持续注入：不改状态
+        elif scope == "next" or (num and scope == str(num)):
             taken.append(it["text"])
             it["status"] = "applied"
     state["pending_ideas"] = ideas

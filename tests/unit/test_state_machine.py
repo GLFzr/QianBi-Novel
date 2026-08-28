@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """状态机：阶段常量、共写转移表、持久化与想法/指导生命周期"""
+import os
+
 import pytest
 
 from app.core import state as st
@@ -109,6 +111,22 @@ def test_norm_ideas_legacy_string_format():
     assert items[0]["text"] == "老格式纯字符串"
     assert items[0]["scope"] == "next"
     assert items[0]["status"] == "pending"
+
+
+def test_idea_book_scope_persists_across_chapters(tmp_path):
+    """T4.2 想法沉淀：通用想法跨章持续注入，不自动消费；标记已应用后停止"""
+    proj = str(tmp_path / "book")
+    os.makedirs(proj)
+    s = st.load_state(proj)
+    assert st.add_idea(proj, s, "全书保持冷峻笔调", scope="通用") is True
+    assert st.take_ideas(s, num=1) == ["全书保持冷峻笔调"]
+    assert st.take_ideas(s, num=2) == ["全书保持冷峻笔调"]   # 不自动消费
+    assert st.take_ideas(s, num=3) == ["全书保持冷峻笔调"]
+    items = st.norm_ideas(s)
+    assert items[0]["status"] == "pending"
+    # 面板「标记已应用」收口（bridge.markIdeaApplied 同语义）
+    items[0]["status"] = "applied"
+    assert st.take_ideas(s, num=4) == []
 
 
 def test_review_findings_save_load(tmp_path):

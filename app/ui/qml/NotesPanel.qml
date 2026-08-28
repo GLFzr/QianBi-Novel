@@ -215,7 +215,7 @@ Item {
                                 AppBadge {
                                     text: modelData.status === "pending"
                                           ? (String(modelData.scope) === "next" ? "待应用·下一章"
-                                             : String(modelData.scope) === "通用" ? "待应用·通用"
+                                             : String(modelData.scope) === "通用" ? "持续注入·通用"
                                              : "待应用·第" + modelData.scope + "章")
                                           : "已应用"
                                     tint: modelData.status === "pending" ? Theme.accent : Theme.success
