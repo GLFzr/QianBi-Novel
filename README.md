@@ -377,6 +377,20 @@ python tests/test_review_v2.py
 python build_exe.py        # 打包单文件 exe（dist/QianBi-Novel.exe）
 ```
 
+### 双端仓库同步（GUI ↔ TUI）
+
+本项目与同级目录的 `qianbi-Novel-TUI`（Textual 终端版）共享业务核心层：
+`app/core`、`app/llm`、`app/prompts`、`app/presets` 四个目录为**双端共享层**。
+
+**共享层改动必须双端同步**：任何一侧改了共享文件，手动同步到另一侧后跑检查脚本确认：
+
+```bash
+python scripts/dual_sync_check.py   # 对比双端共享层，输出漂移清单（退出码 0=同步 / 1=有漂移）
+```
+
+当前存在历史漂移欠账（见脚本输出），新改动不要再新增漂移；结构性差异（如
+`orchestrator.py` 的 QThread/Textual 实现分叉）属有意保留，改动时只同步共享语义部分。
+
 ---
 
 ## 安全提示
