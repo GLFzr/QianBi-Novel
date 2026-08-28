@@ -253,3 +253,5 @@
 | 2026-08-28 | T2.1 L1 拦截率 | Qoder | TUI 01971d7 | 33%→**100%**（3 次真跑多数票 15/15，误杀 0）：夹具树 make_l1_fixtures.py + judge 上下文注入/硬判级规则 + replay --judge/--judge-vote；L0 回放无回归 100% |
 | 2026-08-28 | T2.2 回放纳入流程 | Qoder | TUI 5272b22 | scripts/eval_gate.py 一键闸门（L0 全量 + L1 抽样 10，实测 PASS）；smoke 第 12 项 L0 回归；修 l0_scan deslop 指标恒 0 双重 bug |
 | 2026-08-28 | T2.3 破折号策略 | Qoder | TUI 3cc4ca3 / GUI d8827c9 | EM_DASH 改密度阈值（>6/千字才阻断）；真书回放 57 处阻断→0（改命笔记 54 章 + 时间铺子 10 章），高密度合成例仍阻断；报告存档 tests_output/emdash_replay/ |
+| 2026-08-28 | T2.4 GUI 单测体系化 | Qoder | 7686230 | tests/unit 5 模块 36 用例全绿（目标 20，超额）：状态机链/转移表互逆、闸门三决策（mock ctx）、deslop 规则集（含破折号阈值回归用例）、项目解析/章节锁定、细纲批解析；零 key 离线 0.3s |
+| 2026-08-28 | Phase 2 收官 | Qoder | 全 5 任务完成 | L1 拦截 33%→100%（多数票）、一键评测闸门、破折号误杀清零、36 单测保底、TUI 入库+双端同步机制；下一步 Phase 3（架构与卫生债务） |
