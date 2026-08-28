@@ -157,6 +157,10 @@ def _stream(ctx, slot: str, prompt: str, label: str = "") -> str:
         ctx.stream_chunk(c)
     def on_reasoning(r):
         ctx.stream_reasoning(r)
+        # T4.3 M1：带槽位上下文增量 → Agent Console 分组留存（缺方法时静默降级，兼容旧 ctx）
+        st_thinking = getattr(ctx, "stream_thinking", None)
+        if callable(st_thinking):
+            st_thinking(slot, r)
     return clean_llm_output(ctx.router.client(slot).chat_stream(
         prompt, on_chunk=on_chunk, on_reasoning=on_reasoning))
 

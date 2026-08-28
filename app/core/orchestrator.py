@@ -34,6 +34,7 @@ class Orchestrator(QThread):
     sig_stream_chunk = Signal(str)      # LLM 流式输出增量（写作工作台实时显示）
     sig_stream_stage = Signal(str)      # 流式阶段切换（草稿/去味/审校…），UI 清空流式区并显示标签
     sig_stream_reasoning = Signal(str)  # 思维链增量（默认隐藏，用户主动查看）
+    sig_thinking = Signal(str, str, int, str)  # T4.3 M1：思维链（槽位, 阶段, 章号, 增量）→ Console 留存
     sig_chapter_done = Signal(dict)     # 章节记录
     sig_queue = Signal()                # 队列数据变化，通知 UI 刷新
     sig_finished = Signal(str)          # done / stopped
@@ -222,6 +223,10 @@ class Orchestrator(QThread):
     def stream_reasoning(self, text: str):
         """思维链增量 → UI（默认不展示，用户主动打开才看）"""
         self.sig_stream_reasoning.emit(text)
+
+    def stream_thinking(self, slot: str, text: str):
+        """思维链增量（带槽位上下文）→ Agent Console 分组留存（T4.3 M1）"""
+        self.sig_thinking.emit(slot, self._cur_stage or "", self._cur_num, text)
 
     def checkpoint(self):
         if self._stop:

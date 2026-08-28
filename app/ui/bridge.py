@@ -352,6 +352,7 @@ class Bridge(QObject):
     ideaExpanded = Signal(bool, str)            # ok, result_or_error
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
+    consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -660,6 +661,7 @@ class Bridge(QObject):
         self.orch.sig_stream_chunk.connect(self._on_stream_chunk)
         self.orch.sig_stream_stage.connect(self._on_stream_stage)
         self.orch.sig_stream_reasoning.connect(self._on_stream_reasoning)
+        self.orch.sig_thinking.connect(self._on_thinking)
         self.orch.sig_chapter_done.connect(self._on_chapter_done)
         self.orch.sig_queue.connect(self.refreshQueue)
         self.orch.sig_finished.connect(self._on_finished)
@@ -760,6 +762,7 @@ class Bridge(QObject):
     def _on_gate(self, key: str, chapter: int, summary: str):
         self.gateAsked.emit(key, chapter, summary)
         self.logModel.append("info", f"⏸ 决策门 {key}（第{chapter}章）：{summary}")
+        self._console_log("gate", f"⏸ 决策门 {key}（第{chapter}章）：{summary}", num=chapter)
 
     @Slot(str, str)
     def resolveStepGate(self, action: str, idea: str):
@@ -771,6 +774,109 @@ class Bridge(QObject):
         suffix = f"，并附想法：{idea[:60]}" if (idea or "").strip() else ""
         act = "回退重做" if action == "return" else "继续"
         self.logModel.append(level, f"决策门已{act}{suffix}")
+        # T4.3 M2：门决策镜像到 Console 对话区
+        if action == "return":
+            self._console_log("agent", f"↩ 已回退重做{(f'，想法：{idea[:60]}' if (idea or '').strip() else '')}")
+        else:
+            self._console_log("user" if (idea or "").strip() else "agent",
+                              f"▶ 继续{(f'（想法：{idea[:60]}）' if (idea or '').strip() else '')}")
+
+    # ========== Agent Console（T4.3 M1+M2：思考链留存 + 对话区落盘）==========
+    # 设计依据 plan_agent_console_v3 §1.3；M3（阅读器收窄/门合并）另行排期。
+    _console_thinking = None      # {(slot, stage, num): [chunk]} 实例级惰性初始化
+    _console_dialogue = None      # [{ts, kind, slot, stage, num, text}]
+    _console_expanded = False
+    _console_rev = 0
+
+    def _console_ensure(self):
+        if self._console_thinking is None:
+            self._console_thinking = {}
+        if self._console_dialogue is None:
+            self._console_dialogue = []
+
+    def _on_thinking(self, slot: str, stage: str, num: int, text: str):
+        """思维链增量 → 按 槽位×阶段×章 分组留存（随结束不清空，M1 痛点）"""
+        self._console_ensure()
+        key = (slot, stage, int(num))
+        buf = self._console_thinking.setdefault(key, [])
+        buf.append(text)
+        if len(buf) > 800:                     # 单组环形上限，防长跑内存膨胀
+            del buf[: len(buf) - 800]
+        self._console_rev += 1
+        self.consoleChanged.emit()
+
+    def _console_log(self, kind: str, text: str, slot: str = "", stage: str = "", num: int = 0):
+        """Console 对话区条目：内存 + pipeline_debug/console/ 会话落盘（M2）"""
+        self._console_ensure()
+        import datetime
+        entry = {"ts": datetime.datetime.now().strftime("%m-%d %H:%M:%S"),
+                 "kind": kind, "slot": slot, "stage": stage, "num": int(num),
+                 "text": text}
+        self._console_dialogue.append(entry)
+        if len(self._console_dialogue) > 500:
+            del self._console_dialogue[: len(self._console_dialogue) - 500]
+        self._console_rev += 1
+        self.consoleChanged.emit()
+        if self.proj:
+            try:
+                d = os.path.join(self.proj, "pipeline_debug", "console")
+                os.makedirs(d, exist_ok=True)
+                path = os.path.join(d, f"session-{datetime.datetime.now():%Y%m%d}.jsonl")
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            except Exception:  # noqa: BLE001
+                pass   # 落盘失败不影响主流程
+
+    @Property("QVariantList", notify=consoleChanged)
+    def consoleThinkingGroups(self) -> list:
+        """思考链分组（M1）：[{key, slot, stage, num, text}]，当前章在前"""
+        self._console_ensure()
+        cur = self._cur_num
+        groups = []
+        for (slot, stage, num), chunks in self._console_thinking.items():
+            groups.append({"key": f"{slot}|{stage}|{num}", "slot": slot, "stage": stage,
+                           "num": num, "text": "".join(chunks)[-6000:],
+                           "is_current": num == cur})
+        groups.sort(key=lambda g: (not g["is_current"], -g["num"]))
+        return groups[:40]
+
+    @Property("QVariantList", notify=consoleChanged)
+    def consoleDialogue(self) -> list:
+        self._console_ensure()
+        return list(self._console_dialogue[-200:])
+
+    @Property(bool, notify=consoleChanged)
+    def consoleExpanded(self) -> bool:
+        return self._console_expanded
+
+    @Slot(bool)
+    def setConsoleExpanded(self, on: bool):
+        if self._console_expanded != bool(on):
+            self._console_expanded = bool(on)
+            self.consoleChanged.emit()
+
+    @Slot(str)
+    def consoleSubmit(self, text: str):
+        """Console 输入框（M3 门合并前的对话通道雏形）：
+        门等待中 → 作为「带想法继续」送入当前门；否则沉淀为「下一章」想法"""
+        text = (text or "").strip()
+        if not text:
+            return
+        self._console_ensure()
+        if self.orch and self._running and self.orch.resolve_gate("next", text):
+            self._console_log("user", text)
+            self._console_log("agent", "已作为「带想法继续」送入当前决策门")
+            return
+        if self.proj and not self._running:
+            self.toast.emit("warn", "流水线未运行，想法已保存为「下一章」")
+        elif not self.proj:
+            self._console_log("agent", "当前未打开项目，内容未保存")
+            return
+        state = st.load_state(self.proj)
+        if st.add_idea(self.proj, state, text, "next"):
+            self._console_log("user", text)
+            self._console_log("agent", "已沉淀为「下一章」想法（笔记面板可管理）")
+            self.ideaCountChanged.emit()
 
     @Slot(int)
     def rewriteChapter(self, num: int):
@@ -1199,6 +1305,7 @@ class Bridge(QObject):
         self._streaming = True
         self.liveDraftChanged.emit()
         self.streamingChanged.emit()
+        self._console_log("agent", f"—— 第 {num} 章开始 ——", num=num)
         self.ideaCountChanged.emit()   # 想法可能已被流水线消费，刷新计数
         self.currentChapterChanged.emit()
         self.currentStepChanged.emit()

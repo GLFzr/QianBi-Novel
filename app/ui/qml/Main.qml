@@ -285,6 +285,12 @@ ApplicationWindow {
             }
         }
 
+        // ========== Agent Console（T4.3：思考链留存 + 对话区，折叠 24px / 展开 280px）==========
+        ConsoleDock {
+            id: consoleDock
+            objectName: "consoleDockItem"
+        }
+
         // ========== 次左：功能面板 ==========
         Rectangle {
             Layout.preferredWidth: 340
