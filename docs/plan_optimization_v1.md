@@ -137,15 +137,18 @@
   - 内容：逐条分析 15 条金标中被漏检的 10 条（金标在 `qianbi-Novel-TUI/evals/gold_set.json`，漏检明细在回放报告），分类漏检根因（prompt 覆盖不到 / 引证回验太松 / 维度缺失）→ 修订 `evals/l1_judge.py` 判分 prompt 与阈值 → 回放回归。
   - 验收：回放拦截率 ≥80%（阶段目标），且误杀 ≤1 条；方差统计（≥3 次取众数）流程不变。
   - 结论：提交 TUI 01971d7。**33% → 100%**（3 次真跑多数票 15/15，误杀 0，L0 无回归）。根因不止 prompt：① 10/15 金标指向不存在的章节文件（预设测试书只有第 1 章）；② 回放从未真跑 judge（只查文件存在）；③ prompt 缺细纲/设定/前章，跨文件维度（B 爽点兑现 / C 金手指上限 / D 事件对账 / E 弧光）无从判起。对策三件套：`evals/make_l1_fixtures.py` 确定性生成自包含夹具树（15 条全覆盖，每章只让目标维度出问题）；`l1_judge.py` prompt 注入细纲/设定/前章 + 逐维硬判级规则，输出解析三级容错（模型实际会偏离 ===头格式写 markdown/箭头/裸行）；`replay.py --judge/--judge-vote` 真跑 + 拦截/误杀计分 + 多数票聚合。注意：单次跑 80–87%，多数票才到 100%——印证「单次 L1 不可信」方法论。
-- [ ] **T2.2 回放纳入日常流程**（M）
+- [x] **T2.2 回放纳入日常流程**（M）— 2026-08-28 完成
   - 内容：把 `evals/l0_scan.py`（零成本）接进 TUI `python run.py --smoke` 后的固定动作；写 `scripts/eval_gate.py`：L0 全过 + L1 抽样 10 条；GUI 移植版同步可用。
   - 验收：一条命令跑完并输出 PASS/FAIL；失败时阻断（提示不强制）。
-- [ ] **T2.3 deslop 破折号策略**（M）— 对应 M1
+  - 结论：提交 TUI 5272b22。`scripts/eval_gate.py` 一键闸门（L0 全量必跑零成本；`--l1` 抽样 10 / `--l1-all` 全量），输出 PASS/FAIL、退出码 0/1；`run.py --smoke` 尾部新增第 12 项 L0 回放回归（≥85% 断言），12 项全绿。闸门实测：L0 100% + L1 抽样 9/10 达标。顺带修 `l0_scan.py` deslop 双重 bug（传不存在的第二参 + 二元组解包，异常被吞 → 指标恒 0）。GUI 侧说明：评测基建在 TUI 仓库，共享层一致性由 dual_sync_check.py 守护，闸门结果双端有效（已写入脚本 docstring）。
+- [x] **T2.3 deslop 破折号策略**（M）— 对应 M1 — 2026-08-28 完成
   - 内容：将 `EM_DASH` 从阻断降级为 advisory，或改为「密度阈值」（如每千字 >N 个才提示）；用《改命笔记》54 章 + 《时间铺子》10 章做离线回放，对比阻断数变化。
   - 验收：回放报告存档；合法破折号文风不再被强制改写。
-- [ ] **T2.4 GUI 单测体系化**（L）— 对应 M4
+  - 结论：提交 TUI 3cc4ca3 / GUI d8827c9（app/deslop.py 双端全文件一致）。选密度阈值而非一刀切降级：**>6 处/千字 → blocking，否则 advisory**。离线回放（`evals/emdash_replay.py`，报告存档 `tests_output/emdash_replay/report.md`）：《改命笔记》54 章阻断 1→0；《时间铺子》10 章阻断 56→0（密度 2.34/千字、单章最高 4.97，均落入合法文风区间）；高密度合成用例（>6/千字）仍正确阻断。写作 prompt 的预防性禁令保留（预防严于验收）。GUI test_review_v2 14 项全绿。
+- [x] **T2.4 GUI 单测体系化**（L）— 对应 M4 — 2026-08-28 完成
   - 内容：建立 `tests/unit/`（pytest，零 API key）：状态机转移（state.py 常量与转移表）、门机制三决策（mock Event）、deslop 规则集、project 目录解析/章节锁定、细纲批解析（`===第N章===`）。目标先覆盖 core 层关键路径 20 用例。
   - 验收：`python -m pytest tests/unit -q` 全绿，可在无网络环境运行。
+  - 结论：`tests/unit/` 5 模块 **36 用例全过**（超额达标，0.3s，零网络零 key）：test_state_machine（阶段链完整性/转移表互逆/级联产物模式/持久化往返/指导与想法生命周期）、test_gates（字数双界/AI味分流/三决策 mock ctx）、test_deslop（确定性阻断+密度型建议+破折号阈值双用例，守住 T2.3 成果）、test_project（目录结构/章节锁定生命周期/正则规则解析）、test_outline_parse（主格式/空格变体/标题提取/markdown 降级）。编写中借测试固化了三处真实语义：CW_NEXT 终态自环、级联值是产物路径模式而非阶段键、认知告知为密度型（≥3 处才报）。
 - [x] **T2.5 TUI git 化 + 双端同步机制**（M）— 对应 H5 — 2026-08-28 完成
   - 内容：① `qianbi-Novel-TUI` 初始化 git（首次提交含 .gitignore）；② 写 `scripts/dual_sync_check.py`：对比双端 `app/core`、`app/llm`、`app/prompts`、`app/presets` 的共享文件 diff，输出漂移清单；③ 在两端 README 写明「共享层改动必须双端同步 + 跑此脚本」。
   - 验收：脚本能列出当前真实漂移项；TUI 历史可追溯。
@@ -248,3 +251,5 @@
 | 2026-08-28 | Phase 1 收官 | Qoder | 全 5 任务完成 | 离线全绿（探针 4/4+8/8、42 单测、smoke）；下一步 Phase 2（建议单独排期，收益最大） |
 | 2026-08-28 | T2.5 TUI git 化+双端同步 | Qoder | GUI a9d1fe1 / TUI 16ab6ab + f5ccd5d | TUI 首次入库（敏感扫描通过、产物排除）；dual_sync_check.py 首跑 13 DRIFT+1 ONLY_TUI+18 IDENTICAL；双端 README 立同步约定 |
 | 2026-08-28 | T2.1 L1 拦截率 | Qoder | TUI 01971d7 | 33%→**100%**（3 次真跑多数票 15/15，误杀 0）：夹具树 make_l1_fixtures.py + judge 上下文注入/硬判级规则 + replay --judge/--judge-vote；L0 回放无回归 100% |
+| 2026-08-28 | T2.2 回放纳入流程 | Qoder | TUI 5272b22 | scripts/eval_gate.py 一键闸门（L0 全量 + L1 抽样 10，实测 PASS）；smoke 第 12 项 L0 回归；修 l0_scan deslop 指标恒 0 双重 bug |
+| 2026-08-28 | T2.3 破折号策略 | Qoder | TUI 3cc4ca3 / GUI d8827c9 | EM_DASH 改密度阈值（>6/千字才阻断）；真书回放 57 处阻断→0（改命笔记 54 章 + 时间铺子 10 章），高密度合成例仍阻断；报告存档 tests_output/emdash_replay/ |
