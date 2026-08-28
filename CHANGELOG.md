@@ -11,7 +11,7 @@
 
 ### 新增功能
 
-- **9 套 v2 题材预设**：仙侠/都市天命/克苏鲁/规则怪谈/无限流/末日废土/历史权谋/电竞系统/童话寓言，
+- **10 套 v2 题材预设**：修仙·凡人流/都市改命/都市异能/克苏鲁·收容档案/规则怪谈/无限流/末日废土/历史权谋/电竞系统/童话寓言，
   含 `stage_hints` 6 阶段特化提示（`genre_block_for(preset, stage)`）+ 独立预设库面板（`PresetLibraryPanel.qml`）
 - **6 维最终审核 + 反馈环**：`FINAL_REVIEW_PROMPT`（黄金开章/爽点闭环/金手指/因果对账/人物弧光/钩子）
   + `ROOT_CAUSE_PROMPT`（5+2 根因溯源）+ `REVISION_TARGETS_PROMPT`（定向改稿）；审校结果落盘（`save_review_findings`）
