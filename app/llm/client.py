@@ -249,8 +249,6 @@ class LLMClient:
                                     on_chunk(c)
                             if r and on_reasoning:
                                 on_reasoning(r)
-                usage = getattr(resp, "_usage", None) if False else None
-                # stream 模式 usage 通常在最后一块；未能解析也不影响
                 if not parts:
                     # 流式全程无内容：thinking 模式先降级重试；否则记入可重试错误
                     if self.thinking:

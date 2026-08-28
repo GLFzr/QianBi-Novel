@@ -543,7 +543,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             if verdict_review in ("REJECT", "REJECT-HARD") and review_rounds >= 2:
                 try:
                     issues = parse_final_review_v2(
-                        ctx.last_prompt or ""  # 最近一次 6 维输出
+                        ctx.review_raw or ""  # 最近一次 6 维审校输出
                     ).get("items", [])
                     anchors = prompts.build_upstream_anchors(proj, num)
                     issues_brief = prompts.build_issues_brief(issues)
@@ -699,6 +699,7 @@ def _chapter_review(ctx, num: int, prose: str) -> tuple:
         ctx.last_prompt = prompt
         result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_REVIEW)
                                   .chat_stream(prompt, on_chunk=ctx.stream_chunk))
+        ctx.review_raw = result
     except Exception as e:
         ctx.log("warn", f"第 {num} 章 6 维审校调用失败（不阻断）：{e}")
         return [], [], ""

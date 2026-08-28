@@ -58,6 +58,8 @@ class Orchestrator(QThread):
         self._gate_carry_idea = ""
         # 失败现场（stages 在每次 LLM 调用前写入）
         self.last_prompt = ""
+        # 最近一次 6 维审校的原始输出（反馈环根因解析专用；与 last_prompt 的输入语义区分）
+        self.review_raw = ""
         self._log_tail = []             # 最近日志（环形）
         self._cur_stage = ""
         self._cur_num = 0
@@ -326,8 +328,6 @@ class Orchestrator(QThread):
                 if g9_idea is None:
                     continue  # 回退已删本章文件，循环以相同 num 重跑
                 num += 1
-            else:
-                pass
 
             if total and num > total:
                 state = st.load_state(self.proj)
