@@ -51,7 +51,7 @@ FATE_SUMMARY = re.compile(
     r"这一刻[，,]?[^。！？!?\n]{0,24}(?:终于|才)(?:明白|意识到)|"
     r"从这一刻开始"
 )
-# 破折号（正文禁用）
+# 破折号（密度阈值策略：>6/千字 才阻断，低密度仅 advisory）
 EM_DASH = re.compile(r"——|—(?!-)")
 
 # 模板化微表情（一级禁用词）
@@ -146,8 +146,17 @@ def scan_text(text: str) -> list:
         add("trailer-summary", "blocking", "预告式总结收尾（才刚刚开始/没人知道…）", m, "用未解决问题或具体动作收束")
     for m in FATE_SUMMARY.finditer(body):
         add("fate-summary", "blocking", "抽象命运总结（齿轮/棋局/这一刻终于明白）", m, "回到角色当下可见的动作/对话/物件")
-    for m in EM_DASH.finditer(body):
-        add("em-dash", "blocking", "正文禁用破折号", m, "用句号、逗号或动作断句")
+    # 破折号：密度阈值策略（T2.3）——低密度属合法文风仅提示，高密度才是 AI 腔
+    em_hits = list(EM_DASH.finditer(body))
+    if len(em_hits) > kilo * 6:
+        for m in em_hits:
+            add("em-dash", "blocking",
+                f"破折号高密度（{len(em_hits)} 处 / {kilo:.1f} 千字）", m,
+                "用句号、逗号或动作断句")
+    else:
+        for m in em_hits:
+            add("em-dash", "advisory", "破折号（低密度，文风容忍）", m,
+                "追求紧凑可改句号断句；低密度不强制改写")
 
     # 「，带着……」万能状语：密度超阈值才算 blocking，单个为 advisory
     daizhe_hits = list(DAIZHE_ADVERB.finditer(body))
