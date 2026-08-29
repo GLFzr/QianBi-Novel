@@ -90,6 +90,18 @@ REASONING_CONNECTOR = re.compile(r"这意味着|也就是说|换句话说|问题
 # 引号强调滥用（叙述里短词加引号）
 QUOTE_EMPHASIS = re.compile(r'[“"][^“”"\n]{1,4}[”"]')
 
+# 视线词族（密度型，2026-08 真机语料分析：残留 AI 味第一名——凝视循环镜头单一）
+GAZE_MARKERS = re.compile(r"盯着|看向|望向|注视|目光")
+
+# 否定刹车句族（"没有动/没有回头/没有说话"——短促否定节奏指纹）
+BRAKE_MARKERS = re.compile(r"没有[动说气回头停开口接答理翻]")
+
+# 否定刹车句独立成段（结构型：可预测的段落刹车）
+BRAKE_STANDALONE = re.compile(r"^[^\n]{0,6}没有[^。，！？\n]{1,6}[。！？]?$", re.M)
+
+# 「猛地」反应词窄库（密度型：惊觉模板）
+MENGDI = re.compile(r"猛地")
+
 
 def _in_dialogue(text: str, pos: int) -> bool:
     """判断位置是否在对话引号内（粗略：统计前面中文引号的开合）"""
@@ -245,6 +257,60 @@ def scan_text(text: str) -> list:
         for m in quote_hits:
             add("quote-emphasis", "advisory", "叙述里短词加引号强调（密度型）", m,
                 "去掉引号直接陈述")
+
+    # ---- 结构层 AI 味（2026-08 真机语料分析新增：词表层已清洁，残留全在结构层）----
+
+    # 视线词族密度（盯着/看向/望向/注视/目光合计 >1.5/千字 = 凝视循环镜头单一；
+    # 语料基准：改命笔记 1.8/千字（仍被评「第一指纹」），时间当铺 2.9/千字，健康线 ≈1）
+    gaze_hits = list(GAZE_MARKERS.finditer(body))
+    if len(gaze_hits) >= max(5, kilo * 1.5):
+        findings.append(Finding(
+            rule="gaze-density",
+            level="blocking" if len(gaze_hits) > kilo * 5 else "advisory",
+            message=f"视线词族高密度（盯着/看向/目光等 {len(gaze_hits)} 处 / {kilo:.1f} 千字），凝视循环",
+            text="", start=body_offset, end=body_offset,
+            fix_hint="情绪与注意改用动作/物件/环境反应外化（指节抵着桌沿、茶凉了没喝）",
+        ))
+
+    # 否定刹车句族（「没有动/没有回头/没有说话」——短促否定节奏自重复）
+    brake_hits = list(BRAKE_MARKERS.finditer(body))
+    if len(brake_hits) >= max(4, kilo * 1.5):
+        findings.append(Finding(
+            rule="brake-sentence", level="advisory",
+            message=f"「没有+动词」刹车句高密度（{len(brake_hits)} 处）",
+            text="", start=body_offset, end=body_offset,
+            fix_hint="全章最多保留 2 处，其余改为动作或对白呈现",
+        ))
+
+    # 否定刹车句独立成段（结构型：可预测的段落刹车）
+    brake_paras = BRAKE_STANDALONE.findall(body)
+    if len(brake_paras) >= 2:
+        findings.append(Finding(
+            rule="brake-standalone-para", level="advisory",
+            message=f"「没有×」短句独立成段 ×{len(brake_paras)}（段落刹车模板化）",
+            text="", start=body_offset, end=body_offset,
+            fix_hint="同款刹车全章至多 1 次独立成段",
+        ))
+
+    # 单句碎段占比（≤15 字独立单句段 >45% = 节奏模板化；语料基准：改命笔记 29-31%）
+    paras = [p.strip() for p in body.split("\n") if p.strip()]
+    if len(paras) >= 8 and total_chars > 1500:
+        single = sum(1 for p in paras
+                     if len(p) <= 15 and len(re.findall(r"[。！？!?…]", p)) <= 1)
+        if single / len(paras) > 0.45:
+            findings.append(Finding(
+                rule="one-line-para", level="advisory",
+                message=f"单句短段占比 {single}/{len(paras)}（{single / len(paras):.0%}），节奏模板化",
+                text="", start=body_offset, end=body_offset,
+                fix_hint="关联动作并成复合段，短段只留给关键转折",
+            ))
+
+    # 「猛地」反应词窄库（惊觉模板复用）
+    mengdi_hits = list(MENGDI.finditer(body))
+    if len(mengdi_hits) >= max(4, kilo * 1.5):
+        for m in mengdi_hits:
+            add("mengdi-density", "advisory", "「猛地」反应词复用（惊觉模板）", m,
+                "换具体身体反应或直接写动作")
 
     return findings
 
