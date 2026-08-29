@@ -426,17 +426,32 @@ def load_state(proj: str) -> dict:
 
 
 def save_state(proj: str, state: dict):
-    """原子写入：先临时文件再替换，防中途崩溃损坏状态；写前最小键校验（T3.2）"""
+    """原子写入：先临时文件再替换，防中途崩溃损坏状态；写前最小键校验（T3.2）。
+    os.replace 在 Windows 上会被杀软/索引器的瞬时文件锁拒绝（真机 WinError 5），
+    重试 3 次退避后再放弃。"""
     validate_state(state)
     path = state_path(proj)
     fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=proj)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        last_err = None
+        for attempt in range(3):
+            try:
+                os.replace(tmp, path)
+                last_err = None
+                break
+            except PermissionError as e:   # 瞬时文件锁：退避重试
+                last_err = e
+                time.sleep(0.2 * (attempt + 1))
+        if last_err is not None:
+            raise last_err
     except Exception:
         if os.path.exists(tmp):
-            os.unlink(tmp)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
         raise
 
 
