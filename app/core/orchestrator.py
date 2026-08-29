@@ -293,9 +293,15 @@ class Orchestrator(QThread):
                 st.save_state(self.proj, state)
 
             # 阶段③④ 正文循环（细纲按需自动补）
-            num = project.next_chapter_num(self.proj)
+            # 起点取首个缺失章：中间章被「重写本章」删除后从缺口续跑（真机缺陷①修复）；
+            # 缺口之后的已定稿章逐个跳过，不重写。
+            num = project.first_missing_chapter(self.proj)
+            done_nums = project.chapter_nums(self.proj)
             while total == 0 or num <= total:
                 self.checkpoint()
+                if num in done_nums:
+                    num += 1
+                    continue
                 if not os.path.exists(project.get_outline_path(self.proj, num)):
                     self._cur_stage = st.STAGE_CH_OUTLINE
                     self.sig_stage.emit(st.STAGE_CH_OUTLINE)
@@ -331,6 +337,7 @@ class Orchestrator(QThread):
                     guidance = (guidance + "\n" + g5_idea) if guidance else g5_idea
                 record = stages.chapter_microcycle(self, num, guidance=guidance, ideas=ideas)
                 self.sig_chapter_done.emit(record)
+                done_nums.add(num)
 
                 state = st.load_state(self.proj)
                 state["stage"] = st.STAGE_PROSE
@@ -345,7 +352,8 @@ class Orchestrator(QThread):
                 if g9_idea is not None and g9_idea:
                     self._gate_carry_idea = g9_idea  # 注入下一章
                 if g9_idea is None:
-                    continue  # 回退已删本章文件，循环以相同 num 重跑
+                    done_nums.discard(num)  # 回退已删本章文件，循环以相同 num 重跑
+                    continue
                 num += 1
 
             if total and num > total:

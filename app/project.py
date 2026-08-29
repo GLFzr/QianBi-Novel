@@ -105,6 +105,28 @@ def next_chapter_num(proj: str) -> int:
     return max(c[0] for c in chapters) + 1
 
 
+def first_missing_chapter(proj: str) -> int:
+    """首个缺失章号：无缺口 = max+1（追加语义）；有缺口（中间章被重写删除）= 缺口处。
+
+    供自动档主循环续跑用：配合循环内「已定稿章跳过」，实现重写本章后
+    「从该章续跑」且不重写缺口之后的既有章节（真机缺陷①修复）。
+    """
+    chapters = list_chapters(proj)
+    if not chapters:
+        return 1
+    expected = 1
+    for n in sorted(c[0] for c in chapters):
+        if n > expected:
+            return expected
+        expected = n + 1
+    return expected
+
+
+def chapter_nums(proj: str) -> set:
+    """已定稿章号集合（正文目录实际存在的章）"""
+    return {c[0] for c in list_chapters(proj)}
+
+
 def get_chapter_path(proj: str, num: int, title: str = "") -> str:
     return os.path.join(proj, "正文", chapter_filename(num, title))
 

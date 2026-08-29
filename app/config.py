@@ -40,6 +40,7 @@ DEFAULT_CONFIG = {
     "connections": DEFAULT_CONNECTIONS,
     "slots": {SLOT_WRITING: "ds-v4-pro", SLOT_HELPER: "ds-v4-flash", SLOT_REVIEW: "ds-v4-flash"},
     "gates": {"strategy": GATE_MARK_CONTINUE, "deslop_max_rounds": 2, "word_tolerance": 0.1,
+              "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
               "review_enabled": True, "review_max_rounds": 1},
     "llm": {"max_retries": 2, "backoff_base": 2.0},
     "writing": {"chapter_word_target": 3000, "default_genre": "", "default_platform": "番茄",

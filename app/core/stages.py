@@ -500,20 +500,28 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     actual = project.count_chars(prose)
     ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
 
-    # ---- 字数闸门：不足自动扩写一次 / 超标自动压缩一次 ----
+    # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
+    max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
     low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-    if not low_ok:
+    enrich_rounds = 0
+    while not low_ok and enrich_rounds < max_enrich_rounds:
+        enrich_rounds += 1
         ctx.step(num, st.STEP_ENRICH)
-        ctx.log("warn", f"第 {num} 章 字数不足（{actual}），自动扩写…")
+        ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
         ctx.checkpoint()
         enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
                                                      target=chapter_words, prose=prose,
                                                      tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = enrich_prompt
-        prose = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label="扩写")
+        rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮")
+        # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
+        if rewritten.strip() and project.count_chars(rewritten) >= actual:
+            prose = rewritten
         low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+    if enrich_rounds:
         ctx.log("ok" if low_ok else "warn",
-                f"扩写后 {actual} 字" + ("，达标" if low_ok else "，仍不足，标记不阻断"))
+                f"扩写后 {actual} 字" + ("，达标" if low_ok
+                                        else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
     elif not high_ok:
         ctx.step(num, st.STEP_ENRICH)
         ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），自动压缩…")
@@ -929,16 +937,12 @@ def parse_final_review_v2(text: str) -> dict:
             for marker in _DIM_MAP:
                 rest = rest.replace(marker, "").strip()
             # rest 形如 "[pass/marginal/fail] + 1 句理由 + 【原文引证："..."】 + → root: ..."
+            # 真机缺陷③根因：prompt 规定 [fail] 括号式，旧实现只认裸词 " fail "，括号式全部漏判
             cur_level = ""
-            if rest.startswith("pass") or " pass " in rest or rest.strip() == "pass":
-                cur_level = "pass"
-                rest = rest.replace("pass", "", 1).strip()
-            elif rest.startswith("marginal") or " marginal " in rest or rest.strip() == "marginal":
-                cur_level = "marginal"
-                rest = rest.replace("marginal", "", 1).strip()
-            elif rest.startswith("fail") or " fail " in rest or rest.strip() == "fail":
-                cur_level = "fail"
-                rest = rest.replace("fail", "", 1).strip()
+            m_lvl = re.match(r"[\[\(]?\s*(pass|marginal|fail)\b", rest, re.I)
+            if m_lvl:
+                cur_level = m_lvl.group(1).lower()
+                rest = rest[m_lvl.end():].strip()
             cur_text_parts = [rest]
             # 抽引证
             if "【原文引证：" in rest:
@@ -973,7 +977,14 @@ def parse_final_review_v2(text: str) -> dict:
         v = m.group(1).strip().upper()
         if v in ("PASS", "PASS_WITH_NOTES", "REJECT", "REJECT-HARD"):
             verdict = v
-    # 若无 ===VERDICT=== 段，按总评门禁推断
+    # 若无 ===VERDICT=== 段：从正文关键词提取（模型可能写 "**REJECT-HARD**（…）" markdown 总评）
+    if not verdict:
+        up = text.upper()
+        for v in ("REJECT-HARD", "REJECT", "PASS_WITH_NOTES"):
+            if v in up:
+                verdict = v
+                break
+    # 仍无则按总评门禁推断
     if not verdict:
         if summary["fail"] == 0 and summary["marginal"] <= 1:
             verdict = "PASS"
@@ -989,6 +1000,38 @@ def parse_final_review_v2(text: str) -> dict:
             if it["level"] == "fail" and it.get("root_layer") in _HARD_ROOTS:
                 verdict = "REJECT-HARD"
                 break
+
+    # 阶段 3：verdict 与 findings 一致性兜底（真机缺陷③）。
+    # 模型可能用 markdown 写维度（### A_GOLDEN_OPEN：fail …）导致 ===X=== 协议段
+    # 全部缺失、blocking 为空——修复轮与 G8 失去抓手。两级兜底：
+    #   a) markdown/自由格式维度行扫描：维度名后跟 fail/marginal → 补解析 items
+    #   b) 仍为空 → 从总评段合成一条 blocking（标注「未结构化」，保证不静默丢失）
+    if verdict in ("REJECT", "REJECT-HARD") and not blocking:
+        for line in text.splitlines():
+            s = line.strip()
+            if not s or s.startswith("==="):
+                continue
+            for dim_name in _DIM_MAP.values():
+                m = re.search(rf"{dim_name}\s*[:：\-—\]]*\s*\[?(fail|marginal)\]?", s, re.I)
+                if m:
+                    level = m.group(1).lower()
+                    issue_text = s[m.end():].strip(" ：:—-") or f"{dim_name} {level}"
+                    items.append({"dim": dim_name, "level": level, "text": issue_text[:200],
+                                  "quote": "", "root_layer": "ROOT_PROSE" if level == "fail" else "",
+                                  "line": ""})
+                    if level == "fail":
+                        blocking.append(issue_text[:200])
+                        summary["fail"] += 1
+                    else:
+                        advisory.append(issue_text[:200])
+                        summary["marginal"] += 1
+                    break
+    if verdict in ("REJECT", "REJECT-HARD") and not blocking:
+        m = re.search(r"===VERDICT===[^\n]*\n(.{0,400})", text, re.S)
+        gist = (m.group(1) if m else text[:300]).strip()
+        gist = re.sub(r"\s+", " ", gist)[:200]
+        blocking.append(f"[未结构化评审] {gist or '评审否决但未给出结构化问题，请人工复核'}")
+        summary["fail"] += 1
 
     return {
         "verdict": verdict,

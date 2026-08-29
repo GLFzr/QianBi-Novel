@@ -352,6 +352,7 @@ class Bridge(QObject):
     ideaExpanded = Signal(bool, str)            # ok, result_or_error
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
+    gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
 
     def __init__(self, parent=None):
@@ -1375,6 +1376,7 @@ class Bridge(QObject):
         self.streamStageChanged.emit()
         self.reasoningChanged.emit()
         self.streamingChanged.emit()
+        self.gateClosed.emit()   # 真机缺陷②：停止/完本后清掉残留决策条
         self._cur_num = 0
         self._cur_step = ""
         self.currentChapterChanged.emit()
@@ -1390,6 +1392,7 @@ class Bridge(QObject):
         self._stream_stage_label = ""
         self.streamStageChanged.emit()
         self.streamingChanged.emit()
+        self.gateClosed.emit()   # 真机缺陷②：失败后同样清决策条
         self.logModel.append("error", msg)
         self.toast.emit("error", msg)
         logger.error("流水线失败: %s", msg)

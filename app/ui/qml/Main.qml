@@ -650,6 +650,9 @@ ApplicationWindow {
                 function onGateAsked(key, chapter, summary) {
                     gateBar.showGate(key, chapter, summary)
                 }
+                function onGateClosed() {
+                    gateBar.waiting = false   // 真机缺陷②：停止/失败/完本后清残留决策条
+                }
             }
             Shortcut {
                 sequence: "Return"
