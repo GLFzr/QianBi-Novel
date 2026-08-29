@@ -305,6 +305,16 @@ def scan_text(text: str) -> list:
                 fix_hint="关联动作并成复合段，短段只留给关键转折",
             ))
 
+    # 单词定性独句段（「循环。」「门锁着。」——两字定性+句号替代描写，同一写作模块复用）
+    stamp_paras = [p2 for p2 in paras if re.fullmatch(r"[一-鿿]{1,4}[。！？]", p2)]
+    if len(stamp_paras) >= 3:
+        findings.append(Finding(
+            rule="stamp-para", level="advisory",
+            message=f"单词定性独句段 ×{len(stamp_paras)}（{'、'.join(stamp_paras[:4])}），描写被标签替代",
+            text="", start=body_offset, end=body_offset,
+            fix_hint="定性段全章至多 1 处；其余把标签还原成可拍摄的细节",
+        ))
+
     # 「猛地」反应词窄库（惊觉模板复用）
     mengdi_hits = list(MENGDI.finditer(body))
     if len(mengdi_hits) >= max(4, kilo * 1.5):

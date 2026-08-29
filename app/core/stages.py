@@ -371,6 +371,23 @@ def _outline_title(content: str, num: int) -> str:
 
 # ============ 阶段④：章节微循环（每章 6 步）============
 
+def _sanitize_chapter_refs(text: str) -> str:
+    """清洗注入上下文的非正文字段里的「第N章」引用（真机硬伤修复）。
+
+    章节号会从细纲标题/章间摘要漏进正文台词（真机实例：角色说出
+    「第5章回溯中看到的画面」）。注入 prompt 前剥离行首章标题与句中
+    「第N章」标记，剧情指称不受影响。
+    """
+    if not text:
+        return text
+    lines = []
+    for ln in text.splitlines():
+        ln = re.sub(r"^#{0,6}\s*第\s*\d+\s*章\s*[：:。]?\s*", "", ln)
+        ln = re.sub(r"第\s*\d+\s*章(?=[^\d])", "", ln)
+        lines.append(ln)
+    return "\n".join(lines).strip()
+
+
 def _outline_word_target(proj: str, num: int, default: int) -> int:
     """正文目标字数优先取本章细纲登记的字数目标（C2 联动）；缺省回退默认。
 
@@ -432,16 +449,17 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     while True:
         ctx.step(num, st.STEP_ASSEMBLE)
         outline_path = project.get_outline_path(proj, num)
-        outline = project.read_file(outline_path)
+        outline = _sanitize_chapter_refs(project.read_file(outline_path))
         if not outline:
             raise StageError(f"第 {num} 章细纲不存在")
 
         next_outline = project.read_file(project.get_outline_path(proj, num + 1))
-        next_brief = next_outline[:600] if next_outline else "（本章为当前最后一章细纲）"
+        next_brief = _sanitize_chapter_refs(next_outline[:600]) if next_outline else "（本章为当前最后一章细纲）"
         core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
                         or "（未提供）")
         global_summary = memory.read_global_summary(proj) or "（全书尚未开始或暂无摘要）"
-        recent_summaries = memory.read_recent_summaries(proj, num, n=3) or "（无更近章节摘要）"
+        recent_summaries = _sanitize_chapter_refs(
+            memory.read_recent_summaries(proj, num, n=3)) or "（无更近章节摘要）"
         character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:3000] or "（暂无）"
         foreshadows = memory.unfished_foreshadows(proj) or "（暂无）"
         previous_excerpt = ""
