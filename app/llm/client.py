@@ -43,8 +43,8 @@ class LLMClient:
     def __init__(self, base_url: str, api_key: str, model: str,
                  temperature: float = 0.7, max_tokens: int = 8192, timeout: int = 300,
                  max_retries: int = 2, backoff_base: float = 2.0, thinking: str = "",
-                 reasoning_effort: str = ""):
-        self.base_url = (base_url or "").rstrip("/")
+                 reasoning_effort: str = "", slot: str = ""):
+        self.slot = slot or ""   # 槽位标签（token 用量统计维度，插件）
         self.api_key = api_key or ""
         self.model = model
         self.temperature = temperature
@@ -64,7 +64,7 @@ class LLMClient:
 
     @classmethod
     def from_connection(cls, conn: dict, max_retries: int = 2,
-                        backoff_base: float = 2.0) -> "LLMClient":
+                        backoff_base: float = 2.0, slot: str = "") -> "LLMClient":
         return cls(
             base_url=conn.get("base_url", ""),
             api_key=conn.get("api_key", ""),
@@ -76,7 +76,22 @@ class LLMClient:
             backoff_base=backoff_base,
             thinking=conn.get("thinking", ""),
             reasoning_effort=conn.get("reasoning_effort", ""),
+            slot=slot,
         )
+
+    def _record_usage(self, usage: dict, latency: float):
+        """token 用量统计埋点（插件）：本地 jsonl + 内存聚合，失败不影响调用"""
+        try:
+            tin = int(usage.get("prompt_tokens", 0) or 0)
+            tout = int(usage.get("completion_tokens", 0) or 0)
+            if tin <= 0 and tout <= 0:
+                return
+            self.total_prompt_tokens += tin
+            self.total_completion_tokens += tout
+            from .. import usage as _usage
+            _usage.record(None, self.model, self.slot, tin, tout, latency)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("用量埋点失败（忽略）: %s", e)
 
     def _chat_url(self) -> str:
         if "/v1" in self.base_url:
@@ -153,9 +168,8 @@ class LLMClient:
                             continue
                         raise LLMError(f"模型返回空内容 (finish_reason={finish})")
                     usage = data.get("usage") or {}
-                    self.total_prompt_tokens += usage.get("prompt_tokens", 0)
-                    self.total_completion_tokens += usage.get("completion_tokens", 0)
                     self.last_latency = time.monotonic() - t0
+                    self._record_usage(usage, self.last_latency)
                     logger.info("LLM ok model=%s prompt_tokens=%s completion_tokens=%s latency=%.1fs",
                                 self.model, usage.get("prompt_tokens", 0),
                                 usage.get("completion_tokens", 0), self.last_latency)
@@ -203,6 +217,7 @@ class LLMClient:
             "temperature": self.temperature if temperature is None else temperature,
             "max_tokens": self.max_tokens,
             "stream": True,
+            "stream_options": {"include_usage": True},   # 末 chunk 携带 usage（用量统计）
         }
         if self.thinking:
             payload["thinking"] = {"type": self.thinking}
@@ -213,6 +228,7 @@ class LLMClient:
         last_err = None
         for attempt in range(self.max_retries + 1):
             parts = []   # 每次尝试重置：断流重试不得拼接两次的部分内容
+            stream_usage = None   # 末 chunk 的 usage（include_usage）
             try:
                 with httpx.Client(timeout=self.timeout) as client:
                     with client.stream("POST", self._chat_url(), json=payload, headers=headers) as resp:
@@ -237,6 +253,8 @@ class LLMClient:
                                 chunk = _json.loads(data)
                             except Exception:
                                 continue
+                            if chunk.get("usage"):
+                                stream_usage = chunk["usage"]   # include_usage 末块
                             choices = chunk.get("choices") or []
                             if not choices:
                                 continue
@@ -263,6 +281,8 @@ class LLMClient:
                             self.thinking, self.reasoning_effort = saved_t, saved_e
                     last_err = LLMError("模型返回空内容 (stream)", retryable=True)
                     continue
+                self.last_latency = time.monotonic() - t0
+                self._record_usage(stream_usage or {}, self.last_latency)   # 插件：用量统计
                 break
             except httpx.TimeoutException:
                 last_err = LLMError("请求超时，请检查网络或增大 timeout", retryable=True)

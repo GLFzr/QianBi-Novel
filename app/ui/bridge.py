@@ -358,6 +358,7 @@ class Bridge(QObject):
     mainWindowReady = Signal()                  # 主窗口就绪（单实例唤起时序）
     updateFound = Signal(str, str, str)         # 检查更新：version, notes, url
     generalChanged = Signal()                   # 向导/遥测等通用设置变更
+    usageChanged = Signal()                     # token 用量统计刷新（插件）
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -785,6 +786,18 @@ class Bridge(QObject):
         else:
             self._console_log("user" if (idea or "").strip() else "agent",
                               f"▶ 继续{(f'（想法：{idea[:60]}）' if (idea or '').strip() else '')}")
+
+    # ========== Token 用量统计（插件）==========
+
+    @Slot(result="QVariantMap")
+    def usageSummary(self) -> dict:
+        """聚合视图：今日/本月/全部 的 tokens、调用数、成本、按模型分组"""
+        from .. import usage as _usage
+        return _usage.summary(cfg_mod.load_config())
+
+    @Slot()
+    def refreshUsage(self):
+        self.usageChanged.emit()
 
     # ========== 商业级运行时（封装计划 T3.x/T4.x）==========
 

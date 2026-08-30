@@ -22,6 +22,7 @@ class ModelRouter:
                 conn,
                 max_retries=llm_cfg.get("max_retries", 2),
                 backoff_base=llm_cfg.get("backoff_base", 2.0),
+                slot=slot,   # 用量统计维度（插件）
             )
         return self._clients[slot]
 

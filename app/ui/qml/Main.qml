@@ -872,6 +872,21 @@ ApplicationWindow {
                 ToolTip.visible: containsMouse
                 ToolTip.text: "点击查看统计面板（章节/字数/成本）"
             }
+            Rectangle { width: 1; height: 12; color: Theme.border }
+            Text {
+                text: "⚡ 用量"
+                color: Theme.textTertiary
+                font.pixelSize: Theme.fsTiny
+                font.family: Theme.uiFont
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: usageDialog.open()
+                }
+                ToolTip.visible: containsMouse
+                ToolTip.text: "Token 用量统计（今日/本月/按模型，本地数据）"
+            }
             Text {
                 visible: bridge.isPaused
                 text: "已暂停"
@@ -945,6 +960,9 @@ ApplicationWindow {
 
     // ---- 首启向导（T3.5）：未完成引导时自动弹出 ----
     WizardDialog { id: wizardDialog }
+
+    // ---- Token 用量统计（插件）----
+    UsageDialog { id: usageDialog }
 
     // ---- 关于（T4.2）：F1 呼出，含检查更新/日志目录/遥测开关 ----
     AboutDialog { id: aboutDialog }

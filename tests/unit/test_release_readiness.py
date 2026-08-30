@@ -106,3 +106,45 @@ def test_save_config_keeps_runtime_key_and_disk_clean(tmp_path, monkeypatch):
     import re
     disk = cfg_file.read_text(encoding="utf-8")
     assert not [k for k in re.findall(r'"api_key": "([^"]*)"', disk) if k], "磁盘配置泄漏明文 key"
+
+
+# ---- Token 用量统计（插件）----
+
+def test_usage_record_and_summary(tmp_path, monkeypatch):
+    import importlib
+    import app.usage as um
+    importlib.reload(um)
+    monkeypatch.setattr(um, "FILE", str(tmp_path / "usage.jsonl"))
+    cfg = {}
+    um.record(cfg, "deepseek-v4-flash", "writing", 1000, 2000, 1.5)
+    um.record(cfg, "deepseek-v4-flash", "review", 500, 100, 0.5)
+    um.record(cfg, "deepseek-v4-pro", "writing", 300, 900, 0.8)
+    s = um.summary(cfg)
+    assert s["today"]["in"] == 1800 and s["today"]["out"] == 3000
+    assert s["today"]["calls"] == 3
+    assert s["today"]["by_slot"]["writing"]["in"] == 1300
+    assert s["month"] == s["all"]          # 新装环境今日=本月=全部
+    # 成本：flash 1/2 元每百万 → (1000+500)/1e6*1 + (2000+100)/1e6*2 + pro 2/8
+    assert s["today"]["cost"] == round(0.0015 + 0.0042 + 0.0006 + 0.0072, 2)   # summary 四舍五入到分
+
+
+def test_usage_persists_across_reload(tmp_path, monkeypatch):
+    import importlib
+    import app.usage as um
+    f = tmp_path / "usage.jsonl"
+    monkeypatch.setattr(um, "FILE", str(f))
+    um.record({}, "m1", "writing", 100, 200)
+    importlib.reload(um)                    # 模拟重启：重载模块重读文件
+    monkeypatch.setattr(um, "FILE", str(f))
+    s = um.summary({})
+    assert s["all"]["calls"] == 1 and s["all"]["in"] == 100
+
+
+def test_usage_ignores_zero_usage(tmp_path, monkeypatch):
+    import importlib
+    import app.usage as um
+    importlib.reload(um)
+    monkeypatch.setattr(um, "FILE", str(tmp_path / "usage.jsonl"))
+    um.record({}, "m", "writing", 0, 0)
+    assert not (tmp_path / "usage.jsonl").exists()   # 零用量不落盘
+    assert um.summary({})["all"]["calls"] == 0
