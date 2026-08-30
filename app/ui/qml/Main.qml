@@ -170,6 +170,8 @@ ApplicationWindow {
         if (bridge.hasProject) mainWindow.activePanel = "pipeline"
         // 崩溃/意外退出后的未保存草稿 → 提示恢复（恢复仍是工作副本，保存才成版本）
         if (bridge.hasRecoverableDraft) Qt.callLater(function () { recoverDialog.open() })
+        // 首启向导（T3.5）：未完成过引导 → 自动弹出
+        if (!bridge.onboarded) Qt.callLater(function () { wizardDialog.open() })
         // 窗口位置超出屏幕可视区时重置居中（防窗口被拖出屏幕导致内容"被挡住"）
         Qt.callLater(function () {
             var aw = Screen.desktopAvailableWidth
@@ -940,6 +942,16 @@ ApplicationWindow {
 
     // ---- 沉浸阅读器（M2：三主题/排版/标注/书签/位置记忆）----
     ReaderView { id: readerView }
+
+    // ---- 首启向导（T3.5）：未完成引导时自动弹出 ----
+    WizardDialog { id: wizardDialog }
+
+    // ---- 关于（T4.2）：F1 呼出，含检查更新/日志目录/遥测开关 ----
+    AboutDialog { id: aboutDialog }
+    Shortcut {
+        sequence: "F1"
+        onActivated: aboutDialog.open()
+    }
 
     // ---- 导出（M4：排版选项 + 预览 + 报告）----
     Dialog {

@@ -4,6 +4,29 @@
 
 > 版本号唯一来源为 `app/__init__.py` 的 `__version__` 常量，本文件与 README、git tag 均以其为准。
 
+## [0.14.0] - 2026-08-29（GUI 商业化封装 · 首个安装版）
+
+> 封装计划 [`docs/plan_gui_packaging_v1.md`](docs/plan_gui_packaging_v1.md) 全量落地：从「跑源码的开发工具」到「可安装、可更新、可信赖的发行版」。开源路线（MIT + 免费 + BYOK）。
+
+### 新增
+- **安装器与便携包**：Inno Setup per-user 安装（卸载保留书稿）+ 便携 zip + SHA256SUMS；一键发布流水线 `scripts/build_release.py`（版本资源注入/质量闸门/打包冒烟门禁）
+- **单实例锁**：二次启动唤起既有窗口，杜绝多开写坏配置
+- **全局崩溃处理**：未捕获异常脱敏落盘 + 主线程对话框（打开日志/复制详情）
+- **API Key 安全存储**：迁移至 Windows 凭据管理器，config.json 不再落明文（旧配置自动迁移）
+- **应用内检查更新**：GitHub Releases 清单主通道（URL 可配置），新版提示 + 直达下载
+- **首启向导**：两步引导（开源声明/数据目录 → 连接配置指引），F1 呼出「关于」
+- **关于对话框**：版本/检查更新/日志与数据目录/遥测开关
+- **遥测（opt-in，默认关）**：仅本地文件落点，不上传
+- **第三方声明与隐私说明**：THIRD-PARTY-LICENSES.md / docs/PRIVACY.md
+- 打包冒烟探针 `tests/probe_packaged.py`；发版 checklist `docs/release_checklist.md`
+
+### 修复
+- 运行日志与崩溃现场统一脱敏（api_key/sk-/Bearer 模式）
+
+### 变更
+- 打包规格重写：onedir 路线、UPX 关闭（杀软误报）、依赖裁剪、Windows 版本资源注入
+- `build_exe.py`（旧 onefile 脚本）废弃，统一入口 `scripts/build_release.py`
+
 ## [0.13.0] - 2026-08-28（TUI 优势功能完整移植 · 定版）
 
 > 把同源 TUI 项目中优于 GUI 的核心功能完整移植到 GUI 端，并通过 5 章真实 LLM 共写 e2e 验证。

@@ -2,6 +2,7 @@
 """QML 桥接层：向界面暴露流水线状态、章节队列、日志流与全部命令"""
 import datetime
 import json
+import threading
 import logging
 import os
 import re
@@ -354,6 +355,9 @@ class Bridge(QObject):
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
+    mainWindowReady = Signal()                  # 主窗口就绪（单实例唤起时序）
+    updateFound = Signal(str, str, str)         # 检查更新：version, notes, url
+    generalChanged = Signal()                   # 向导/遥测等通用设置变更
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -781,6 +785,100 @@ class Bridge(QObject):
         else:
             self._console_log("user" if (idea or "").strip() else "agent",
                               f"▶ 继续{(f'（想法：{idea[:60]}）' if (idea or '').strip() else '')}")
+
+    # ========== 商业级运行时（封装计划 T3.x/T4.x）==========
+
+    @Property(str, constant=True)
+    def appVersion(self) -> str:
+        from .. import __version__
+        return __version__
+
+    # ---- 首启向导（T3.5）----
+    @Property(bool, notify=generalChanged)
+    def onboarded(self) -> bool:
+        if not self.proj:
+            return bool(cfg_mod.load_config().get("general", {}).get("onboarded", False))
+        return bool(cfg_mod.load_config().get("general", {}).get("onboarded", False))
+
+    @Slot()
+    def setOnboarded(self):
+        cfg = cfg_mod.load_config()
+        cfg.setdefault("general", {})["onboarded"] = True
+        cfg_mod.save_config(cfg)
+        self.generalChanged.emit()
+
+    # ---- 遥测开关（T4.3，默认关）----
+    @Property(bool, notify=generalChanged)
+    def telemetryEnabled(self) -> bool:
+        return bool((cfg_mod.load_config().get("telemetry") or {}).get("enabled", False))
+
+    @Slot(bool)
+    def setTelemetryEnabled(self, on: bool):
+        cfg = cfg_mod.load_config()
+        from .. import telemetry
+        cfg = telemetry.set_enabled(cfg, bool(on))
+        cfg_mod.save_config(cfg)
+        self.generalChanged.emit()
+        self.toast.emit("ok", "遥测已" + ("开启（数据仅保存在本地）" if on else "关闭"))
+
+    # ---- 检查更新（T3.4，GitHub Releases 主通道）----
+    @Slot(bool)
+    def checkForUpdates(self, manual: bool):
+        cfg = cfg_mod.load_config()
+        u = cfg.get("updates") or {}
+        if not manual and not u.get("check_on_start", True):
+            return
+        from .. import __version__
+        url = u.get("manifest_url", "")
+
+        def work():
+            from .. import update_check
+            m = update_check.check(url, __version__)
+            if m:
+                self.updateFound.emit(str(m.get("version", "")),
+                                      str(m.get("notes", "")),
+                                      str(m.get("url", "")))
+            elif manual:
+                self.toast.emit("ok", f"已是最新版本 v{__version__}")
+        threading.Thread(target=work, daemon=True).start()
+
+    @Slot(str)
+    def openPath(self, path: str):
+        """打开目录/文件（资源管理器或默认程序）"""
+        try:
+            os.startfile(path)
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("warn", f"无法打开: {e}")
+
+    @Slot()
+    def openLogDir(self):
+        self.openPath(os.path.join(os.path.expanduser("~"), ".qianbi_novel", "logs"))
+
+    @Slot()
+    def openDataDir(self):
+        self.openPath(os.path.join(os.path.expanduser("~"), ".qianbi_novel"))
+
+    @Slot(str, str)
+    def emitCrash(self, summary: str, path: str):
+        """全局崩溃对话框（main.py CrashReporter 排队到主线程调用）"""
+        try:
+            from PySide6.QtWidgets import QMessageBox
+            from PySide6.QtGui import QGuiApplication
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setWindowTitle("千笔一文 Novel — 遇到问题")
+            msg.setText("应用遇到未捕获的错误。现场已保存（含脱敏处理），已保存的稿件不受影响。")
+            msg.setDetailedText(f"{summary}\n\n现场文件：{path}")
+            b_logs = msg.addButton("打开日志目录", QMessageBox.ActionRole)
+            b_copy = msg.addButton("复制详情", QMessageBox.ActionRole)
+            msg.addButton("关闭", QMessageBox.RejectRole)
+            msg.exec()
+            if msg.clickedButton() is b_logs:
+                self.openLogDir()
+            elif msg.clickedButton() is b_copy:
+                QGuiApplication.clipboard().setText(f"{summary}\n{path}")
+        except Exception as e:  # noqa: BLE001
+            logger.error("崩溃对话框失败: %s", e)
 
     # ========== Agent Console（T4.3 M1+M2：思考链留存 + 对话区落盘）==========
     # 设计依据 plan_agent_console_v3 §1.3；M3（阅读器收窄/门合并）另行排期。

@@ -4,6 +4,8 @@
 存于用户目录 ~/.qianbi_novel/config.json；自动迁移旧版（.oh_story_desktop）配置。
 """
 import json
+
+from . import secrets
 import os
 import shutil
 import uuid
@@ -53,6 +55,10 @@ DEFAULT_CONFIG = {
                 "gate_soft": ["G1", "G3", "G4", "G6", "G7"]},
     "last_project": "",
     "recent_projects": [],
+    "general": {"onboarded": False},          # 首启向导（T3.5）
+    "telemetry": {"enabled": False},           # 遥测 opt-in（D6：默认关，本地落点）
+    "updates": {"manifest_url": "https://raw.githubusercontent.com/GLFzr/qianbi-novel/main/latest.json",
+                "check_on_start": True},       # GitHub Releases 主通道（D3，仓库公开后生效）
 }
 
 
@@ -137,12 +143,14 @@ def load_config() -> dict:
         for c in DEFAULT_CONNECTIONS:
             if c["id"] not in ids:
                 merged["connections"].append(json.loads(json.dumps(c)))
+        merged = secrets.hydrate(merged)
         return merged
     except Exception:
         return json.loads(json.dumps(DEFAULT_CONFIG))
 
 
 def save_config(cfg: dict):
+    cfg = secrets.dehydrate(cfg)   # 明文 key 抽出入凭据管理器（T3.3）
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
