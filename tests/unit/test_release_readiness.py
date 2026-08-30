@@ -88,8 +88,13 @@ def test_save_config_keeps_runtime_key_and_disk_clean(tmp_path, monkeypatch):
     """T3.3 关键回归：落盘脱水不得污染运行时对象（真机 401 事故根因）"""
     import json as _json
     from app import config as cfg_mod
+    from app import secrets as secrets_mod
+    # 凭据隔离：keyring 指向假服务名，测试绝不触碰真实用户凭据（事故教训 2026-08-29）
+    monkeypatch.setattr(secrets_mod, "SERVICE", "QianBiNovel/test-run")
     cfg_file = tmp_path / "config.json"
-    raw = cfg_mod.load_config()          # 真实环境配置（可能从 keyring hydrate）
+    raw = cfg_mod.load_config()
+    raw["connections"] = [dict(raw["connections"][0])]
+    raw["connections"][0]["id"] = "unittest-conn"
     raw["connections"][0]["api_key"] = "sk-test-redact-12345678"
     cfg_file.write_text(_json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(cfg_mod, "CONFIG_FILE", str(cfg_file))
