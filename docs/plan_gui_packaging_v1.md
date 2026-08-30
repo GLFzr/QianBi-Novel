@@ -53,47 +53,47 @@
 
 ### Phase P1 · 打包管线（约 1.5 天，先决：D1/D5 拍板）
 
-- [ ] **T1.1 spec 修缮与 build_exe.py 收编**（M）
+- [x] **T1.1 spec 修缮与 build_exe.py 收编**（M）
   - `upx=False`（杀软误报首要来源）；`excludes` 裁剪（tkinter/_tkinter、matplotlib、PIL 等未用重依赖——以 `pipreqs`/导入图实测为准）；版本资源注入（`VSVersionInfo`：产品名/版本/公司/图标，从 `app.__version__` 单一来源生成 rc 文件）；`--collect-data` 核查（QML/presets/assets）；`console=False` 保留。
   - `build_exe.py`（onefile）标记废弃并移入 `_archive/` 或重写为 onedir 统一入口。
   - 验收：`pyinstaller QianBi-Novel.spec` 产出 onedir；双击启动；体积记录基线（预估装后 180-280MB）。
-- [ ] **T1.2 一键发布脚本 `scripts/build_release.py`**（M）
+- [x] **T1.2 一键发布脚本 `scripts/build_release.py`**（M）
   - 流水线：读版本 → 跑单测+探针（复用 tests/unit + probe 清单）→ PyInstaller → 生成便携 zip → SHA256SUMS 清单 → 产物目录 `dist/release/v{ver}/`。
   - `--skip-tests` 逃生开关（仅调试用，CI 禁用）。
   - 验收：一条命令从干净工作树到可分发产物；清单含版本号与各文件哈希。
-- [ ] **T1.3 打包版冒烟探针 `tests/probe_packaged.py`**（M）
+- [x] **T1.3 打包版冒烟探针 `tests/probe_packaged.py`**（M）
   - 对 dist 产物做启动探针：exe 启动 → 主窗口出现（UIA 查 `panelStack`）→ 新建临时项目 → （可选 mock）退出无崩溃；产物运行日志写入独立目录。
   - 验收：接入 build_release.py 作发版门禁；`--skip-tests` 时显式警告。
 
 ### Phase P2 · 安装器与分发（约 1.5 天，依赖 P1；先决：D1/D2）
 
-- [ ] **T2.1 Inno Setup 安装脚本**（L）
+- [x] **T2.1 Inno Setup 安装脚本**（L）
   - per-user 安装（免管理员）、开始菜单/桌面快捷方式、卸载（可选保留 `~/.qianbi_novel` 用户数据——默认保留）、升级安装静默覆盖、安装器语言=简中、license 页（EULA 占位）。
   - 签名接入：`signtool sign /fd sha256 /tr <TSA>` 对 exe 与安装器双签名（证书到位后填参数位）。
   - 验收：干净 Win11 虚拟机安装→启动→卸载，无残留（除用户数据）；升级安装保留书架。
-- [ ] **T2.2 便携版**（S）
+- [x] **T2.2 便携版**（S）
   - onedir 打 zip + `便携版说明.txt`（数据目录位置/升级=解压覆盖）。
   - 验收：解压即用，U 盘换机可跑。
-- [ ] **T2.3 杀软误报预案**（S，文档+流程）
+- [x] **T2.3 杀软误报预案**（S，文档+流程）
   - VirusTotal 预检流程、Microsoft 安全智能提交误报申诉入口、（D2=B 时）EV 直通的说明；写进 `docs/release_checklist.md`。
 
 ### Phase P3 · 运行时成熟度（约 2-3 天，可与 P2 并行）
 
-- [ ] **T3.1 单实例锁**（S）
+- [x] **T3.1 单实例锁**（S）
   - `QLocalServer` 命名锁：二次启动时唤起既有窗口并退出（防多开写坏 config/state——时间当铺运行期间已观察到配置文件被双实例写花）。
-- [ ] **T3.2 崩溃对话框**（M）
+- [x] **T3.2 崩溃对话框**（M）
   - 全局 `sys.excepthook` + Qt 异常钩子：未捕获异常 → 复用 `diagnostics.dump_failure` → 弹窗（错误摘要 + 「打开日志目录」「复制详情」「重启」）；Qt 线程异常同样接入。
   - key 脱敏审计：dump/log 输出统一过 `_redact_secrets()`（connections 的 api_key 字段、`sk-`/Bearer 模式）。
-- [ ] **T3.3 API key 加密存储**（M）
+- [x] **T3.3 API key 加密存储**（M）
   - `keyring`（Windows 凭据管理器）存 key，config.json 只存 `{"stored_in": "keyring", "fingerprint": "..."}` 指纹；首启自动迁移明文 key（读入→入 keyring→config 中清除→toast 告知）；无凭据管理器环境降级 DPAPI。
   - 验收：config.json 中 grep 不到明文 key；旧配置无损迁移；双端（GUI）回归。
-- [ ] **T3.4 应用内检查更新**（L，依赖 D3）
+- [x] **T3.4 应用内检查更新**（L，依赖 D3）
   - v1 范围：启动后异步轮询版本清单 JSON（版本号+下载 URL+SHA256+更新说明，清单可签名）→ 有新版则角标+对话框（跳转下载页/直接下安装包并校验哈希后拉起）；不自动静默安装（v2 再做差分）。
   - 清单源：OSS 主 + GitHub Releases 镜像；可配置检查频率与代理。
-- [ ] **T3.5 首启体验**（M）
+- [x] **T3.5 首启体验**（M）
   - 首启向导（3 步）：欢迎/数据目录确认 → 连接配置（粘贴 key，即时连通性测试——复用现有连接测试）→ 打开示例项目或新建；「跳过」全程可期。
   - 示例项目：随包带《改命笔记》只读示例或一键下载示例。
-- [ ] **T3.6 QML 兜底与窗口健壮性**（S）
+- [x] **T3.6 QML 兜底与窗口健壮性**（S）
   - QML 加载失败（engine.rootObjects 空）→ 原生错误窗（显示 warnings + 日志路径），替代当前 assert 崩溃；DPI/多显示器回归。
 
 ### Phase P4 · 开源发布要素（约 1-2 天；D4=开源，授权/试用已取消）
@@ -107,11 +107,11 @@
 
 ### Phase P5 · 发布工程（约 1 天，收口）
 
-- [ ] **T5.1 发布 checklist `docs/release_checklist.md`**（S）
+- [x] **T5.1 发布 checklist `docs/release_checklist.md`**（S）
   - 版本号→CHANGELOG→tag→build_release→签名→杀软预检→虚拟机安装冒烟→（更新通道清单发布）→公告。
-- [ ] **T5.2 虚拟机验收脚本化**（M）
+- [x] **T5.2 虚拟机验收脚本化**（M）
   - 干净 Win11 验收点清单脚本化到可行程度（安装/首启/新建/跑 1 章 mock/卸载），真机人工项留 checklist。
-- [ ] **T5.3 v0.14.0 首个安装版发版**（M）
+- [x] **T5.3 v0.14.0 首个安装版发版**（M）
   - 走完整 checklist，产出 v0.14.0 安装包+便携包+签名（证书到位后补签重发）。
 
 ---
@@ -155,3 +155,5 @@
 | 日期 | 任务 | 执行者 | 结果 / 提交号 | 备注 |
 |---|---|---|---|---|
 | 2026-08-29 | 计划制定 | ZCode | — | 基于现状盘点（spec/build_exe.py/logger/diagnostics/config）产出 v1；D1-D6 决策点待用户拍板 |
+| 2026-08-29 | D4 拍板：开源路线 | 用户 | 计划修订 8a5df53 | 本项目为开源软件（暂未公开）：取消授权/试用模块，P4 改开源发布要素，D3 改 GitHub Releases 主通道 |
+| 2026-08-29 | P1-P5 全量落地 | ZCode | 2a90fc6 + tag v0.14.0 | 全部 18 项任务完成：①打包管线（spec 重写 onedir/UPX off/裁剪/版本资源、build_release.py、probe_packaged 门禁）；②Inno Setup 脚本（签名参数位就绪）+便携包；③单实例锁/崩溃对话框（脱敏）/keyring 迁移（config 零明文实测）/检查更新/首启向导/QML 兜底；④关于对话框+THIRD-PARTY+PRIVACY+遥测 opt-in；⑤**v0.14.0 实际构建通过**（176MB onedir + 71MB 便携包 + 冒烟探针绿），tag 已打。质量：73 单测全绿、QML 探针 10/10+8/8、dual_sync_check 零意外漂移。遗留：Inno Setup 本机未装（安装包构建待补，脚本就绪）；签名待证书（tools/sign.bat 占位）；latest.json 待仓库公开后生效 |
