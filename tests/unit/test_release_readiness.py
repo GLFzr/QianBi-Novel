@@ -82,3 +82,22 @@ def test_crash_dump_global_redacted(tmp_path, monkeypatch):
     text = open(path, encoding="utf-8").read()
     assert "ValueError" in text and "secret99999999" not in text
     assert "worker-1" in text
+
+
+def test_save_config_keeps_runtime_key_and_disk_clean(tmp_path, monkeypatch):
+    """T3.3 关键回归：落盘脱水不得污染运行时对象（真机 401 事故根因）"""
+    import json as _json
+    from app import config as cfg_mod
+    cfg_file = tmp_path / "config.json"
+    raw = cfg_mod.load_config()          # 真实环境配置（可能从 keyring hydrate）
+    raw["connections"][0]["api_key"] = "sk-test-redact-12345678"
+    cfg_file.write_text(_json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(cfg_mod, "CONFIG_FILE", str(cfg_file))
+    cfg = cfg_mod.load_config()
+    key_before = cfg["connections"][0]["api_key"]
+    assert key_before, "前置：hydrate 后运行时应有 key"
+    cfg_mod.save_config(cfg)
+    assert cfg["connections"][0]["api_key"] == key_before, "运行时 key 被脱水污染"
+    import re
+    disk = cfg_file.read_text(encoding="utf-8")
+    assert not [k for k in re.findall(r'"api_key": "([^"]*)"', disk) if k], "磁盘配置泄漏明文 key"

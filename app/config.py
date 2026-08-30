@@ -150,10 +150,13 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict):
-    cfg = secrets.dehydrate(cfg)   # 明文 key 抽出入凭据管理器（T3.3）
+    # T3.3 关键修复：在深拷贝上脱水——传入对象是 bridge 持有的运行时配置，
+    # 原地清空会导致后续 LLM 调用拿到空 key（真机 401 事故根因）
+    import copy
+    disk = secrets.dehydrate(copy.deepcopy(cfg))
     os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        json.dump(disk, f, ensure_ascii=False, indent=2)
 
 
 def find_connection(cfg: dict, conn_id: str) -> dict:
