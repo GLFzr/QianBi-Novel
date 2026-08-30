@@ -45,6 +45,7 @@ class LLMClient:
                  max_retries: int = 2, backoff_base: float = 2.0, thinking: str = "",
                  reasoning_effort: str = "", slot: str = ""):
         self.slot = slot or ""   # 槽位标签（token 用量统计维度，插件）
+        self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.model = model
         self.temperature = temperature
