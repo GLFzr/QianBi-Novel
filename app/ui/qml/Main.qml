@@ -505,7 +505,7 @@ ApplicationWindow {
                             id: ma
                             anchors.fill: parent
                             hoverEnabled: true
-                            ToolTip.visible: ma.hovered
+                            ToolTip.visible: ma.hovered === true
                             ToolTip.text: "未保存（工作副本）"
                         }
                     }

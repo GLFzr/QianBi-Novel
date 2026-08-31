@@ -241,7 +241,7 @@ Rectangle {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: bridge.setCwPreset(modelData.id)
                         }
-                        ToolTip.visible: pstHot.hovered && modelData.description !== ""
+                        ToolTip.visible: pstHot.hovered === true && modelData !== undefined && modelData.description !== ""
                         ToolTip.text: modelData.description
                     }
                 }
