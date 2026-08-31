@@ -148,3 +148,128 @@ def test_usage_ignores_zero_usage(tmp_path, monkeypatch):
     um.record({}, "m", "writing", 0, 0)
     assert not (tmp_path / "usage.jsonl").exists()   # 零用量不落盘
     assert um.summary({})["all"]["calls"] == 0
+
+
+def test_usage_cross_day_month_split(tmp_path, monkeypatch):
+    """历史 jsonl 含跨月记录：today / month / all 三档切分正确"""
+    import importlib
+    import json as _json
+    import app.usage as um
+    importlib.reload(um)
+    f = tmp_path / "usage.jsonl"
+    rows = [
+        {"ymd": "2026-07-31", "model": "m-flash", "slot": "writing", "in": 100, "out": 200},
+        {"ymd": "2026-08-27", "model": "m-flash", "slot": "writing", "in": 300, "out": 400},
+        {"ymd": "2026-08-28", "model": "m-pro", "slot": "review", "in": 500, "out": 600},
+    ]
+    f.write_text("\n".join(_json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    monkeypatch.setattr(um, "FILE", str(f))
+    monkeypatch.setattr(um, "_today", lambda: "2026-08-28")
+    s = um.summary({})
+    assert s["today"]["in"] == 500 and s["today"]["calls"] == 1
+    assert s["month"]["in"] == 800 and s["month"]["calls"] == 2   # 08-27+08-28，不含 7 月
+    assert s["all"]["in"] == 900 and s["all"]["calls"] == 3
+
+
+def test_usage_memory_day_rollover(tmp_path, monkeypatch):
+    """进程存活期间跨天：内存按天分桶自动切分"""
+    import importlib
+    import app.usage as um
+    importlib.reload(um)
+    monkeypatch.setattr(um, "FILE", str(tmp_path / "usage.jsonl"))
+    day = {"v": "2026-08-27"}
+    monkeypatch.setattr(um, "_today", lambda: day["v"])
+    um.record({}, "m", "writing", 100, 100)
+    day["v"] = "2026-08-28"
+    um.record({}, "m", "writing", 50, 50)
+    s = um.summary({})
+    assert s["today"]["in"] == 50 and s["today"]["calls"] == 1
+    assert s["all"]["in"] == 150 and s["all"]["calls"] == 2
+
+
+def test_client_chat_records_usage(tmp_path, monkeypatch):
+    """埋点（chat 路径）：响应 usage → jsonl 落盘，model/slot/in/out 正确"""
+    import importlib
+    import json as _json
+    import app.usage as um
+    importlib.reload(um)
+    monkeypatch.setattr(um, "FILE", str(tmp_path / "usage.jsonl"))
+
+    class _Resp:
+        status_code = 200
+        text = ""
+
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 120, "completion_tokens": 80}}
+
+    class _HttpClient:
+        def __init__(self, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, json=None, headers=None):
+            return _Resp()
+
+    import app.llm.client as lc
+    monkeypatch.setattr(lc.httpx, "Client", _HttpClient)
+    c = lc.LLMClient("http://fake.invalid/v1", "sk-test", "m-flash", slot="writing")
+    assert c.chat("hi") == "ok"
+    assert c.total_prompt_tokens == 120 and c.total_completion_tokens == 80
+    rec = _json.loads((tmp_path / "usage.jsonl").read_text(encoding="utf-8").strip())
+    assert rec["model"] == "m-flash" and rec["slot"] == "writing"
+    assert rec["in"] == 120 and rec["out"] == 80
+
+
+def test_client_stream_records_usage(tmp_path, monkeypatch):
+    """埋点（stream 路径）：末 chunk（include_usage）usage → jsonl 落盘"""
+    import importlib
+    import json as _json
+    import app.usage as um
+    importlib.reload(um)
+    monkeypatch.setattr(um, "FILE", str(tmp_path / "usage.jsonl"))
+
+    lines = [
+        'data: {"choices": [{"delta": {"content": "hel"}}]}',
+        'data: {"choices": [{"delta": {"content": "lo"}}]}',
+        'data: {"choices": [], "usage": {"prompt_tokens": 40, "completion_tokens": 20}}',
+        'data: [DONE]',
+    ]
+
+    class _StreamResp:
+        status_code = 200
+
+        def iter_lines(self):
+            return iter(lines)
+
+    class _StreamCtx:
+        def __enter__(self):
+            return _StreamResp()
+
+        def __exit__(self, *a):
+            return False
+
+    class _HttpClient:
+        def __init__(self, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def stream(self, method, url, json=None, headers=None):
+            return _StreamCtx()
+
+    import app.llm.client as lc
+    monkeypatch.setattr(lc.httpx, "Client", _HttpClient)
+    c = lc.LLMClient("http://fake.invalid/v1", "sk-test", "m-flash", slot="draft")
+    assert c.chat_stream("hi") == "hello"
+    rec = _json.loads((tmp_path / "usage.jsonl").read_text(encoding="utf-8").strip())
+    assert rec["slot"] == "draft" and rec["in"] == 40 and rec["out"] == 20

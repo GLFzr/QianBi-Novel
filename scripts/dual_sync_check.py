@@ -28,8 +28,9 @@ import os
 import sys
 
 SHARED_DIRS = ["app/core", "app/llm", "app/prompts", "app/presets"]
-# app 根目录的双端共享文件（T3.x 补充：deslop.py 曾在覆盖范围外漂移不可见）
-SHARED_ROOT_FILES = ["app/deslop.py"]
+# app 根目录的双端共享文件（T3.x 补充：deslop.py 曾在覆盖范围外漂移不可见；
+# usage.py 为 Token 用量统计共享模块，2026-08-31 纳入）
+SHARED_ROOT_FILES = ["app/deslop.py", "app/usage.py"]
 SKIP_NAMES = {"__pycache__"}
 SKIP_SUFFIXES = {".pyc", ".pyo"}
 
