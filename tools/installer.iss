@@ -32,7 +32,8 @@ UninstallDisplayIcon={app}\{#AppExe}
 ; 升级安装不卸载用户数据（数据在 ~/.qianbi_novel，与程序目录分离）
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 简体中文翻译随仓库分发（Inno Setup 6.7+ 不再内置翻译文件，避免依赖安装目录）
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Files]
 Source: "..\dist\QianBi-Novel\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

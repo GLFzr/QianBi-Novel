@@ -128,13 +128,6 @@ def main():
         src = os.path.join(ROOT, doc)
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(out_dir, os.path.basename(doc)))
-    sums = os.path.join(out_dir, "SHA256SUMS.txt")
-    with open(sums, "w", encoding="utf-8") as f:
-        for fn in sorted(os.listdir(out_dir)):
-            fp = os.path.join(out_dir, fn)
-            if os.path.isfile(fp):
-                f.write(f"{sha256(fp)}  {fn}\n")
-    step("SHA256SUMS", True, sums)
 
     # ---- 7. Inno Setup 安装包（检测 ISCC，未装自动跳过）----
     if not args.no_installer:
@@ -151,6 +144,17 @@ def main():
             print("[SKIP] 未检测到 Inno Setup 6（安装包跳过；安装后重跑 --no-installer --skip-tests --skip-probe 即可补齐）")
     else:
         print("[SKIP] --no-installer")
+
+    # ---- 8. SHA256SUMS（放在安装包之后，确保 setup.exe 也被收录）----
+    sums = os.path.join(out_dir, "SHA256SUMS.txt")
+    with open(sums, "w", encoding="utf-8") as f:
+        for fn in sorted(os.listdir(out_dir)):
+            if fn == "SHA256SUMS.txt":
+                continue
+            fp = os.path.join(out_dir, fn)
+            if os.path.isfile(fp):
+                f.write(f"{sha256(fp)}  {fn}\n")
+    step("SHA256SUMS", True, sums)
 
     print(f"=== 完成。产物目录: {out_dir} ===")
 
