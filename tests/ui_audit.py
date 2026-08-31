@@ -127,7 +127,8 @@ at("21_reader_marks", lambda: (b.addAnnotation(2, "highlight_yellow", "这是第
 at("22_reader_prefs", lambda: (find_reader().setProperty("drawerOpened", False), _open_prefs()))
 at("23_reader_parchment", lambda: (b.setReaderPref("theme", "parchment"), find_reader().setProperty("prefs", b.readerPrefs()), find_reader().setProperty("drawerOpened", False)))
 at("24_reader_white_big", lambda: (b.setReaderPref("theme", "white"), b.setReaderPref("fontScale", 1.35), find_reader().setProperty("prefs", b.readerPrefs())))
-at("25_back_pipeline", lambda: (b.setReaderPref("fontScale", 1.0), find_reader().setProperty("opacity", 0)))
+at("25_back_pipeline", lambda: (b.setReaderPref("fontScale", 1.0),
+                                find_reader().metaObject().invokeMethod(find_reader(), "close")))
 
 
 def _open_prefs():

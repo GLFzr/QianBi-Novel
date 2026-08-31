@@ -75,6 +75,162 @@ class SelectionRewriteWorker(QThread):
             self.sig_error.emit(str(e))
 
 
+# ---------- 待修章节一键修复工作线程（依据已登记审校问题定向修复，不碰流水线）----------
+
+class ChapterRepairWorker(QThread):
+    """逐章修复待修章节：读登记阻塞问题（无则先新鲜复审）→ 快照「修复前备份」→
+    REVIEW_FIX_PROMPT 定向修改 → 复扫；改善才落库并翻转状态，未改善保留原稿。"""
+    sig_log = Signal(str)
+    sig_chapter_done = Signal(int, bool, str)   # num, ok, detail
+    sig_all_done = Signal(int, int)             # ok_count, fail_count
+
+    def __init__(self, cfg: dict, proj: str, nums: list, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.nums = list(nums)
+        self.router = ModelRouter(cfg)
+
+    def run(self):
+        ok = fail = 0
+        for num in self.nums:
+            try:
+                success, detail = self._repair_one(num)
+            except Exception as e:  # noqa: BLE001
+                success, detail = False, f"异常: {e}"
+            if success:
+                ok += 1
+            else:
+                fail += 1
+            self.sig_chapter_done.emit(num, success, detail)
+        self.sig_all_done.emit(ok, fail)
+
+    def _findings_blocking(self, num: int) -> list:
+        state = st.load_state(self.proj)
+        rf = st.load_review_findings(state, num)
+        blocking = [b for b in (rf.get("blocking") or []) if str(b).strip()]
+        if not blocking:
+            blocking = [i.get("text", "") for i in (rf.get("items") or [])
+                        if isinstance(i, dict) and i.get("level") == "fail" and i.get("text")]
+        return blocking
+
+    def _review_v2(self, num: int, prose: str) -> dict:
+        """新鲜 6 维复审（组装参数与 stages._chapter_review 对齐）"""
+        from ..core import memory as mem_mod, stages as stages_mod
+        sem = self.cfg.get("writing", {}).get("regex_semantics", "logic")
+        prompt = prompts.FINAL_REVIEW_PROMPT.format(
+            prose=prose[:6000],
+            core_setting=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
+                          or "（未提供）"),
+            global_summary=mem_mod.read_global_summary(self.proj) or "（尚未开始）",
+            character_states=project.read_file(project.get_tracking_path(self.proj, "角色状态"))[:2000] or "（暂无）",
+            foreshadows=mem_mod.unfished_foreshadows(self.proj) or "（暂无）",
+            timeline=project.read_file(project.get_tracking_path(self.proj, "时间线"))[:1500] or "（暂无）",
+            worldbook_block=project.worldbook_text(self.proj) or "（暂无）",
+            regex_block=project.regex_block(self.proj, sem) or "（暂无）",
+            genre_review_extra=stages_mod._genre_review_extra(self.proj),
+            outline=(project.read_file(project.get_outline_path(self.proj, num))[:1000] or "（未提供）"),
+        )
+        result = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat_stream(prompt))
+        v2 = stages_mod.parse_final_review_v2(result)
+        if not v2["verdict"]:   # v1 兜底解析
+            fb, fa = stages_mod.parse_review_findings(result)
+            v2["blocking"] = v2["blocking"] or fb
+            v2["advisory"] = v2["advisory"] or fa
+        return v2
+
+    def _repair_one(self, num: int) -> tuple:
+        path = None
+        for n, _name, p in project.list_chapters(self.proj):
+            if n == num:
+                path = p
+                break
+        if not path:
+            return False, "未找到正文文件"
+        prose = project.read_file(path)
+        if not prose.strip():
+            return False, "正文为空"
+        blocking = self._findings_blocking(num)
+        if not blocking:
+            self.sig_log.emit(f"第 {num} 章无登记阻塞问题，先跑一轮新鲜复审…")
+            v2 = self._review_v2(num, prose)
+            if v2["verdict"]:
+                st.save_review_findings(self.proj, st.load_state(self.proj), num,
+                                        v2["verdict"], v2["items"], v2["blocking"], v2["advisory"])
+            blocking = v2["blocking"]
+            if not blocking:
+                st.update_history_status(self.proj, st.load_state(self.proj), num, "pass")
+                return True, "复审通过，无阻塞问题"
+        self.sig_log.emit(f"第 {num} 章按 {len(blocking)} 处阻塞问题定向修复…")
+        versions.snapshot(self.proj, num, prose, "修复前备份")
+        fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
+            chapter_num=num, findings="\n".join(blocking), prose=prose)
+        rewritten = clean_llm_output(
+            self.router.client(cfg_mod.SLOT_REVIEW).chat_stream(fix_prompt))
+        # 修复稿健全性守卫（与 stages.py 修复环同款：拒绝修订计划/空文本/长度骤减）
+        looks_like_plan = rewritten.lstrip().startswith("===")
+        too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))
+        if not rewritten.strip() or looks_like_plan or too_short:
+            reason = "空" if not rewritten.strip() else "修订计划" if looks_like_plan else "长度骤减"
+            return False, f"模型返回非正文（{reason}），原稿保留"
+        # 回滚保护：复扫未改善则保留原稿
+        v2 = self._review_v2(num, rewritten)
+        new_blocking = v2["blocking"]
+        if len(new_blocking) < len(blocking):
+            project.write_file(path, rewritten)
+            state = st.load_state(self.proj)
+            if v2["verdict"]:
+                st.save_review_findings(self.proj, state, num, v2["verdict"],
+                                        v2["items"], new_blocking, v2["advisory"])
+            st.update_history_status(self.proj, st.load_state(self.proj), num,
+                                     "pass" if not new_blocking else "needs_fix")
+            if not new_blocking:
+                return True, f"已修复 {len(blocking)} 处阻塞，复审通过"
+            return True, f"阻塞 {len(blocking)}→{len(new_blocking)}（可再修一轮）"
+        return False, f"修复未改善（{len(blocking)}→{len(new_blocking)}），原稿保留"
+
+
+def collect_needs_fix(state: dict) -> list:
+    """聚合待修章节：history 状态非 pass，或登记的 review_findings 仍有阻塞。
+
+    返回 [{num, title, words, status, verdict, blocking, advisory, needHuman, ts}]（按章号升序）
+    """
+    entries = {}
+    for h in state.get("history", []):
+        if not isinstance(h, dict) or h.get("status") == "pass":
+            continue
+        num = h.get("num", 0)
+        entries[num] = {"num": num, "title": h.get("title", ""), "words": h.get("words", 0),
+                        "status": h.get("status", "needs_fix"), "verdict": "",
+                        "blocking": 0, "advisory": 0, "needHuman": False, "ts": h.get("ts", "")}
+    for key, rf in (state.get("review_findings") or {}).items():
+        try:
+            num = int(key)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(rf, dict):
+            continue
+        blocking = [b for b in (rf.get("blocking") or []) if str(b).strip()]
+        if not blocking:
+            blocking = [i.get("text", "") for i in (rf.get("items") or [])
+                        if isinstance(i, dict) and i.get("level") == "fail" and i.get("text")]
+        if not blocking:
+            continue
+        e = entries.get(num) or {"num": num, "title": "", "words": 0, "status": "needs_fix",
+                                 "verdict": "", "blocking": 0, "advisory": 0,
+                                 "needHuman": False, "ts": ""}
+        e["verdict"] = rf.get("verdict", "")
+        e["blocking"] = len(blocking)
+        e["advisory"] = len(rf.get("advisory") or [])
+        e["ts"] = rf.get("ts", "") or e["ts"]
+        entries[num] = e
+    nhh = state.get("chapter_need_human") or {}
+    for num in entries:
+        if str(num) in nhh:
+            entries[num]["needHuman"] = True
+    return sorted(entries.values(), key=lambda e: e["num"])
+
+
 # ---------- 列表模型 ----------
 
 class ChapterListModel(QAbstractListModel):
@@ -337,6 +493,10 @@ class Bridge(QObject):
     # v2 新增：6 维审校 issues + 主题切换
     reviewIssuesChanged = Signal()
     themeChanged = Signal()
+    # 待修章节汇总 + 一键修复
+    needsFixChanged = Signal()
+    needsFixReady = Signal()        # 流水线结束且存在待修章：QML 弹汇总对话框询问作者
+    repairChanged = Signal()
     # 共写档（co-write）状态
     cwModeChanged = Signal()
     cwStageChanged = Signal()
@@ -389,6 +549,11 @@ class Bridge(QObject):
         self._sel_reasoning = ""
         self._sel_worker = None
         self._sel_result = ""
+        # 待修章节一键修复状态
+        self._repair_worker = None
+        self._repair_status = ""
+        # ReviewIssueDialog 正在显示的章号（resolveReviewIssue 回执不再错位到 current_chapter）
+        self._review_issue_num = 0
         # 保存驱动版本状态：工作副本 dirty 跟踪 + 草稿暂存（不产生版本）
         self._editor_dirty = False
         self._working_text = ""
@@ -1378,6 +1543,11 @@ class Bridge(QObject):
                 state_str = "pass" if h.get("status") == "pass" else "needs_fix"
                 if h.get("deslop_blocking"):
                     note = f"AI味 {h['deslop_blocking']} 阻断"
+                if state_str == "needs_fix":
+                    rf = (state.get("review_findings") or {}).get(str(num)) or {}
+                    rb = [b for b in (rf.get("blocking") or []) if str(b).strip()]
+                    if rb:
+                        note = (note + " · " if note else "") + f"审校 {len(rb)} 处"
             if num == self._cur_num and self._running:
                 state_str = "writing"
                 note = st.STEP_LABELS.get(self._cur_step, "")
@@ -1388,6 +1558,7 @@ class Bridge(QObject):
                           "words": words, "note": note})
         self.chapterModel.set_items(items)
         self._refresh_progress()
+        self.needsFixChanged.emit()
 
     def _refresh_progress(self):
         if not self.proj:
@@ -1495,6 +1666,11 @@ class Bridge(QObject):
         self.refreshQueue()
         if reason == "done":
             self.toast.emit("ok", "全书完本")
+        # 检查出问题 → 汇总待修并询问作者是否一键修复（跑完即触发）
+        nf = self._needs_fix_entries()
+        if nf:
+            self.toast.emit("warn", f"流水线结束：{len(nf)} 章待修，已汇总到「待修」入口")
+            self.needsFixReady.emit()
 
     def _on_failed(self, msg: str):
         self._set_running(False)
@@ -2903,12 +3079,38 @@ class Bridge(QObject):
         # 优先取 current_chapter
         cur = str(s.get("current_chapter", 0))
         if cur in rf:
+            try:
+                self._review_issue_num = int(cur)
+            except ValueError:
+                self._review_issue_num = 0
             return rf[cur].get("items", [])
         # 否则取最近一次
         if not rf:
             return []
         latest_num = max(rf.keys(), key=lambda k: rf[k].get("ts", ""))
+        try:
+            self._review_issue_num = int(latest_num)
+        except ValueError:
+            self._review_issue_num = 0
         return rf.get(latest_num, {}).get("items", [])
+
+    @Slot(int, result="QVariantList")
+    def reviewIssuesFor(self, num: int) -> list:
+        """指定章的 issues（队列行「查看问题」入口），并记录对话框所属章号"""
+        self._review_issue_num = int(num)
+        if not self.proj:
+            return []
+        rf = st.load_state(self.proj).get("review_findings") or {}
+        return rf.get(str(int(num)), {}).get("items", [])
+
+    @Slot(int)
+    def showReviewIssues(self, num: int):
+        """章级问题入口：取该章 issues 并复用 onReviewIssuesChanged 打开对话框"""
+        items = self.reviewIssuesFor(num)
+        if not items:
+            self.toast.emit("info", f"第 {num} 章没有登记的审校问题")
+            return
+        self.reviewIssuesChanged.emit()
 
     @Slot(str)
     def resolveReviewIssue(self, choice: str):
@@ -2923,26 +3125,125 @@ class Bridge(QObject):
         if not self.proj:
             return
         s = st.load_state(self.proj)
-        cur = s.get("current_chapter", 0)
+        # 回执对准对话框正在显示的章（而非 current_chapter，避免错位）
+        cur = self._review_issue_num or int(s.get("current_chapter", 0) or 0)
         if not cur:
             return
         if choice == "ignore":
             st.mark_chapter_need_human(self.proj, s, cur)
             self.toast.emit("info", f"第 {cur} 章已忽略，标 human")
         elif choice == "upstream":
-            # 触发新一轮 review_chain（实际传染由 stages.py 检测到后做）
+            # 登记上游重做请求（GUI 侧尚无上游 Agent 重做回路，执行走「带指导重写」）
             st.append_review_chain(self.proj, s, cur,
                                    issues=[], reworks=["upstream_requested"],
                                    verdict="UPSTREAM_REQUEST", round_no=999)
-            self.toast.emit("info", f"第 {cur} 章将触发上游重做（下次审校自动跑）")
-        else:  # local
-            self.toast.emit("info", f"第 {cur} 章选择本地改稿（不传染上游）")
+            self.toast.emit("info", f"第 {cur} 章已登记上游重做请求（执行请用章节右键「带指导重写」）")
+        else:  # local：按登记问题本地定向改稿（一键修复同款流程）
+            self.toast.emit("info", f"第 {cur} 章开始本地定向改稿…")
         self.reviewIssuesChanged.emit()
+        self.needsFixChanged.emit()
+        if choice == "local":
+            self._start_repair([cur])
+
+    @Slot(result=str)
+    def reviewVerdict(self) -> str:
+        """当前问题对话框所属章节的登记裁决（供 badge 显示）"""
+        if not self.proj or not self._review_issue_num:
+            return ""
+        rf = st.load_state(self.proj).get("review_findings") or {}
+        return rf.get(str(self._review_issue_num), {}).get("verdict", "")
 
     @Slot()
     def clearReviewIssues(self):
         """清空 review_issues 显示（用户已处理完）"""
         self.reviewIssuesChanged.emit()
+
+    # ---- 待修章节汇总 + 一键修复 ----
+
+    def _needs_fix_entries(self) -> list:
+        if not self.proj:
+            return []
+        return collect_needs_fix(st.load_state(self.proj))
+
+    @Property(int, notify=needsFixChanged)
+    def needsFixCount(self) -> int:
+        return len(self._needs_fix_entries())
+
+    @Property(bool, notify=repairChanged)
+    def repairRunning(self) -> bool:
+        return bool(self._repair_worker and self._repair_worker.isRunning())
+
+    @Property(str, notify=repairChanged)
+    def repairStatus(self) -> str:
+        return self._repair_status
+
+    @Slot(result="QVariantList")
+    def needsFixChapters(self) -> list:
+        """全部待修章节（含各章阻塞/建议数与裁决，供汇总对话框渲染）"""
+        return self._needs_fix_entries()
+
+    @Slot("QVariant")
+    def repairChapters(self, nums):
+        """修复指定章节列表（对话框「修复本章」）"""
+        try:
+            lst = [int(n) for n in list(nums or [])]
+        except (TypeError, ValueError):
+            lst = []
+        self._start_repair(lst)
+
+    @Slot()
+    def repairAll(self):
+        """一键修复全部待修章节（逐章按登记的审校问题定向修）"""
+        self._start_repair([e["num"] for e in self._needs_fix_entries()])
+
+    def _start_repair(self, nums: list):
+        if self._running:
+            self.toast.emit("warn", "流水线运行中，请先停止再做一键修复")
+            return
+        if self._repair_worker and self._repair_worker.isRunning():
+            self.toast.emit("warn", "修复进行中，请稍候")
+            return
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        nums = [n for n in nums if n and n > 0]
+        if not nums:
+            self.toast.emit("info", "当前没有待修章节")
+            return
+        if self._editor_dirty and self._cur_num in nums:
+            self.toast.emit("warn", f"第 {self._cur_num} 章有未保存改动，请先保存再修复该章")
+            return
+        self._repair_status = f"开始修复 {len(nums)} 章…"
+        self.repairChanged.emit()
+        worker = ChapterRepairWorker(self.cfg, self.proj, nums, parent=self)
+        worker.sig_log.connect(lambda m: self.logModel.append("info", m))
+        worker.sig_chapter_done.connect(self._on_repair_chapter)
+        worker.sig_all_done.connect(self._on_repair_done)
+        self._repair_worker = worker
+        worker.start()
+
+    def _on_repair_chapter(self, num: int, ok: bool, detail: str):
+        self._repair_status = f"第 {num} 章：{detail}"
+        self.repairChanged.emit()
+        self.logModel.append("ok" if ok else "warn",
+                             f"修复 第{num}章 {'成功' if ok else '未采纳'}：{detail}")
+        self.refreshQueue()
+        # 若编辑器正显示刚修复的章且无未保存改动：跟随磁盘新内容（与定稿同款处理）
+        if self._cur_num == num and self.proj and not self._editor_dirty:
+            for n, _name, path in project.list_chapters(self.proj):
+                if n == num:
+                    self._chapter_path = path
+                    self._chapter_text = project.read_file(path)
+                    self.chapterTextChanged.emit()
+                    self._reset_editor_state()
+                    break
+
+    def _on_repair_done(self, ok: int, fail: int):
+        self._repair_status = f"修复完成：{ok} 章成功" + (f"，{fail} 章未采纳（原稿保留）" if fail else "")
+        self.repairChanged.emit()
+        self.toast.emit("ok" if ok and not fail else "warn", self._repair_status)
+        self._repair_worker = None
+        self.refreshQueue()
 
     # ---- 编辑器偏好（M5）----
 

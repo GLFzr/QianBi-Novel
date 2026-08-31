@@ -463,3 +463,17 @@ def append_history(proj: str, state: dict, record: dict):
     state["history"].append(record)
     state["history"].sort(key=lambda h: h.get("num", 0))
     save_state(proj, state)
+
+
+def update_history_status(proj: str, state: dict, num: int, status: str) -> bool:
+    """就地更新已有 history 记录的 status（如待修章修复后 needs_fix→pass）。
+
+    记录不存在时不动 state，返回 False。
+    """
+    for h in state.get("history", []):
+        if h.get("num") == num:
+            if h.get("status") != status:
+                h["status"] = status
+                save_state(proj, state)
+            return True
+    return False

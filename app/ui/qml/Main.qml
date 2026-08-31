@@ -321,6 +321,10 @@ ApplicationWindow {
                 ChapterPanel {
                     id: chapterPanelProxy
                     onOpenChapter: function (n) { mainWindow.tryOpenChapter(n) }
+                    onShowNeedsFix: {
+                        needsFixDialog.refresh()
+                        needsFixDialog.open()
+                    }
                 }
                 NotesPanel {}
                 PresetLibraryPanel {}
@@ -764,14 +768,16 @@ ApplicationWindow {
                                 }
                             }
                             MouseArea {
+                                id: findHot
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     editor.select(modelData.start, modelData.end)
                                     editor.forceActiveFocus()
                                 }
                             }
-                            ToolTip.visible: containsMouse && modelData.hint !== ""
+                            ToolTip.visible: findHot.containsMouse && modelData.hint !== ""
                             ToolTip.text: modelData.hint
                         }
                     }
@@ -861,15 +867,17 @@ ApplicationWindow {
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.uiFont
                 MouseArea {
+                    id: statsHot
                     anchors.fill: parent
                     anchors.margins: -6
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         statsData = bridge.statsSummary()
                         statsDialog.open()
                     }
                 }
-                ToolTip.visible: containsMouse
+                ToolTip.visible: statsHot.containsMouse
                 ToolTip.text: "点击查看统计面板（章节/字数/成本）"
             }
             Rectangle { width: 1; height: 12; color: Theme.border }
@@ -879,12 +887,14 @@ ApplicationWindow {
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.uiFont
                 MouseArea {
+                    id: usageHot
                     anchors.fill: parent
                     anchors.margins: -6
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: usageDialog.open()
                 }
-                ToolTip.visible: containsMouse
+                ToolTip.visible: usageHot.containsMouse
                 ToolTip.text: "Token 用量统计（今日/本月/按模型，本地数据）"
             }
             Text {
@@ -947,7 +957,7 @@ ApplicationWindow {
                             selToolbar.visible = false
                             rewriteDialog.open()
                         }
-                        ToolTip.visible: hovered
+                        ToolTip.visible: stBtnHover.containsMouse
                         ToolTip.text: "局部改写选中段落 · Ctrl+E"
                     }
                 }
@@ -1810,23 +1820,7 @@ ApplicationWindow {
         id: reviewIssueDialog
         objectName: "reviewIssueDialog"
         issues: bridge.reviewIssues()
-        verdict: {
-            // 从 issues 反推 verdict（无法直接读 state.review_findings）
-            var items = bridge.reviewIssues()
-            if (!items || items.length === 0) return ""
-            var fail = 0, hard = false
-            for (var i = 0; i < items.length; i++) {
-                if (items[i].level === "fail") {
-                    fail++
-                    if (items[i].root_layer === "ROOT_CORE" || items[i].root_layer === "ROOT_OUTLINE") {
-                        hard = true
-                    }
-                }
-            }
-            if (hard) return "REJECT-HARD"
-            if (fail >= 2) return "REJECT"
-            return "REJECT"
-        }
+        verdict: bridge.reviewVerdict()
     }
     Connections {
         target: bridge
@@ -1836,6 +1830,19 @@ ApplicationWindow {
                 reviewIssueDialog.issues = items
                 reviewIssueDialog.open()
             }
+        }
+    }
+
+    // ---- 待修章节汇总对话框（一键修复入口；流水线跑完有待修章自动弹出）----
+    NeedsFixDialog {
+        id: needsFixDialog
+        objectName: "needsFixDialog"
+    }
+    Connections {
+        target: bridge
+        function onNeedsFixReady() {
+            needsFixDialog.refresh()
+            needsFixDialog.open()
         }
     }
 

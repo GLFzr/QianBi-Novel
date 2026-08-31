@@ -9,6 +9,7 @@ Item {
     id: chapterPanel
 
     signal openChapter(int num)
+    signal showNeedsFix()
 
     property int guidanceNum: 0
     property int confirmNum: 0
@@ -52,6 +53,16 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 AppButton {
+                    visible: bridge.needsFixCount > 0
+                    text: "待修 " + bridge.needsFixCount
+                    kind: "danger"
+                    height: 28
+                    ToolTip.visible: hovered
+                    ToolTip.text: "审校检出阻塞问题的章节，点击查看汇总并一键修复"
+                    ToolTip.delay: 400
+                    onClicked: chapterPanel.showNeedsFix()
+                }
+                AppButton {
                     text: "项目文件"
                     height: 28
                     onClicked: {
@@ -90,6 +101,7 @@ Item {
                     chapterPanel.guidanceNum = n
                     chapterGuidanceDialog.open()
                 }
+                onViewIssues: function (n) { bridge.showReviewIssues(n) }
             }
 
             ScrollBar.vertical: ScrollBar {

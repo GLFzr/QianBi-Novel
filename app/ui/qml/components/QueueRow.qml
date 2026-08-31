@@ -14,6 +14,7 @@ Rectangle {
     signal openChapter(int num)
     signal rewriteChapter(int num)
     signal requestGuidanceRewrite(int num)
+    signal viewIssues(int num)
 
     width: ListView.view ? ListView.view.width : 300
     height: 46
@@ -95,6 +96,11 @@ Rectangle {
         id: contextMenu
         palette.window: Theme.bgCard
         palette.text: Theme.textPrimary
+        MenuItem {
+            text: "查看问题…"
+            visible: row.state === "needs_fix"
+            onTriggered: row.viewIssues(row.num)
+        }
         MenuItem {
             text: "重写本章"
             onTriggered: row.rewriteChapter(row.num)

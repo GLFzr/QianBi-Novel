@@ -251,9 +251,10 @@ REVISION_TARGETS_PROMPT = """你是编辑，给作者"最便宜"的修改指认�
 
 每条 ≤50 字，定位精确到"第 N 段/某角色出场后第三句"等。不要重复整章。"""
 
-# 兼容别名：保持 v1 接口（自动档/共写档仍可调）
-REVIEW_PROMPT = FINAL_REVIEW_PROMPT
-REVIEW_FIX_PROMPT = REVISION_TARGETS_PROMPT
+# 注意：勿在此处把 REVIEW_PROMPT / REVIEW_FIX_PROMPT 别名到 v2 提示词——
+# stages.py 审校修复环依赖 REVIEW_FIX_PROMPT 返回「修改后完整正文」，
+# 别名成 REVISION_TARGETS_PROMPT（输出 ===REVISIONS=== 指认清单）会被
+# 修复稿健全性守卫当作修订计划整段丢弃，导致自动修复永远不生效。
 
 
 # ========== 根因溯源 Agent（v3 反馈闭环 · 阶段 2）==========

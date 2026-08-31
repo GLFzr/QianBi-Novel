@@ -142,7 +142,7 @@ Dialog {
                 anchors.margins: 12
                 spacing: 10
                 AppButton {
-                    text: "A · 返上游重做（传染）"
+                    text: "A · 请求上游重做"
                     kind: "primary"
                     Layout.fillWidth: true
                     height: 32
@@ -152,7 +152,7 @@ Dialog {
                     }
                 }
                 AppButton {
-                    text: "B · 仅本地改稿"
+                    text: "B · 本地改稿（立即修复）"
                     kind: "success"
                     Layout.fillWidth: true
                     height: 32
