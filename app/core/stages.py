@@ -100,6 +100,24 @@ def _genre_review_extra(proj: str) -> str:
         return "（无题材专项检查）"
 
 
+def prev_chapter_pack(proj: str, num: int, tail: int = 800) -> tuple:
+    """上一章统一锚点：(结尾文本, 开头文风样本)，取小于本章的最近存在章。
+
+    非线性安全——重写/补写中间章时不再因「磁盘最后一章 != num-1」丢失衔接锚点。
+    无更前章或空文返回 ("", "")，占位文案由调用方按场景给。
+    """
+    prev = project.nearest_chapter_before(proj, num)
+    if not prev:
+        return "", ""
+    text = project.read_file(prev[2]) or ""
+    if not text.strip():
+        return "", ""
+    ending = text[-tail:] if len(text) > tail else text
+    body_start = text.find("\n")   # 文风样本跳过标题行
+    sample = text[body_start + 1:body_start + 501] if body_start > 0 else text[:500]
+    return ending, sample.strip()
+
+
 def _tic_blacklist(proj: str, last_n: int = 10) -> str:
     """统计最近 N 章正文里高频身体动作/口头禅词，生成限量黑名单注入 prompt"""
     chapters = project.list_chapters(proj)[-last_n:]
@@ -254,12 +272,9 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
     nearby_text = "\n\n".join(nearby) if nearby else "（无相邻细纲）"
 
     # 场景承接锚点：上一章「实际写出来的结尾」（细纲只看摘要会丢章末钩子，导致剧情断裂）
-    previous_ending = "（本章为第一章，无上一章结尾）"
-    chapters = project.list_chapters(ctx.proj)
-    if chapters:
-        last_text = project.read_file(chapters[-1][2])
-        if chapters[-1][0] == start - 1 and last_text:
-            previous_ending = last_text[-500:]
+    # 统一锚定：取小于批首章的最近存在章（非线性安全——补写中间单元时不再误报第一章）
+    prev_ending_text, _style = prev_chapter_pack(ctx.proj, start, tail=500)
+    previous_ending = prev_ending_text or "（本章为第一章，无上一章结尾）"
     # 待回收伏笔（细纲层排期，防"回收：未定"无限堆积）
     foreshadows = memory.unfished_foreshadows(ctx.proj) or "（暂无待回收伏笔）"
 
@@ -292,11 +307,20 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         return []
     start, end = todo[0], todo[-1]
     ctx.checkpoint()
+    # 记忆锚：长篇细纲的主线进度锚点（全局摘要 + 近期章节摘要 + 角色状态），防后段卷细纲漂移
+    global_summary = memory.read_global_summary(ctx.proj) or "（全书尚未开始）"
+    recent_summaries = _sanitize_chapter_refs(
+        memory.read_recent_summaries(ctx.proj, start, n=3)) or "（无更前章节摘要）"
+    character_states = project.read_file(project.get_tracking_path(ctx.proj, "角色状态"))[:1500] \
+        or "（暂无）"
     prompt = prompts.CHAPTER_OUTLINE_PROMPT.format(
         chapter_num=start,
         volume_outline=volume_outline,
         nearby_outlines=nearby_text,
         core_setting_brief=core_setting[:2500],
+        global_summary=global_summary,
+        recent_summaries=recent_summaries,
+        character_states=character_states,
         start_chapter=start,
         end_chapter=end,
         count=end - start + 1,
@@ -462,19 +486,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             memory.read_recent_summaries(proj, num, n=3)) or "（无更近章节摘要）"
         character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:3000] or "（暂无）"
         foreshadows = memory.unfished_foreshadows(proj) or "（暂无）"
+        timeline = project.read_file(project.get_tracking_path(proj, "时间线"))[:1500] or "（暂无）"
         previous_excerpt = ""
         style_sample = "（本章为第一章，无上一章文风样本）"
-        chapters = project.list_chapters(proj)
-        if chapters:
-            last = chapters[-1]
-            if last[0] == num - 1:
-                prev_text = project.read_file(last[2])
-                previous_excerpt = prev_text[-800:] if len(prev_text) > 800 else prev_text
-                # 文风锚定：上一章开头样本（跳过标题行），防长篇文风漂移
-                body_start = prev_text.find("\n")
-                sample = prev_text[body_start + 1:body_start + 501] if body_start > 0 else prev_text[:500]
-                if sample.strip():
-                    style_sample = sample
+        # 统一锚定：取小于本章的最近存在章（非线性安全——重写中间章时仍有衔接锚点）
+        prev_text, prev_style = prev_chapter_pack(proj, num, tail=800)
+        if prev_text:
+            previous_excerpt = prev_text
+            if prev_style:
+                style_sample = prev_style
         ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 细纲 + 前3章摘要 + 角色状态 + 伏笔 + 文风样本）")
         # 决策门 G4：素材组装后（软门：默认轻提示）
         g4_idea = ctx.gate("G4", f"材料就绪：细纲 + 前3章摘要 + 角色状态 + 伏笔表 + 文风样本（草稿目标 {chapter_words} 字）",
@@ -491,6 +511,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     ctx.step(num, st.STEP_DRAFT)
     ctx.checkpoint()
     wb_block, rg_block = _worldbook_regex_blocks(ctx)
+    # 阶段重生成时 bridge 写入的「阶段指导」：消费即删，拼进本章写作指导
+    sg_path = os.path.join(proj, "追踪", "阶段指导.md")
+    stage_guidance = project.read_file(sg_path).strip()
+    if stage_guidance:
+        guidance = f"{guidance}\n{stage_guidance}".strip() if guidance else stage_guidance
+        try:
+            os.remove(sg_path)
+        except OSError:
+            pass
     prompt = prompts.PROSE_WRITING_PROMPT.format(
         chapter_num=num,
         core_setting=core_setting,
@@ -500,6 +529,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         recent_summaries=recent_summaries,
         character_states=character_states,
         foreshadows=foreshadows,
+        timeline=timeline,
         previous_excerpt=previous_excerpt or "（本章为第一章）",
         style_sample=style_sample,
         user_guidance=_compose_guidance(guidance, ctx.cfg),
@@ -529,6 +559,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.checkpoint()
         enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
                                                      target=chapter_words, prose=prose,
+                                                     outline_brief=outline[:600],
                                                      tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = enrich_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮")
@@ -548,7 +579,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
         trim_prompt = prompts.TRIM_PROMPT.format(chapter_num=num, actual=actual,
                                                  target=chapter_words, cut_pct=cut_pct,
-                                                 prose=prose, tic_blacklist=_tic_blacklist(proj))
+                                                 prose=prose, outline_brief=outline[:600],
+                                                 tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = trim_prompt
         prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩")
         low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
@@ -589,6 +621,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.checkpoint()
         findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
         rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose,
+                                                               outline_brief=outline[:600],
                                                                tic_blacklist=_tic_blacklist(proj))
         ctx.last_prompt = rewrite_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮")
@@ -652,7 +685,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     anchors = prompts.build_upstream_anchors(proj, num)
                     issues_brief = prompts.build_issues_brief(issues)
                     root_prompt = prompts.ROOT_CAUSE_PROMPT.format(
-                        issues_brief=issues_brief
+                        issues_brief=issues_brief,
+                        upstream_anchors=anchors,
                     )
                     ctx.last_prompt = root_prompt
                     root_result = clean_llm_output(
@@ -672,7 +706,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     ctx.log("warn", f"第 {num} 章 根因溯源失败：{e}")
             # 普通修改（v1 REVIEW_FIX_PROMPT + worst_segment_quotes）
             fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
-                chapter_num=num, findings="\n".join(blocking_review), prose=prose)
+                chapter_num=num, findings="\n".join(blocking_review), prose=prose,
+                outline_brief=outline[:600], core_setting_brief=core_setting)
             ctx.last_prompt = fix_prompt
             rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt,
                                label=f"审校修改 第{review_rounds}轮")
@@ -764,9 +799,14 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 章节摘要 + 全局摘要链
     ctx.checkpoint()
     try:
+        # 头 2000 + 尾 800：模板要求「结尾落点」，只喂开头会让超标章的结尾缺席
+        if len(prose) > 3000:
+            excerpt = prose[:2000] + "\n…（中段省略）…\n" + prose[-800:]
+        else:
+            excerpt = prose[:3000]
         summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
             chapter_num=num, title=title or f"第{num}章",
-            prose_excerpt=prose[:2500])
+            prose_excerpt=excerpt)
         ctx.last_prompt = summary_prompt
         chapter_summary = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
             summary_prompt)).splitlines()[0].strip()
@@ -1083,6 +1123,8 @@ def _update_tracking(ctx, num: int, prose: str) -> dict:
         character_state=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000],
         foreshadow_table=project.read_file(project.get_tracking_path(proj, "伏笔"))[:2000],
         timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
+        old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
+        or "（尚无写作上下文）",
     )
     ctx.last_prompt = prompt
     result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(prompt))

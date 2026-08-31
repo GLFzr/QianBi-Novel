@@ -127,6 +127,16 @@ def chapter_nums(proj: str) -> set:
     return {c[0] for c in list_chapters(proj)}
 
 
+def nearest_chapter_before(proj: str, num: int):
+    """小于 num 的最近存在章 (n, title, path)；无则 None。
+
+    统一章锚定：非线性工作流（重写/补写中间章）下「上一章」的唯一正确定义，
+    取代各处「磁盘最后一章恰好 == num-1」的线性流水线假设。
+    """
+    prev = [c for c in list_chapters(proj) if c[0] < num]
+    return max(prev, key=lambda c: c[0]) if prev else None
+
+
 def get_chapter_path(proj: str, num: int, title: str = "") -> str:
     return os.path.join(proj, "正文", chapter_filename(num, title))
 

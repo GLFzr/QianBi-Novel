@@ -145,6 +145,16 @@ CHAPTER_OUTLINE_PROMPT = """你是网络小说细纲设计师。为第 {chapter_
 
 {regex_block}
 
+## 记忆锚（长篇主线进度的唯一锚点，细纲不得与之矛盾）
+### 全局摘要
+{global_summary}
+
+### 近期章节摘要（更近的剧情现场）
+{recent_summaries}
+
+### 角色状态（当前处境/能力/关系基准）
+{character_states}
+
 ## 已确定的细纲（前后衔接参考）
 {nearby_outlines}
 

@@ -49,7 +49,10 @@ def append_chapter_summary(proj: str, num: int, title: str, summary: str):
     entries[num] = (title, summary.strip())
     if not header:
         header = ["# 章节摘要链", "", "> 每章一句话摘要，按章号追加。", ""]
-    body = [f"- 第{n}章《{t}》：{s}" for n, (t, s) in sorted(entries.items()) if t or s]
+    body = []
+    for n, v in sorted(entries.items()):
+        if isinstance(v, tuple) and (v[0] or v[1]):
+            body.append(f"- 第{n}章《{v[0]}》：{v[1]}")
     project.write_file(path, "\n".join(header + body) + "\n")
 
 
@@ -68,8 +71,21 @@ def read_recent_summaries(proj: str, before_num: int, n: int = 3) -> str:
 
 
 def unfished_foreshadows(proj: str, limit: int = 2000) -> str:
-    """未回收伏笔节选"""
+    """未回收伏笔节选（过滤已回收条目）
+
+    伏笔表格式：| 伏笔 | 类别 | 埋设章节 | 状态 | 计划回收 | 备注 |
+    """
     text = project.read_file(project.get_tracking_path(proj, "伏笔"))
     if not text.strip():
         return ""
-    return text[:limit]
+    kept = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("|") and "---" not in s:
+            cells = [c.strip() for c in s.strip("|").split("|")]
+            if len(cells) >= 4 and cells[0] != "伏笔" and (
+                    "已回收" in cells[3] or cells[3] == "回收"):
+                continue
+        kept.append(line)
+    out = "\n".join(kept).strip()
+    return out[:limit] if out else ""
