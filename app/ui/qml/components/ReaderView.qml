@@ -27,7 +27,7 @@ Rectangle {
     property var store: ({ annotations: [], bookmarks: [], position: 0.0 })
     property int progressPercent: 0
     property string drawerTab: "toc"
-    property alias drawerOpened: drawerShadow.opened   // 测试/外部驱动用
+    property alias drawerOpened: drawer.opened   // 测试/外部驱动用
 
     // 三主题独立配色（不影响写作主题）
     readonly property var themes: ({
@@ -239,7 +239,7 @@ Rectangle {
         anchors.top: topBar.bottom
         anchors.bottom: bottomBar.top
         anchors.left: parent.left
-        anchors.right: drawerShadow.left
+        anchors.right: drawer.left
         contentWidth: width
         contentHeight: textArea.implicitHeight + 80
         clip: true
@@ -507,7 +507,7 @@ Rectangle {
 
     // ---- 右侧抽屉（目录 / 标注·书签）----
     Rectangle {
-        id: drawerShadow
+        id: drawer
         visible: drawer.opened
         anchors.right: parent.right
         anchors.top: topBar.bottom
@@ -590,7 +590,7 @@ Rectangle {
                 Layout.fillHeight: true
                 clip: true
                 ColumnLayout {
-                    width: drawerShadow.width
+                    width: drawer.width
                     spacing: 6
 
                     Text {

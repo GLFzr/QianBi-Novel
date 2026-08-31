@@ -118,7 +118,9 @@ Item {
                         }
                     }
                     MouseArea {
+                        id: modeMa
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             modeChip.modeIdx = (modeChip.modeIdx + 1) % modeChip.modes.length
@@ -127,7 +129,7 @@ Item {
                             bridge.setRunMode(m)
                         }
                     }
-                    ToolTip.visible: containsMouse
+                    ToolTip.visible: modeMa.containsMouse
                     ToolTip.text: "全自动=每步自动过 · 边界确认=只停大纲/草稿/定稿等大节点 · 逐步确认=每个决策门都停靠你确认 · 共写=六阶段人机共写（对话讨论+确定定稿）"
                 }
                 AppButton {
