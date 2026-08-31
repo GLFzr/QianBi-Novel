@@ -51,8 +51,10 @@ Dialog {
                     Layout.fillWidth: true
                 }
                 AppBadge {
-                    text: reviewDialog.verdict || "REJECT"
-                    tint: reviewDialog.verdict === "REJECT-HARD" ? Theme.danger : Theme.accent
+                    visible: reviewDialog.verdict !== ""
+                    text: reviewDialog.verdict
+                    tint: reviewDialog.verdict.indexOf("REJECT") === 0 ? Theme.danger
+                          : (reviewDialog.verdict.indexOf("PASS") === 0 ? Theme.success : Theme.accent)
                 }
             }
         }

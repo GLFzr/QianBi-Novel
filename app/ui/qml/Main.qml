@@ -1816,16 +1816,17 @@ ApplicationWindow {
     }
 
     // ---- v0.13：6 维审校问题对话框（A/B/C 三选一）----
+    // issues/verdict 由下方 onReviewIssuesChanged 统一赋值：
+    // 声明处绑定只在组件初始化时求值一次（启动时项目未开），会造成 verdict 永远为空落到兜底文案
     ReviewIssueDialog {
         id: reviewIssueDialog
         objectName: "reviewIssueDialog"
-        issues: bridge.reviewIssues()
-        verdict: bridge.reviewVerdict()
     }
     Connections {
         target: bridge
         function onReviewIssuesChanged() {
             var items = bridge.reviewIssues()
+            reviewIssueDialog.verdict = bridge.reviewVerdict()
             if (items && items.length > 0) {
                 reviewIssueDialog.issues = items
                 reviewIssueDialog.open()

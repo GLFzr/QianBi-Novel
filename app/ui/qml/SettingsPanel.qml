@@ -360,7 +360,7 @@ Item {
                     Column {
                         spacing: 6
                         width: (parent.width - 16) / 3
-                        Text { text: "温度×10"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                        Text { text: "温度"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                         AppSpinBox { id: tempSpin; width: parent.width; from: 0; to: 20; value: 7; overrideText: (tempSpin.value / 10).toFixed(1) }
                     }
                     Column {

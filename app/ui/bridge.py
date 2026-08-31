@@ -3074,9 +3074,11 @@ class Bridge(QObject):
         if not self.proj:
             return []
         s = st.load_state(self.proj)
-        # 取最近一次 review（current_chapter + 上 N 章）
         rf = s.get("review_findings") or {}
-        # 优先取 current_chapter
+        # 优先取对话框已登记的章号（指定章「查看问题」入口），避免误取 current_chapter
+        if self._review_issue_num and str(self._review_issue_num) in rf:
+            return rf[str(self._review_issue_num)].get("items", [])
+        # 其次取 current_chapter
         cur = str(s.get("current_chapter", 0))
         if cur in rf:
             try:
@@ -3140,7 +3142,8 @@ class Bridge(QObject):
             self.toast.emit("info", f"第 {cur} 章已登记上游重做请求（执行请用章节右键「带指导重写」）")
         else:  # local：按登记问题本地定向改稿（一键修复同款流程）
             self.toast.emit("info", f"第 {cur} 章开始本地定向改稿…")
-        self.reviewIssuesChanged.emit()
+        # 注意：不要在此发 reviewIssuesChanged——QML 侧选择后已关闭对话框，
+        # 再发会让 onReviewIssuesChanged 把同一对话框立刻重新弹出
         self.needsFixChanged.emit()
         if choice == "local":
             self._start_repair([cur])

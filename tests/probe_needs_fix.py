@@ -133,6 +133,8 @@ def step5_issue_opened():
     check("ReviewIssueDialog 已由查看问题打开", opened)
     check("对话框显示 1 项 issue",
           dlg is not None and len(dlg.property("issues") or []) == 1)
+    check("verdict 已同步为该章登记判定",
+          dlg is not None and dlg.property("verdict") == "REJECT")
     if dlg:
         _call(dlg, "close")
     QTimer.singleShot(100, step6_warnings)
