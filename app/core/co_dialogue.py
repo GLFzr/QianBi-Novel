@@ -8,6 +8,7 @@
 - build_handoff：交接小节的唯一生成者（解析 Summarize 输出并落 state['cw']['handoff']）。
 """
 import os
+import re
 
 from PySide6.QtCore import QThread, Signal
 
@@ -283,10 +284,14 @@ class ReadbackWorker(QThread):
                                   for d in diffs if d.get("op") in ("del", "add"))[:2000] or "（无）"
             diff_summary = (f"改动 {len(diffs)} 处；删除 {sum(len(d.get('text','')) for d in diffs if d.get('op')=='del')} 字，"
                             f"新增 {sum(len(d.get('text','')) for d in diffs if d.get('op')=='add')} 字")
+            outline = project.read_file(project.get_outline_path(self.proj, self.num))[:600] \
+                or "（无本章细纲）"
             prompt = prompts.CO_READBACK_PROMPT.format(
+                chapter_num=self.num,
                 diff_summary=diff_summary,
                 diff_text=diff_text or "（无行级差异）",
                 chapter_text=self.new_text[:1500],
+                chapter_outline=outline,
             )
             self.last_prompt = prompt
             text = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat(prompt))
@@ -309,11 +314,14 @@ class SupervisorWorker(QThread):
     done = Signal(str)
     error = Signal(str)
 
-    def __init__(self, cfg: dict, proj: str, num: int, router=None, parent=None):
+    def __init__(self, cfg: dict, proj: str, num: int, router=None, parent=None,
+                 chapter_text: str = ""):
         super().__init__(parent)
         self.cfg = cfg
         self.proj = proj
         self.num = num
+        # 编辑器工作副本优先：定稿时正文可能尚未落盘，只读磁盘会拿到旧稿/空稿
+        self.chapter_text_override = (chapter_text or "").strip()
         self.router = router or ModelRouter(cfg)
         self.last_prompt = ""
         self.result_text = ""
@@ -321,21 +329,26 @@ class SupervisorWorker(QThread):
     def run(self):
         from . import memory
         try:
-            chapters = project.list_chapters(self.proj)
             prev_ending = "（本章为第一章）"
             # 补写/重写中间章时，上一章 = 小于本章的最近存在章（不是磁盘最后一章）
-            prev = sorted([c for c in chapters if c[0] < self.num])
+            prev = project.nearest_chapter_before(self.proj, self.num)
             if prev:
-                prev_ending = project.read_file(prev[-1][2])[-800:]
-            chapter_text = project.read_file(project.get_chapter_path(self.proj, self.num))[:3000]
-            if not chapter_text.strip():
-                # 正文可能尚未落盘（编辑器工作副本）：读细纲兜底
-                chapter_text = project.read_file(project.get_outline_path(self.proj, self.num))[:3000]
+                prev_ending = project.read_file(prev[2])[-800:]
+            chapter_outline = project.read_file(project.get_outline_path(self.proj, self.num))[:1000] \
+                or "（无本章细纲）"
+            if self.chapter_text_override:
+                chapter_text = self.chapter_text_override[:3000]
+            else:
+                chapter_text = project.read_file(project.get_chapter_path(self.proj, self.num))[:3000]
+                if not chapter_text.strip():
+                    chapter_text = ""
             next_brief = project.read_file(project.get_outline_path(self.proj, self.num + 1))[:600] \
                 or "（本章为当前最后一章细纲）"
             prompt = prompts.CO_SUPERVISOR_PROMPT.format(
+                chapter_num=self.num,
                 global_summary=(memory.read_global_summary(self.proj) or "（尚未开始）")[:800],
                 previous_ending=prev_ending,
+                chapter_outline=chapter_outline,
                 chapter_text=chapter_text or "（本章正文尚在工作副本中）",
                 next_outline_brief=next_brief,
                 worldbook_block=project.worldbook_text(self.proj, 1200),
@@ -350,6 +363,34 @@ class SupervisorWorker(QThread):
             self.done.emit(text)
         except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
+
+
+def parse_supervisor_report(text: str) -> tuple:
+    """解析主 Agent 报告 → (needs_fix, directive)（派活契约，纯函数）
+
+    - 结论行「- 结论：需调整（…）」→ needs_fix=True；「通过」或找不到结论行 → False
+      （找不到视为解析失败：自动链停在原地，不猜）
+    - 【改写指令】取该行冒号后内容 + 后续非列表续行；「通过」报告按约定不含此条
+    """
+    needs_fix = False
+    directive = ""
+    lines = (text or "").splitlines()
+    for i, line in enumerate(lines):
+        s = line.strip()
+        m = re.match(r"^[-*]?\s*结论[：:]\s*(.+)$", s)
+        if m:
+            needs_fix = "需调整" in m.group(1)
+            continue
+        m = re.match(r"^[-*]?\s*【改写指令】[：:]?\s*(.*)$", s)
+        if m:
+            parts = [m.group(1).strip()]
+            for nxt in lines[i + 1:]:
+                t = nxt.strip()
+                if not t or t.startswith(("-", "*", "#")):
+                    break
+                parts.append(t)
+            directive = " ".join(p for p in parts if p).strip()
+    return needs_fix, directive
 
 
 # ---------- M3：章细纲滚动生成（确定单元后，helper 槽，≈200 字/章）----------
@@ -383,11 +424,10 @@ class OutlineBatchWorker(QThread):
                 if self.batch[0] - 2 <= n <= self.batch[-1] + 2:
                     nearby.append(project.read_file(p)[:400])
             prev_ending = "（本章为第一章）"
-            chapters = project.list_chapters(self.proj)
-            if chapters:
-                last = chapters[-1]
-                if last[0] == self.batch[0] - 1:
-                    prev_ending = project.read_file(last[2])[-400:]
+            # 统一锚定：取小于批首章的最近存在章（补写中间单元时不再误报第一章）
+            prev = project.nearest_chapter_before(self.proj, self.batch[0])
+            if prev:
+                prev_ending = project.read_file(prev[2])[-400:]
             prompt = prompts.CO_UNIT_OUTLINE_PROMPT.format(
                 unit_block=prompts.unit_text(self.unit),
                 handoff=prev_handoff(state, st.STAGE_CW_UNIT),
@@ -442,10 +482,10 @@ class ReviewOutlinesWorker(QThread):
                     parts.append(f"===第{n}章===\n{c}")
             outlines = "\n\n".join(parts) or "（无细纲）"
             prev_ending = "（本章为第一章）"
-            chapters = project.list_chapters(self.proj)
-            if chapters:
-                last = chapters[-1]
-                prev_ending = project.read_file(last[2])[-400:] if last[0] < (self.nums or [1])[0] else prev_ending
+            # 统一锚定：取小于首批章的最近存在章（重写中间章细纲时不再误报第一章）
+            prev = project.nearest_chapter_before(self.proj, (self.nums or [1])[0])
+            if prev:
+                prev_ending = project.read_file(prev[2])[-400:]
             prompt = prompts.CO_OUTLINE_REVIEW_PROMPT.format(
                 outlines=outlines,
                 worldbook_block=project.worldbook_text(self.proj, 1500),

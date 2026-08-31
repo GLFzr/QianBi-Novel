@@ -358,6 +358,14 @@ Rectangle {
                     }
                     Item { Layout.fillWidth: true }
                     AppButton {
+                        text: "派给写作 Agent"
+                        kind: "ghost"
+                        height: 18
+                        onClicked: bridge.dispatchCwReport()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "按报告里的【改写指令】派写作 Agent 改写（不受自动轮次限制；无指令时不可用）"
+                    }
+                    AppButton {
                         text: "×"
                         kind: "ghost"
                         height: 18

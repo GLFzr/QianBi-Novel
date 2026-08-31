@@ -164,7 +164,11 @@ class ChapterRepairWorker(QThread):
         self.sig_log.emit(f"第 {num} 章按 {len(blocking)} 处阻塞问题定向修复…")
         versions.snapshot(self.proj, num, prose, "修复前备份")
         fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
-            chapter_num=num, findings="\n".join(blocking), prose=prose)
+            chapter_num=num, findings="\n".join(blocking), prose=prose,
+            outline_brief=(project.read_file(project.get_outline_path(self.proj, num))[:600]
+                           or "（无本章细纲）"),
+            core_setting_brief=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
+                                or "（未提供）"))
         rewritten = clean_llm_output(
             self.router.client(cfg_mod.SLOT_REVIEW).chat_stream(fix_prompt))
         # 修复稿健全性守卫（与 stages.py 修复环同款：拒绝修订计划/空文本/长度骤减）
@@ -2281,11 +2285,15 @@ class Bridge(QObject):
         state = self._cw.load()
         co_dialogue.transcript_append(state, stage, "user", text)
         self._cw_save_state(state)
+        focus = self._cur_num if stage == st.STAGE_CW_PROSE else 0
+        self._spawn_cw_dialogue(text, stage, focus)
+
+    def _spawn_cw_dialogue(self, text: str, stage: str, focus_chapter: int = 0):
+        """起一次性 DialogueWorker（QML 输入入口与主 Agent 派单共用）"""
         self._cw_reply = ""
         self._set_cw_busy(True)
-        focus = self._cur_num if stage == st.STAGE_CW_PROSE else 0
         worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self,
-                                            focus_chapter=focus)
+                                            focus_chapter=focus_chapter)
         worker.chunk.connect(self._on_cw_chunk)
         worker.done.connect(self._on_cw_done)
         worker.error.connect(self._on_cw_error)
@@ -2600,7 +2608,11 @@ class Bridge(QObject):
 
     def _start_cw_supervisor(self):
         self._set_cw_busy(True)
-        worker = co_dialogue.SupervisorWorker(self.cfg, self.proj, self._cur_num, parent=self)
+        # 工作副本优先：定稿时编辑器未保存内容（_working_text）才是「待定稿」，
+        # _chapter_text 是磁盘基准，只传它会在未保存时拿旧稿
+        editor_text = self._working_text or self._chapter_text if self._cur_num > 0 else ""
+        worker = co_dialogue.SupervisorWorker(self.cfg, self.proj, self._cur_num, parent=self,
+                                              chapter_text=editor_text)
         worker.done.connect(self._on_cw_supervisor_done)
         worker.error.connect(self._on_cw_error)
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
@@ -2610,15 +2622,66 @@ class Bridge(QObject):
 
     def _on_cw_supervisor_done(self, text: str):
         import datetime as _dt
+        num = self._cur_num
         state = self._cw.load()
         cw = st.ensure_cw(state)
-        cw.setdefault("supervised", {})[str(self._cur_num)] = _dt.datetime.now().strftime("%m-%d %H:%M")
+        cw.setdefault("supervised", {})[str(num)] = _dt.datetime.now().strftime("%m-%d %H:%M")
         cw["report"] = {"ts": _dt.datetime.now().strftime("%m-%d %H:%M"),
-                        "num": self._cur_num, "text": text}
+                        "num": num, "text": text}
+        needs_fix, directive = co_dialogue.parse_supervisor_report(text)
+        auto_fix = cw.setdefault("auto_fix", {})
+        used = int(auto_fix.get(str(num), 0))
+        # 全自动流转：需调整 + 有改写指令 + 本章自动轮次未超上限（1 次/章，防互改死循环）
+        if needs_fix and directive and used < 1:
+            auto_fix[str(num)] = used + 1
+            self._cw_save_state(state)
+            self.cwReportChanged.emit()
+            self.toast.emit("info", f"主 Agent 判定第 {num} 章需调整，已自动派写作 Agent 改写")
+            QTimer.singleShot(0, lambda n=num, d=directive: self._dispatch_cw_rewrite(n, d))
+            return
         self._cw_save_state(state)
         self.cwReportChanged.emit()
-        self.toast.emit("ok", f"主 Agent 衔接比对完成（第 {self._cur_num} 章，见报告区）"
+        if needs_fix:
+            reason = "改写指令缺失" if not directive else "已达自动轮次上限（1 次/章）"
+            self.toast.emit("warn", f"主 Agent 判定第 {num} 章需调整（{reason}）——报告区可手动派给写作 Agent")
+            return
+        self.toast.emit("ok", f"主 Agent 衔接比对完成（第 {num} 章，见报告区）"
                               "——确认无问题再点「确定」锁定")
+
+    def _dispatch_cw_rewrite(self, num: int, directive: str, _retry: int = 0):
+        """派写作 Agent 按指令改写（对话区可见；产物仍走原「采纳/保存」人工落点）"""
+        if self._cw_worker is not None:
+            # supervisor finished 尚未释放 worker：短延迟重试（最多 ~2s）
+            if _retry < 20:
+                QTimer.singleShot(100, lambda: self._dispatch_cw_rewrite(num, directive, _retry + 1))
+            else:
+                self.toast.emit("warn", f"自动派单失败：worker 未释放（第 {num} 章），请在报告区手动派")
+            return
+        if self._get_cw_mode() != "cw" or self._get_cw_stage_key() != st.STAGE_CW_PROSE:
+            self.toast.emit("warn", f"自动派单跳过：当前不在共写正文阶段（第 {num} 章）")
+            return
+        text = f"（主 Agent 派单）请按以下指令改写第 {num} 章：{directive}"
+        state = self._cw.load()
+        co_dialogue.transcript_append(state, st.STAGE_CW_PROSE, "user", text)
+        self._cw_save_state(state)
+        self._spawn_cw_dialogue(text, st.STAGE_CW_PROSE, focus_chapter=num)
+
+    @Slot()
+    def dispatchCwReport(self):
+        """报告区手动派活（不受自动轮次限制）：按最新报告的【改写指令】派写作 Agent"""
+        if not self._cw:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在工作中，稍后再派")
+            return
+        state = self._cw.load()
+        report = st.ensure_cw(state).get("report") or {}
+        num = int(report.get("num") or 0)
+        _needs_fix, directive = co_dialogue.parse_supervisor_report(report.get("text", ""))
+        if num <= 0 or not directive:
+            self.toast.emit("warn", "没有可派单的报告/改写指令")
+            return
+        self._dispatch_cw_rewrite(num, directive)
 
     def _cw_worldbook_changed_notice(self, state: dict) -> bool:
         """触发点②：世界书变更后影响提示（不发 LLM）；locked 章建议显式解锁后重核"""
