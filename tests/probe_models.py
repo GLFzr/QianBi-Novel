@@ -2,11 +2,16 @@
 """模型探测：哪个 opencode go 模型能完成长输出（大纲级）"""
 import httpx
 import os
+import sys
 import time
 
 KEY = os.environ.get("QIANBI_TEST_KEY", "")
 BASE = "https://opencode.ai/zen/go/v1"
-core = open(r"G:\ai\酒馆\qianbi-novel\tests_output\改命笔记\设定\题材定位.md", encoding="utf-8").read()
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_CORE = os.path.join(_ROOT, "tests_output", "长测_改命笔记", "设定", "题材定位.md")
+if not os.path.exists(_CORE):
+    sys.exit(f"夹具缺失: {_CORE}")
+core = open(_CORE, encoding="utf-8").read()
 prompt = f"""你是网络小说结构设计师。基于以下核心设定，设计全书卷级大纲与第一卷详细大纲。
 
 ## 核心设定
