@@ -7,7 +7,7 @@ Rectangle {
     id: row
     property int num: 0
     property string title: ""
-    property string state: "queued"      // pass / writing / needs_fix / outline_ready / queued
+    property string state: "queued"      // pass / writing / needs_fix / outline_ready / untracked / queued
     property int words: 0
     property string note: ""
 
@@ -56,7 +56,8 @@ Rectangle {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             text: row.title !== "" ? row.title
-                : row.state === "outline_ready" ? "（细纲已就绪）" : "（待生成细纲）"
+                : row.state === "outline_ready" ? "（细纲已就绪）"
+                : row.state === "untracked" ? "（待补写）" : "（待生成细纲）"
             color: row.state === "writing" ? Theme.accent : Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsSmall
@@ -86,7 +87,7 @@ Rectangle {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onClicked: function (mouse) {
-            if (mouse.button === Qt.LeftButton && (row.state === "pass" || row.state === "needs_fix"))
+            if (mouse.button === Qt.LeftButton && row.state !== "writing")
                 row.openChapter(row.num)
             else if (mouse.button === Qt.RightButton)
                 contextMenu.popup()

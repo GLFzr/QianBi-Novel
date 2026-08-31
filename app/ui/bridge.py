@@ -1275,6 +1275,7 @@ class Bridge(QObject):
     @Slot(int)
     def openChapter(self, num: int):
         """打开章节到编辑器（工作副本：加载磁盘内容，无未保存修改）
+        正文不存在时合成空打开（路径=无标题预期文件名），供补写缺失章节
         注意：QML 端在调用前需先处理当前未保存修改（保存/放弃/取消）"""
         if not self.proj:
             return
@@ -1289,7 +1290,23 @@ class Bridge(QObject):
                 self.currentChapterChanged.emit()
                 self._reset_editor_state()
                 return
-        self.toast.emit("warn", f"第 {num} 章正文不存在")
+        self._cur_num = num
+        self._chapter_path = project.get_chapter_path(self.proj, num)
+        self._chapter_text = ""
+        self._chapter_findings = []
+        self.chapterTextChanged.emit()
+        self.chapterFindingsChanged.emit()
+        self.currentChapterChanged.emit()
+        self._reset_editor_state()
+        self.toast.emit("info", f"第 {num} 章尚未写成——可直接书写，或在共写档让写作 Agent 按上下文补写")
+
+    def _canonical_chapter_path(self, num: int, fallback: str) -> str:
+        """该章号已有正文文件时返回其真实路径（防止无标题文件名造成同章双文件）"""
+        if self.proj and num:
+            for n, _name, path in project.list_chapters(self.proj):
+                if n == num:
+                    return path
+        return fallback
 
     @Slot(str)
     def markEditorDirty(self, text: str):
@@ -1327,6 +1344,8 @@ class Bridge(QObject):
         if project.is_chapter_locked(self.proj, self._cur_num):
             self.toast.emit("warn", "该章已终稿锁定，请先在共写档显式解锁")
             return
+        if self._cur_num and not os.path.isfile(self._chapter_path):
+            self._chapter_path = self._canonical_chapter_path(self._cur_num, self._chapter_path)
         source = self._last_edit_action or versions.SOURCE_MANUAL
         old = project.read_file(self._chapter_path)
         v = versions.snapshot(self.proj, self._cur_num, old, source)
@@ -1396,6 +1415,7 @@ class Bridge(QObject):
         if not nd:
             return {}
         num, content, mtime = nd
+        self._chapter_path = project.get_chapter_path(self.proj, num)
         for n, name, path in project.list_chapters(self.proj):
             if n == num:
                 self._chapter_path = path
@@ -1551,9 +1571,16 @@ class Bridge(QObject):
             if num == self._cur_num and self._running:
                 state_str = "writing"
                 note = st.STEP_LABELS.get(self._cur_step, "")
+            elif num in chapters and num not in history:
+                state_str = "untracked"
+                note = "正文存在·未入流水线"
             elif state_str == "queued" and num in outlines:
                 state_str = "outline_ready"
                 note = "细纲就绪"
+            elif (state_str == "queued" and num == self._cur_num
+                  and num not in chapters and num not in outlines and num not in history):
+                state_str = "untracked"
+                note = "未写"
             items.append({"num": num, "title": title, "state": state_str,
                           "words": words, "note": note})
         self.chapterModel.set_items(items)
@@ -2159,13 +2186,21 @@ class Bridge(QObject):
         self.cwStreamingChanged.emit()
 
     def _cw_open_product(self, stage: str):
-        """阶段切换：编辑器载入对应产物文件（cw_prose=最新一章）"""
+        """阶段切换：编辑器载入对应产物文件（cw_prose=当前打开章，回退最新一章）"""
         if stage == st.STAGE_CW_PROSE:
             chapters = project.list_chapters(self.proj)
-            if chapters:
-                self._cur_num = chapters[-1][0]
-                self._chapter_path = chapters[-1][2]
-                self._chapter_text = project.read_file(chapters[-1][2])
+            pick = None
+            if self._cur_num:
+                for n, _name, p in chapters:
+                    if n == self._cur_num:
+                        pick = (n, p)
+                        break
+            if pick is None and chapters:
+                pick = (chapters[-1][0], chapters[-1][2])
+            if pick:
+                self._cur_num = pick[0]
+                self._chapter_path = pick[1]
+                self._chapter_text = project.read_file(pick[1])
             else:
                 self._chapter_path = ""
                 self._chapter_text = ""
@@ -2248,7 +2283,9 @@ class Bridge(QObject):
         self._cw_save_state(state)
         self._cw_reply = ""
         self._set_cw_busy(True)
-        worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self)
+        focus = self._cur_num if stage == st.STAGE_CW_PROSE else 0
+        worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self,
+                                            focus_chapter=focus)
         worker.chunk.connect(self._on_cw_chunk)
         worker.done.connect(self._on_cw_done)
         worker.error.connect(self._on_cw_error)
@@ -2341,6 +2378,14 @@ class Bridge(QObject):
             if stage == st.STAGE_CW_PROSE:
                 if not self._cur_num:
                     self.toast.emit("warn", "请先打开要确定的章节")
+                    return
+                _own = ""
+                for _n, _name, _p in project.list_chapters(self.proj):
+                    if _n == self._cur_num:
+                        _own = project.read_file(_p)
+                        break
+                if not _own.strip():
+                    self.toast.emit("warn", f"第 {self._cur_num} 章尚未写成——先完成正文再点「确定」")
                     return
                 state = self._cw.load()
                 supervised = st.ensure_cw(state).get("supervised", {})
@@ -2758,6 +2803,8 @@ class Bridge(QObject):
         if self._cur_num and project.is_chapter_locked(self.proj, self._cur_num):
             self.toast.emit("warn", "该章已终稿锁定，请先显式解锁")
             return
+        if self._cur_num and not os.path.isfile(self._chapter_path):
+            self._chapter_path = self._canonical_chapter_path(self._cur_num, self._chapter_path)
         project.write_file(self._chapter_path, text or self._chapter_text)
         self._chapter_text = text or self._chapter_text
         self._reset_editor_state()

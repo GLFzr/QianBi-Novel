@@ -98,8 +98,13 @@ def _grow(preset_id: str, field: str) -> str:
         return "（该预设未提供此参考）"
 
 
-def compose_reference_block(proj: str, stage: str, preset_id: str = "") -> str:
-    """各阶段参考块：上一环节产物 + grow_* 参考 + 世界书/正则（M2 注入）"""
+def compose_reference_block(proj: str, stage: str, preset_id: str = "",
+                            focus_chapter: int = 0) -> str:
+    """各阶段参考块：上一环节产物 + grow_* 参考 + 世界书/正则（M2 注入）
+
+    focus_chapter（仅 prose 阶段）：用户当前打开/选中的章号；0 = 沿用旧行为
+    （next_chapter_num，即追加下一章）。
+    """
     def rd(*rel):
         return project.read_file(os.path.join(proj, *rel))
 
@@ -128,17 +133,31 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "") -> str:
         return (f"【全书大纲摘要】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
                 + _grow(preset_id, "grow_unit_logic"))
     if stage == st.STAGE_CW_PROSE:
-        num = project.next_chapter_num(proj)
+        chapters = project.list_chapters(proj)
+        num = int(focus_chapter) if int(focus_chapter or 0) > 0 else project.next_chapter_num(proj)
+        by_num = {n: p for n, _name, p in chapters}
         outline = rd("大纲", f"细纲_第{num:03d}章.md") or "（本章细纲尚未生成）"
         wb = project.worldbook_text(proj, 1200)
         rg = project.regex_block(proj, "logic", 1000)
+        prev_nums = [n for n in by_num if n < num]
+        next_nums = [n for n in by_num if n > num]
         prev_ending = "（本章为第一章）"
-        chapters = project.list_chapters(proj)
-        if chapters:
-            last_text = project.read_file(chapters[-1][2])
-            prev_ending = last_text[-500:]
-        return (f"【本章细纲】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
-                f"【上一章结尾】\n{prev_ending}")
+        if prev_nums:
+            prev_ending = project.read_file(by_num[max(prev_nums)])[-500:]
+        next_opening = "（本章之后暂无已写章节）"
+        if next_nums:
+            next_opening = project.read_file(by_num[min(next_nums)])[:500]
+        own = by_num.get(num, "")
+        own_text = project.read_file(own) if own else ""
+        if own_text.strip():
+            status = f"已有草稿（约 {project.count_chars(own_text)} 字），按作者意见修改或续写"
+        else:
+            status = ("尚未写成。作者要求写作时，请依据上一章结尾、下一章开头与本章细纲"
+                      "补写完整正文，注意与前后章无缝衔接")
+        return (f"【焦点章节】锚定第 {num} 章（用户在编辑器打开的章；若与作者本轮所指不同，以作者为准并提醒）\n\n"
+                f"【本章细纲】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
+                f"【上一章结尾】\n{prev_ending}\n\n【下一章开头】\n{next_opening}\n\n"
+                f"【本章现状】{status}")
     return "（本阶段无参考块）"
 
 
@@ -159,13 +178,14 @@ class DialogueWorker(QThread):
     error = Signal(str)
 
     def __init__(self, cfg: dict, proj: str, stage: str, user_text: str,
-                 router=None, parent=None):
+                 router=None, parent=None, focus_chapter: int = 0):
         super().__init__(parent)
         self.cfg = cfg
         self.proj = proj
         self.stage = stage
         self.user_text = user_text
         self.router = router or ModelRouter(cfg)
+        self.focus_chapter = int(focus_chapter or 0)
         self.last_prompt = ""
         self.result_text = ""
 
@@ -181,7 +201,8 @@ class DialogueWorker(QThread):
                 agent_name=role["agent"],
                 stage_label=st.CW_STAGE_LABELS.get(self.stage, self.stage),
                 handoff=prev_handoff(state, self.stage),
-                reference_block=compose_reference_block(self.proj, self.stage, _preset_id(self.proj)),
+                reference_block=compose_reference_block(self.proj, self.stage, _preset_id(self.proj),
+                                                        focus_chapter=self.focus_chapter),
                 transcript=transcript_text(state, self.stage),
                 user_message=self.user_text,
             )

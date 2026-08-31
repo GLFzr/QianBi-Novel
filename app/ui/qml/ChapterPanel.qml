@@ -91,7 +91,7 @@ Item {
                 state: model.state
                 words: model.words
                 note: model.note
-                onOpenChapter: function (n) { bridge.openChapter(n); chapterPanel.openChapter(n) }
+                onOpenChapter: function (n) { chapterPanel.openChapter(n) }
                 onRewriteChapter: function (n) {
                     // 重写确认：旧正文先归档为「重写前备份」版本，放弃时可回退
                     chapterPanel.confirmNum = n
