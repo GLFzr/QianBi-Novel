@@ -112,6 +112,26 @@ Rectangle {
                     ToolTip.visible: hovered
                     ToolTip.text: "确定细纲：Agent 重读校验衔接/世界书/正则/单元范围；无阻塞自动进入正文写作"
                 }
+                AppButton {
+                    text: "去AI味"
+                    kind: "ghost"
+                    height: 28
+                    visible: cwDock.viewIsCurrent && bridge.cwStageKey === "cw_prose"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.deslopCwProse()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "扫描本章正文并去味改写（读编辑器工作副本）——结果进编辑器，点「保存」才落盘"
+                }
+                AppButton {
+                    text: "审校"
+                    kind: "ghost"
+                    height: 28
+                    visible: cwDock.viewIsCurrent && bridge.cwStageKey === "cw_prose"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.reviewCwProse()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "六维审校本章正文（读编辑器工作副本）——问题登记待修汇总，可一键修复"
+                }
                 Item { Layout.fillWidth: true }
                 Text {
                     visible: cwDock.busy
@@ -358,12 +378,15 @@ Rectangle {
                     }
                     Item { Layout.fillWidth: true }
                     AppButton {
-                        text: "派给写作 Agent"
+                        text: bridge.cwReportConsumed ? "已派发" : "派给写作 Agent"
                         kind: "ghost"
                         height: 18
+                        enabled: !bridge.cwReportConsumed
                         onClicked: bridge.dispatchCwReport()
                         ToolTip.visible: hovered
-                        ToolTip.text: "按报告里的【改写指令】派写作 Agent 改写（不受自动轮次限制；无指令时不可用）"
+                        ToolTip.text: bridge.cwReportConsumed
+                                      ? "该报告已派发过一次（防重复派单）——新一轮「确定」比对后会有新报告"
+                                      : "按报告里的【改写指令】派写作 Agent 改写（不受自动轮次限制；无指令时不可用）"
                     }
                     AppButton {
                         text: "×"
@@ -389,47 +412,91 @@ Rectangle {
         }
 
         // ---- 消息流（转写）----
-        ListView {
-            id: msgList
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            spacing: 6
-            topMargin: 8
-            bottomMargin: 8
-            model: bridge.cwMessages
-            delegate: Rectangle {
-                required property var modelData
-                width: msgList.width - 16
-                anchors.horizontalCenter: parent.horizontalCenter
-                height: msgBubble.height + 14
-                radius: 8
-                color: modelData.role === "user" ? Theme.bgActive : Theme.bgCard
-                border.width: 1
-                border.color: Theme.border
-                Column {
-                    id: msgBubble
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 7
-                    spacing: 3
-                    Text {
-                        text: modelData.role === "user" ? "你" : bridge.cwAgent
-                        color: modelData.role === "user" ? Theme.accent : Theme.info
-                        font.family: Theme.uiFont
-                        font.pixelSize: 10
-                        font.bold: true
+            ListView {
+                id: msgList
+                anchors.fill: parent
+                clip: true
+                spacing: 6
+                topMargin: 8
+                bottomMargin: 8
+                model: bridge.cwMessages
+                // 模型整体重建（cwMessages 每次返回新列表）或新增消息后稳定停在底部，
+                // 消灭「发送后跳回最上面」；LogView 同款 callLater 模式
+                onCountChanged: Qt.callLater(function () { msgList.positionViewAtEnd() })
+                onModelChanged: Qt.callLater(function () { msgList.positionViewAtEnd() })
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                    contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
+                }
+                delegate: Rectangle {
+                    required property var modelData
+                    width: msgList.width - 16
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    height: msgBubble.height + 14
+                    radius: 8
+                    color: modelData.role === "user" ? Theme.bgActive : Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
+                    Column {
+                        id: msgBubble
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 7
+                        spacing: 3
+                        Text {
+                            text: modelData.role === "user" ? "你" : bridge.cwAgent
+                            color: modelData.role === "user" ? Theme.accent : Theme.info
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                            font.bold: true
+                        }
+                        Text {
+                            width: parent.width
+                            text: modelData.text
+                            color: Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                            wrapMode: Text.Wrap
+                            textFormat: Text.PlainText
+                        }
                     }
-                    Text {
-                        width: parent.width
-                        text: modelData.text
-                        color: Theme.textPrimary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsSmall
-                        wrapMode: Text.Wrap
-                        textFormat: Text.PlainText
-                    }
+                }
+            }
+            // 回顶/回底浮动按钮（常显，用户直达）
+            Column {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 10
+                spacing: 6
+                AppButton {
+                    text: "▲ 顶部"
+                    kind: "ghost"
+                    height: 22
+                    onClicked: msgList.positionViewAtBeginning()
+                }
+                AppButton {
+                    text: "▼ 底部"
+                    kind: "ghost"
+                    height: 22
+                    onClicked: msgList.positionViewAtEnd()
+                }
+            }
+            Connections {
+                target: bridge
+                // AI 开始输出：强制回底，让最新消息 + 流式块进入视野
+                function onCwBusyChanged() {
+                    if (cwDock.busy)
+                        Qt.callLater(function () { msgList.positionViewAtEnd() })
+                }
+                // 流式输出中：仅当已贴近底部才跟随（用户上翻读历史时不被拽回）
+                function onCwStreamingChanged() {
+                    if (!cwDock.busy) return
+                    if (msgList.contentY + msgList.height >= msgList.contentHeight - 60)
+                        Qt.callLater(function () { msgList.positionViewAtEnd() })
                 }
             }
         }

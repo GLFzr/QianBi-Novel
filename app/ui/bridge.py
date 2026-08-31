@@ -509,6 +509,7 @@ class Bridge(QObject):
     cwStreamingChanged = Signal()
     cwLockedChanged = Signal()
     cwReportChanged = Signal()
+    cwProsePolished = Signal(str)   # M6：手动去AI味完成，改写文本进编辑器工作副本（不落盘）
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -704,6 +705,7 @@ class Bridge(QObject):
                                notify=cwLockedChanged)
     cwReportText = Property(str, lambda self: self._get_cw_report_text(), notify=cwReportChanged)
     cwReportTs = Property(str, lambda self: self._get_cw_report_ts(), notify=cwReportChanged)
+    cwReportConsumed = Property(bool, lambda self: self._get_cw_report_consumed(), notify=cwReportChanged)
     cwBusySeconds = Property(int, lambda self: self._cw_busy_seconds, notify=cwBusyChanged)
     cwPreset = Property(str, lambda self: self._get_cw_preset(), notify=cwStageChanged)
     cwReachedStages = Property("QVariantList", lambda self: self._get_cw_reached_stages(), notify=cwStageChanged)
@@ -2165,6 +2167,11 @@ class Bridge(QObject):
             return ""
         return str(st.ensure_cw(self._cw.load()).get("report", {}).get("ts", ""))
 
+    def _get_cw_report_consumed(self) -> bool:
+        if not self._cw:
+            return False
+        return bool(st.ensure_cw(self._cw.load()).get("report", {}).get("consumed", False))
+
     def _get_cw_preset(self) -> str:
         if not self._cw:
             return ""
@@ -2628,6 +2635,12 @@ class Bridge(QObject):
         cw.setdefault("supervised", {})[str(num)] = _dt.datetime.now().strftime("%m-%d %H:%M")
         cw["report"] = {"ts": _dt.datetime.now().strftime("%m-%d %H:%M"),
                         "num": num, "text": text}
+        if self._cw_cancelled:
+            # 已取消：报告照常落盘，但不触发自动派活
+            self._cw_cancelled = False
+            self._cw_save_state(state)
+            self.cwReportChanged.emit()
+            return
         needs_fix, directive = co_dialogue.parse_supervisor_report(text)
         auto_fix = cw.setdefault("auto_fix", {})
         used = int(auto_fix.get(str(num), 0))
@@ -2637,7 +2650,8 @@ class Bridge(QObject):
             self._cw_save_state(state)
             self.cwReportChanged.emit()
             self.toast.emit("info", f"主 Agent 判定第 {num} 章需调整，已自动派写作 Agent 改写")
-            QTimer.singleShot(0, lambda n=num, d=directive: self._dispatch_cw_rewrite(n, d))
+            QTimer.singleShot(0, lambda n=num, d=directive, ts=cw["report"]["ts"]:
+                              self._dispatch_cw_rewrite(n, d, report_ts=ts))
             return
         self._cw_save_state(state)
         self.cwReportChanged.emit()
@@ -2648,12 +2662,34 @@ class Bridge(QObject):
         self.toast.emit("ok", f"主 Agent 衔接比对完成（第 {num} 章，见报告区）"
                               "——确认无问题再点「确定」锁定")
 
-    def _dispatch_cw_rewrite(self, num: int, directive: str, _retry: int = 0):
-        """派写作 Agent 按指令改写（对话区可见；产物仍走原「采纳/保存」人工落点）"""
+    def _dispatch_cw_rewrite(self, num: int, directive: str, report_ts: str = "",
+                             _retry: int = 0):
+        """派写作 Agent 按指令改写（对话区可见；产物仍走原「采纳/保存」人工落点）
+
+        幂等守卫：首次进入（_retry==0）即认领报告（consumed 落盘）——自动链与手动
+        按钮谁先进入谁消费，重试窗口内的第二次进入见 consumed 即放弃，杜绝重复派单。
+        """
+        if _retry == 0:
+            if not self._cw:
+                return
+            state = self._cw.load()
+            cw = st.ensure_cw(state)
+            report = cw.get("report") or {}
+            if report.get("consumed"):
+                self.toast.emit("info", f"第 {num} 章的报告已派发过，不重复派单")
+                return
+            if report_ts and report.get("ts") != report_ts:
+                self.toast.emit("warn", f"报告已被新一轮比对覆盖，派单取消（第 {num} 章）")
+                return
+            report["consumed"] = True
+            cw["report"] = report
+            self._cw_save_state(state)
+            self.cwReportChanged.emit()
         if self._cw_worker is not None:
             # supervisor finished 尚未释放 worker：短延迟重试（最多 ~2s）
             if _retry < 20:
-                QTimer.singleShot(100, lambda: self._dispatch_cw_rewrite(num, directive, _retry + 1))
+                QTimer.singleShot(100, lambda: self._dispatch_cw_rewrite(
+                    num, directive, report_ts=report_ts, _retry=_retry + 1))
             else:
                 self.toast.emit("warn", f"自动派单失败：worker 未释放（第 {num} 章），请在报告区手动派")
             return
@@ -2668,7 +2704,10 @@ class Bridge(QObject):
 
     @Slot()
     def dispatchCwReport(self):
-        """报告区手动派活（不受自动轮次限制）：按最新报告的【改写指令】派写作 Agent"""
+        """报告区手动派活（不受自动轮次限制）：按最新报告的【改写指令】派写作 Agent
+
+        与自动链共用 _dispatch_cw_rewrite 的认领守卫：已消费的报告不再重派。
+        """
         if not self._cw:
             return
         if self._cw_busy:
@@ -2681,7 +2720,7 @@ class Bridge(QObject):
         if num <= 0 or not directive:
             self.toast.emit("warn", "没有可派单的报告/改写指令")
             return
-        self._dispatch_cw_rewrite(num, directive)
+        self._dispatch_cw_rewrite(num, directive, report_ts=str(report.get("ts", "")))
 
     def _cw_worldbook_changed_notice(self, state: dict) -> bool:
         """触发点②：世界书变更后影响提示（不发 LLM）；locked 章建议显式解锁后重核"""
@@ -2706,6 +2745,103 @@ class Bridge(QObject):
         st.ensure_cw(state)["report"] = {}
         self._cw_save_state(state)
         self.cwReportChanged.emit()
+
+    # ---- M6：共写档手动查验（去AI味 / 审校；结果不落盘）----
+
+    @Slot()
+    def deslopCwProse(self):
+        """共写正文手动去AI味：扫描 + 改写进编辑器工作副本（保存才落盘）"""
+        self._start_cw_prose_check("deslop")
+
+    @Slot()
+    def reviewCwProse(self):
+        """共写正文手动六维审校：结果登记 review_findings，复用问题对话框/待修汇总"""
+        self._start_cw_prose_check("review")
+
+    def _start_cw_prose_check(self, mode: str):
+        if not self.proj or not self._cw:
+            return
+        if self._get_cw_mode() != "cw" or self._get_cw_stage_key() != st.STAGE_CW_PROSE:
+            self.toast.emit("warn", "手动查验只在共写正文阶段可用")
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在工作中，稍后再试")
+            return
+        if self._cur_num <= 0:
+            self.toast.emit("warn", "请先打开要查验的章节")
+            return
+        text = self._working_text or self._chapter_text
+        if not text.strip():
+            self.toast.emit("warn", f"第 {self._cur_num} 章没有正文可查验")
+            return
+        num = self._cur_num
+        self._cw_reply = ""
+        self._set_cw_busy(True)
+        worker = co_dialogue.CwProseCheckWorker(self.cfg, self.proj, num, text,
+                                                mode=mode, parent=self)
+        worker.chunk.connect(self._on_cw_chunk)
+        if mode == "deslop":
+            worker.done.connect(lambda _t, n=num: self._on_cw_deslop_done(n))
+        else:
+            worker.done.connect(lambda t, n=num: self._on_cw_review_done(t, n))
+        worker.error.connect(self._on_cw_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_worker = worker
+        worker.start()
+        label = "去AI味改写" if mode == "deslop" else "六维审校"
+        self.toast.emit("info", f"正在对第 {num} 章做{label}…")
+
+    def _on_cw_deslop_done(self, num: int):
+        if self._cw_cancelled:
+            self._cw_cancelled = False
+            self._cw_reply = ""
+            self.cwStreamingChanged.emit()
+            return
+        w = self._cw_worker
+        self._cw_reply = ""
+        self.cwStreamingChanged.emit()
+        if w is None or not w.result_text.strip():
+            return
+        if not w.changed:
+            self.toast.emit("ok", f"第 {num} 章扫描干净，无 AI 味问题")
+            return
+        if self._cur_num != num:
+            self.toast.emit("warn", f"第 {num} 章去味完成，但你已切章——结果已丢弃，请回该章重跑")
+            return
+        b0, a0 = w.before_counts
+        b1, a1 = w.after_counts
+        self.cwProsePolished.emit(w.result_text)
+        if b1:
+            self.toast.emit("warn", f"去味完成：阻断 {b0}→{b1} / 建议 {a0}→{a1}（复扫仍有阻断，可再点一次）")
+        else:
+            self.toast.emit("ok", f"去味完成：阻断 {b0}→0 / 建议 {a0}→{a1}——已进编辑器，点「保存」才落盘")
+
+    def _on_cw_review_done(self, text: str, num: int):
+        if self._cw_cancelled:
+            self._cw_cancelled = False
+            self._cw_reply = ""
+            self.cwStreamingChanged.emit()
+            return
+        from ..core import stages as stages_mod
+        self._cw_reply = ""
+        self.cwStreamingChanged.emit()
+        if not text.strip():
+            return
+        v2 = stages_mod.parse_final_review_v2(text)
+        if not v2["verdict"]:   # v1 兜底解析（与 ChapterRepairWorker._review_v2 同款）
+            fb, fa = stages_mod.parse_review_findings(text)
+            v2["blocking"] = v2["blocking"] or fb
+            v2["advisory"] = v2["advisory"] or fa
+        state = self._cw.load()
+        # save_review_findings 内部已 save_state 落盘，无需二次写入
+        st.save_review_findings(self.proj, state, num, v2["verdict"] or "REJECT",
+                                v2["items"], v2["blocking"], v2["advisory"])
+        self.needsFixChanged.emit()
+        if not v2["blocking"] and not v2["items"]:
+            self.toast.emit("ok", f"第 {num} 章审校通过，无登记问题")
+            return
+        self.toast.emit("warn", f"第 {num} 章审校完成：阻断 {len(v2['blocking'])} / 建议 {len(v2['advisory'])}（详见问题对话框）")
+        self.showReviewIssues(num)
 
     def _confirm_cw_project(self):
         state = self._cw.load()

@@ -660,6 +660,14 @@ ApplicationWindow {
                     gateBar.waiting = false   // 真机缺陷②：停止/失败/完本后清残留决策条
                 }
             }
+            Connections {
+                target: bridge
+                // 共写手动去AI味完成：改写文本进工作副本（未落盘），保存才提交
+                function onCwProsePolished(polished) {
+                    bridge.noteEditAction("去AI味")
+                    editor.text = polished   // 触发 markEditorDirty → 未保存标记亮起
+                }
+            }
             Shortcut {
                 sequence: "Return"
                 enabled: gateBar.waiting

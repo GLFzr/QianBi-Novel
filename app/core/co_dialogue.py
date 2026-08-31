@@ -502,3 +502,104 @@ class ReviewOutlinesWorker(QThread):
             self.done.emit(text)
         except Exception as e:  # noqa: BLE001
             self.error.emit(str(e))
+
+
+# ---------- M6：共写档手动查验（去AI味 / 六维审校）----------
+
+class CwProseCheckWorker(QThread):
+    """共写档手动查验：去AI味改写（writing 槽）/ 六维审校（review 槽）
+
+    读 bridge 传入的编辑器工作副本；与流水线微循环同款 prompt 装配
+    （DESLOP_REWRITE_PROMPT / FINAL_REVIEW_PROMPT），结果不落盘：
+    - deslop：done 携带改写后文本（零改动时携带原文），前后扫描计数存属性；
+    - review：done 携带原始报告文本（bridge 侧解析并登记，复用待修汇总/一键修复）。
+    """
+    chunk = Signal(str)
+    done = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, cfg: dict, proj: str, num: int, text: str, mode: str = "deslop",
+                 router=None, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.num = num
+        self.text = text or ""
+        self.mode = mode
+        self.router = router or ModelRouter(cfg)
+        self.last_prompt = ""
+        self.result_text = ""
+        self.changed = False
+        self.before_counts = (0, 0)   # (blocking, advisory)
+        self.after_counts = (0, 0)
+
+    def run(self):
+        try:
+            if self.mode == "deslop":
+                self._run_deslop()
+            else:
+                self._run_review()
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(str(e))
+
+    def _run_deslop(self):
+        from .. import deslop
+        from . import gates
+        from . import stages as stages_mod
+        blocking, advisory = gates.scan_deslop(self.text)
+        self.before_counts = (len(blocking), len(advisory))
+        if not blocking and not advisory:
+            self.changed = False
+            self.result_text = self.text
+            self.done.emit(self.text)
+            return
+        outline = project.read_file(project.get_outline_path(self.proj, self.num))[:600] \
+            or "（无本章细纲）"
+        prompt = prompts.DESLOP_REWRITE_PROMPT.format(
+            findings=deslop.findings_to_prompt_text(blocking + advisory),
+            prose=self.text,
+            outline_brief=outline,
+            tic_blacklist=stages_mod._tic_blacklist(self.proj),
+        )
+        self.last_prompt = prompt
+        rewritten = clean_llm_output(self.router.client(cfg_mod.SLOT_WRITING)
+                                     .chat_stream(prompt, on_chunk=self.chunk.emit))
+        if self.isInterruptionRequested():
+            return
+        if not rewritten.strip():
+            self.error.emit("去味改写返回为空，请重试")
+            return
+        b2, a2 = gates.scan_deslop(rewritten)
+        self.changed = True
+        self.after_counts = (len(b2), len(a2))
+        self.result_text = rewritten
+        self.done.emit(rewritten)
+
+    def _run_review(self):
+        from . import memory
+        from . import stages as stages_mod
+        sem = self.cfg.get("writing", {}).get("regex_semantics", "logic")
+        prompt = prompts.FINAL_REVIEW_PROMPT.format(
+            prose=self.text[:6000],
+            core_setting=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
+                          or "（未提供）"),
+            global_summary=memory.read_global_summary(self.proj) or "（尚未开始）",
+            character_states=project.read_file(project.get_tracking_path(self.proj, "角色状态"))[:2000] or "（暂无）",
+            foreshadows=memory.unfished_foreshadows(self.proj) or "（暂无）",
+            timeline=project.read_file(project.get_tracking_path(self.proj, "时间线"))[:1500] or "（暂无）",
+            worldbook_block=project.worldbook_text(self.proj),
+            regex_block=project.regex_block(self.proj, sem),
+            genre_review_extra=stages_mod._genre_review_extra(self.proj),
+            outline=(project.read_file(project.get_outline_path(self.proj, self.num))[:1000]
+                     or "（未提供）"),
+        )
+        self.last_prompt = prompt
+        result = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW)
+                                  .chat_stream(prompt, on_chunk=self.chunk.emit))
+        if self.isInterruptionRequested():
+            return
+        if not result.strip():
+            self.error.emit("审校返回为空，请重试")
+            return
+        self.result_text = result
+        self.done.emit(result)
