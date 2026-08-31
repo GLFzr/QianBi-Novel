@@ -57,6 +57,9 @@ class _FakeClient:
     def chat_stream(self, prompt, on_chunk=None, **kw):
         return self.reply
 
+    def chat(self, prompt, **kw):
+        return self.reply
+
 
 class _FakeRouter:
     def __init__(self, reply="好的。"):
@@ -73,6 +76,24 @@ def test_dialogue_worker_focus_passthrough(tmp_path):
     w.run()
     assert "锚定第 2 章" in w.last_prompt
     assert w.result_text == "好的。"
+
+
+def test_supervisor_prev_chapter_for_middle_rewrite(tmp_path):
+    """主 Agent 衔接比对：重写中间章时上一章=小于本章的最近存在章（曾误判「本章为第一章」）"""
+    proj = _mk_proj(tmp_path)
+    # ch1/ch3 存在；对第 3 章做衔接比对 → 上一章应为 ch1（而非「本章为第一章」，也非磁盘最后一章）
+    w = co_dialogue.SupervisorWorker({}, proj, 3, router=_FakeRouter("报告。"))
+    w.run()
+    assert "第一章结尾钩子" in w.last_prompt
+    assert "（本章为第一章）" not in w.last_prompt
+    assert w.result_text == "报告。"
+
+
+def test_supervisor_first_chapter_placeholder(tmp_path):
+    proj = _mk_proj(tmp_path)
+    w = co_dialogue.SupervisorWorker({}, proj, 1, router=_FakeRouter("报告。"))
+    w.run()
+    assert "（本章为第一章）" in w.last_prompt
 
 
 # ---- 双文件守卫 / 草稿串章兜底（Bridge 方法以轻量 self 驱动，不构造完整 QObject）----

@@ -323,8 +323,10 @@ class SupervisorWorker(QThread):
         try:
             chapters = project.list_chapters(self.proj)
             prev_ending = "（本章为第一章）"
-            if chapters and chapters[-1][0] == self.num - 1:
-                prev_ending = project.read_file(chapters[-1][2])[-800:]
+            # 补写/重写中间章时，上一章 = 小于本章的最近存在章（不是磁盘最后一章）
+            prev = sorted([c for c in chapters if c[0] < self.num])
+            if prev:
+                prev_ending = project.read_file(prev[-1][2])[-800:]
             chapter_text = project.read_file(project.get_chapter_path(self.proj, self.num))[:3000]
             if not chapter_text.strip():
                 # 正文可能尚未落盘（编辑器工作副本）：读细纲兜底
