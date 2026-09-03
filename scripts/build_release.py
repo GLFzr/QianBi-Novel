@@ -66,6 +66,8 @@ def main():
     ap.add_argument("--skip-tests", action="store_true", help="跳过质量闸门（发版禁用）")
     ap.add_argument("--no-installer", action="store_true", help="跳过 Inno Setup 安装包")
     ap.add_argument("--skip-probe", action="store_true", help="跳过打包版冒烟探针")
+    ap.add_argument("--skip-qml", action="store_true",
+                    help="打包探针跳过 qml 摘要段（调试用；发版禁用）")
     args = ap.parse_args()
 
     from app import __version__
@@ -104,10 +106,14 @@ def main():
                   for dp, _, fs in os.walk(dist_dir) for f in fs)
     print(f"       onedir 体积: {size_mb:.0f} MB")
 
-    # ---- 5. 打包版冒烟探针 ----
+    # ---- 5. 打包版验证（资源清单审计 + 启动冒烟 + 打包态/开发态摘要对拍）----
     if not args.skip_probe:
-        r = subprocess.run([sys.executable, "tests/probe_packaged.py", "--exe", exe], cwd=ROOT)
-        step("打包版冒烟", r.returncode == 0)
+        cmd = [sys.executable, "tests/probe_packaged.py", "--exe", exe]
+        if args.skip_qml:
+            cmd.append("--skip-qml")
+            print("       [WARN] --skip-qml：摘要对拍跳过 qml 段（发版禁用）")
+        r = subprocess.run(cmd, cwd=ROOT)
+        step("打包版验证", r.returncode == 0)
     else:
         print("[WARN] --skip-probe：打包冒烟已跳过（发版禁用）")
 

@@ -1,5 +1,6 @@
 ; 千笔一文 Novel — Inno Setup 安装脚本（封装计划 T2.1）
-; 编译：ISCC /DAppVersion=0.14.0 tools/installer.iss
+; 编译：ISCC /DAppVersion=<app/__init__.py 的 __version__> tools/installer.iss
+;      （正常发版由 scripts/build_release.py 自动注入，无需手写版本号）
 ; 签名（证书到位后在 Sign Tool 配置或本脚本 SignToolDirective 启用）：
 ;   signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 <file>
 
