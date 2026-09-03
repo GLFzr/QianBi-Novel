@@ -293,14 +293,14 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_backflow_chain.py
-# …… 41 probe_*.py in total: 30 run offline, 5 need a real key, probe_packaged is invoked
+# …… 42 probe_*.py in total: 30 run offline, 5 need a real key, probe_packaged is invoked
 #     by the release pipeline with --exe
 ```
 
 | Probe | Covers |
 |---|---|
 | `probe_prompt_baseline.py` | 45 assembly-point prompt digests + positive wiring assertions for preset fields |
-| `probe_qml_compile.py` | Compiles all 34 QML components (a wrong property silently prevents the whole tree from loading) |
+| `probe_qml_compile.py` | Compiles all 40 QML components (a wrong property silently prevents the whole tree from loading) |
 | `probe_agent_relay.py` | Co-writing relay orchestration: each agent sees only the previous stage's output, Supervisor context cap, lock trigger point |
 | `probe_word_block.py` | Word-count gate, lock interception, force-lock trail, stale queue |
 | `probe_backflow_chain.py` | Full backflow chain: idempotency, external edits, missing outline, interruption, re-queue |
@@ -358,7 +358,7 @@ scripts/
   dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
   unit/                 34 files / 421 offline tests
-  probe_*.py            41 headless chain probes
+  probe_*.py            42 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice
 ```
@@ -442,7 +442,7 @@ Full history in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Theme |
 |---|---|
-| **v0.16.0** | External document import for fan fiction (decompose only what exists · preview · reversible) + contract panel (view/edit/delete rules) + update path hardened (both channels never touch your data) + streaming stop & thinking visibility + UI borders and batch controls |
+| **v0.17.0** | UI maturation: design system 2.0 (luminance steps/self-drawn controls/desaturated semantics) + modal overlays & five text-overlap fixes + reader heading hierarchy & CJK quotes + root-cause fix for zero panel padding (ScrollView ignores Layout.margins) |
 | v0.15.0 | Entry-based worldbook activation + preset assembly layer (scene cards / per-phase sampling / per-chapter snapshots / solidify as template) + three-layer review + plot backflow + word-count gate + packaging parity gate |
 | v0.14.0 | Commercial packaging: installer & portable zip, single-instance lock, crash handling, keys into Credential Manager, update check, first-run wizard |
 | v0.13.0 | Full port of the TUI's strengths: 10 v2 presets, 6-dimension review + repair loop, 6 scene-card types, 3 themes |

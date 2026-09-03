@@ -244,13 +244,13 @@ python -m venv .venv
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_backflow_chain.py
-# …… 共 41 个 probe_*.py：30 个离线可跑，5 个需真实 Key，probe_packaged 由发布流水线带 --exe 调用
+# …… 共 42 个 probe_*.py：30 个离线可跑，5 个需真实 Key，probe_packaged 由发布流水线带 --exe 调用，probe_ui_gallery 产出全量 UI 截图
 ```
 
 | 探针 | 覆盖 |
 |---|---|
 | `probe_prompt_baseline.py` | 45 个装配点 prompt 摘要 + 预设字段接线正例断言 |
-| `probe_qml_compile.py` | 34 个 QML 组件逐个编译（属性写错会让整棵界面树静默加载失败）|
+| `probe_qml_compile.py` | 40 个 QML 组件逐个编译（属性写错会让整棵界面树静默加载失败）|
 | `probe_agent_relay.py` | 共写接力编排：每 Agent 只注入上环节产物、Supervisor 上下文上限、锁定触发点 |
 | `probe_word_block.py` | 字数闸门、锁定拦截、强锁留痕、陈旧队列 |
 | `probe_backflow_chain.py` | 反哺全链路：幂等、外部直改、缺细纲、中断、补跑队列 |
@@ -306,7 +306,7 @@ scripts/
   dual_sync_check.py    共享层漂移检查（文件级 + 符号级 AST 摘要）
 tests/
   unit/                 34 个文件 / 421 项离线单测
-  probe_*.py            41 个无头链路探针
+  probe_*.py            42 个无头链路探针
   evals/                prompt 装配基线 + 审校金标集
 docs/                   设计与计划文档、隐私说明
 ```
@@ -380,6 +380,7 @@ GUI 先行暂不同步的符号要在 `DEFERRED_SYMBOLS` 登记「原因 + TUI �
 
 | 版本 | 主题 |
 |---|---|
+| **v0.17.0** | UI 成熟化：设计系统 2.0（明度阶梯/控件全自绘/语义色降噪）+ 弹窗遮罩与字体重叠五连修 + 阅读器标题层级与中文引号 + 面板零边距根因修复（ScrollView 忽略 Layout.margins）|
 | **v0.16.0** | 外部文档导入（同人文路径：只拆实有 · 预览映射 · 整批可撤）+ 本书契约面板 + 更新通道两条路径不吃数据 + 流式可中断与思考过程可见 + 界面描边与细纲批次控制 |
 | v0.15.0 | 世界书条目化激活 + 预设组装层（工艺卡/分相位采样/章级快照/固化为模板）+ 审核三层 + 剧情反哺 + 字数闸门 + 打包一致性门禁 |
 | v0.14.0 | 商业化封装：安装器与便携包、单实例锁、崩溃处理、Key 入凭据管理器、检查更新、首启向导 |

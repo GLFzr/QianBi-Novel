@@ -4,6 +4,65 @@
 
 > 版本号唯一来源为 `app/__init__.py` 的 `__version__` 常量，本文件与 README、git tag 均以其为准。
 
+## [0.17.0] - 2026-09-04（UI 成熟化 · 面板呼吸感 · 阅读排版升级）
+
+> 动机：功能已经齐了，这一版解决「看起来不像成品」——
+> 以 ZCode 桌面端与 Apple 呈现方式为设计基准，做了一轮全量 UI 深度优化：
+> 高级化（明度阶梯/发丝线/克制的强调色）、风格化（统一控件系统）、成熟化（三轮截图验收零硬伤）。
+
+### 新增
+
+- **设计系统 2.0**：明度阶梯重校准（夜间主题 bgPanel<bgPage<bgCard 相邻层差 ≥8，区块不再糊成一片）；
+  字号 6 档（补 fsMicro）、圆角 4 档、间距 6 档全部 token 化；语义色降饱和保色相，只用于小面积
+  （数值/细条/徽章），禁止大色块；新增 `warn` 语义色、`overlay` 弹窗遮罩、accent 三态衍生色
+- **六个新控件**：AppSelect（自绘下拉，替换全部原生 ComboBox 的系统箭头/白底弹层）、
+  AppSwitch（布尔偏好开关）、AppScrollBar（统一滚动条）、AppEmptyState（空态三件套：
+  图标+标题+弱说明）、AppStatTile（指标瓦片，语义色只落在细条与数值上）、AppDialogTitle
+- **模态遮罩**：全部弹窗统一获得全屏变暗遮罩（Apple modal 行为），不再裸浮在页面上；
+  ApplicationWindow 设全局 palette，原生控件缝隙不再漏白
+- **阅读器排版**：Markdown 标题（`# 第X章 …`）渲染为真标题层级（更大字号加粗、节间距），
+  不再与正文同字号；直引号按配对自动转中文引号「""」；阅读列宽约束与行距校准
+- **UI 图库探针** `probe_ui_gallery.py`：逐面板 + 逐 Dialog + 三主题自动截图 34 张，
+  配合三轮视觉验收流程（文字重叠=0、糊边=0、风格一致性）
+- **视觉 token 审计** `tools/audit_tokens.py` 并编入发布流水线第四道不可跳过闸门：
+  拦裸字号 10、锚点 footer 反模式、业务代码裸 hex 色、无描边卡片回潮
+
+### 修复
+
+- **面板内容零边距贴边**（长期未解的「中列遮挡」真凶）：SettingsPanel/PipelinePanel/NotesPanel
+  的 ScrollView 内容用了 `Layout.margins`，但 ScrollView 的 contentItem 不是 Layout，
+  **该属性被 Qt 静默忽略**——表单、卡片、按钮左右顶死面板边缘，控件贴着边框像被遮挡；
+  Console 展开把面板推向编辑器后视觉更甚。改为真实 x/y 偏移 + 收窄宽度，全部面板两侧各留 12px
+- **弹窗字体重叠五连**：终稿锁定徽章宽度为 0 文字溢出压工具栏（Main.qml）；NeedsFix/ReviewIssue
+  双标题（QQC2 隐式 header + 自绘标题条叠加）；Toast 固定 36px 长文换行溢出；forceLock/stats
+  弹窗 header 无 wrap 长标题画出边缘；版本行/队列行/文件列表多处无 elide 水平溢出
+- **禁用主按钮退化成裸文字**：`!enabled` 时主按钮只剩文字、层级反被描边次按钮倒挂；
+  现禁用态保留外形（主=灰底、次=描边）
+- **行首标点悬挂**：全部 CJK 说明文字 wrapMode 从 `WrapAnywhere`（允许标点起行）改为 `Wrap`
+  （遵循 Unicode 断行规则），行首不再出现「。」「）」
+- **AppButton 高度下限 28**：52 处被压到 20/22px 的按钮文字垂直溢出压描边；补 `success` kind
+  （此前 ReviewIssueDialog 传的 "success" 静默落入 secondary，强调丢失）
+- 压住 41 处主题外硬编码色：AppButton accent 衍生色、StageStepper/StepPills 夜间几乎不可见的
+  死色、未保存圆点、选中文本色等全部入库；AboutDialog 原生 CheckBox → AppCheck
+- 去emoji/字符图标（⚡✦❖☰✍📋✨🎯💡▲▼×）：统一 AppIcon 线性图标；
+  Console 折叠把手的竖排"Console"残留改为图标+tooltip
+
+### 变更
+
+- 流水线质量趋势柱改中性色+阻断红点（原高饱和红绿大色块）；阶段卡字符图标换线性图标；
+  面板头统一规格（66px + fsTitle 粗标题 + 弱化元信息）；质量四格换 AppStatTile
+- 预设库空详情区、审校 0 项、生成配置空壳、项目文件空列表全部补空态设计，消灭死黑大区
+- 弹窗 footer 从锚点定位改为 RowLayout+弹性占位（9 处）；「关闭」按钮形态统一
+  （唯一出口=描边次级，伴随主操作=幽灵）
+
+### 测试与闸门
+
+- 离线单测 421 项全绿；无头探针 41 → **42 个**；QML 34 → **40 个文件**全部可编译
+- 发布流水线闸门 3 → **4 道**（+视觉 token 审计）；`docs/v0.17_status_report.md` 附三轮
+  截图验收全记录（面板 9/9、弹窗 21/21 通过）
+
+---
+
 ## [0.16.0] - 2026-09-04（契约有牙齿 · 同人文导入 · 升级不吃数据）
 
 > 动机：v0.15 把「设定怎么进 prompt」做扎实了，这一版解决「说了不算」——
