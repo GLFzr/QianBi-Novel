@@ -243,3 +243,41 @@ def test_every_callsite_passes_every_placeholder():
             assert not missing, "%s 在 %s 漏传 %s" % (name, where, sorted(missing))
             checked += 1
     assert checked >= 5, "只核到 %d 处调用点，覆盖面异常" % checked
+
+
+def test_contract_hit_reaches_review_l0_block(tmp_path):
+    """第二层处置：确定性命中必须经 review_l0_block 进终审
+
+    这是流水线 / 修复复审 / 共写手动审校三个入口共用的唯一装配点，
+    在这里钉住就等于三处一起钉住。
+    """
+    from app.core import stages
+    proj = _make_proj(tmp_path)
+    # 可满足的契约：不追加任何块（避免把「没问题」也写成一段噪声）
+    _write_rules(proj, "# 规则集\n- 不得出现「仿佛」：`仿佛`｜level：must｜mode：forbid\n")
+    assert "正则 must 契约" not in stages.review_l0_block(proj, 1, "他推门进去，说了 50 元。")
+    # require 型契约在本章没有落点：必须作为 advisory 进审校，并点名是哪条
+    _write_rules(proj, "# 规则集\n- 每章至少写明一处当票面额：`￥\\d+`｜level：must｜mode：require\n")
+    block = stages.review_l0_block(proj, 1, "他推门进去，什么也没写。")
+    assert "正则 must 契约" in block and "当票面额" in block
+    assert "ADVISORY" in block              # require 判不动只漏报，不阻断
+
+
+def test_contract_precheck_only_blocks_on_blocking(tmp_path):
+    """第三层处置：锁定闸门的 item 形状与「advisory 不拦人」"""
+    proj = _make_proj(tmp_path)
+    prose = "他推门进去，什么也没写。"
+    # 无违规 → 三空元组，调用方直接放行
+    _write_rules(proj, "# 规则集\n- 不得出现「仿佛」：`仿佛`｜level：must｜mode：forbid\n")
+    assert mustscan.contract_precheck(proj, 1, prose) == ([], [], "")
+    # require 缺失只是 advisory：绝不能拦锁定，否则假阻断会把人逼成无脑强锁
+    _write_rules(proj, "# 规则集\n- 每章写明当票面额：`￥\\d+`｜level：must｜mode：require\n")
+    assert mustscan.contract_precheck(proj, 1, prose) == ([], [], "")
+    # forbid 命中才拦，且 item 与审校 v2 同构、带可验真的原文
+    _write_rules(proj, "# 规则集\n- 不得出现「仿佛」：`仿佛`｜level：must｜mode：forbid\n")
+    items, blocking, verdict = mustscan.contract_precheck(proj, 1, "他仿佛看见父亲。")
+    assert verdict == "REJECT" and len(items) == 1 and len(blocking) == 1
+    it = items[0]
+    assert it["text"].startswith("[正则must]")
+    assert it["dim"] and it["level"] == "fail" and it["root_layer"] == "ROOT_REGEX"
+    assert it["quote"] and it["quote"] in "他仿佛看见父亲。"

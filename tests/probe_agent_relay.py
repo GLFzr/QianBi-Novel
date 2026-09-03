@@ -99,7 +99,7 @@ b.setCwMode(True)
 sup_started, blocked = [], []
 b._start_cw_supervisor = lambda: sup_started.append(1)
 b._maybe_backflow = lambda num, force=False: None
-b.lockBlocked.connect(lambda num, reason, actual, target: blocked.append((num, target)))
+b.lockBlocked.connect(lambda num, reason, actual, target, kind: blocked.append((num, target)))
 s2 = st.load_state(proj)
 st.ensure_cw(s2)["stage"] = st.STAGE_CW_PROSE
 st.save_state(proj, s2)

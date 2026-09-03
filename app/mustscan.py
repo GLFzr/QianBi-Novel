@@ -94,3 +94,23 @@ def format_must_findings(findings: list, max_chars: int = 600) -> str:
         lines.append(line)
         total += len(line) + 1
     return "\n".join(lines)
+
+
+def contract_precheck(proj: str, num: int, prose: str) -> tuple:
+    """锁定/审校前置的确定性契约闸门 → (items, blocking, verdict)
+
+    与 gates.word_count_precheck 同款契约：本函数不自己拦，只合成与审校 v2
+    item 同构的结果，由调用方决定短路（跳过审校 LLM / 发 lockBlocked / 强锁留痕）。
+    放在本模块而非 gates.py：gates.py 与 TUI 逐字节同源，本模块 GUI-only。
+
+    只有 blocking 参与闸门。advisory 的含义就是「判不准」，对不确定的东西亮红
+    会制造假阻断，最终把人训练成无脑点强锁——那这套机制就白做了。
+    """
+    fs = [f for f in scan_proj(proj, prose) if f["level"] == "blocking"]
+    if not fs:
+        return ([], [], "")
+    items = [{"dim": "D_PLOT", "level": "fail", "quote": f.get("quote") or "",
+              "text": "[正则must] " + f["text"], "root_layer": "ROOT_REGEX", "line": ""}
+             for f in fs]
+    blocking = [it["text"] for it in items]
+    return (items, blocking, "REJECT")

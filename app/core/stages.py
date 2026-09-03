@@ -16,7 +16,7 @@ import os
 import re
 
 from .. import config as cfg_mod
-from .. import project, prompts, deslop, wb
+from .. import project, prompts, deslop, mustscan, wb
 from ..llm import clean_llm_output
 from ..prompts import scene_cards
 from . import gates, memory, scan, state as st, versions
@@ -1083,7 +1083,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
 def review_l0_block(proj: str, num: int, prose: str) -> str:
     """L0 确定性预检组装（流水线/修复复审/共写审校三注入点共用）
 
-    专名/跨章复读/数值账/章末弱钩/题材禁词 → 格式化注入审校 prompt。
+    专名/跨章复读/数值账/章末弱钩/题材禁词 → 格式化注入审校 prompt；
+    再接本书正则 must 的确定性命中（app/mustscan）。后者是契约违规的
+    第二层处置：不另起一个自动重试环（那会和 ±20% 字数纪律互相拉扯出振荡），
+    直接交给既有审校反馈环——它带着全量上下文改，且本就有三轮熔断。
     """
     prev = project.nearest_chapter_before(proj, num)
     prev_prose = (project.read_file(prev[2]) if prev else "") or ""
@@ -1093,9 +1096,13 @@ def review_l0_block(proj: str, num: int, prose: str) -> str:
     ])
     genre = (project.read_idea_info(proj) or {}).get("genre", "") or ""
     forbidden = [] if any(k in genre for k in ("修仙", "仙侠", "玄幻")) else scan.GENERIC_FORBIDDEN
-    return scan.format_scan_block(scan.scan_chapter(
+    block = scan.format_scan_block(scan.scan_chapter(
         prose, prev_prose, roster=project.worldbook_anchors(proj, 0),
         ledger_text=ledger_text, forbidden_words=forbidden))
+    must_fs = mustscan.scan_proj(proj, prose)
+    if must_fs:
+        block += "\n\n【正则 must 契约·本地确定性命中】\n" + mustscan.format_must_findings(must_fs)
+    return block
 
 
 def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str) -> str:

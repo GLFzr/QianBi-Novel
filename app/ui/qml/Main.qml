@@ -1293,13 +1293,15 @@ ApplicationWindow {
     property string lockBlockReason: ""
     property int lockBlockActual: 0
     property int lockBlockTarget: 0
+    property string lockBlockKind: "word"   // word=字数未达标 | contract=正则 must 违规
     Connections {
         target: bridge
-        function onLockBlocked(num, reason, actual, target) {
+        function onLockBlocked(num, reason, actual, target, kind) {
             mainWindow.lockBlockNum = num
             mainWindow.lockBlockReason = reason
             mainWindow.lockBlockActual = actual
             mainWindow.lockBlockTarget = target
+            mainWindow.lockBlockKind = kind || "word"
             forceLockDialog.open()
         }
     }
@@ -1314,7 +1316,9 @@ ApplicationWindow {
         padding: 18
         background: DialogBg {}
         header: Text {
-            text: "第 " + mainWindow.lockBlockNum + " 章字数未达标，仍要锁定？"
+            text: mainWindow.lockBlockKind === "contract"
+                   ? "第 " + mainWindow.lockBlockNum + " 章违反本书正则契约，仍要锁定？"
+                   : "第 " + mainWindow.lockBlockNum + " 章字数未达标，仍要锁定？"
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
@@ -1333,10 +1337,22 @@ ApplicationWindow {
                 wrapMode: Text.Wrap
             }
             Text {
+                visible: mainWindow.lockBlockKind !== "contract"
                 width: parent.width
                 text: "当前 " + Number(mainWindow.lockBlockActual).toLocaleString(Qt.locale(), 'f', 0)
                       + " 字 / 目标 " + Number(mainWindow.lockBlockTarget).toLocaleString(Qt.locale(), 'f', 0)
                       + " 字。锁定后本章反哺登记照常进行，但短章事实会被留痕；解锁后可继续扩写。"
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+            Text {
+                visible: mainWindow.lockBlockKind === "contract"
+                width: parent.width
+                text: "这条规则是本地按你声明的正则确定性命中的，不是模型的主观判断。"
+                      + "若规则本身已过时，请改 设定/正则.md（或给它加 ｜disabled）而不是强锁绕过；"
+                      + "确属有意为之则强锁，违规内容会写进本章的强锁留痕。"
                 color: Theme.textSecondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsBody

@@ -84,8 +84,8 @@ WB_ADDITIONAL = """
 
 RG_FIXTURE = """# 正则约束
 
-- 规则：不得出现「仿佛」「似乎」等推测性比喻｜level：must｜scope：prose
-- 规则：每章至少一处具体价钱或数字，且不重复使用同一金额
+- 规则：不得出现「仿佛」「似乎」等推测性比喻：`仿佛|似乎`｜level：must｜mode：forbid｜scope：prose
+- 规则：每章至少写明一处当票面额：`￥\d+`｜level：must｜mode：require
   续行示例：灵石、时薪、当票面额均可。
 """
 
@@ -504,9 +504,10 @@ def _diff(old: list, new: list):
             lines.append(f"[调用次数] {kind}/{slot} {len(o)}→{len(n)} "
                          f"（新增装配点或该装配点少跑了一次）")
             continue
-        os_ = sorted(o, key=lambda e: e["sha256"])
-        ns_ = sorted(n, key=lambda e: e["sha256"])
-        for oe, ne in zip(os_, ns_):
+        # 组内条数相等 → 按原始调用顺序配对（顺序是确定的）。
+        # 别按摘要排序配对：prose/review 这类一组多条时，排序会把第 4 章去比第 1 章，
+        # 报出 9038→8942 这种毫无意义的增量，对账时反而看不出真实变化。
+        for oe, ne in zip(o, n):
             if oe["sha256"] != ne["sha256"]:
                 lines.append(f"[内容变化] {kind}/{slot} "
                              f"chars {oe['chars']}→{ne['chars']} (#{ne['i']})")

@@ -101,8 +101,8 @@ def check(name, ok):
 check.failed = False
 
 LOCK_BLOCKED = []
-b.lockBlocked.connect(lambda num, reason, actual, target:
-                      LOCK_BLOCKED.append((num, reason, actual, target)))
+b.lockBlocked.connect(lambda num, reason, actual, target, kind:
+                      LOCK_BLOCKED.append((num, reason, actual, target, kind)))
 
 
 def step1_precheck():
@@ -137,6 +137,8 @@ def step3_lock_gate():
           LOCK_BLOCKED and LOCK_BLOCKED[0][0] == 4
           and LOCK_BLOCKED[0][2] == project.count_chars(SHORT_PROSE)
           and LOCK_BLOCKED[0][3] == 2000)
+    check("闸门类型标注为 word（决定强锁对话框文案）",
+          bool(LOCK_BLOCKED) and LOCK_BLOCKED[0][4] == "word")
     check("短章未被静默锁定", not project.is_chapter_locked(PROJ, 4))
     QTimer.singleShot(400, step4_force_dialog)
 

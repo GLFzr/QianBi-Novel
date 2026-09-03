@@ -12,7 +12,7 @@ from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
                             Property, Signal, Slot, QThread, QTimer)
 
 from .. import config as cfg_mod
-from .. import project, deslop, prompts
+from .. import mustscan, project, deslop, prompts
 from ..core import gates, state as st, versions
 from ..core.orchestrator import Orchestrator
 from ..core.co_writing import CoWriting
@@ -755,7 +755,8 @@ class Bridge(QObject):
     modelsFetched = Signal(str, list)           # cid, models
     ideaExpanded = Signal(bool, str)            # ok, result_or_error
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
-    lockBlocked = Signal(int, str, int, int)    # 锁定被字数闸门拦截：num, reason, actual, target
+    lockBlocked = Signal(int, str, int, int, str)  # 锁定被闸门拦截：num, reason, actual, target, kind
+    # kind: "word"=字数未达标（有 actual/target）| "contract"=正则 must 契约违规（无字数概念）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
@@ -2794,8 +2795,11 @@ class Bridge(QObject):
     def confirmChapterLocked(self):
         """✓ 章节内容确定 = 终稿锁定：内容不再改动，编辑器只读
 
-        字数闸门：低于目标下限 → 发 lockBlocked 信号（QML 弹「仍要锁定」确认），
-        用户点强锁走 forceConfirmChapterLocked；短章不能静默锁定。
+        两道确定性闸门，都不静默放行，都允许作者显式强过并留痕：
+        ① 字数闸门：低于目标下限 → lockBlocked(kind="word")；
+        ② 正则 must 契约：本地可判的规则被违反 → lockBlocked(kind="contract")。
+        用户点强锁走 forceConfirmChapterLocked。契约不凌驾于作者——
+        但绕过它必须留下署名记录，而不是悄悄发生。
         """
         if not self.proj or not self._cur_num:
             self.toast.emit("warn", "请先打开要锁定的章节")
@@ -2810,23 +2814,35 @@ class Bridge(QObject):
             default = int(self.cfg.get("writing", {}).get("chapter_word_target", 3000))
             target = gates.chapter_word_target(self.proj, self._cur_num, default)
             self.lockBlocked.emit(self._cur_num, blocking[0],
-                                  project.count_chars(prose), target)
+                                  project.count_chars(prose), target, "word")
+            return
+        _c_items, c_blocking, c_verdict = mustscan.contract_precheck(
+            self.proj, self._cur_num, prose)
+        if c_verdict:
+            self.lockBlocked.emit(self._cur_num, c_blocking[0], 0, 0, "contract")
             return
         self._do_lock_chapter(forced=False)
 
     @Slot()
     def forceConfirmChapterLocked(self):
-        """强制锁定（用户在确认框选择「仍要锁定」）：字数不达标留审计痕"""
+        """强制锁定（用户在确认框选择「仍要锁定」）：未通过的闸门全部留审计痕
+
+        绕过的那一条必须写进记录——否则强锁这个出口恰好藏掉了闸门要暴露的东西。
+        """
         if not self.proj or not self._cur_num:
             return
         if project.is_chapter_locked(self.proj, self._cur_num):
             return
         prose = self._chapter_text or project.read_file(self._chapter_path or "")
+        reasons = []
         _items, blocking, _v = gates.word_count_precheck(
             self.proj, self._cur_num, prose, self.cfg)
+        reasons += list(blocking or [])
+        _ci, c_blocking, _cv = mustscan.contract_precheck(self.proj, self._cur_num, prose)
+        reasons += list(c_blocking or [])
         try:
             st.record_forced_lock(self.proj, st.load_state(self.proj), self._cur_num,
-                                  blocking[0] if blocking else "手动强锁")
+                                  "；".join(reasons) if reasons else "手动强锁")
         except Exception:
             pass
         self._do_lock_chapter(forced=True)
