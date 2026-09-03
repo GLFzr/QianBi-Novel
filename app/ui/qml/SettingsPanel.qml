@@ -342,6 +342,7 @@ Item {
                             model: modelList
                             textRole: "m"
                             palette.window: Theme.bgCard
+                            palette.base: Theme.bgCard
                             palette.text: Theme.textPrimary
                             palette.buttonText: Theme.textPrimary
                             background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
