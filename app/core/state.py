@@ -270,13 +270,14 @@ class CWStateTD(TypedDict, total=False):
     mode: str            # auto=自动档 / cw=共写档（项目级粘性）
     stage: str           # 当前共写阶段
     preset: str
-    transcript: dict     # {阶段key: [{role, text}]}
+    transcript: dict     # {阶段key: [{role, text, nums?}]}（nums=这条回执对应的细纲章号）
     handoff: dict        # {阶段key: 交接小节}
     reopening: str
     locked: dict
     unit: dict
     supervised: dict
     report: dict
+    last_outline_batch: list   # 最近一批细纲的章号：编辑器跟随最新一批
 
 
 class PipelineStateTD(TypedDict, total=False):

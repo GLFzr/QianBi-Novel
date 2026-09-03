@@ -17,13 +17,18 @@ Rectangle {
     property bool viewIsCurrent: bridge.cwViewStage === bridge.cwStageKey
     property bool busy: bridge.cwBusy
     property bool rollbackOpen: false   // 打回目标选择展开（#5 跨阶段打回）
+    // 是否跟随新内容钉底。默认关：用户没主动回底就不该被拽走视野（#6）。
+    property bool follow: false
+
+    function goToEnd() { msgList.positionViewAtEnd() }
 
     function send() {
         var t = cwInput.text.trim()
         if (t === "") return
         cwInput.text = ""
         bridge.submitCwMessage(t)
-        msgList.positionViewAtEnd()
+        cwDock.follow = true      // 刚发的话当然要在眼前
+        Qt.callLater(cwDock.goToEnd)
     }
 
     function toggleRollback() {
@@ -75,13 +80,25 @@ Rectangle {
                 anchors.rightMargin: 10
                 spacing: 6
                 AppButton {
-                    text: "✓ 确定"
+                    text: bridge.cwStageKey === "cw_unit" ? "✓ 确定细纲" : "✓ 确定"
                     kind: "primary"
                     height: 28
                     enabled: cwDock.viewIsCurrent && !cwDock.busy
                     onClicked: bridge.confirmCwStage()
                     ToolTip.visible: hovered
-                    ToolTip.text: "把当前阶段已收敛的讨论总结定稿，状态机前进"
+                    ToolTip.text: bridge.cwStageKey === "cw_unit"
+                                  ? "定稿本单元；已有细纲则重读校验衔接/世界书/正则契约，通过即进入「正文写作」；一批细纲都还没出则先生成第一批"
+                                  : "把当前阶段已收敛的讨论总结定稿，进入下一阶段"
+                }
+                AppButton {
+                    text: "↻ 生成下一批"
+                    kind: "ghost"
+                    height: 28
+                    visible: cwDock.viewIsCurrent && bridge.cwStageKey === "cw_unit"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.generateNextCwOutlines()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "只往后滚动生成下一批 5 章细纲，阶段不变（要收口本单元请点「确定细纲」）"
                 }
                 AppButton {
                     text: "↩ 打回"
@@ -101,16 +118,6 @@ Rectangle {
                     onClicked: bridge.reopenCwWorldbook()
                     ToolTip.visible: hovered
                     ToolTip.text: "软切回世界书阶段修订（不级联删除），确定后写回并返回"
-                }
-                AppButton {
-                    text: "校验细纲"
-                    kind: "ghost"
-                    height: 28
-                    visible: cwDock.viewIsCurrent && bridge.cwStageKey === "cw_unit" && bridge.cwUnitHasOutlines
-                    enabled: !cwDock.busy
-                    onClicked: bridge.validateCwOutlines()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "确定细纲：Agent 重读校验衔接/世界书/正则/单元范围；无阻塞自动进入正文写作"
                 }
                 AppButton {
                     text: "去AI味"
@@ -347,7 +354,7 @@ Rectangle {
                     kind: "primary"
                     onClicked: bridge.setCwUnitRange(unitStartBox.value, unitEndBox.value, unitTopic.text)
                     ToolTip.visible: hovered
-                    ToolTip.text: "登记单元范围与主题（完结章 ±10 内可浮动），然后点「确定」生成单元总纲与下一批 5 章细纲"
+                    ToolTip.text: "登记单元范围与主题（完结章 ±10 内可浮动），然后点「确定细纲」定稿并生成第一批细纲"
                 }
             }
         }
@@ -417,29 +424,45 @@ Rectangle {
             Layout.fillHeight: true
             ListView {
                 id: msgList
+                objectName: "cwMsgList"
                 anchors.fill: parent
                 clip: true
                 spacing: 6
                 topMargin: 8
                 bottomMargin: 8
-                model: bridge.cwMessages
-                // 模型整体重建（cwMessages 每次返回新列表）或新增消息后稳定停在底部，
-                // 消灭「发送后跳回最上面」；LogView 同款 callLater 模式
-                onCountChanged: Qt.callLater(function () { msgList.positionViewAtEnd() })
-                onModelChanged: Qt.callLater(function () { msgList.positionViewAtEnd() })
+                model: bridge.cwMessageModelProp
+                // 只在「已回到底部」时跟随新内容。旧写法是 onCountChanged /
+                // onModelChanged 无条件 positionViewAtEnd —— 流式期间每秒都在拽回底部，
+                // 用户根本拖不上去。（模型换成增量插行后，onModelChanged 这个坑本身也没了）
+                onCountChanged: if (cwDock.follow) Qt.callLater(cwDock.goToEnd)
+                // 内容变高时，只要还贴着底部就继续贴着（新消息插进来会瞬时无尾）
+                onContentHeightChanged: if (cwDock.follow) Qt.callLater(cwDock.goToEnd)
+                // 往上滚（拖动或滚轮）即刻停止跟随；重新贴底则自动恢复跟随
+                // （prevContentY 是 Flickable 的 C++ 内部量，QML 取不到，只能自己记）
+                property real lastContentY: 0
+                onContentYChanged: {
+                    if (contentY < lastContentY - 1) cwDock.follow = false
+                    lastContentY = contentY
+                }
+                onAtYEndChanged: if (atYEnd) cwDock.follow = true
                 ScrollBar.vertical: ScrollBar {
                     policy: ScrollBar.AsNeeded
                     contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
                 }
                 delegate: Rectangle {
-                    required property var modelData
+                    id: msgBubbleRect
+                    required property string msgRole
+                    required property string msgText
+                    required property var msgNums
+                    readonly property bool batchLink: msgNums && msgNums.length > 0
                     width: msgList.width - 16
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    x: 8
                     height: msgBubble.height + 14
                     radius: 8
-                    color: modelData.role === "user" ? Theme.bgActive : Theme.bgCard
+                    color: msgRole === "user" ? Theme.bgActive : Theme.bgCard
                     border.width: 1
-                    border.color: Theme.border
+                    border.color: msgHover.hovered && batchLink ? Theme.accent : Theme.border
+                    HoverHandler { id: msgHover }
                     Column {
                         id: msgBubble
                         anchors.left: parent.left
@@ -448,21 +471,38 @@ Rectangle {
                         anchors.margins: 7
                         spacing: 3
                         Text {
-                            text: modelData.role === "user" ? "你" : bridge.cwAgent
-                            color: modelData.role === "user" ? Theme.accent : Theme.info
+                            text: msgRole === "user" ? "你" : bridge.cwAgent
+                            color: msgRole === "user" ? Theme.accent : Theme.info
                             font.family: Theme.uiFont
                             font.pixelSize: 10
                             font.bold: true
                         }
                         Text {
                             width: parent.width
-                            text: modelData.text
+                            text: msgText
                             color: Theme.textPrimary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.fsSmall
                             wrapMode: Text.Wrap
                             textFormat: Text.PlainText
                         }
+                        Text {
+                            visible: msgBubbleRect.batchLink
+                            text: "▸ 点我看这批细纲"
+                            color: Theme.accent
+                            font.family: Theme.uiFont
+                            font.pixelSize: 10
+                        }
+                    }
+                    // 按下即放行给 Flickable，否则 MouseArea 会吃掉拖动（又变成拖不动）
+                    MouseArea {
+                        anchors.fill: parent
+                        propagateComposedEvents: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: msgBubbleRect.batchLink ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onPressed: mouse.accepted = false
+                        onReleased: mouse.accepted = false
+                        onClicked: if (msgBubbleRect.batchLink) bridge.showCwOutlineBatch(msgBubbleRect.msgNums)
                     }
                 }
             }
@@ -476,27 +516,26 @@ Rectangle {
                     text: "▲ 顶部"
                     kind: "ghost"
                     height: 22
-                    onClicked: msgList.positionViewAtBeginning()
+                    onClicked: { cwDock.follow = false; msgList.positionViewAtBeginning() }
                 }
                 AppButton {
                     text: "▼ 底部"
                     kind: "ghost"
                     height: 22
-                    onClicked: msgList.positionViewAtEnd()
+                    onClicked: { cwDock.follow = true; cwDock.goToEnd() }
                 }
             }
             Connections {
                 target: bridge
-                // AI 开始输出：强制回底，让最新消息 + 流式块进入视野
+                // AI 开始输出：仅当用户处于跟随态才回底（#6）
                 function onCwBusyChanged() {
-                    if (cwDock.busy)
-                        Qt.callLater(function () { msgList.positionViewAtEnd() })
+                    if (cwDock.busy && cwDock.follow)
+                        Qt.callLater(cwDock.goToEnd)
                 }
-                // 流式输出中：仅当已贴近底部才跟随（用户上翻读历史时不被拽回）
+                // 流式增量：跟随态才钉底；用户上翻后不再被拽回
                 function onCwStreamingChanged() {
-                    if (!cwDock.busy) return
-                    if (msgList.contentY + msgList.height >= msgList.contentHeight - 60)
-                        Qt.callLater(function () { msgList.positionViewAtEnd() })
+                    if (cwDock.busy && cwDock.follow)
+                        Qt.callLater(cwDock.goToEnd)
                 }
             }
         }
@@ -539,30 +578,47 @@ Rectangle {
             Layout.fillWidth: true
             Layout.margins: 8
             spacing: 6
-            TextField {
-                id: cwInput
+            // 输入区：随内容增高（旧 TextField 不折行且 height 写死 30，
+            // 第二行起根本看不见），超过上限后内部滚动
+            ScrollView {
+                id: cwInputScroll
+                objectName: "cwInputScroll"
                 Layout.fillWidth: true
-                height: 30
-                placeholderText: "和 " + bridge.cwAgent + " 讨论这一步…（回车发送）"
-                placeholderTextColor: Theme.textTertiary
-                color: Theme.textPrimary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsSmall
-                selectByMouse: true
-                enabled: cwDock.viewIsCurrent && !cwDock.busy && bridge.cwStageKey !== "cw_project"
-                background: Rectangle {
-                    radius: Theme.rBtn
-                    color: Theme.bgHover
-                    border.width: 1
-                    border.color: cwInput.activeFocus ? Theme.accent : Theme.border
+                Layout.preferredHeight: Math.min(Math.max(32, cwInput.contentHeight + 14), 140)
+                clip: true
+                TextArea {
+                    id: cwInput
+                    objectName: "cwInput"
+                    wrapMode: TextArea.Wrap
+                    placeholderText: "和 " + bridge.cwAgent + " 讨论这一步…（回车发送，Ctrl+回车换行）"
+                    placeholderTextColor: Theme.textTertiary
+                    color: Theme.textPrimary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    selectByMouse: true
+                    enabled: cwDock.viewIsCurrent && !cwDock.busy && bridge.cwStageKey !== "cw_project"
+                    background: Rectangle {
+                        radius: Theme.rBtn
+                        color: Theme.bgHover
+                        border.width: 1
+                        border.color: cwInput.activeFocus ? Theme.accent : Theme.border
+                    }
+                    function handleReturn(ev) {
+                        ev.accepted = true
+                        if (ev.modifiers & Qt.ControlModifier)
+                            insert(cursorPosition, "\n")
+                        else
+                            cwDock.send()
+                    }
+                    Keys.onReturnPressed: handleReturn(event)
+                    Keys.onEnterPressed: handleReturn(event)
                 }
-                Keys.onReturnPressed: cwDock.send()
-                Keys.onEnterPressed: cwDock.send()
             }
             AppButton {
                 text: "发送"
                 kind: "primary"
                 height: 30
+                Layout.alignment: Qt.AlignBottom
                 enabled: cwInput.enabled && cwInput.text.trim() !== ""
                 onClicked: cwDock.send()
             }

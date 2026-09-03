@@ -23,11 +23,18 @@ HANDOFF_MAX = 800       # 交接块上限
 
 # ---------- 对话转写管理 ----------
 
-def transcript_append(state: dict, stage: str, role: str, text: str):
-    """追加一条转写（role: user / agent）并落盘"""
+def transcript_append(state: dict, stage: str, role: str, text: str, nums=None):
+    """追加一条转写（role: user / agent）并落盘
+
+    nums：这条消息对应哪几章细纲。细纲按批生成，点该批那条回执要把右侧面板
+    切回这一批（即使后面又生成了更新的批次）。
+    """
     cw = st.ensure_cw(state)
     items = cw.setdefault("transcript", {}).setdefault(stage, [])
-    items.append({"role": role, "text": text})
+    item = {"role": role, "text": text}
+    if nums:
+        item["nums"] = [int(n) for n in nums]
+    items.append(item)
     cw["transcript"][stage] = items
 
 

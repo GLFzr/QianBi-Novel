@@ -37,7 +37,6 @@ ApplicationWindow {
     ]
     property string activePanel: "shelf"
     property bool logVisible: false
-    property bool showReasoning: false   // 思维链默认隐藏，用户主动打开才展示
     property int selStart: -1            // 局部改写：选中区间
     property int selEnd: -1
     property int pendingChapter: -1      // 未保存确认后待执行动作：>=0 打开该章，-2 关闭窗口
@@ -81,7 +80,7 @@ ApplicationWindow {
     // ---- 全局快捷键 ----
     Shortcut {
         sequence: StandardKey.Save
-        enabled: bridge.editorDirty && !bridge.isStreaming && bridge.chapterPath !== ""
+        enabled: bridge.editorDirty && !bridge.isStreaming && bridge.canSaveEditor
                  && !(bridge.cwMode === "cw" && bridge.chapterLocked)
         onActivated: mainWindow.saveEditor()
     }
@@ -295,6 +294,7 @@ ApplicationWindow {
 
         // ========== 次左：功能面板 ==========
         Rectangle {
+            objectName: "funcPanel"
             Layout.preferredWidth: 420
             Layout.fillHeight: true
             color: Theme.bgPanel
@@ -360,8 +360,8 @@ ApplicationWindow {
                     Column {
                         spacing: 0
                         Text {
-                            text: bridge.chapterPath
-                                  ? bridge.chapterPath.split(/[\\/]/).pop().replace(".md", "")
+                            text: bridge.chapterTitle
+                                  ? bridge.chapterTitle
                                   : (bridge.isStreaming ? "正在写作…" : "未打开章节")
                             color: Theme.textPrimary
                             font.family: Theme.uiFont
@@ -390,10 +390,11 @@ ApplicationWindow {
                     Row {
                         visible: bridge.isStreaming
                         spacing: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        // S2 thinking 呼吸动画：思考期（有思维链、还没正文）三点呼吸，不空白
+                        Layout.alignment: Qt.AlignVCenter
+                        // S2 thinking 呼吸动画：思考期（本轮还没吐正文）三点呼吸，不空白
+                        // 判据用 reasoningLive，不能用 reasoningText 非空——后者跨阶段累积
                         Text {
-                            visible: bridge.reasoningText !== "" && bridge.liveDraftText === ""
+                            visible: bridge.reasoningLive
                             text: "● ● ●"
                             color: Theme.info
                             font.pixelSize: 8
@@ -405,10 +406,10 @@ ApplicationWindow {
                             }
                         }
                         Text {
-                            text: bridge.reasoningText !== "" && bridge.liveDraftText === ""
+                            text: bridge.reasoningLive
                                   ? "思考中"
                                   : (bridge.streamStageLabel !== "" ? "正在" + bridge.streamStageLabel + "…" : "生成中…")
-                            color: bridge.reasoningText !== "" && bridge.liveDraftText === "" ? Theme.info : Theme.accent
+                            color: bridge.reasoningLive ? Theme.info : Theme.accent
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.fsTiny
                             anchors.verticalCenter: parent.verticalCenter
@@ -534,11 +535,10 @@ ApplicationWindow {
                         }
                     }
                     AppButton {
-                        visible: bridge.isStreaming
-                        text: showReasoning ? "隐藏思考" : "显示思考"
+                        text: bridge.showReasoning ? "隐藏思考" : "显示思考"
                         kind: "ghost"
                         checkable: false
-                        onClicked: showReasoning = !showReasoning
+                        onClicked: bridge.setShowReasoning(!bridge.showReasoning)
                     }
                 }
             }
@@ -684,10 +684,10 @@ ApplicationWindow {
                 onActivated: gateBar.doReturn()
             }
 
-            // ---- 思维链面板（默认隐藏，用户点「显示思考」才展开）----
+            // ---- 思维链面板（偏好持久化；流式结束后仍保留本轮内容供回看）----
             Rectangle {
                 Layout.fillWidth: true
-                visible: mainWindow.showReasoning && bridge.isStreaming && bridge.reasoningText !== ""
+                visible: bridge.showReasoning && bridge.reasoningText !== ""
                 height: 150
                 color: Theme.bgLog
                 Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: Theme.border }

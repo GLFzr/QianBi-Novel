@@ -569,6 +569,55 @@ class LogListModel(QAbstractListModel):
         self.endResetModel()
 
 
+class CwMessageModel(QAbstractListModel):
+    """共写对话流：把「整表重建」换成「增量插行」
+
+    旧写法是 @Property("QVariantList") 每次返回一个新 list 喂给 ListView，
+    于是每条新消息（以及每次刷新）都会销毁重建全部 delegate、把视图拽回末尾——
+    用户往上翻历史时钉底拖不动，正是这么来的。转写本身是只追加的，
+    所以前缀相同就发 beginInsertRows，只有真正分叉（切阶段回看）才 reset。
+    """
+    MsgRoleRole = Qt.UserRole + 1
+    MsgTextRole = Qt.UserRole + 2
+    MsgNumsRole = Qt.UserRole + 3
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._items = []
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self._items)
+
+    def roleNames(self):
+        return {self.MsgRoleRole: b"msgRole", self.MsgTextRole: b"msgText",
+                self.MsgNumsRole: b"msgNums"}
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < len(self._items)):
+            return None
+        item = self._items[index.row()]
+        if role == self.MsgRoleRole:
+            return item.get("role", "agent")
+        if role == self.MsgTextRole:
+            return item.get("text", "")
+        if role == self.MsgNumsRole:
+            return item.get("nums", [])
+        return None
+
+    def sync(self, items: list):
+        old = self._items
+        if items == old:
+            return
+        if len(items) > len(old) and items[:len(old)] == old:
+            self.beginInsertRows(QModelIndex(), len(old), len(items) - 1)
+            self._items = list(items)
+            self.endInsertRows()
+            return
+        self.beginResetModel()
+        self._items = list(items)
+        self.endResetModel()
+
+
 class ConnectionListModel(QAbstractListModel):
     IdRole = Qt.UserRole + 1
     NameRole = Qt.UserRole + 2
@@ -726,6 +775,7 @@ class Bridge(QObject):
     streamingChanged = Signal()
     streamStageChanged = Signal()
     reasoningChanged = Signal()
+    reasoningLiveChanged = Signal()
     selectionDraftChanged = Signal()
     selectionReasoningChanged = Signal()
     selectionStateChanged = Signal()
@@ -744,10 +794,9 @@ class Bridge(QObject):
     cwModeChanged = Signal()
     cwStageChanged = Signal()
     cwBusyChanged = Signal()
-    cwMessagesChanged = Signal()
+    cwReportChanged = Signal()
     cwStreamingChanged = Signal()
     cwLockedChanged = Signal()
-    cwReportChanged = Signal()
     cwProsePolished = Signal(str)   # M6：手动去AI味完成，改写文本进编辑器工作副本（不落盘）
     # 事件信号
     projectOpened = Signal()
@@ -791,6 +840,7 @@ class Bridge(QObject):
         self._streaming = False
         self._stream_stage_label = ""
         self._reasoning_text = ""
+        self._reasoning_live = False           # 本次调用正在思考（正文还没吐字）
         # 局部改写状态（选中文本 + 想法 → AI 只改选中段）
         self._sel_draft = ""
         self._sel_reasoning = ""
@@ -809,9 +859,16 @@ class Bridge(QObject):
         self._draft_timer.setSingleShot(True)
         self._draft_timer.setInterval(5000)    # 5s 防抖：只防丢稿，不算版本
         self._draft_timer.timeout.connect(self._flush_draft)
+        self._console_pending = False
+        self._console_timer = QTimer(self)
+        self._console_timer.setSingleShot(True)
+        self._console_timer.setInterval(120)   # 思考链增量合并窗口（见 _notify_console）
+        self._console_timer.timeout.connect(self._flush_console)
+        self._console_expanded = bool(self.cfg.get("general", {}).get("console_expanded", False))
         # 共写档状态（CoWriting 状态机 + 一次性 worker）
         self._cw = None
         self._cw_view = ""                     # 对话区查看的阶段（回看历史用，机器阶段不动）
+        self._cw_batch_files = []              # 编辑器正处于「一批细纲」视图时的 [(章号, 路径)]
         self._cw_busy = False
         self._cw_confirming = False            # 确定按钮重入锁（#3）
         self._cw_cancelled = False             # 用户取消在途请求（#8）
@@ -826,6 +883,7 @@ class Bridge(QObject):
         self._cw_busy_timer.timeout.connect(self._on_cw_busy_tick)
         self.chapterModel = ChapterListModel(self)
         self.logModel = LogListModel(self)
+        self.cwMessageModel = CwMessageModel(self)
         self.connectionModel = ConnectionListModel(self)
         # 上次项目自动打开
         last = self.cfg.get("last_project", "")
@@ -865,6 +923,8 @@ class Bridge(QObject):
     def _get_streaming(self): return self._streaming
     def _get_stream_stage(self): return self._stream_stage_label
     def _get_reasoning(self): return self._reasoning_text
+    def _get_reasoning_live(self): return self._reasoning_live
+    def _get_show_reasoning(self): return bool(self.cfg.get("general", {}).get("show_reasoning", True))
     def _get_sel_draft(self): return self._sel_draft
     def _get_sel_reasoning(self): return self._sel_reasoning
     def _get_sel_rewriting(self): return self._sel_worker is not None and self._sel_worker.isRunning()
@@ -912,12 +972,18 @@ class Bridge(QObject):
     slotsText = Property(str, _get_slot_text, notify=slotsTextChanged)
     chapterText = Property(str, _get_chapter_text, notify=chapterTextChanged)
     chapterPath = Property(str, _get_chapter_path, notify=chapterTextChanged)
+    chapterTitle = Property(str, lambda self: self._cw_get_chapter_title(),
+                            notify=chapterTextChanged)
+    canSaveEditor = Property(bool, lambda self: bool(self._chapter_path or self._cw_batch_files),
+                             notify=chapterTextChanged)
     chapterFindings = Property("QVariantList", _get_chapter_findings, notify=chapterFindingsChanged)
     lastRecord = Property("QVariantMap", lambda self: self._last_record, notify=lastRecordChanged)
     liveDraftText = Property(str, _get_live_draft, notify=liveDraftChanged)
     isStreaming = Property(bool, _get_streaming, notify=streamingChanged)
     streamStageLabel = Property(str, _get_stream_stage, notify=streamStageChanged)
     reasoningText = Property(str, _get_reasoning, notify=reasoningChanged)
+    reasoningLive = Property(bool, _get_reasoning_live, notify=reasoningLiveChanged)
+    showReasoning = Property(bool, _get_show_reasoning, notify=consoleChanged)
     selectionDraftText = Property(str, _get_sel_draft, notify=selectionDraftChanged)
     selectionReasoningText = Property(str, _get_sel_reasoning, notify=selectionReasoningChanged)
     isRewritingSelection = Property(bool, _get_sel_rewriting, notify=selectionStateChanged)
@@ -937,7 +1003,7 @@ class Bridge(QObject):
     cwAgent = Property(str, lambda self: self._get_cw_agent(), notify=cwStageChanged)
     cwViewStage = Property(str, lambda self: self._get_cw_view(), notify=cwStageChanged)
     cwBusy = Property(bool, lambda self: self._cw_busy, notify=cwBusyChanged)
-    cwMessages = Property("QVariantList", lambda self: self._get_cw_messages(), notify=cwMessagesChanged)
+    cwMessageModelProp = Property(QObject, lambda self: self.cwMessageModel, constant=True)
     cwStreamingText = Property(str, lambda self: self._cw_reply, notify=cwStreamingChanged)
     cwSummary = Property("QVariantMap", lambda self: self._get_cw_summary(), notify=cwStageChanged)
     cwStageCards = Property("QVariantList", lambda self: self._get_cw_stage_cards(), notify=cwStageChanged)
@@ -1013,7 +1079,7 @@ class Bridge(QObject):
         self._cw_view = self._get_cw_stage_key()
         self.cwModeChanged.emit()
         self.cwStageChanged.emit()
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
         # 恢复最近一次定稿记录（质量格/快捷按钮的数据源）
         _state = st.load_state(path)
         _hist = _state.get("history") or []
@@ -1330,13 +1396,28 @@ class Bridge(QObject):
     _console_thinking = None      # {(slot, stage, num): [chunk]} 实例级惰性初始化
     _console_dialogue = None      # [{ts, kind, slot, stage, num, text}]
     _console_expanded = False
-    _console_rev = 0
 
     def _console_ensure(self):
         if self._console_thinking is None:
             self._console_thinking = {}
         if self._console_dialogue is None:
             self._console_dialogue = []
+
+    def _notify_console(self):
+        """思考链增量节流（plan_agent_console_v1 §写入节流，此前只写在设计里没落地）
+
+        consoleThinkingGroups / consoleDialogue 是 QVariantList，每次 notify 都整表
+        重建 → QML delegate 全销毁、ListView 滚动位置丢失。逐 token 通知等于让用户
+        永远读不成一段完整的思考，所以 120ms 内的增量合并成一次 notify。
+        """
+        if self._console_pending:
+            return
+        self._console_pending = True
+        self._console_timer.start()
+
+    def _flush_console(self):
+        self._console_pending = False
+        self.consoleChanged.emit()
 
     def _on_thinking(self, slot: str, stage: str, num: int, text: str):
         """思维链增量 → 按 槽位×阶段×章 分组留存（随结束不清空，M1 痛点）"""
@@ -1346,8 +1427,7 @@ class Bridge(QObject):
         buf.append(text)
         if len(buf) > 800:                     # 单组环形上限，防长跑内存膨胀
             del buf[: len(buf) - 800]
-        self._console_rev += 1
-        self.consoleChanged.emit()
+        self._notify_console()
 
     def _console_log(self, kind: str, text: str, slot: str = "", stage: str = "", num: int = 0):
         """Console 对话区条目：内存 + pipeline_debug/console/ 会话落盘（M2）"""
@@ -1359,7 +1439,6 @@ class Bridge(QObject):
         self._console_dialogue.append(entry)
         if len(self._console_dialogue) > 500:
             del self._console_dialogue[: len(self._console_dialogue) - 500]
-        self._console_rev += 1
         self.consoleChanged.emit()
         if self.proj:
             try:
@@ -1397,6 +1476,15 @@ class Bridge(QObject):
     def setConsoleExpanded(self, on: bool):
         if self._console_expanded != bool(on):
             self._console_expanded = bool(on)
+            self.cfg.setdefault("general", {})["console_expanded"] = self._console_expanded
+            cfg_mod.save_config(self.cfg)
+            self.consoleChanged.emit()
+
+    @Slot(bool)
+    def setShowReasoning(self, on: bool):
+        if self._get_show_reasoning() != bool(on):
+            self.cfg.setdefault("general", {})["show_reasoning"] = bool(on)
+            cfg_mod.save_config(self.cfg)
             self.consoleChanged.emit()
 
     @Slot(str)
@@ -1896,23 +1984,40 @@ class Bridge(QObject):
         self.refreshQueue()
 
     def _on_stream_chunk(self, text: str):
+        if self._reasoning_live:
+            self._reasoning_live = False       # 正文开始吐：本轮不再「思考中」
+            self.reasoningLiveChanged.emit()
         self._live_draft += text
         self.liveDraftChanged.emit()
 
+    _REASONING_KEEP = 8000                     # 跨阶段累积的上限：只裁头部，保留最近
+
     def _on_stream_stage(self, label: str):
-        """流式阶段切换：清空流式区 + 更新阶段标签（人和 AI 一起读）"""
+        """流式阶段切换：清空流式区 + 更新阶段标签（人和 AI 一起读）
+
+        思维链**不再清空**：一章要跑草稿/去味/审校多次调用，逐次清零等于让用户
+        永远只看得到最后那一小段。改成按阶段留一行分隔累积，超上限裁掉最早的部分。
+        「正在思考」改由 _reasoning_live 表达（它才是逐调用的一次性状态）。
+        """
         self._live_draft = ""
         self._stream_stage_label = label
         self._streaming = True
-        self._reasoning_text = ""
+        self._reasoning_live = True
+        if label:
+            self._reasoning_text = (self._reasoning_text[-self._REASONING_KEEP:]
+                                    + ("\n\n" if self._reasoning_text else "")
+                                    + f"〔{label}〕")
         self.liveDraftChanged.emit()
         self.streamStageChanged.emit()
         self.reasoningChanged.emit()
+        self.reasoningLiveChanged.emit()
         self.streamingChanged.emit()
 
     def _on_stream_reasoning(self, text: str):
         """思维链增量（默认隐藏，用户主动打开才看）"""
         self._reasoning_text += text
+        if len(self._reasoning_text) > self._REASONING_KEEP * 2:
+            self._reasoning_text = self._reasoning_text[-self._REASONING_KEEP:]
         self.reasoningChanged.emit()
 
     def _on_step(self, num: int, step_key: str):
@@ -1925,7 +2030,7 @@ class Bridge(QObject):
         self._last_record = record
         self._streaming = False
         self._stream_stage_label = ""
-        self._reasoning_text = ""
+        self._reasoning_live = False   # 思维链文本保留：章定稿正是用户要回看的时候
         # 若当前编辑器正显示刚定稿的章：跟随磁盘新内容（工作副本干净，版本基准同步）
         if self._cur_num == record.get("num") and self.proj:
             for n, name, path in project.list_chapters(self.proj):
@@ -1958,8 +2063,10 @@ class Bridge(QObject):
         self._streaming = False
         self._stream_stage_label = ""
         self._reasoning_text = ""
+        self._reasoning_live = False
         self.streamStageChanged.emit()
         self.reasoningChanged.emit()
+        self.reasoningLiveChanged.emit()
         self.streamingChanged.emit()
         self.gateClosed.emit()   # 真机缺陷②：停止/完本后清掉残留决策条
         self._cur_num = 0
@@ -1982,7 +2089,9 @@ class Bridge(QObject):
         self.stoppingChanged.emit()
         self._streaming = False
         self._stream_stage_label = ""
+        self._reasoning_live = False
         self.streamStageChanged.emit()
+        self.reasoningLiveChanged.emit()
         self.streamingChanged.emit()
         self.gateClosed.emit()   # 真机缺陷②：失败后同样清决策条
         self.logModel.append("error", msg)
@@ -2282,6 +2391,13 @@ class Bridge(QObject):
                 "isDraft": bool(num == self._cur_num and self._editor_dirty),
                 "isLive": bool(num == self._cur_num and self._streaming)}
 
+    @Slot(int, result=str)
+    def readerChapterOutline(self, num: int) -> str:
+        """本章细纲（阅读器 正文/细纲 切换用）；没有细纲文件时返回空串"""
+        if not self.proj or not num:
+            return ""
+        return project.read_file(project.get_outline_path(self.proj, int(num))).strip()
+
     # ============ 创作驾驶舱（M3 · 阶段卡片）============
 
     @Slot(result="QVariantList")
@@ -2465,11 +2581,107 @@ class Bridge(QObject):
     def _cw_refresh(self):
         self.cwModeChanged.emit()
         self.cwStageChanged.emit()
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
         self.cwStreamingChanged.emit()
+
+    def _cw_sync_messages(self):
+        """对话流增量刷新（取代旧的「整体换一个 QVariantList」→ 视图被拽回末尾）"""
+        self.cwMessageModel.sync(self._get_cw_messages())
+
+    # ---- 细纲批次：面板跟随最新一批 / 点批次回执回看该批 ----
+
+    _BATCH_FALLBACK = 5      # 无批次记录时，按章号最高的 5 章近似「最新一批」
+    _BATCH_MARK = re.compile(r"^#\s*▸\s*第\s*(\d+)\s*章")
+
+    def _cw_outline_nums(self, state: dict) -> list:
+        """最新一批细纲的章号：优先用生成时记录的批次，退回章号最高的若干章"""
+        recorded = [int(n) for n in (st.ensure_cw(state).get("last_outline_batch") or [])]
+        have = {n for n, _p in project.list_outlines(self.proj)}
+        nums = [n for n in recorded if n in have]
+        if not nums:
+            nums = sorted(have)[-self._BATCH_FALLBACK:]
+        return nums
+
+    def _cw_open_outline_batch(self, nums: list) -> bool:
+        """把这批细纲拼进编辑器（一屏读完一批）。返回是否真的载入内容。
+
+        批量视图下 _chapter_path 置空、改由 _cw_batch_files 记账：若偷懒把合并
+        文本的 _chapter_path 指向第一批首章文件，一次保存就会把 5 章内容写进
+        那一个文件——其余四章直接丢。
+        """
+        files = [(n, project.get_outline_path(self.proj, n)) for n in sorted(nums)]
+        shown, parts = [], []
+        for n, p in files:
+            body = project.read_file(p).strip()
+            if body:
+                shown.append((n, p))
+                parts.append((n, body))
+        if not parts:
+            return False
+        self._cw_batch_files = shown
+        self._chapter_path = ""
+        self._chapter_text = "\n\n".join(f"# ▸ 第 {n} 章\n\n{body}" for n, body in parts)
+        self._chapter_findings = []
+        self._reset_editor_state()
+        self.chapterTextChanged.emit()
+        self.chapterFindingsChanged.emit()
+        self.currentChapterChanged.emit()
+        return True
+
+    def _cw_save_outline_batch(self, text: str):
+        """批量视图保存：按标记切回各章细纲文件
+
+        某章的小节从文本里消失了 → 跳过并提示，绝不删文件（静默丢稿不可接受）。
+        """
+        sections, cur, buf = {}, None, []
+        for line in (text or "").splitlines():
+            m = self._BATCH_MARK.match(line)
+            if m:
+                if cur is not None:
+                    sections[cur] = "\n".join(buf).strip()
+                cur, buf = int(m.group(1)), []
+            elif cur is not None:
+                buf.append(line)
+        if cur is not None:
+            sections[cur] = "\n".join(buf).strip()
+        paths = dict(self._cw_batch_files)
+        done = 0
+        for n, body in sections.items():
+            if n not in paths:
+                continue          # 用户手写的陌生章号：不猜落点，下面统一提示
+            project.write_file(paths[n], body)
+            done += 1
+        lost = sorted(set(paths) - set(sections))
+        stray = sorted(set(sections) - set(paths))
+        self._chapter_text = text
+        self._reset_editor_state()
+        self.toast.emit("ok" if done else "warn",
+                        "已保存 %d 章细纲%s%s" % (
+                            done,
+                            "；第 %s 章小节缺失，未改动其文件" % "、".join(map(str, lost)) if lost else "",
+                            "；未知章号 %s 未落盘" % "、".join(map(str, stray)) if stray else ""))
+        self.refreshQueue()
+
+    def _cw_get_chapter_title(self) -> str:
+        """编辑器标题：产物文件名 / 批量细纲范围 / 空（空时由 QML 回落旧文案）"""
+        if self._chapter_path:
+            return os.path.splitext(os.path.basename(self._chapter_path))[0]
+        if self._cw_batch_files:
+            ns = [n for n, _p in self._cw_batch_files]
+            return (f"细纲 第{ns[0]}章" if len(ns) == 1
+                    else f"细纲 第{ns[0]}-{ns[-1]}章（{len(ns)} 章一批）")
+        return ""
+
+    def _cw_open_latest_batch(self) -> bool:
+        """细纲阶段进编辑器时载入最新一批；一批都没有则回落到单元总纲产物"""
+        if not self.proj:
+            return False
+        nums = self._cw_outline_nums(self._cw.load())
+        return bool(nums) and self._cw_open_outline_batch(nums)
 
     def _cw_open_product(self, stage: str):
         """阶段切换：编辑器载入对应产物文件（cw_prose=当前打开章，回退最新一章）"""
+        self._cw_batch_files = []
         if stage == st.STAGE_CW_PROSE:
             chapters = project.list_chapters(self.proj)
             pick = None
@@ -2488,6 +2700,11 @@ class Bridge(QObject):
                 self._chapter_path = ""
                 self._chapter_text = ""
         else:
+            if stage == st.STAGE_CW_UNIT and self._cw and self._cw_open_latest_batch():
+                # 细纲阶段：编辑器跟随**最新一批**细纲。旧实现固定读
+                # CW_STAGE_PRODUCTS[cw_unit]（=单元总纲.md），所以界面永远停在
+                # 历史上第一次生成的那份内容，新生成的批次看不见。
+                return
             rels = st.CW_STAGE_PRODUCTS.get(stage, [])
             if rels:
                 p = os.path.join(self.proj, rels[0])
@@ -2579,7 +2796,7 @@ class Bridge(QObject):
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_worker = worker
         worker.start()
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
 
     def _release_cw_worker(self, w):
         if self._cw_worker is w:
@@ -2634,7 +2851,7 @@ class Bridge(QObject):
         co_dialogue.transcript_append(state, stage, "agent", text)
         self._cw_save_state(state)
         self._cw_reply = ""
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
         self.cwStreamingChanged.emit()
 
     def _on_cw_error(self, msg: str):
@@ -2719,8 +2936,34 @@ class Bridge(QObject):
         self.toast.emit("ok", f"单元已登记：第 {start} 章 ~ 第 {targetEnd} 章{hint}，点「确定」生成单元总纲")
 
     @Slot()
+    def generateNextCwOutlines(self):
+        """只滚动生成下一批细纲，阶段不动（#4：与「确定细纲」拆开的两个动作）"""
+        if not self.proj or not self._cw:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在工作中，稍后再生成")
+            return
+        stage = self._get_cw_stage_key()
+        if stage != st.STAGE_CW_UNIT or self._cw_view != stage:
+            self.toast.emit("warn", "请先回到单元细纲阶段")
+            return
+        self._start_cw_outline_batch(self._cw.load())
+
+    @Slot("QVariantList")
+    def showCwOutlineBatch(self, nums):
+        """点某一批细纲的对话回执 → 编辑器切到**这一批**（#5：即使后面又生成了新批次）"""
+        if not self.proj:
+            return
+        try:
+            want = [int(n) for n in (nums or [])]
+        except (TypeError, ValueError):
+            return
+        if not self._cw_open_outline_batch(want):
+            self.toast.emit("warn", "这批细纲的文件已经不在了（可能被打回清除）")
+
+    @Slot()
     def validateCwOutlines(self):
-        """确定细纲：Agent 重读校验本批细纲衔接；无阻塞 → 自动进入正文写作"""
+        """校验本批细纲衔接；无阻塞 → 进入正文写作（「确定细纲」走的就是这条链）"""
         if not self.proj or not self._cw:
             return
         if self._cw_busy:
@@ -2730,9 +2973,13 @@ class Bridge(QObject):
         if stage != st.STAGE_CW_UNIT or self._cw_view != stage:
             self.toast.emit("warn", "请先回到单元细纲阶段")
             return
+        self._start_cw_outline_validation()
+
+    def _start_cw_outline_validation(self):
+        """起细纲校验 worker（无守卫版：供「确定细纲」定稿后直接续链）"""
         nums = [n for n, _p in project.list_outlines(self.proj)]
         if not nums:
-            self.toast.emit("warn", "还没有细纲可校验，先点「确定」生成单元总纲与细纲")
+            self.toast.emit("warn", "还没有细纲可校验——先点「生成下一批」出细纲")
             return
         state = self._cw.load()
         unit = self._cw.unit(state)
@@ -2755,7 +3002,7 @@ class Bridge(QObject):
                    % (len(blocking), "\n".join(f"- {b}" for b in blocking)))
             co_dialogue.transcript_append(state, st.STAGE_CW_UNIT, "agent", msg)
             self._cw_save_state(state)
-            self.cwMessagesChanged.emit()
+            self._cw_sync_messages()
             self.toast.emit("warn", f"细纲校验未通过：{len(blocking)} 处阻塞")
             return
         co_dialogue.transcript_append(
@@ -2766,7 +3013,7 @@ class Bridge(QObject):
         self._cw_save_state(state)
         self._cw_view = self._get_cw_stage_key()
         self._cw_open_product(nxt)
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
         self._cw_refresh()
         self.refreshQueue()
         self.toast.emit("ok", "细纲校验通过，进入「正文写作」")
@@ -2793,12 +3040,14 @@ class Bridge(QObject):
             return
         state = self._cw.load()
         nums = [o[0] for o in outlines]
+        st.ensure_cw(state)["last_outline_batch"] = list(nums)
         co_dialogue.transcript_append(
             state, st.STAGE_CW_UNIT, "agent",
             f"✅ 本批细纲已生成：第 {nums[0]}-{nums[-1]} 章（{len(nums)} 章，≈200 字/章）。"
-            "可直接在编辑器修改细纲，或对话区提出由我改；确认后点「确定细纲」校验衔接。")
+            "点这条消息可回看本批细纲，也可直接在编辑器改；往后接着写点「生成下一批」，"
+            "本单元写完要进正文就点「确定细纲」。", nums=nums)
         self._cw_save_state(state)
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
         self.refreshQueue()
         self.toast.emit("ok", f"细纲已生成：第 {nums[0]}-{nums[-1]} 章")
         self._cw_open_product(self._get_cw_stage_key())
@@ -3022,7 +3271,7 @@ class Bridge(QObject):
         state = self._cw.load()
         co_dialogue.transcript_append(state, st.STAGE_CW_PROSE, "agent", "（读改揣摩）" + text)
         self._cw_save_state(state)
-        self.cwMessagesChanged.emit()
+        self._cw_sync_messages()
         self.toast.emit("ok", "读改揣摩完成（已进对话区）")
 
     # ---- 读改节流设置（设置面板）----
@@ -3353,7 +3602,7 @@ class Bridge(QObject):
             if self._cw_worldbook_changed_notice(state):
                 self.toast.emit("warn", "世界书已变更：已锁定章节不会自动修改，建议解锁重核（见报告区）")
         elif stage == st.STAGE_CW_UNIT:
-            self.toast.emit("ok", "「单元细纲」已确定定稿，正在滚动生成下一批 5 章细纲…")
+            self.toast.emit("ok", "「单元细纲」已定稿，正在收尾本阶段…")
         else:
             nxt = self._cw.advance(state)
             self.toast.emit("ok", "「%s」已确定定稿，进入「%s」"
@@ -3365,6 +3614,18 @@ class Bridge(QObject):
         self.cwReportChanged.emit()
         self.refreshQueue()
         if stage == st.STAGE_CW_UNIT and not st.ensure_cw(state).get("reopening"):
+            self._cw_finish_unit_stage(state)
+
+    def _cw_finish_unit_stage(self, state: dict):
+        """「确定细纲」的收口（#2/#4：按钮说的就是它做的事）
+
+        本单元还没出过细纲 → 先生成第一批（没东西可校验）；
+        已有细纲 → 重读校验，通过即进入「正文写作」，与其它阶段「确定=进入下一步」一致。
+        """
+        if project.list_outlines(self.proj):
+            self._start_cw_outline_validation()
+        else:
+            self.toast.emit("ok", "正在生成第一批 5 章细纲…")
             self._start_cw_outline_batch(state)
 
     def _write_cw_products(self, stage: str, product: str):
@@ -3437,6 +3698,9 @@ class Bridge(QObject):
     @Slot(str)
     def saveCwProduct(self, text: str):
         """共写档产物保存（编辑器直接改产物后保存修改：不走版本快照）"""
+        if self._cw_batch_files:
+            self._cw_save_outline_batch(text or self._chapter_text)
+            return
         if not self._chapter_path or not self.proj:
             return
         if self._cur_num and project.is_chapter_locked(self.proj, self._cur_num):

@@ -21,6 +21,9 @@ Rectangle {
     property int curNum: 0
     property string curTitle: ""
     property string bodyText: ""
+    property string proseText: ""        // 正文（含未保存工作副本）
+    property string outlineText: ""      // 本章细纲；空=没有，切换器随之隐藏
+    property bool showOutline: false
     property bool isDraft: false
     property bool isLive: false
     property var prefs: ({ theme: "night", fontScale: 1.0, lineHeight: 1.8, serif: true, paged: false })
@@ -71,8 +74,11 @@ Rectangle {
             if (chapters[i].num === num) curTitle = chapters[i].title
         isDraft = ch.isDraft || (workTextOverride !== undefined && workTextOverride !== "")
         isLive = ch.isLive
-        bodyText = (workTextOverride !== undefined && workTextOverride !== "")
-                   ? workTextOverride : ch.text
+        proseText = (workTextOverride !== undefined && workTextOverride !== "")
+                    ? workTextOverride : ch.text
+        outlineText = bridge.readerChapterOutline(num)
+        if (showOutline && outlineText === "") showOutline = false   // 这章没细纲
+        applyView()
         store = bridge.readStore(num)
         render()
         var pos = store.position || 0
@@ -85,6 +91,19 @@ Rectangle {
     function savePosition() {
         if (!curNum || flick.contentHeight <= flick.height) return
         bridge.saveReadPosition(curNum, flick.contentY / (flick.contentHeight - flick.height))
+    }
+
+    function applyView() {
+        bodyText = showOutline ? outlineText : proseText
+        render()
+    }
+
+    function setView(outline) {
+        if (outline && outlineText === "") return
+        showOutline = outline
+        savePosition()
+        applyView()
+        Qt.callLater(function () { flick.contentY = 0 })
     }
 
     function render() {
@@ -163,6 +182,14 @@ Rectangle {
             RToolButton { icon: "left"; label: "退出"; onClicked: reader.close() }
 
             Rectangle { width: 1; height: 22; color: th.border }
+
+            RSegment {
+                visible: reader.outlineText !== ""
+                options: ["正文", "细纲"]
+                values: [false, true]
+                current: reader.showOutline
+                onPicked: (v) => reader.setView(v)
+            }
 
             ColumnLayout {
                 spacing: 0

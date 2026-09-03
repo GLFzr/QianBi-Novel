@@ -13,11 +13,14 @@ Rectangle {
     id: consoleDock
     objectName: "consoleDock"
     property bool expanded: bridge ? bridge.consoleExpanded : false
-    width: expanded ? 280 : 24
+    // 必须走 Layout 附加属性：本件是 RowLayout 的直接子项，只给裸 width 时布局
+    // 永远按折叠宽记账，展开的那 280px 会被相邻不透明面板盖住（看起来像「被遮挡」）
+    Layout.preferredWidth: expanded ? 280 : 24
+    Layout.minimumWidth: Layout.preferredWidth
+    Layout.maximumWidth: Layout.preferredWidth
     Layout.fillHeight: true
     color: Theme.bgPanel
     clip: true
-    Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
