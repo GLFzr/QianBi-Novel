@@ -279,7 +279,7 @@ def _build_fixture(project, tag: str) -> str:
 def _sec_assembly() -> list:
     from app import config as cfg_mod
     from app import presets as genre_presets
-    from app import project, wb
+    from app import mustscan, project, wb
     from app.core import gates, scan
     from app.core import stages
     from app.llm.client import LLMClient
@@ -315,6 +315,26 @@ def _sec_assembly() -> list:
         for cap in (1500, 120):
             out.append(_entry("project.regex_block %s cap=%s" % (sem, cap),
                               project.regex_block(proj, sem, cap)))
+        out.append(_entry("project.regex_block %s must-only cap=120" % sem,
+                          project.regex_block(proj, sem, 120, levels=("must",))))
+
+    # —— 正则 must 契约确定性检查（app/mustscan）——
+    # 夹具 正则.md 两条都是自然语言（无 pattern），拿它跑只能证明不崩；
+    # 这里用显式 pattern 规则，把 forbid 命中 / require 缺失 / 不可编译三条判定路径都覆盖。
+    _MUST_RULES = [
+        {"rule": "禁止三连感叹", "level": "must", "scope": "全书",
+         "pattern": "!{3,}", "mode": "forbid"},
+        {"rule": "必须出现具体金额", "level": "must", "scope": "全书",
+         "pattern": r"\d+元", "mode": "require"},
+        {"rule": "写坏的模式", "level": "must", "scope": "全书",
+         "pattern": "(((", "mode": "forbid"},
+        {"rule": "自然语言规则不可机判", "level": "must", "scope": "全书",
+         "pattern": "", "mode": "forbid"},
+    ]
+    for label, probe in (("命中", "他付了三十元，走了。!!!"),
+                         ("干净", "他付了 30 元，走了。")):
+        out.append(_entry("mustscan.check_patterns %s" % label,
+                          mustscan.check_patterns(probe, _MUST_RULES)))
 
     # —— 流水线与共写共用的注入内核 ——
     for sem in ("logic", "regex"):

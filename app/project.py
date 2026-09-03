@@ -247,8 +247,15 @@ def worldbook_anchors(proj: str, num: int = 0) -> list:
 
 
 def regex_rules(proj: str, semantics: str = "logic") -> list:
-    """「正则」抽象接口（方案 §4.1）：返回 [{rule, level: must/should, scope}]
+    """「正则」抽象接口（方案 §4.1）：返回 [{rule, level: must/should, scope, pattern, mode}]
 
+    - pattern：条目内反引号包裹的字面正则（无背引号则空串）。**只有 pattern 非空的
+      规则才可确定性判定**；自然语言规则一律交 prompt 注入 + LLM 审校，
+      不可拿 rule 文本去 re.compile（那是整句话，不是模式）
+    - mode：pattern 的极性，取自 ｜mode：forbid/require，缺省 **forbid**（命中即违规）。
+      选 forbid 兜底是因为它不会产生假阻断；require（缺失即违规）判不动时只会漏报，
+      故消费方对 require 一律降 advisory。`禁止 X` 与 `必须有 X` 配同一个 pattern
+      对机器完全同形，极性只能由作者显式声明
     - 默认 semantics="logic"（逻辑约束规则集）：解析 设定/正则.md 的
       `- 规则：…｜level：must/should｜scope：…` 条目；兼容多行块——
       列表项起一条目，后续非列表行并入该条目，至空行/标题/下一列表项止，
@@ -288,7 +295,8 @@ def regex_rules(proj: str, semantics: str = "logic") -> list:
         if semantics == "regex":
             m = re.search(r"`([^`]+)`", entry)
             rule = m.group(1) if m else entry
-            rules.append({"rule": rule[:300], "level": "must", "scope": "样本"})
+            rules.append({"rule": rule[:300], "level": "must", "scope": "样本",
+                          "pattern": (m.group(1) if m else "")[:200], "mode": "forbid"})
             continue
         level, scope = "must", "全书"
         m = re.search(r"level\s*[:：]\s*(must|should)", entry)
@@ -297,22 +305,45 @@ def regex_rules(proj: str, semantics: str = "logic") -> list:
         m = re.search(r"scope\s*[:：]\s*([^\s｜|]+)", entry)
         if m:
             scope = m.group(1).strip()
-        rule = re.sub(r"(?:[｜|]\s*)?(?:level|scope)\s*[:：]\s*[^\s｜|]+", "", entry)
+        mm = re.search(r"mode\s*[:：]\s*(forbid|require)", entry)
+        mode = mm.group(1) if mm else "forbid"
+        pm = re.search(r"`([^`]+)`", entry)
+        rule = re.sub(r"(?:[｜|]\s*)?(?:level|scope|mode)\s*[:：]\s*[^\s｜|]+", "", entry)
         rule = re.sub(r"\s{2,}", " ", rule).strip(" ｜|")
-        rules.append({"rule": rule[:300], "level": level, "scope": scope[:60]})
+        rules.append({"rule": rule[:300], "level": level, "scope": scope[:60],
+                      "pattern": (pm.group(1) if pm else "")[:200], "mode": mode})
     return rules
 
 
-def regex_block(proj: str, semantics: str = "logic", max_chars: int = 1500) -> str:
-    """组装注入 prompt 的正则块（空串回退占位，不抛 KeyError）"""
+def regex_block(proj: str, semantics: str = "logic", max_chars: int = 1500,
+                levels: tuple = None) -> str:
+    """组装注入 prompt 的正则块（空串回退占位，不抛 KeyError）
+
+    levels=None 走历史路径，逐字节不变（含半句截断——规则超长的真实书靠它保漂移基线）。
+    levels=("must",) 只出该等级，且**整行取舍**：宁可少给几条，也不给模型半句残规则。
+    要求「一条都不能丢」的调用方传足够大的 max_chars。
+    """
     rules = regex_rules(proj, semantics)
+    if levels is not None:
+        rules = [r for r in rules if r["level"] in levels]
     if not rules:
-        return "（本书尚未生成正则约束规则集）"
+        return "（本书尚未生成正则约束规则集）" if levels is None else "（本书无该等级正则约束）"
     lines = [f"- {r['rule']}（level: {r['level']} · scope: {r['scope']}）" for r in rules]
-    text = "\n".join(lines)
-    if len(text) > max_chars:
-        text = text[:max_chars] + "…（截断）"
-    return text
+    if levels is None:                       # 历史行为：按字符数硬截
+        text = "\n".join(lines)
+        if len(text) > max_chars:
+            text = text[:max_chars] + "…（截断）"
+        return text
+    out, total, dropped = [], 0, 0           # 过滤路径：整行取舍
+    for line in lines:
+        if total + len(line) + 1 > max_chars:
+            dropped += 1
+            continue
+        out.append(line)
+        total += len(line) + 1
+    if dropped:
+        out.append(f"- …另有 {dropped} 条未注入（超出 {max_chars} 字预算）")
+    return "\n".join(out)
 
 
 def split_worldbook_product(product: str) -> tuple:
