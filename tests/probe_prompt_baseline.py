@@ -82,7 +82,7 @@ WB_ADDITIONAL = """
 - **清账规则**（规则）：子时清账时不能说谎，违者当日记忆归零 ｜ 首见第2章
 """
 
-RG_FIXTURE = """# 正则约束
+RG_FIXTURE = r"""# 正则约束
 
 - 规则：不得出现「仿佛」「似乎」等推测性比喻：`仿佛|似乎`｜level：must｜mode：forbid｜scope：prose
 - 规则：每章至少写明一处当票面额：`￥\d+`｜level：must｜mode：require
@@ -582,6 +582,36 @@ def wiring_check(rec, proj: str) -> list:
             if rule not in merged(kind):
                 fails.append("must 契约「%s…」未进 %s prompt（该步在裸写正文）"
                              % (rule[:20], kind))
+
+    # —— 外部文档导入：那张模板不经过流水线装配点（run_all 不触发导入），基线看
+    #    不住它，所以单独钉三件事。段名对不上的后果不是报错，是「拆出来了但静默
+    #    落不了地」——正好是基线与字节比对都盲的那种断链。
+    try:
+        from app import importdoc
+
+        want = set(re.findall(r"\{(\w+)\}", importdoc.DOC_DECOMPOSE_PROMPT))
+        if want != {"state_block", "part", "total", "document"}:
+            fails.append("导入模板占位符与 build_prompt 传参不一致：%s" % sorted(want))
+        for s in importdoc.SLOTS:
+            # 章级落点在模板里带章号后缀（===细纲 第N章===），所以只钉「段名开头
+            # 紧跟空白或直接收尾」，既放过后缀也不让 `原作进程` 冒充 `原作`。
+            pattern = r"===\s*%s(?:\s+\S+)?\s*===" % re.escape(s["name"])
+            if not re.search(pattern, importdoc.DOC_DECOMPOSE_PROMPT):
+                fails.append("落点 %s（%s）没写进导入模板，拆出来也没人接"
+                             % (s["key"], s["name"]))
+        sample = importdoc.parse_product(
+            "===原作===\n书名：《探针原作》\n灯序共九境\n引证：灯序共九境\n"
+            "===分歧点===\n- 第2章起主角知道结局\n引证：灯序共九境\n"
+            "===原作进程===\n第一卷｜原作第1章｜守灯人接任\n引证：灯序共九境\n")
+        got_keys = {it["key"] for it in sample}
+        for key in ("canon", "divergence", "canon_timeline"):
+            if key not in got_keys:
+                fails.append("导入解析器接不住 %s 段（同人路径断了）" % key)
+        plans = importdoc.annotate(sample, "灯序共九境", "")
+        if not any(p.get("suggested") for p in plans):
+            fails.append("识别出原作却没给出建议契约（OOC 防线断了）")
+    except Exception as e:  # noqa: BLE001
+        fails.append("导入结构断言跑不起来：%s" % e)
     return fails
 
 
