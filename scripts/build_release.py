@@ -189,10 +189,13 @@ def main():
     # ---- 6. 产物目录 + 便携 zip + SHA256SUMS ----
     out_dir = os.path.join(ROOT, "dist", "release", f"v{__version__}")
     os.makedirs(out_dir, exist_ok=True)
-    readme_name = "使用说明.txt"
+    # 说明文件两个名字：包内用中文（解压后与 exe 并列，一眼看到，UTF-8 名解压正常）；
+    # 产物目录里的独立副本必须用 ASCII —— GitHub 会把非 ASCII 的 release 资产名
+    # 悄悄退化成 "default.txt"。
+    readme_in_zip = "使用说明.txt"
+    readme_standalone = "PORTABLE_README.txt"
     readme_bytes = portable_readme(__version__)
-    readme_path = os.path.join(out_dir, readme_name)
-    with open(readme_path, "wb") as f:
+    with open(os.path.join(out_dir, readme_standalone), "wb") as f:
         f.write(readme_bytes)
     portable = os.path.join(out_dir, f"QianBi-Novel-v{__version__}-portable.zip")
     with zipfile.ZipFile(portable, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
@@ -200,8 +203,7 @@ def main():
             for f in fs:
                 full = os.path.join(dp, f)
                 z.write(full, os.path.relpath(full, dist_dir))
-        # 说明文件放在 zip 根目录，与 exe 并列，解压第一眼就能看到
-        z.writestr(readme_name, readme_bytes)
+        z.writestr(readme_in_zip, readme_bytes)
     step("便携 zip", os.path.exists(portable),
          f"{os.path.getsize(portable) / 1048576:.0f} MB")
 
