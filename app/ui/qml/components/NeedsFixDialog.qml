@@ -192,6 +192,28 @@ Dialog {
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
+                TextField {
+                    id: backfillNumsField
+                    objectName: "backfillNumsField"
+                    implicitWidth: 120
+                    height: 32
+                    placeholderText: "章号 如 4,5"
+                    color: Theme.textPrimary
+                    placeholderTextColor: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    background: Rectangle {
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        border.width: 1
+                        border.color: backfillNumsField.activeFocus ? Theme.accent : Theme.border
+                    }
+                }
+                AppButton {
+                    text: "反哺补跑"
+                    height: 32
+                    onClicked: bridge.runBackfill(backfillNumsField.text)
+                }
                 AppButton {
                     text: "一键修复全部"
                     kind: "primary"

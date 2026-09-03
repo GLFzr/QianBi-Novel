@@ -147,6 +147,7 @@ QtObject {
         case "pass": return success
         case "writing": return accent
         case "needs_fix": return danger
+        case "stale": return highlightYellow
         case "outline_ready": return info
         case "untracked": return info
         default: return muted
@@ -158,6 +159,7 @@ QtObject {
         case "pass": return "通过"
         case "writing": return "写作中"
         case "needs_fix": return "待修"
+        case "stale": return "过期"
         case "outline_ready": return "排队"
         case "untracked": return "待补"
         default: return "排队"

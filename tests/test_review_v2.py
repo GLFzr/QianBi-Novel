@@ -270,10 +270,11 @@ def test_chapter_review_signature_3tuple():
     import inspect
     from app.core.stages import _chapter_review
     sig = inspect.signature(_chapter_review)
-    # 仅验证函数存在并接受 (ctx, num, prose)
+    # (ctx, num, prose[, votes])：votes 为 P5 多轮投票可选参数
     params = list(sig.parameters.keys())
-    assert params == ["ctx", "num", "prose"]
-    print(f"  ✓ _chapter_review 签名: (ctx, num, prose) → 3 元组返回")
+    assert params[:3] == ["ctx", "num", "prose"]
+    assert len(params) <= 4 and (len(params) == 3 or params[3] == "votes")
+    print(f"  ✓ _chapter_review 签名: {tuple(params)} → 3 元组返回")
 
 
 # ---- runner ----

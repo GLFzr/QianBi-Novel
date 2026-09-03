@@ -5,6 +5,9 @@
 - mark_continue（默认）：修复失败 → 标待修继续写
 - strict：修复失败 → 自动暂停等人（auto_pause）
 """
+import logging
+import re
+
 from .. import config as cfg_mod
 from .. import deslop, project
 
@@ -81,3 +84,49 @@ def resolve_failed(ctx, reason: str, gr: GateResult):
         ctx.auto_pause(f"{reason}，自动修复后仍未通过，请人工处理")
     else:
         ctx.log("warn", f"{reason}，已标记「待修」，继续写作（可在章节详情中人工修改）")
+
+
+def chapter_word_target(proj: str, num: int, default: int) -> int:
+    """正文目标字数优先取本章细纲登记的字数目标（C2 联动）；缺省回退默认。
+
+    防模型幻觉：细纲文本里的「字数目标」若与默认值偏差超过 50%，视为模型
+    自造数字（曾出现细纲写 3000 而配置为 300 的污染），一律回退默认值。
+    """
+    try:
+        text = project.read_file(project.get_outline_path(proj, num))
+        m = re.search(r"字数目标\s*[：:]\s*(\d+)", text or "")
+        if m:
+            target = int(m.group(1))
+            if abs(target - default) <= default * 0.5:
+                return target
+            logging.getLogger("qianbi.gates").warning(
+                "细纲字数目标 %s 与配置 %s 偏差过大，按配置执行（防模型幻觉）", target, default)
+    except Exception:  # noqa: BLE001
+        pass
+    return default
+
+
+def word_count_precheck(proj: str, num: int, prose: str, cfg: dict) -> tuple:
+    """字数预检（本地，零 LLM）：短章不得静默过审。
+
+    实际字数 < 目标×(1-word_tolerance) 时，合成一条 [字数] 阻塞项并给 REJECT，
+    调用方据此短路（跳过审校 LLM）。达标返回 ([], [], "")。
+
+    Returns:
+        (items, blocking, verdict) —— items 与 parse_final_review_v2 的 item 结构一致
+    """
+    gates_cfg = (cfg or {}).get("gates", {})
+    if not gates_cfg.get("word_block_on_review", True):
+        return [], [], ""
+    default = int((cfg or {}).get("writing", {}).get("chapter_word_target", 3000))
+    tolerance = float(gates_cfg.get("word_tolerance", 0.1))
+    target = chapter_word_target(proj, num, default)
+    actual = project.count_chars(prose or "")
+    floor = int(target * (1 - tolerance))
+    if actual >= floor:
+        return [], [], ""
+    text = (f"[字数] 第{num}章正文 {actual} 字，低于目标 {target}"
+            f"（容差 {tolerance:.0%}，下限 {floor}），需扩写达标后再过审")
+    items = [{"dim": "D_PLOT", "level": "fail", "text": text,
+              "quote": "", "root_layer": "ROOT_PROSE", "line": ""}]
+    return items, [text], "REJECT"

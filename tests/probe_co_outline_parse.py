@@ -32,7 +32,7 @@ class StubClient:
     def __init__(self, text):
         self.text = text
 
-    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None):
+    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None, **kw):
         return self.text
 
     def chat(self, prompt):

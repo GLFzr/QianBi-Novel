@@ -75,7 +75,7 @@ class MockClient:
         self.slot = slot
         self.router = router
 
-    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None):
+    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None, **kw):
         return self._dispatch(prompt, on_chunk)
 
     def chat(self, prompt):

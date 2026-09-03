@@ -21,6 +21,25 @@ from .ui.bridge import Bridge
 
 logger = setup_logging()
 
+# ---- 崩溃观测：faulthandler 落独立文件，原生崩溃也能留 Python 层轨迹 ----
+import faulthandler  # noqa: E402
+
+_faulthandler_file = None
+try:
+    from .logger import LOG_DIR as _LOG_DIR
+    _faulthandler_file = open(os.path.join(_LOG_DIR, "faulthandler.log"), "a", encoding="utf-8")
+    faulthandler.enable(file=_faulthandler_file, all_threads=True)
+except Exception:  # noqa: BLE001
+    try:
+        faulthandler.enable()
+    except Exception:  # noqa: BLE001
+        _faulthandler_file = None
+if _faulthandler_file:
+    import datetime as _dt
+    _faulthandler_file.write(f"\n--- process start {_dt.datetime.now():%Y-%m-%d %H:%M:%S} "
+                             f"v{__version__} pid={os.getpid()}\n")
+    _faulthandler_file.flush()
+
 
 def resource_path(rel: str) -> str:
     """兼容开发与 PyInstaller 打包路径"""

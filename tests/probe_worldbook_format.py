@@ -14,6 +14,7 @@ os.environ["USERPROFILE"] = _FH
 sys.path.insert(0, os.getcwd())
 
 from app import project, prompts
+from app.prompts import scene_cards
 from app.core import stages
 
 results = []
@@ -39,13 +40,19 @@ project.write_file(os.path.join(proj, "设定", "正则.md"),
 prose_prompt = prompts.PROSE_WRITING_PROMPT.format(
     chapter_num=1, core_setting="设定", outline="细纲", next_chapter_brief="预告",
     global_summary="摘要", recent_summaries="近三章", character_states="角色状态",
-    foreshadows="伏笔", previous_excerpt="上文", style_sample="文风",
+    foreshadows="伏笔", timeline="时间线", previous_excerpt="上文", style_sample="文风",
     user_guidance="指导", user_ideas="想法", word_target=3000,
     tic_blacklist="（无）", used_setpieces="（无）", genre_block="（通用）",
     worldbook_block=project.worldbook_text(proj),
     regex_block=project.regex_block(proj, "logic"),
+    craft_block=scene_cards.craft_block(1, 10, "细纲"),
+    author_note="每章至少一处可指认的物件反应",
 )
 check("正文 prompt 注入世界书", "力量体系" in prose_prompt and "世界书" in prose_prompt)
+check("正文 prompt 注入工艺路线", "主卡·" in prose_prompt and "本章演法" in prose_prompt)
+check("作者按落在正文 prompt 近端",
+      prose_prompt.index("作者按") > prose_prompt.index("去 AI 味红线")
+      and "可指认的物件反应" in prose_prompt)
 check("正文 prompt 注入 must 规则", "必须成立" in prose_prompt or "代价索回" in prose_prompt)
 
 review_prompt = prompts.REVIEW_PROMPT.format(
@@ -61,7 +68,8 @@ outline_prompt = prompts.CHAPTER_OUTLINE_PROMPT.format(
     core_setting_brief="设定", start_chapter=1, end_chapter=2, count=2,
     chapter_words=3000, chapter_words_max=3300, next_chapter=2,
     previous_ending="上文结尾", foreshadows="伏笔", unit_contract="单元契约",
-    genre_block="（通用）",
+    genre_block="（通用）", global_summary="摘要", recent_summaries="近三章",
+    character_states="角色状态",
     worldbook_block=project.worldbook_text(proj),
     regex_block=project.regex_block(proj, "logic"),
     user_directive="（无）",
@@ -74,11 +82,12 @@ check("无文件世界书占位", "尚未生成世界书" in project.worldbook_t
 check("无文件正则占位", "尚未生成正则" in project.regex_block(proj_old))
 p2 = prompts.PROSE_WRITING_PROMPT.format(
     chapter_num=1, core_setting="", outline="", next_chapter_brief="", global_summary="",
-    recent_summaries="", character_states="", foreshadows="", previous_excerpt="",
+    recent_summaries="", character_states="", foreshadows="", timeline="", previous_excerpt="",
     style_sample="", user_guidance="无特殊指导", user_ideas="（无）", word_target=3000,
     tic_blacklist="（无）", used_setpieces="（无）", genre_block="（通用）",
     worldbook_block=project.worldbook_text(proj_old),
     regex_block=project.regex_block(proj_old, "logic"),
+    craft_block=scene_cards.craft_block(1, 0, ""), author_note="（本章无作者按）",
 )
 check("空串回退组装不抛", "尚未生成世界书" in p2)
 
@@ -113,6 +122,19 @@ check("产物拆分世界书", wb.strip() == "## 世界书\n力量体系…" and
 check("产物拆分正则段", rg.startswith("## 正则") and "must" in rg)
 wb2, rg2 = project.split_worldbook_product("## 世界书\n只有世界书")
 check("无正则段容错", rg2 == "" and "世界书" in wb2)
+# 真机取证：模型常写单井号「# 正则」，只认 ``##`` → 整段约束留在世界书里，regex_rules 恒空
+wb3, rg3 = project.split_worldbook_product(
+    "# 世界书\n力量体系…\n\n# 正则（逻辑约束规则集）\n- 规则：A｜level：must｜scope：全书")
+check("单井号正则段也拆得出", rg3.startswith("# 正则") and "世界书" in wb3 and "正则" not in wb3)
+# 节内 ``###`` 子标题属本段：旧的「下一任意级别标题即止」会把子节后面的规则丢掉
+wb4, rg4 = project.split_worldbook_product(
+    "## 世界书\n力量体系…\n\n## 正则\n- 规则：A｜level：must\n\n### 文风约束\n"
+    "- 规则：B｜level：should\n\n## 其他\n收尾")
+check("正则节内子标题不截断", "规则：A" in rg4 and "规则：B" in rg4)
+check("正则段止于更浅层标题", rg4.splitlines()[-1].startswith("- 规则：B") and "其他" not in rg4)
+check("正则段后的小节拼回世界书", "收尾" in wb4 and "其他" in wb4 and "正则" not in wb4)
+project.write_file(os.path.join(proj_old, "设定", "正则.md"), rg4)
+check("拆出的正则段可被解析", len(project.regex_rules(proj_old, "logic")) == 2)
 
 print("=== 世界书格式回归探针 ===")
 ok = True

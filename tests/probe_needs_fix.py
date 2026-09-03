@@ -11,6 +11,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from probe_guard import arm_config_guard
+
+arm_config_guard()
+
 from PySide6.QtCore import QUrl, QTimer, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine

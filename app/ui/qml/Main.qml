@@ -295,7 +295,7 @@ ApplicationWindow {
 
         // ========== 次左：功能面板 ==========
         Rectangle {
-            Layout.preferredWidth: 340
+            Layout.preferredWidth: 420
             Layout.fillHeight: true
             color: Theme.bgPanel
             Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
@@ -870,7 +870,7 @@ ApplicationWindow {
             Rectangle { width: 1; height: 12; color: Theme.border }
             Item { Layout.fillWidth: true }
             Text {
-                text: "累计 " + bridge.totalTokens.toLocaleString() + " tokens · ≈ " + bridge.estCost
+                text: "今日 " + Number(bridge.totalTokens || 0).toLocaleString(Qt.locale(), 'f', 0) + " tokens · ≈ " + bridge.estCost
                 color: Theme.textTertiary
                 font.pixelSize: Theme.fsTiny
                 font.family: Theme.uiFont
@@ -886,7 +886,7 @@ ApplicationWindow {
                     }
                 }
                 ToolTip.visible: statsHot.containsMouse
-                ToolTip.text: "点击查看统计面板（章节/字数/成本）"
+                ToolTip.text: "今日用量（本地统计，含全部调用）· 点击查看统计面板（章节/字数/成本）"
             }
             Rectangle { width: 1; height: 12; color: Theme.border }
             Text {
@@ -1158,6 +1158,11 @@ ApplicationWindow {
             anchors.right: parent.right
             anchors.margins: 12
             AppButton {
+                text: "简介与标签…"
+                enabled: bridge.hasProject
+                onClicked: blurbDialog.open()
+            }
+            AppButton {
                 text: "备份项目 zip"
                 onClicked: bridge.backupProject()
             }
@@ -1178,6 +1183,180 @@ ApplicationWindow {
         onOpened: {
             lastExport = ""
             refreshPreview()
+        }
+    }
+
+    // ---- 发布物料：标签与简介（一键生成，粘贴到平台后台）----
+    Dialog {
+        id: blurbDialog
+        objectName: "blurbDialog"
+        parent: Overlay.overlay
+        modal: true
+        width: 660
+        height: 560
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(24, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: DialogBg {}
+        property string content: ""
+        property bool busy: false
+
+        header: Column {
+            padding: 16
+            spacing: 2
+            Text {
+                text: "发布物料 · 标签与简介"
+                color: Theme.textPrimary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTitle
+                font.bold: true
+            }
+            Text {
+                text: "据题材定位 + 全书大纲生成 · 自动保存到 设定/简介与标签.md · 流水线面板亦可生成"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTiny
+            }
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: Theme.rCard
+                color: Theme.bgLog
+                border.width: 1
+                border.color: Theme.border
+                ScrollView {
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    TextArea {
+                        readOnly: true
+                        text: blurbDialog.content !== "" ? blurbDialog.content
+                              : (blurbDialog.busy ? "" : "（尚未生成——点下方「生成简介与标签」，约 30-60 秒）")
+                        color: blurbDialog.content !== "" ? Theme.textSecondary : Theme.textTertiary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        wrapMode: Text.Wrap
+                        background: Rectangle { color: "transparent" }
+                    }
+                }
+                Text {
+                    anchors.centerIn: parent
+                    visible: blurbDialog.busy
+                    text: "生成中…（辅助槽，约 30-60 秒）"
+                    color: Theme.accent
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                }
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "复制全文"
+                enabled: blurbDialog.content !== "" && !blurbDialog.busy
+                onClicked: bridge.copyText(blurbDialog.content)
+            }
+            AppButton {
+                text: blurbDialog.content === "" ? "生成简介与标签" : "重新生成"
+                kind: "primary"
+                enabled: !bridge.isRunning && !blurbDialog.busy
+                onClicked: {
+                    blurbDialog.busy = true
+                    bridge.generateBlurb()
+                }
+            }
+            AppButton {
+                text: "关闭"
+                kind: "ghost"
+                onClicked: blurbDialog.close()
+            }
+        }
+        onOpened: {
+            content = bridge.blurbText()
+        }
+    }
+    Connections {
+        target: bridge
+        function onBlurbGenerated(ok, text) {
+            blurbDialog.busy = false
+            if (ok)
+                blurbDialog.content = text
+        }
+    }
+
+    // ---- 锁定被字数闸门拦截：强锁确认框 ----
+    property int lockBlockNum: 0
+    property string lockBlockReason: ""
+    property int lockBlockActual: 0
+    property int lockBlockTarget: 0
+    Connections {
+        target: bridge
+        function onLockBlocked(num, reason, actual, target) {
+            mainWindow.lockBlockNum = num
+            mainWindow.lockBlockReason = reason
+            mainWindow.lockBlockActual = actual
+            mainWindow.lockBlockTarget = target
+            forceLockDialog.open()
+        }
+    }
+    Dialog {
+        id: forceLockDialog
+        objectName: "forceLockDialog"
+        parent: Overlay.overlay
+        modal: true
+        width: 480
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: DialogBg {}
+        header: Text {
+            text: "第 " + mainWindow.lockBlockNum + " 章字数未达标，仍要锁定？"
+            color: Theme.textPrimary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTitle
+            font.bold: true
+            padding: 16
+        }
+        contentItem: Column {
+            spacing: 8
+            width: parent.width
+            Text {
+                width: parent.width
+                text: mainWindow.lockBlockReason
+                color: Theme.danger
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+            Text {
+                width: parent.width
+                text: "当前 " + Number(mainWindow.lockBlockActual).toLocaleString(Qt.locale(), 'f', 0)
+                      + " 字 / 目标 " + Number(mainWindow.lockBlockTarget).toLocaleString(Qt.locale(), 'f', 0)
+                      + " 字。锁定后本章反哺登记照常进行，但短章事实会被留痕；解锁后可继续扩写。"
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+        }
+        footer: Row {
+            spacing: 8
+            anchors.right: parent.right
+            anchors.margins: 12
+            AppButton {
+                text: "先不锁定"
+                kind: "ghost"
+                onClicked: forceLockDialog.close()
+            }
+            AppButton {
+                text: "仍要锁定"
+                kind: "primary"
+                onClicked: { bridge.forceConfirmChapterLocked(); forceLockDialog.close() }
+            }
         }
     }
 
@@ -1208,11 +1387,11 @@ ApplicationWindow {
             Repeater {
                 model: [
                     { k: "已写章节", v: (mainWindow.statsData.chapters || 0) + " 章" },
-                    { k: "全书字数", v: (mainWindow.statsData.words || 0).toLocaleString() + " 字" },
-                    { k: "平均章节", v: (mainWindow.statsData.avgWords || 0).toLocaleString() + " 字" },
-                    { k: "今日新增", v: (mainWindow.statsData.todayWords || 0).toLocaleString() + " 字" },
-                    { k: "本周新增", v: (mainWindow.statsData.weekWords || 0).toLocaleString() + " 字" },
-                    { k: "累计 token", v: (mainWindow.statsData.tokens || 0).toLocaleString() },
+                    { k: "全书字数", v: Number(mainWindow.statsData.words || 0).toLocaleString(Qt.locale(), 'f', 0) + " 字" },
+                    { k: "平均章节", v: Number(mainWindow.statsData.avgWords || 0).toLocaleString(Qt.locale(), 'f', 0) + " 字" },
+                    { k: "今日新增", v: Number(mainWindow.statsData.todayWords || 0).toLocaleString(Qt.locale(), 'f', 0) + " 字" },
+                    { k: "本周新增", v: Number(mainWindow.statsData.weekWords || 0).toLocaleString(Qt.locale(), 'f', 0) + " 字" },
+                    { k: "今日 token", v: Number(mainWindow.statsData.tokens || 0).toLocaleString(Qt.locale(), 'f', 0) },
                     { k: "预估成本", v: mainWindow.statsData.cost || "¥0.00" }
                 ]
                 delegate: Column {
@@ -1853,6 +2032,16 @@ ApplicationWindow {
             needsFixDialog.refresh()
             needsFixDialog.open()
         }
+    }
+
+    // ---- P2：章级生成配置快照对话框（队列行右键「查看生成配置…」）----
+    GenConfigDialog {
+        id: genConfigDialog
+        objectName: "genConfigDialog"
+    }
+    Connections {
+        target: bridge
+        function onGenConfigReady(num) { genConfigDialog.showFor(num) }
     }
 
     // ---- v0.13：Ctrl+T 切换主题快捷键（夜间/羊皮纸/纯白）----

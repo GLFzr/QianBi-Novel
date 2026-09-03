@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """QML 桥接层：向界面暴露流水线状态、章节队列、日志流与全部命令"""
 import datetime
+import difflib
 import json
 import threading
 import logging
@@ -12,7 +13,7 @@ from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
 
 from .. import config as cfg_mod
 from .. import project, deslop, prompts
-from ..core import state as st, versions
+from ..core import gates, state as st, versions
 from ..core.orchestrator import Orchestrator
 from ..core.co_writing import CoWriting
 from ..core import co_dialogue
@@ -75,11 +76,144 @@ class SelectionRewriteWorker(QThread):
             self.sig_error.emit(str(e))
 
 
+# ---------- 定向修复助手（v3：最小差异 + 同一性验收）----------
+
+def _norm_text(s: str) -> str:
+    return re.sub(r"\s+", "", s or "")
+
+
+def format_fix_targets(targets: list) -> str:
+    """修复目标 → REVIEW_FIX_PROMPT 注入的问题清单（含原文引证/命中原文/修法）"""
+    lines = []
+    for i, t in enumerate(targets, 1):
+        if t.get("kind") == "deslop":
+            lines.append(f"[问题{i}] 去AI味规则 {t.get('dim', '')}")
+            lines.append(f"说明: {t.get('text', '')}")
+            if t.get("quote"):
+                lines.append(f"命中原文: 「{t['quote']}」（只改这一句）")
+            if t.get("hint"):
+                lines.append(f"修法: {t['hint']}")
+        else:
+            dim = t.get("dim") or ""
+            lines.append(f"[问题{i}]" + (f" 维度{dim}" if dim else ""))
+            lines.append(f"说明: {t.get('text', '')}")
+            if t.get("quote"):
+                lines.append(f"原文引证: 「{t['quote']}」（只改包含此引文的位置）")
+    return "\n".join(lines) or "（无问题）"
+
+
+def flagged_para_indices(prose: str, targets: list) -> set:
+    """包含任一问题引证/命中原文的段号（按换行分段，0 基）"""
+    norm_paras = [_norm_text(p) for p in prose.split("\n")]
+    flagged = set()
+    for t in targets:
+        q = _norm_text(t.get("quote") or "")
+        if not q:
+            continue
+        for i, np_ in enumerate(norm_paras):
+            if q in np_:
+                flagged.add(i)
+    return flagged
+
+
+def enforce_minimal_diff(prose: str, rewritten: str, flagged: set):
+    """段级对齐后机械还原：未涉及任何问题的原文段落被模型改动/增删的一律还原。
+
+    Returns (enforced_text, restored_count)。
+    """
+    old = prose.split("\n")
+    new = rewritten.split("\n")
+    sm = difflib.SequenceMatcher(None, old, new, autojunk=False)
+    out = []
+    restored = 0
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            out.extend(old[i1:i2])
+        elif tag == "replace":
+            oc, nc = old[i1:i2], new[j1:j2]
+            chunk_flagged = any(i in flagged for i in range(i1, i2))
+            for k in range(max(len(oc), len(nc))):
+                if k < len(oc):
+                    oi = i1 + k
+                    if oi in flagged:
+                        out.append(nc[k] if k < len(nc) else oc[k])
+                    else:
+                        if k >= len(nc) or nc[k] != oc[k]:
+                            restored += 1
+                        out.append(oc[k])
+                elif chunk_flagged:
+                    out.append(nc[k])
+                else:
+                    restored += 1   # 无问题区域的插入段 → 丢弃
+        elif tag == "insert":
+            if (i1 - 1) in flagged or i1 in flagged:
+                out.extend(new[j1:j2])
+            else:
+                restored += j2 - j1
+        elif tag == "delete":
+            for oi in range(i1, i2):
+                out.append(old[oi])
+                if oi not in flagged:
+                    restored += 1
+    return "\n".join(out), restored
+
+
+def issue_similarity(a: str, b: str) -> float:
+    na, nb = _norm_text(a), _norm_text(b)
+    if not na or not nb:
+        return 0.0
+    return difflib.SequenceMatcher(None, na, nb).ratio()
+
+
+def target_resolved(t: dict, new_text: str, new_blocking_texts: list) -> bool:
+    """同一性判定：原问题「已解决」= 引文不再存在 且 复扫没有报出相似问题"""
+    similar = any(issue_similarity(t.get("text", ""), nb) >= 0.55
+                  for nb in new_blocking_texts)
+    q = _norm_text(t.get("quote") or "")
+    if q:
+        return q not in _norm_text(new_text) and not similar
+    return not similar
+
+
+def recover_quote_from_text(text: str, prose: str) -> str:
+    """从问题文本里恢复可定位的原文引证（登记时 quote 丢失的兜底）。
+
+    优先取【原文引证：...】整段及其内部引号片段，其次取文本内引号片段；
+    只返回确实存在于正文的片段。
+    """
+    prose_norm = _norm_text(prose)
+    candidates = []
+    m = re.search(r"【原文引证[：:]\s*(.+?)\s*】", text or "", re.S)
+    if m:
+        q = m.group(1).strip().strip('"“”')
+        candidates.append(q)
+        candidates.extend(re.findall(r"[“\"]([^”\"]{4,80})[”\"]", q))
+    candidates.extend(re.findall(r"[“\"]([^”\"]{4,80})[”\"]", text or ""))
+    for q in candidates:
+        q = q.strip()
+        if q and _norm_text(q) and _norm_text(q) in prose_norm:
+            return q
+    return ""
+
+
+def split_unstructured_findings(text: str) -> list:
+    """把「[未结构化评审]」式的整条阻塞文本按 - [阻塞]/- [建议] 拆成独立问题。"""
+    if not re.search(r"- ?[【\[]?(?:阻塞|建议)[】\]]?", text or ""):
+        return [text]
+    segs = re.split(r"- ?[【\[]?(?:阻塞|建议)[】\]]?", text)
+    out = []
+    for s in segs:
+        s = re.sub(r"^\s*[【\[]?未结构化评审[】\]]?\s*\S*\s*===ITEMS===\s*", "", s).strip()
+        if s:
+            out.append(s)
+    return out or [text]
+
+
 # ---------- 待修章节一键修复工作线程（依据已登记审校问题定向修复，不碰流水线）----------
 
 class ChapterRepairWorker(QThread):
-    """逐章修复待修章节：读登记阻塞问题（无则先新鲜复审）→ 快照「修复前备份」→
-    REVIEW_FIX_PROMPT 定向修改 → 复扫；改善才落库并翻转状态，未改善保留原稿。"""
+    """逐章修复待修章节：聚合登记阻塞问题 + 本地 deslop 阻断命中 → 快照「修复前备份」→
+    REVIEW_FIX_PROMPT 按引证定向修改 → 段级最小差异还原 → 同一性验收（原问题消除才采纳）。"""
     sig_log = Signal(str)
     sig_chapter_done = Signal(int, bool, str)   # num, ok, detail
     sig_all_done = Signal(int, int)             # ok_count, fail_count
@@ -89,7 +223,9 @@ class ChapterRepairWorker(QThread):
         self.cfg = cfg
         self.proj = proj
         self.nums = list(nums)
-        self.router = ModelRouter(cfg)
+        from ..core import stages as stages_mod
+        # 与流水线同一预设参数档：否则「一键修复」和自动跑出来的稿子采样口径不一致
+        self.router = ModelRouter(cfg, **stages_mod.preset_param_layers(proj))
 
     def run(self):
         ok = fail = 0
@@ -105,39 +241,78 @@ class ChapterRepairWorker(QThread):
             self.sig_chapter_done.emit(num, success, detail)
         self.sig_all_done.emit(ok, fail)
 
-    def _findings_blocking(self, num: int) -> list:
+    def _build_fix_targets(self, num: int, prose: str) -> list:
+        """聚合定向修复目标：登记 6 维 fail 项（带原文引证）+ v1 blocking 兜底 + 本地 deslop 阻断命中。
+
+        每条 {kind: review|deslop, dim, text, quote, hint}；quote 用于定位段落与同一性验收。
+        """
         state = st.load_state(self.proj)
         rf = st.load_review_findings(state, num)
-        blocking = [b for b in (rf.get("blocking") or []) if str(b).strip()]
-        if not blocking:
-            blocking = [i.get("text", "") for i in (rf.get("items") or [])
-                        if isinstance(i, dict) and i.get("level") == "fail" and i.get("text")]
-        return blocking
+        targets = []
+        seen = set()
+
+        def _add(kind, dim, text, quote, hint=""):
+            text = str(text or "").strip()
+            if not text:
+                return
+            nt, nq = _norm_text(text), _norm_text(quote)
+            if (nt and nt in seen) or (nq and nq in seen):
+                return
+            if nt:
+                seen.add(nt)
+            if nq:
+                seen.add(nq)
+            targets.append({"kind": kind, "dim": dim or "", "text": text,
+                            "quote": str(quote or "").strip(), "hint": hint or ""})
+
+        for it in (rf.get("items") or []):
+            if isinstance(it, dict) and it.get("level") == "fail" and it.get("text") \
+                    and not str(it["text"]).startswith("[字数]") \
+                    and it.get("quote_verified") is not False:
+                _add("review", it.get("dim", ""), it["text"], it.get("quote", ""))
+        for b in (rf.get("blocking") or []):
+            for part in split_unstructured_findings(str(b or "")):
+                # [字数] 项修复 prompt 扩不了字数，进目标只会死循环（#37 教训）→ 不进修复目标
+                if not part.startswith("[字数]"):
+                    _add("review", "", part, "")
+        for f in deslop.scan_text(prose):
+            if f.level == "blocking":
+                _add("deslop", f.rule, f.message, f.text, f.fix_hint)
+        # 引证恢复：登记时 quote 丢失（解析降级/旧数据）→ 从问题文本里找回正文中真实存在的引文
+        for t in targets:
+            if t["kind"] == "review" and not t["quote"]:
+                t["quote"] = recover_quote_from_text(t["text"], prose)
+        # 过期引证过滤：登记问题的引文已不在正文（多为人工已修）→ 该目标作废，
+        # 全部作废时走新鲜复审而不是白白调一次修复模型
+        prose_norm = _norm_text(prose)
+        targets = [t for t in targets
+                   if t["kind"] != "review" or not t["quote"]
+                   or _norm_text(t["quote"]) in prose_norm]
+        return targets
 
     def _review_v2(self, num: int, prose: str) -> dict:
-        """新鲜 6 维复审（组装参数与 stages._chapter_review 对齐）"""
-        from ..core import memory as mem_mod, stages as stages_mod
-        sem = self.cfg.get("writing", {}).get("regex_semantics", "logic")
-        prompt = prompts.FINAL_REVIEW_PROMPT.format(
-            prose=prose[:6000],
-            core_setting=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
-                          or "（未提供）"),
-            global_summary=mem_mod.read_global_summary(self.proj) or "（尚未开始）",
-            character_states=project.read_file(project.get_tracking_path(self.proj, "角色状态"))[:2000] or "（暂无）",
-            foreshadows=mem_mod.unfished_foreshadows(self.proj) or "（暂无）",
-            timeline=project.read_file(project.get_tracking_path(self.proj, "时间线"))[:1500] or "（暂无）",
-            worldbook_block=project.worldbook_text(self.proj) or "（暂无）",
-            regex_block=project.regex_block(self.proj, sem) or "（暂无）",
-            genre_review_extra=stages_mod._genre_review_extra(self.proj),
-            outline=(project.read_file(project.get_outline_path(self.proj, num))[:1000] or "（未提供）"),
-        )
-        result = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat_stream(prompt))
-        v2 = stages_mod.parse_final_review_v2(result)
-        if not v2["verdict"]:   # v1 兜底解析
-            fb, fa = stages_mod.parse_review_findings(result)
-            v2["blocking"] = v2["blocking"] or fb
-            v2["advisory"] = v2["advisory"] or fa
-        return v2
+        """新鲜 6 维复审（多轮投票，组装与 stages._chapter_review 同源）"""
+        from ..core import gates as gates_mod, stages as stages_mod
+        # 字数预检（本地，零 LLM）：短章直接 REJECT
+        wc_items, wc_blocking, wc_verdict = gates_mod.word_count_precheck(
+            self.proj, num, prose, self.cfg)
+        if wc_verdict:
+            return {"verdict": wc_verdict, "items": wc_items,
+                    "blocking": wc_blocking, "advisory": [],
+                    "summary": {"pass": 0, "marginal": 0, "fail": len(wc_items)}}
+
+        class _Ctx:   # review_with_votes 需要的最小 ctx 面
+            pass
+        ctx = _Ctx()
+        ctx.proj = self.proj
+        ctx.cfg = self.cfg
+        ctx.router = self.router
+        ctx.last_prompt = ""
+        ctx.review_raw = ""
+        ctx.stream_chunk = lambda t: None
+        ctx.log = lambda level, msg: self.sig_log.emit(msg)
+        votes = max(1, int(self.cfg.get("gates", {}).get("review_votes", 3)))
+        return stages_mod.review_with_votes(ctx, num, prose, votes)
 
     def _repair_one(self, num: int) -> tuple:
         path = None
@@ -150,21 +325,25 @@ class ChapterRepairWorker(QThread):
         prose = project.read_file(path)
         if not prose.strip():
             return False, "正文为空"
-        blocking = self._findings_blocking(num)
-        if not blocking:
+        targets = self._build_fix_targets(num, prose)
+        if not targets:
             self.sig_log.emit(f"第 {num} 章无登记阻塞问题，先跑一轮新鲜复审…")
             v2 = self._review_v2(num, prose)
             if v2["verdict"]:
                 st.save_review_findings(self.proj, st.load_state(self.proj), num,
                                         v2["verdict"], v2["items"], v2["blocking"], v2["advisory"])
-            blocking = v2["blocking"]
-            if not blocking:
+            targets = self._build_fix_targets(num, prose)
+            if not targets:
+                if v2["verdict"] in ("REJECT", "REJECT-HARD"):
+                    reason = "; ".join(str(b) for b in v2["blocking"]) or "存在阻塞问题"
+                    return False, f"复审 {v2['verdict']}（无可定向修复项）：{reason}"
                 st.update_history_status(self.proj, st.load_state(self.proj), num, "pass")
+                self._reset_attempts(num)
                 return True, "复审通过，无阻塞问题"
-        self.sig_log.emit(f"第 {num} 章按 {len(blocking)} 处阻塞问题定向修复…")
+        self.sig_log.emit(f"第 {num} 章按 {len(targets)} 处问题定向修复（带引证定位，最小改动）…")
         versions.snapshot(self.proj, num, prose, "修复前备份")
         fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
-            chapter_num=num, findings="\n".join(blocking), prose=prose,
+            chapter_num=num, findings=format_fix_targets(targets), prose=prose,
             outline_brief=(project.read_file(project.get_outline_path(self.proj, num))[:600]
                            or "（无本章细纲）"),
             core_setting_brief=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
@@ -176,22 +355,76 @@ class ChapterRepairWorker(QThread):
         too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))
         if not rewritten.strip() or looks_like_plan or too_short:
             reason = "空" if not rewritten.strip() else "修订计划" if looks_like_plan else "长度骤减"
+            self._bump_attempts(num)
             return False, f"模型返回非正文（{reason}），原稿保留"
-        # 回滚保护：复扫未改善则保留原稿
-        v2 = self._review_v2(num, rewritten)
-        new_blocking = v2["blocking"]
-        if len(new_blocking) < len(blocking):
-            project.write_file(path, rewritten)
+        # 最小差异强制：未涉及任何问题的段落被模型顺手改动的一律还原；
+        # 若所有问题都无法定位到段落（无引证），降级为不强制还原，仅靠同一性验收把关
+        flagged = flagged_para_indices(prose, targets)
+        if flagged:
+            enforced, restored = enforce_minimal_diff(prose, rewritten, flagged)
+            if restored:
+                self.sig_log.emit(f"第 {num} 章：已回滚 {restored} 处非问题区域的顺手改动")
+        else:
+            enforced, restored = rewritten, 0
+            self.sig_log.emit(f"第 {num} 章：问题无可定位引证，本轮放宽最小差异约束")
+        if _norm_text(enforced) == _norm_text(prose):
+            marked = self._bump_attempts(num)
+            suffix = "，连续 3 轮未收敛已转人工" if marked else ""
+            return False, f"修复无效：模型未改动任何问题段落{suffix}，原稿保留"
+        # 同一性验收：原问题确实消除且不复发才采纳（不再只看数量减少）
+        v2 = self._review_v2(num, enforced)
+        new_blocking = list(v2["blocking"])
+        for f in deslop.scan_text(enforced):
+            if f.level == "blocking" and f.text not in new_blocking:
+                new_blocking.append(f.text)
+        resolved = [t for t in targets if target_resolved(t, enforced, new_blocking)]
+        if not new_blocking:
+            project.write_file(path, enforced)
             state = st.load_state(self.proj)
             if v2["verdict"]:
                 st.save_review_findings(self.proj, state, num, v2["verdict"],
                                         v2["items"], new_blocking, v2["advisory"])
-            st.update_history_status(self.proj, st.load_state(self.proj), num,
-                                     "pass" if not new_blocking else "needs_fix")
-            if not new_blocking:
-                return True, f"已修复 {len(blocking)} 处阻塞，复审通过"
-            return True, f"阻塞 {len(blocking)}→{len(new_blocking)}（可再修一轮）"
-        return False, f"修复未改善（{len(blocking)}→{len(new_blocking)}），原稿保留"
+            st.update_history_status(self.proj, st.load_state(self.proj), num, "pass")
+            self._reset_attempts(num)
+            extra = f"，回滚 {restored} 处无关改写" if restored else ""
+            return True, f"已修复 {len(targets)} 处问题，复审通过{extra}"
+        if not resolved:
+            marked = self._bump_attempts(num)
+            suffix = "，连续 3 轮未收敛已转人工" if marked else ""
+            return False, f"原问题未被修复（{len(new_blocking)} 处仍在）{suffix}，原稿保留"
+        if len(new_blocking) >= len(targets):
+            marked = self._bump_attempts(num)
+            suffix = "，连续 3 轮未收敛已转人工" if marked else ""
+            return False, (f"修复无净改善（{len(targets)}→{len(new_blocking)}，已解决 {len(resolved)} "
+                           f"但出现新问题）{suffix}，原稿保留")
+        project.write_file(path, enforced)
+        state = st.load_state(self.proj)
+        if v2["verdict"]:
+            st.save_review_findings(self.proj, state, num, v2["verdict"],
+                                    v2["items"], new_blocking, v2["advisory"])
+        st.update_history_status(self.proj, st.load_state(self.proj), num, "needs_fix")
+        return True, f"阻塞 {len(targets)}→{len(new_blocking)}（已解决 {len(resolved)}，可再修一轮）"
+
+    def _bump_attempts(self, num: int) -> bool:
+        """累计修复轮次；≥3 轮未收敛标 chapter_need_human。返回本轮是否已升级。"""
+        state = st.load_state(self.proj)
+        att = state.setdefault("repair_attempts", {})
+        rec = att.get(str(num)) or {"count": 0}
+        rec["count"] = int(rec.get("count", 0)) + 1
+        att[str(num)] = rec
+        st.save_state(self.proj, state)
+        if rec["count"] >= 3:
+            st.mark_chapter_need_human(self.proj, st.load_state(self.proj), num)
+            return True
+        return False
+
+    def _reset_attempts(self, num: int):
+        state = st.load_state(self.proj)
+        att = state.get("repair_attempts") or {}
+        if str(num) in att:
+            att.pop(str(num), None)
+            state["repair_attempts"] = att
+            st.save_state(self.proj, state)
 
 
 def collect_needs_fix(state: dict) -> list:
@@ -500,6 +733,7 @@ class Bridge(QObject):
     # 待修章节汇总 + 一键修复
     needsFixChanged = Signal()
     needsFixReady = Signal()        # 流水线结束且存在待修章：QML 弹汇总对话框询问作者
+    genConfigReady = Signal(int)    # 队列行「查看生成配置」：QML 弹本章 P2 快照对话框（带章号）
     repairChanged = Signal()
     # 共写档（co-write）状态
     cwModeChanged = Signal()
@@ -517,6 +751,7 @@ class Bridge(QObject):
     modelsFetched = Signal(str, list)           # cid, models
     ideaExpanded = Signal(bool, str)            # ok, result_or_error
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
+    lockBlocked = Signal(int, str, int, int)    # 锁定被字数闸门拦截：num, reason, actual, target
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
@@ -577,6 +812,8 @@ class Bridge(QObject):
         self._cw_reply = ""                    # 本轮 agent 流式回复缓冲
         self._cw_worker = None
         self._cw_sum_worker = None
+        self._backflow_worker = None           # 剧情反哺 worker（helper 槽，后台串行）
+        self._backflow_queue = []              # 补跑队列（章号，先进先出）
         self._cw_busy_timer = QTimer(self)
         self._cw_busy_timer.setInterval(1000)
         self._cw_busy_timer.timeout.connect(self._on_cw_busy_tick)
@@ -635,14 +872,13 @@ class Bridge(QObject):
         return bool(self.proj and versions.newest_draft(self.proj))
 
     def _get_tokens(self):
-        if self.orch:
-            return self.orch.router.total_tokens()
-        return 0
+        from .. import usage as _usage
+        t = _usage.summary().get("today", {})
+        return int(t.get("in", 0)) + int(t.get("out", 0))
 
     def _get_cost_text(self):
-        if not self.orch:
-            return "¥0.00"
-        return f"¥{self.orch.router.estimate_cost():.2f}"
+        from .. import usage as _usage
+        return f"¥{_usage.summary().get('today', {}).get('cost', 0.0):.2f}"
 
     def _get_slot_text(self):
         def fmt(slot):
@@ -715,8 +951,8 @@ class Bridge(QObject):
 
     # ============ 项目管理 ============
 
-    @Slot(str, str, str, str, int, str, result=bool)
-    def newProject(self, location, name, genre, platform, totalWan, idea):
+    @Slot(str, str, str, str, int, str, str, result=bool)
+    def newProject(self, location, name, genre, platform, totalWan, idea, presetId=""):
         location, name = location.strip(), name.strip()
         if not location or not name:
             self.toast.emit("warn", "请填写保存位置与书名")
@@ -728,8 +964,17 @@ class Bridge(QObject):
             return False
         project.write_idea_info(path, genre.strip(), platform.strip() or "番茄",
                                 idea.strip(), int(totalWan or 0))
+        preset_name = ""
+        if presetId:
+            from .. import presets as genre_presets
+            state = st.load_state(path)
+            state["genre_preset"] = presetId
+            st.save_state(path, state)
+            preset_name = genre_presets.load_preset(presetId).get("name") or presetId
         self._open_project(path)
-        self.toast.emit("ok", f"项目《{name}》已创建，点击「开始」启动流水线")
+        self.toast.emit("ok", f"项目《{name}》已创建"
+                        + (f"（题材预设「{preset_name}」）" if preset_name else "")
+                        + "，点击「开始」启动流水线")
         return True
 
     @Slot(str)
@@ -969,6 +1214,7 @@ class Bridge(QObject):
     @Slot()
     def refreshUsage(self):
         self.usageChanged.emit()
+        self.tokensChanged.emit()
 
     # ========== 商业级运行时（封装计划 T3.x/T4.x）==========
 
@@ -1236,6 +1482,7 @@ class Bridge(QObject):
     def _on_sel_done(self, text: str):
         self._sel_result = text
         self.selectionStateChanged.emit()
+        self.refreshUsage()
         self.toast.emit("ok", "改写完成，可「应用」或「放弃」")
 
     def _on_sel_error(self, msg: str):
@@ -1295,6 +1542,8 @@ class Bridge(QObject):
                 self.chapterFindingsChanged.emit()
                 self.currentChapterChanged.emit()
                 self._reset_editor_state()
+                if st.is_review_stale(self.proj, st.load_state(self.proj), num):
+                    self.toast.emit("warn", f"第 {num} 章审校结论已过期（正文在结论后被修改过），建议重新查验")
                 return
         self._cur_num = num
         self._chapter_path = project.get_chapter_path(self.proj, num)
@@ -1565,7 +1814,8 @@ class Bridge(QObject):
             if num in history:
                 h = history[num]
                 title = h.get("title") or title
-                words = h.get("words") or words
+                if num not in chapters:      # 正文文件缺失才用历史快照兜底（防止快照冻结旧字数）
+                    words = h.get("words") or words
                 state_str = "pass" if h.get("status") == "pass" else "needs_fix"
                 if h.get("deslop_blocking"):
                     note = f"AI味 {h['deslop_blocking']} 阻断"
@@ -1574,10 +1824,13 @@ class Bridge(QObject):
                     rb = [b for b in (rf.get("blocking") or []) if str(b).strip()]
                     if rb:
                         note = (note + " · " if note else "") + f"审校 {len(rb)} 处"
+            if num in chapters and st.is_review_stale(self.proj, state, num):
+                state_str = "stale"
+                note = (note + " · " if note else "") + "结论已过期·待复审"
             if num == self._cur_num and self._running:
                 state_str = "writing"
                 note = st.STEP_LABELS.get(self._cur_step, "")
-            elif num in chapters and num not in history:
+            elif num in chapters and num not in history and state_str != "stale":
                 state_str = "untracked"
                 note = "正文存在·未入流水线"
             elif state_str == "queued" and num in outlines:
@@ -1672,7 +1925,7 @@ class Bridge(QObject):
         self.streamingChanged.emit()
         self.lastRecordChanged.emit()
         self.currentChapterChanged.emit()
-        self.tokensChanged.emit()
+        self.refreshUsage()
         self._refresh_progress()
         # 逐步确认模式：每章定稿后暂停（新版由决策门 G9 承担；此处仅兼容旧配置：auto 模式+step_confirm）
         if (self._running and self.orch
@@ -2351,6 +2604,7 @@ class Bridge(QObject):
         self.cwStreamingChanged.emit()
 
     def _on_cw_done(self, text: str):
+        self.refreshUsage()
         if self._cw_cancelled:
             self._cw_cancelled = False
             self._cw_reply = ""
@@ -2475,6 +2729,7 @@ class Bridge(QObject):
     def _on_cw_validate_done(self, text: str):
         from ..core.stages import parse_review_findings
         blocking, advisory = parse_review_findings(text)
+        self.refreshUsage()
         state = self._cw.load()
         if blocking:
             msg = ("🔍 细纲校验发现 %d 处阻塞：\n%s\n请修改细纲（可直接编辑或对话区提出）后再次点「确定细纲」。"
@@ -2513,6 +2768,7 @@ class Bridge(QObject):
         worker.start()
 
     def _on_cw_batch_done(self, outlines: list):
+        self.refreshUsage()
         if self._cw_cancelled:
             self._cw_cancelled = False
             return
@@ -2532,18 +2788,157 @@ class Bridge(QObject):
 
     @Slot()
     def confirmChapterLocked(self):
-        """✓ 章节内容确定 = 终稿锁定：内容不再改动，编辑器只读"""
+        """✓ 章节内容确定 = 终稿锁定：内容不再改动，编辑器只读
+
+        字数闸门：低于目标下限 → 发 lockBlocked 信号（QML 弹「仍要锁定」确认），
+        用户点强锁走 forceConfirmChapterLocked；短章不能静默锁定。
+        """
         if not self.proj or not self._cur_num:
             self.toast.emit("warn", "请先打开要锁定的章节")
             return
         if project.is_chapter_locked(self.proj, self._cur_num):
             self.toast.emit("info", "该章已终稿锁定")
             return
+        prose = self._chapter_text or project.read_file(self._chapter_path or "")
+        _items, blocking, verdict = gates.word_count_precheck(
+            self.proj, self._cur_num, prose, self.cfg)
+        if verdict:
+            default = int(self.cfg.get("writing", {}).get("chapter_word_target", 3000))
+            target = gates.chapter_word_target(self.proj, self._cur_num, default)
+            self.lockBlocked.emit(self._cur_num, blocking[0],
+                                  project.count_chars(prose), target)
+            return
+        self._do_lock_chapter(forced=False)
+
+    @Slot()
+    def forceConfirmChapterLocked(self):
+        """强制锁定（用户在确认框选择「仍要锁定」）：字数不达标留审计痕"""
+        if not self.proj or not self._cur_num:
+            return
+        if project.is_chapter_locked(self.proj, self._cur_num):
+            return
+        prose = self._chapter_text or project.read_file(self._chapter_path or "")
+        _items, blocking, _v = gates.word_count_precheck(
+            self.proj, self._cur_num, prose, self.cfg)
+        try:
+            st.record_forced_lock(self.proj, st.load_state(self.proj), self._cur_num,
+                                  blocking[0] if blocking else "手动强锁")
+        except Exception:
+            pass
+        self._do_lock_chapter(forced=True)
+
+    def _do_lock_chapter(self, forced: bool = False):
         project.set_chapter_locked(self.proj, self._cur_num, True)
         self.cwLockedChanged.emit()
         self.refreshQueue()
-        self.toast.emit("ok", f"第 {self._cur_num} 章已确定（终稿锁定）：内容不再改动；"
+        tag = "（强制锁定：字数未达标，已留审计痕）" if forced else ""
+        self.toast.emit("ok", f"第 {self._cur_num} 章已确定（终稿锁定）{tag}：内容不再改动；"
                               "解锁后可继续编辑（终稿仍留版本历史）")
+        self._maybe_backflow(self._cur_num)
+
+    # ---- 剧情反哺：定稿正文里的新实体/新规则/伏笔变动 → 回写世界书/伏笔表 ----
+
+    def _maybe_backflow(self, num: int, force: bool = False):
+        """触发点：锁定/审校通过/补跑。新鲜度去重：正文没再改过就不重跑"""
+        if not self.proj or not num:
+            return
+        if self._backflow_worker is not None:
+            if force:
+                self._backflow_queue.append(int(num))
+            return
+        if not force:
+            try:
+                if st.backflow_is_fresh(self.proj, self._cw.load(), int(num)):
+                    return
+            except Exception:
+                pass
+        self._start_backflow(int(num))
+
+    def _start_backflow(self, num: int):
+        prose = ""
+        for n, _name, p in project.list_chapters(self.proj):
+            if n == num:
+                prose = project.read_file(p)
+                break
+        if not prose.strip():
+            self.toast.emit("warn", f"第 {num} 章没有正文，反哺跳过")
+            self._drain_backflow_queue()
+            return
+        worker = co_dialogue.MemoryBackflowWorker(self.cfg, self.proj, num, prose, parent=self)
+        worker.done.connect(self._on_backflow_done)
+        worker.error.connect(self._on_backflow_error)
+        worker.finished.connect(lambda w=worker: self._release_backflow_worker(w))
+        self._backflow_worker = worker
+        worker.start()
+        self.toast.emit("info", f"第 {num} 章剧情反哺提取中（新设定回写世界书）…")
+
+    def _release_backflow_worker(self, w):
+        if self._backflow_worker is w:
+            self._backflow_worker = None
+
+    def _on_backflow_done(self, num: int, report: str):
+        self.refreshUsage()
+        first_line = report.splitlines()[0] if report else f"反哺 第{num}章 完成"
+        if "偏离点" in report:
+            self.toast.emit("warn", f"{first_line}——存在偏离点，详见问题登记")
+            try:
+                state = self._cw.load()
+                devs = [ln[2:].strip() for ln in report.splitlines() if ln.startswith("- ")]
+                if devs:
+                    items = [{"dim": "D_PLOT", "level": "marginal",
+                              "text": f"[反哺偏离] {d}", "quote": "",
+                              "root_layer": "ROOT_PROSE", "line": ""} for d in devs]
+                    st.save_review_findings(self.proj, state, num, "ADVISORY",
+                                            items, [], [it["text"] for it in items])
+                    self.needsFixChanged.emit()
+            except Exception:
+                pass
+        else:
+            self.toast.emit("ok", first_line)
+        self._drain_backflow_queue()
+
+    def _on_backflow_error(self, num: int, msg: str):
+        self.toast.emit("error", f"第 {num} 章反哺失败：{msg}（可稍后补跑）")
+        self._drain_backflow_queue()
+
+    def _drain_backflow_queue(self):
+        while self._backflow_queue:
+            nxt = self._backflow_queue.pop(0)
+            if st.backflow_is_fresh(self.proj, self._cw.load(), nxt):
+                continue
+            self._start_backflow(nxt)
+            return
+
+    @Slot(str)
+    def runBackfill(self, numsCsv: str):
+        """手动补跑反哺：章号逗号分隔（如 "4,5"），跳过已新鲜登记的章"""
+        if not self.proj:
+            return
+        nums = []
+        for part in str(numsCsv or "").replace("，", ",").split(","):
+            part = part.strip()
+            if part.isdigit():
+                nums.append(int(part))
+        if not nums:
+            self.toast.emit("warn", "补跑需要章号（逗号分隔），如 4,5")
+            return
+        have = {n for n, _name, _p in project.list_chapters(self.proj)}
+        todo, missing = [], []
+        state = self._cw.load()
+        for n in nums:
+            if n not in have:
+                missing.append(n)
+            elif not st.backflow_is_fresh(self.proj, state, n):
+                todo.append(n)
+        if missing:
+            self.toast.emit("warn", "这些章没有正文文件：" + "、".join(map(str, missing)))
+        if not todo:
+            self.toast.emit("info", "所选章节均已反哺且正文未再改动，无需补跑")
+            return
+        self._backflow_queue.extend(n for n in todo if n not in self._backflow_queue)
+        if self._backflow_worker is None:
+            self._drain_backflow_queue()
+        self.toast.emit("info", f"反哺补跑已排队：{len(todo)} 章（后台串行）")
 
     @Slot()
     def unlockChapter(self):
@@ -2589,6 +2984,7 @@ class Bridge(QObject):
         worker.start()
 
     def _on_cw_readback_done(self, text: str):
+        self.refreshUsage()
         state = self._cw.load()
         co_dialogue.transcript_append(state, st.STAGE_CW_PROSE, "agent", "（读改揣摩）" + text)
         self._cw_save_state(state)
@@ -2629,6 +3025,7 @@ class Bridge(QObject):
 
     def _on_cw_supervisor_done(self, text: str):
         import datetime as _dt
+        self.refreshUsage()
         num = self._cur_num
         state = self._cw.load()
         cw = st.ensure_cw(state)
@@ -2792,6 +3189,7 @@ class Bridge(QObject):
         self.toast.emit("info", f"正在对第 {num} 章做{label}…")
 
     def _on_cw_deslop_done(self, num: int):
+        self.refreshUsage()
         if self._cw_cancelled:
             self._cw_cancelled = False
             self._cw_reply = ""
@@ -2817,6 +3215,7 @@ class Bridge(QObject):
             self.toast.emit("ok", f"去味完成：阻断 {b0}→0 / 建议 {a0}→{a1}——已进编辑器，点「保存」才落盘")
 
     def _on_cw_review_done(self, text: str, num: int):
+        self.refreshUsage()
         if self._cw_cancelled:
             self._cw_cancelled = False
             self._cw_reply = ""
@@ -2827,7 +3226,11 @@ class Bridge(QObject):
         self.cwStreamingChanged.emit()
         if not text.strip():
             return
+        # 引证验真：假引证条目降级（编造引证不得进待修登记；盘上正文为空则跳过验真）
+        prose = project.read_file(project.get_chapter_path(self.proj, num))
         v2 = stages_mod.parse_final_review_v2(text)
+        if prose.strip():
+            v2 = stages_mod.verify_review_quotes(prose, v2)
         if not v2["verdict"]:   # v1 兜底解析（与 ChapterRepairWorker._review_v2 同款）
             fb, fa = stages_mod.parse_review_findings(text)
             v2["blocking"] = v2["blocking"] or fb
@@ -2837,6 +3240,8 @@ class Bridge(QObject):
         st.save_review_findings(self.proj, state, num, v2["verdict"] or "REJECT",
                                 v2["items"], v2["blocking"], v2["advisory"])
         self.needsFixChanged.emit()
+        if str(v2["verdict"]).startswith("PASS") and not v2["blocking"]:
+            self._maybe_backflow(num)
         if not v2["blocking"] and not v2["items"]:
             self.toast.emit("ok", f"第 {num} 章审校通过，无登记问题")
             return
@@ -2891,6 +3296,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"共写档选用预设「{name}」（仅作参考，不锁定）")
 
     def _on_cw_sum_done(self, text: str):
+        self.refreshUsage()
         if self._cw_cancelled:
             self._cw_cancelled = False
             return
@@ -3250,16 +3656,21 @@ class Bridge(QObject):
         """v2 预设详情：含 6 阶段 hint + v1 共享字段（独立面板预览用）"""
         from .. import presets as genre_presets
         if not preset_id:
-            return {"id": "", "name": "通用（无预设）", "fields": {}, "stage_hints": {}}
+            return {"id": "", "name": "通用（无预设）", "fields": {},
+                    "stage_hints": {}, "stage_params": {}, "sampling": {}}
         p = genre_presets.load_preset(preset_id)
         if not p:
-            return {"id": preset_id, "name": "(未找到)", "fields": {}, "stage_hints": {}}
+            return {"id": preset_id, "name": "(未找到)", "fields": {},
+                    "stage_hints": {}, "stage_params": {}, "sampling": {}}
         # v1 共享字段
         fields = {}
         for key, label in genre_presets.PRESET_FIELDS:
             val = (p.get(key) or "").strip()
             if val:
                 fields[key] = {"label": label, "value": val}
+        note = genre_presets.author_note(preset_id)
+        if note:
+            fields["author_note"] = {"label": "作者按（正文 prompt 近端注入）", "value": note}
         # v2 stage hints
         hints = p.get("stage_hints") or {}
         stage_hints = {}
@@ -3275,7 +3686,29 @@ class Bridge(QObject):
             "genre": p.get("genre", ""),
             "fields": fields,
             "stage_hints": stage_hints,
+            "stage_params": self._stage_param_view(preset_id),
+            "sampling": self._sampling_view(preset_id),
         }
+
+    @staticmethod
+    def _sampling_view(preset_id: str) -> dict:
+        """全书采样基线展示视图：不分相位的那层打底覆盖（阶段档压它，显式实参压两者）"""
+        from .. import presets as genre_presets
+        base = genre_presets.sampling(preset_id)
+        return {k: {"label": genre_presets.SAMPLING_LABELS.get(k, k), "value": v}
+                for k, v in base.items()}
+
+    @staticmethod
+    def _stage_param_view(preset_id: str) -> dict:
+        """阶段参数档展示视图（已过白名单校验；脏值在读取层就被丢弃，这里只排版）"""
+        from .. import presets as genre_presets
+        labels = dict(genre_presets.STAGE_PARAM_PHASES)
+        fields = {k: lab for k, lab, _lo, _hi, _int in genre_presets.STAGE_PARAM_FIELDS}
+        view = {}
+        for phase, vals in genre_presets.stage_params(preset_id).items():
+            parts = [f"{fields.get(k, k)}={v}" for k, v in vals.items()]
+            view[phase] = {"label": labels.get(phase, phase), "value": " · ".join(parts)}
+        return view
 
     @Slot(str, str, result=bool)
     def exportPreset(self, preset_id: str, out_path: str) -> bool:
@@ -3311,6 +3744,99 @@ class Bridge(QObject):
         self.themeChanged.emit()
         cn = {"qianbi_night": "夜间", "qianbi_parchment": "羊皮纸", "qianbi_plain": "纯白"}[theme]
         self.toast.emit("ok", f"主题已切换为「{cn}」")
+
+    # ---- 章级生成配置快照（P2）：队列行右键「查看生成配置」----
+
+    @Slot(int, result="QVariantMap")
+    def chapterGenConfig(self, num: int) -> dict:
+        """这一章生成时吃了什么：世界书激活清单、参数档、每次调用真实下发的采样
+
+        排版留在这里而不是 QML：快照结构由流水线写，展示口径变了只改一处。
+        改造前跑出来的老章节没有快照 → found=False，面板按「未登记」提示。
+        """
+        num = int(num or 0)
+        empty = {"found": False, "num": num, "sections": []}
+        if not self.proj or not num:
+            return empty
+        snap = project.get_chapter_gen_config(self.proj, num)
+        if not snap:
+            return empty
+        from .. import presets as genre_presets
+        labels = {k: lab for k, lab, _lo, _hi, _int in genre_presets.STAGE_PARAM_FIELDS}
+        labels.update(genre_presets.SAMPLING_LABELS)
+        phases = dict(genre_presets.STAGE_PARAM_PHASES)
+        order = list(labels)        # 标签表按预设字段顺序构造，键序即展示顺序
+
+        def fmt(vals):
+            """按预设字段声明顺序排版（连接槽→温度→核采样→…），字母序会把温度丢到中间"""
+            d = vals or {}
+            return " · ".join(f"{labels.get(k, k)}={d[k]}" for k in order if d.get(k) not in (None, ""))
+
+        pid = snap.get("preset") or ""
+        p_name = (genre_presets.load_preset(pid).get("name") or pid) if pid else "通用（无预设）"
+        head = [f"预设：{p_name}", f"生成时间：{snap.get('ts', '')}"]
+        layers = [f"全书采样基线：{t}" for t in [fmt(snap.get("sampling"))] if t]
+        for phase, vals in (snap.get("stage_params") or {}).items():
+            t = fmt(vals)
+            if t:
+                layers.append(f"{phases.get(phase, phase)}档：{t}")
+        head += layers or ["参数档：无覆盖，全部沿用连接档案默认值"]
+        sections = [{"title": f"第 {num} 章生成配置", "lines": head}]
+
+        for phase, meta in (snap.get("worldbook") or {}).items():
+            acts = meta.get("activated") or []
+            lines = [f"{a.get('name', '')}｜{a.get('why', '')}" for a in acts]
+            dropped = [d for d in (meta.get("dropped") or []) if d]
+            if dropped:
+                lines.append("未入预算：" + "、".join(dropped))
+            sections.append({
+                "title": "%s世界书 · 激活 %d 条 / 预算 %s 字" % (
+                    phases.get(phase, phase), len(acts), meta.get("budget", 0)),
+                "lines": lines or ["（本节装配无条目命中，或走了整文件快速路径）"]})
+
+        calls = snap.get("calls") or []
+        lines = []
+        for c in calls:
+            bits = [phases.get(c.get("phase", ""), c.get("phase", "未知相位")) or "未知相位",
+                    c.get("slot") or "默认槽", c.get("model") or "?",
+                    fmt(c.get("sampling")) or "档案默认"]
+            if c.get("degraded"):
+                bits.append("网关拒收已降级")
+            bits.append("prompt " + str(c.get("prompt_hash", ""))[:8])
+            lines.append(" · ".join(bits))
+        if lines:
+            sections.append({"title": f"调用记录（{len(calls)} 次）", "lines": lines})
+        return {"found": True, "num": num, "sections": sections}
+
+    @Slot(int)
+    def showGenConfig(self, num: int):
+        """队列行右键入口：章号随信号交给 QML 对话框，桥不持有对话框状态"""
+        self.genConfigReady.emit(int(num or 0))
+
+    @Slot(int, result="QVariantMap")
+    def saveChapterPresetTemplate(self, num: int) -> dict:
+        """「固化为模板」：这一章实际生效的组装参数 → 可复用预设（飞轮的写回端）
+
+        模板 id 由「书名+章号」决定，重新生成后再固化只更新同一个模板文件，
+        点赞过的章节不会被一堆近似重复的预设淹没。
+        """
+        from .. import presets as genre_presets
+        num = int(num or 0)
+        if not self.proj or not num:
+            return {"ok": False, "msg": "请先打开项目并选择章节"}
+        snap = project.get_chapter_gen_config(self.proj, num)
+        if not snap:
+            return {"ok": False, "msg": f"第 {num} 章没有生成配置快照，无法固化"}
+        data = genre_presets.preset_from_snapshot(
+            snap, self._book_title or os.path.basename(self.proj),
+            genre_presets.load_preset(snap.get("preset") or ""))
+        existed = os.path.isfile(os.path.join(genre_presets.user_dir(),
+                                              data["id"] + ".json"))
+        genre_presets.save_preset(data)
+        msg = f"已{'更新' if existed else '创建'}模板「{data['name']}」" + \
+              ("" if existed else "，可在「新建项目 → 题材预设」里选用")
+        self.toast.emit("ok", msg)
+        return {"ok": True, "msg": msg, "id": data["id"], "updated": existed}
 
     # ---- v2 6 维审校 issues（plan v2 模块 B）----
 
@@ -3490,6 +4016,7 @@ class Bridge(QObject):
     def _on_repair_done(self, ok: int, fail: int):
         self._repair_status = f"修复完成：{ok} 章成功" + (f"，{fail} 章未采纳（原稿保留）" if fail else "")
         self.repairChanged.emit()
+        self.refreshUsage()
         self.toast.emit("ok" if ok and not fail else "warn", self._repair_status)
         self._repair_worker = None
         self.refreshQueue()
@@ -3598,3 +4125,17 @@ class Bridge(QObject):
             self.toast.emit("ok", "已在文件管理器中定位导出文件")
         except Exception as e:  # noqa: BLE001
             self.toast.emit("error", f"无法打开文件管理器: {e}")
+
+    @Slot(str)
+    def copyText(self, text: str):
+        """复制文本到系统剪贴板（发布物料粘贴到平台后台用）"""
+        try:
+            from PySide6.QtGui import QGuiApplication
+            cb = QGuiApplication.clipboard()
+            if cb is None:
+                self.toast.emit("warn", "当前环境无剪贴板")
+                return
+            cb.setText(text or "")
+            self.toast.emit("ok", "已复制到剪贴板")
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"复制失败: {e}")

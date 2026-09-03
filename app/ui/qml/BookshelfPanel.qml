@@ -204,6 +204,7 @@ Item {
         parent: Overlay.overlay
         title: "新建项目"
         modal: true
+        onOpened: newPresetCombo.model = bridge.genrePresets()   // 新导入/固化的预设不必重启应用
         width: 440
         padding: 18
         x: parent ? Math.round((parent.width - width) / 2) : 0
@@ -300,8 +301,12 @@ Item {
                     text: "创建并进入"
                     kind: "primary"
                     onClicked: {
+                        var m = newPresetCombo.model
+                        var it = m && m.get ? m.get(newPresetCombo.currentIndex)
+                                            : (m ? m[newPresetCombo.currentIndex] : null)
                         if (bridge.newProject(locationField.text, nameField.text, genreField.text,
-                                              platformCombo.currentText, totalWanSpin.value, ideaArea.text)) {
+                                              platformCombo.currentText, totalWanSpin.value, ideaArea.text,
+                                              it ? it.id : "")) {
                             newProjectDialog.close()
                         }
                     }

@@ -196,6 +196,74 @@ def is_chapter_need_human(state: dict, num: int) -> bool:
     nhh = state.get("chapter_need_human") or {}
     return str(num) in nhh
 
+
+def _chapter_prose_path(proj: str, num: int):
+    from .. import project
+    for n, _name, p in project.list_chapters(proj):
+        if n == num:
+            return p
+    return None
+
+
+def _parse_ts(ts: str):
+    import datetime
+    try:
+        return datetime.datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def _now_str() -> str:
+    import datetime
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def is_review_stale(proj: str, state: dict, num: int) -> bool:
+    """审校结论陈旧判定：正文文件在结论落盘之后被改过（手改使结论失效）。
+
+    旧数据无 findings/无 ts/无正文文件一律不判陈旧（安全迁移，不误报）。
+    """
+    ts = (load_review_findings(state, num) or {}).get("ts")
+    reviewed = _parse_ts(ts) if ts else None
+    if reviewed is None:
+        return False
+    try:
+        path = _chapter_prose_path(proj, num)
+        if not path or not os.path.exists(path):
+            return False
+        return os.path.getmtime(path) > reviewed.timestamp() + 1.0   # 秒级截断容差
+    except Exception:
+        return False
+
+
+def mark_backflowed(proj: str, state: dict, num: int, report: str = ""):
+    """登记某章剧情反哺已完成（触发点去重用）"""
+    bf = state.setdefault("backflowed", {})
+    bf[str(num)] = {"ts": _now_str(), "report": report}
+    save_state(proj, state)
+
+
+def backflow_is_fresh(proj: str, state: dict, num: int) -> bool:
+    """反哺新鲜：已登记且正文在登记之后未再改动 → 无需重跑"""
+    rec = (state.get("backflowed") or {}).get(str(num))
+    done = _parse_ts((rec or {}).get("ts", "")) if rec else None
+    if done is None:
+        return False
+    try:
+        path = _chapter_prose_path(proj, num)
+        if not path or not os.path.exists(path):
+            return False
+        return os.path.getmtime(path) <= done.timestamp()
+    except Exception:
+        return False
+
+
+def record_forced_lock(proj: str, state: dict, num: int, reason: str = ""):
+    """强锁审计：字数未达标仍被用户强制锁定终稿时留痕"""
+    fl = state.setdefault("forced_locks", {})
+    fl[str(num)] = {"ts": _now_str(), "reason": reason}
+    save_state(proj, state)
+
 # ---- T3.2 类型加固：运行时仍是普通 dict（JSON 序列化兼容），TypedDict 仅作静态标注与校验依据 ----
 class CWStateTD(TypedDict, total=False):
     """state['cw'] 子树键型（cw_defaults 为唯一默认源；未知键允许存在）"""
@@ -255,6 +323,8 @@ _STATE_KEY_TYPES = {
     "review_findings": dict,
     "review_chain": dict,
     "chapter_need_human": dict,
+    "backflowed": dict,
+    "forced_locks": dict,
     "cw": dict,
 }
 _CW_KEY_TYPES = {

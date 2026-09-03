@@ -102,6 +102,7 @@ Item {
                     chapterGuidanceDialog.open()
                 }
                 onViewIssues: function (n) { bridge.showReviewIssues(n) }
+                onViewGenConfig: function (n) { bridge.showGenConfig(n) }
             }
 
             ScrollBar.vertical: ScrollBar {

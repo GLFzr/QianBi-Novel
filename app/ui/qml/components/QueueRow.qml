@@ -15,6 +15,7 @@ Rectangle {
     signal rewriteChapter(int num)
     signal requestGuidanceRewrite(int num)
     signal viewIssues(int num)
+    signal viewGenConfig(int num)
 
     width: ListView.view ? ListView.view.width : 300
     height: 46
@@ -22,6 +23,7 @@ Rectangle {
     color: mouseArea.containsMouse ? Theme.bgHover
          : state === "writing" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
          : state === "needs_fix" ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.05)
+         : state === "stale" ? Qt.rgba(Theme.highlightYellow.r, Theme.highlightYellow.g, Theme.highlightYellow.b, 0.06)
          : "transparent"
     border.width: mouseArea.containsMouse ? 1 : 0
     border.color: Theme.borderStrong
@@ -66,7 +68,7 @@ Rectangle {
         Text {
             Layout.alignment: Qt.AlignVCenter
             visible: text !== ""
-            text: row.note !== "" ? row.note : (row.words > 0 ? row.words.toLocaleString() : "")
+            text: row.note !== "" ? row.note : (row.words > 0 ? Number(row.words).toLocaleString(Qt.locale(), 'f', 0) : "")
             color: row.state === "needs_fix" ? Theme.danger : Theme.textTertiary
             font.family: Theme.monoFont
             font.pixelSize: Theme.fsTiny
@@ -101,6 +103,11 @@ Rectangle {
             text: "查看问题…"
             visible: row.state === "needs_fix"
             onTriggered: row.viewIssues(row.num)
+        }
+        MenuItem {
+            text: "查看生成配置…"
+            visible: row.state !== "queued" && row.state !== "outline_ready"
+            onTriggered: row.viewGenConfig(row.num)
         }
         MenuItem {
             text: "重写本章"

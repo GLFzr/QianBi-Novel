@@ -11,6 +11,8 @@ import os
 import re
 import tempfile
 
+from . import wb
+
 PROJECT_DIRS = ["设定", "大纲", "正文", "追踪"]
 SETTING_SUBDIRS = ["世界观", "角色", "势力"]
 
@@ -213,50 +215,91 @@ def write_idea_info(proj: str, genre: str, platform: str, idea: str, total_words
 
 WORLDBOOK_PATH = "设定/世界书.md"
 REGEX_PATH = "设定/正则.md"
+# 剧情反哺登记分区（机器管理；装配层为其保留保底预算，见 app/wb.py）
+WORLDBOOK_BACKFLOW_HEADING = "## 追加登记"
 
 
-def worldbook_text(proj: str, max_chars: int = 2000) -> str:
-    """世界书全文（注入 prompt 用，空串回退占位）"""
-    doc = read_file(os.path.join(proj, WORLDBOOK_PATH))
-    if not doc.strip():
-        return "（本书尚未生成世界书——按核心设定写作，后续在世界书阶段补充）"
-    if len(doc) > max_chars:
-        return doc[:max_chars] + "…（截断）"
-    return doc
+def worldbook_text(proj: str, max_chars: int = 2000, anchors: list = None,
+                   num: int = 0) -> str:
+    """世界书注入块（空串回退占位）——装配内核见 app/wb.py（双端逐字节一致）
+
+    条目化激活：常驻（规则/数值基准节、``[常驻]``）＞ 本章命中（专名/关键词/章节区间）
+    ＞ 近章登记（追加登记区、首见第N章、拓宽批次）＞ 节权重；「追加登记」区另有保底预算。
+    全文不超预算时逐字返回原文件（老书零变化）。签名向后兼容：不传 num 即无章上下文。
+    """
+    return wb.assemble(proj, num=num, budget=max_chars, anchors=anchors)["text"]
+
+
+def worldbook_anchors(proj: str, num: int = 0) -> list:
+    """世界书注入锚点：本章出场专名 ＞ 细纲已知名命中 ＞ 主要角色表（相关性截断优先保留）
+
+    旧实现只认「角色：」字段与 ``名字：`` 行首式写法，而细纲模板的真实字段是
+    「出场顺序」、世界书实体登记多为表格/标题行，锚点恒为空。
+    """
+    core = read_file(os.path.join(proj, "设定", "题材定位.md"))
+    m = re.search(r"##\s*主要角色表(.*?)(?=\n##\s|\Z)", core, re.S)
+    roster = wb.roster_names(m.group(1)) if m else []
+    if not num:
+        return roster[:20]
+    known = wb.merge_names(roster, wb.roster_names(read_file(os.path.join(proj, WORLDBOOK_PATH))))
+    outline = read_file(get_outline_path(proj, num)) or ""
+    return wb.merge_names(wb.matching_names(outline, known), wb.cast_names(outline), roster)[:20]
 
 
 def regex_rules(proj: str, semantics: str = "logic") -> list:
     """「正则」抽象接口（方案 §4.1）：返回 [{rule, level: must/should, scope}]
 
     - 默认 semantics="logic"（逻辑约束规则集）：解析 设定/正则.md 的
-      `- 规则：…｜level：must/should｜scope：…` 条目
-    - semantics="regex"（字面正则样本，备选）：只取行内反引号包裹的 pattern 作 rule
+      `- 规则：…｜level：must/should｜scope：…` 条目；兼容多行块——
+      列表项起一条目，后续非列表行并入该条目，至空行/标题/下一列表项止，
+      level/scope 在整块内查找，缺省 level=must（既入规则集即为约束）；
+      条目带 ｜disabled 标记即整条跳过（多行块内任一行行尾都算）
+    - semantics="regex"（字面正则样本，备选）：只取条目内反引号包裹的 pattern 作 rule
     - 文件缺失/为空 → 空列表（组装方负责占位回退）
     """
     doc = read_file(os.path.join(proj, REGEX_PATH))
     if not doc.strip():
         return []
-    rules = []
-    for line in doc.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    entries, cur = [], None
+    for raw in doc.splitlines():
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            if cur is not None:
+                entries.append(cur)
+                cur = None
             continue
-        line = line.lstrip("-•* ").strip()
-        if not line:
+        if re.match(r"^[-•*]\s+", s):
+            if cur is not None:
+                entries.append(cur)
+            cur = re.sub(r"^[-•*]\s+", "", s)
+        elif cur is not None:
+            cur += " " + s
+        else:
+            entries.append(s)
+    if cur is not None:
+        entries.append(cur)
+    rules = []
+    for entry in entries:
+        entry = entry.strip()
+        if not entry:
+            continue
+        if re.search(r"[｜|]\s*disabled\b", entry):   # 多行块已并成一条：任一行行尾都算
             continue
         if semantics == "regex":
-            m = re.search(r"`([^`]+)`", line)
-            rule = m.group(1) if m else line
+            m = re.search(r"`([^`]+)`", entry)
+            rule = m.group(1) if m else entry
             rules.append({"rule": rule[:300], "level": "must", "scope": "样本"})
             continue
-        level, scope = "should", "全书"
-        m = re.search(r"level\s*[:：]\s*(must|should)", line)
+        level, scope = "must", "全书"
+        m = re.search(r"level\s*[:：]\s*(must|should)", entry)
         if m:
             level = m.group(1)
-        m = re.search(r"scope\s*[:：]\s*([^｜|]+)", line)
+        m = re.search(r"scope\s*[:：]\s*([^\s｜|]+)", entry)
         if m:
             scope = m.group(1).strip()
-        rules.append({"rule": line[:300], "level": level, "scope": scope[:60]})
+        rule = re.sub(r"(?:[｜|]\s*)?(?:level|scope)\s*[:：]\s*[^\s｜|]+", "", entry)
+        rule = re.sub(r"\s{2,}", " ", rule).strip(" ｜|")
+        rules.append({"rule": rule[:300], "level": level, "scope": scope[:60]})
     return rules
 
 
@@ -273,14 +316,23 @@ def regex_block(proj: str, semantics: str = "logic", max_chars: int = 1500) -> s
 
 
 def split_worldbook_product(product: str) -> tuple:
-    """共写世界书总结产物 → (世界书正文, 正则段)
+    """世界书产物 → (世界书正文, 正则段)
 
-    「## 正则」小节独立成 设定/正则.md；未拆出独立正则段时返回 (全文, "")。
+    「正则…」小节独立成 设定/正则.md；未拆出独立正则段时返回 (全文, "")。
+    标题层级按 1~4 级都认：模型常写成「# 正则（逻辑约束规则集）」，只认 ``##``
+    会把整段约束留在世界书里 → 正则规则集恒空，闸门无规则可校验。
+    终止边界取同层或更浅层标题（节内 ``###`` 子标题仍属本段）。
+    正则段之后的内容拼回世界书正文：两半分别落 世界书.md / 正则.md，
+    只取「正则之前」会让模型把小节排在正则后面时整节凭空消失。
     """
-    m = re.search(r"##\s*正则.*?(?=\n##\s|\Z)", product or "", re.S)
+    text = (product or "").strip()
+    m = re.search(r"^(#{1,4})[ \t]*正则[^\n]*$", text, re.M)
     if not m:
-        return (product or "").strip(), ""
-    return product[:m.start()].rstrip(), m.group(0).strip()
+        return text, ""
+    nxt = re.search(r"^#{1,%d}[ \t]" % len(m.group(1)), text[m.end():], re.M)
+    end = m.end() + nxt.start() if nxt else len(text)
+    before, after = text[:m.start()].rstrip(), text[end:].strip()
+    return ((before + "\n\n" + after).strip() if after else before), text[m.start():end].strip()
 
 
 # ---------- 章节终稿锁定（M4 · 锁读写全部下沉 project.py，worker 与 UI 同进程读取）----------
@@ -346,6 +398,24 @@ def attempt_unlock(proj: str, num: int) -> bool:
         return False
     set_chapter_locked(proj, num, False)
     return True
+
+
+# ---------- 章级生成配置快照（P2）：与锁定同仓，state.json 不背这块体量 ----------
+
+def get_chapter_gen_config(proj: str, num: int) -> dict:
+    """本章生成时的世界书激活清单/参数档/调用指纹；老书没记过 → {}"""
+    if not num:
+        return {}
+    return _read_annotation(proj, num).get("gen_config") or {}
+
+
+def set_chapter_gen_config(proj: str, num: int, cfg: dict):
+    """写快照（保留标注/书签/锁定字段）：整键替换，不与旧快照做增量合并"""
+    if not num:
+        return
+    data = _read_annotation(proj, num)
+    data["gen_config"] = cfg or {}
+    _write_annotation(proj, num, data)
 
 
 def planned_chapters(proj: str, chapter_word_target: int = 3000) -> int:

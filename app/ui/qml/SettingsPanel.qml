@@ -118,9 +118,10 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 14
                 spacing: 8
-                Column {
-                    spacing: 3
+                Row {
+                    spacing: 8
                     Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
                     Text {
                         text: "设置"
                         color: Theme.textPrimary
@@ -197,10 +198,12 @@ Item {
             color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.07)
             border.width: 1
             border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.3)
-            height: apiNoteCol.implicitHeight + 16
+            implicitHeight: apiNoteCol.implicitHeight + 20
             ColumnLayout {
                 id: apiNoteCol
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
                 anchors.margins: 10
                 spacing: 3
                 Text {
@@ -307,12 +310,12 @@ Item {
 
                 AppField { id: urlField; Layout.fillWidth: true; label: "Base URL" }
 
-                Row {
+                RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
                     AppField {
                         id: keyField
-                        width: parent.width - 60
+                        Layout.fillWidth: true
                         label: "API Key"
                         echoMode: showKey.checked ? TextInput.Normal : TextInput.Password
                         placeholder: "sk-…"
@@ -320,7 +323,7 @@ Item {
                     AppButton {
                         id: showKey
                         text: showKey.checked ? "隐藏" : "显示"
-                        anchors.bottom: parent.bottom
+                        Layout.alignment: Qt.AlignBottom
                         checkable: true
                     }
                 }
@@ -329,12 +332,12 @@ Item {
                     Layout.fillWidth: true
                     spacing: 6
                     Text { text: "模型名（可下拉选择或手动输入）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    Row {
+                    RowLayout {
                         width: parent.width
                         spacing: 6
                         ComboBox {
                             id: modelField
-                            width: parent.width - 76
+                            Layout.fillWidth: true
                             editable: true
                             model: modelList
                             textRole: "m"
@@ -345,7 +348,7 @@ Item {
                         }
                         AppButton {
                             text: "拉取"
-                            anchors.verticalCenter: parent.verticalCenter
+                            Layout.alignment: Qt.AlignVCenter
                             onClicked: {
                                 if (settings.editingId && !settings.isNew) bridge.fetchModels(settings.editingId)
                                 else bridge.showToast("warn", "请先保存连接再拉取模型列表")
@@ -359,19 +362,19 @@ Item {
                     spacing: 8
                     Column {
                         spacing: 6
-                        width: (parent.width - 16) / 3
+                        width: (parent.width - 16) * 0.26
                         Text { text: "温度"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                         AppSpinBox { id: tempSpin; width: parent.width; from: 0; to: 20; value: 7; overrideText: (tempSpin.value / 10).toFixed(1) }
                     }
                     Column {
                         spacing: 6
-                        width: (parent.width - 16) / 3
+                        width: (parent.width - 16) * 0.48
                         Text { text: "max_tokens"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                         AppSpinBox { id: maxTokensSpin; width: parent.width; from: 512; to: 131072; stepSize: 1024; value: 8192 }
                     }
                     Column {
                         spacing: 6
-                        width: (parent.width - 16) / 3
+                        width: (parent.width - 16) * 0.26
                         Text { text: "超时(秒)"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                         AppSpinBox { id: timeoutSpin; width: parent.width; from: 30; to: 3600; stepSize: 30; value: 300 }
                     }
@@ -465,10 +468,12 @@ Item {
                     Layout.fillWidth: true
                     radius: Theme.rCard
                     color: Theme.bgCard
-                    height: slotCol.implicitHeight + 24
+                    implicitHeight: slotCol.implicitHeight + 24
                     Column {
                         id: slotCol
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         anchors.margins: 12
                         spacing: 8
                         Text {
@@ -527,6 +532,14 @@ Item {
                                 }
                             }
                         }
+                        Text {
+                            width: parent.width
+                            text: "建议：审校槽绑定 pro 档连接（判定更稳，约 2-3 倍 token 成本）；flash 档也能用，但边界判分更容易摇摆。审校判定已统一低温运行，无需改连接档案的温度。"
+                            color: Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.uiFont
+                            wrapMode: Text.Wrap
+                        }
                     }
                 }
 
@@ -556,13 +569,16 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: 76
+                        implicitHeight: wtCol.implicitHeight + 24
                         ColumnLayout {
-                            anchors.fill: parent
+                            id: wtCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 4
                             Text { text: "章节字数目标"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
-                            Text { text: "草稿低于目标（含容差）会自动扩写一轮"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            Text { text: "草稿低于目标（含容差）会自动扩写一轮"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny; wrapMode: Text.Wrap; Layout.fillWidth: true }
                             RowLayout {
                                 spacing: 8
                                 Layout.fillWidth: true
@@ -579,13 +595,16 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: 76
+                        implicitHeight: rvCol.implicitHeight + 24
                         ColumnLayout {
-                            anchors.fill: parent
+                            id: rvCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 4
                             Text { text: "一致性审校"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
-                            Text { text: "每章定稿前用审校槽做一致性检查，阻塞问题自动修一轮"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny }
+                            Text { text: "每章定稿前用审校槽做一致性检查，阻塞问题自动修一轮"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny; wrapMode: Text.Wrap; Layout.fillWidth: true }
                             RowLayout {
                                 Layout.fillWidth: true
                                 Item { Layout.fillWidth: true }
@@ -605,9 +624,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: 76
+                        implicitHeight: modeCol.implicitHeight + 24
                         ColumnLayout {
-                            anchors.fill: parent
+                            id: modeCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 4
                             Text { text: "默认运行模式"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
@@ -632,9 +654,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: 92
+                        implicitHeight: rgCol.implicitHeight + 24
                         ColumnLayout {
-                            anchors.fill: parent
+                            id: rgCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 4
                             Text { text: "「正则」语义"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
@@ -676,9 +701,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: 96
+                        implicitHeight: rbCol.implicitHeight + 24
                         ColumnLayout {
-                            anchors.fill: parent
+                            id: rbCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 4
                             Text { text: "读改揣摩（共写档）"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
@@ -729,10 +757,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        Layout.preferredHeight: themeCol.implicitHeight + 20
+                        implicitHeight: themeCol.implicitHeight + 20
                         ColumnLayout {
                             id: themeCol
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 10
                             spacing: 8
                             Text {
@@ -775,9 +805,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        Layout.preferredHeight: 60
+                        implicitHeight: libRow.implicitHeight + 20
                         RowLayout {
-                            anchors.fill: parent
+                            id: libRow
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 10
                             spacing: 10
                             ColumnLayout {
@@ -795,6 +828,8 @@ Item {
                                     color: Theme.textTertiary
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.fsTiny
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
                                 }
                             }
                             AppButton {
@@ -818,10 +853,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: edCol.implicitHeight + 24
+                        implicitHeight: edCol.implicitHeight + 24
                         ColumnLayout {
                             id: edCol
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 10
 
@@ -911,10 +948,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: bkCol.implicitHeight + 24
+                        implicitHeight: bkCol.implicitHeight + 24
                         ColumnLayout {
                             id: bkCol
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 8
                             Text { text: "项目备份"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
@@ -949,10 +988,12 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
-                        height: keysCol.implicitHeight + 24
+                        implicitHeight: keysCol.implicitHeight + 24
                         ColumnLayout {
                             id: keysCol
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 12
                             spacing: 8
                             Repeater {
@@ -974,8 +1015,7 @@ Item {
                                         border.width: 1; border.color: Theme.border
                                         Text { anchors.centerIn: parent; text: modelData[0]; color: Theme.accent; font.family: Theme.monoFont; font.pixelSize: 11 }
                                     }
-                                    Text { text: modelData[1]; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall }
-                                    Item { Layout.fillWidth: true }
+                                    Text { text: modelData[1]; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap; Layout.fillWidth: true }
                                 }
                             }
                         }

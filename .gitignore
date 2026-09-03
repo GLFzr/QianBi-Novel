@@ -16,6 +16,8 @@ QianBi-Novel.exe
 # ---- 本地归档/测试残留 ----
 _archive/
 tests_output/
+tests/corpus_pd/
+tests/corpus_ref/
 .tmp_test/
 tmpt2tjun0o/
 smoke_tmp/

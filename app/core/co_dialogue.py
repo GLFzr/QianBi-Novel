@@ -15,7 +15,7 @@ from PySide6.QtCore import QThread, Signal
 from .. import config as cfg_mod
 from .. import project, prompts
 from ..llm import ModelRouter, clean_llm_output
-from . import state as st
+from . import memory, state as st
 
 TRANSCRIPT_MAX = 4000   # 对话转写截断上限（最近 ≤4k 字）
 HANDOFF_MAX = 800       # 交接块上限
@@ -138,7 +138,7 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
         num = int(focus_chapter) if int(focus_chapter or 0) > 0 else project.next_chapter_num(proj)
         by_num = {n: p for n, _name, p in chapters}
         outline = rd("大纲", f"细纲_第{num:03d}章.md") or "（本章细纲尚未生成）"
-        wb = project.worldbook_text(proj, 1200)
+        wb = project.worldbook_text(proj, 1200, num=num)
         rg = project.regex_block(proj, "logic", 1000)
         prev_nums = [n for n in by_num if n < num]
         next_nums = [n for n in by_num if n > num]
@@ -155,8 +155,16 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
         else:
             status = ("尚未写成。作者要求写作时，请依据上一章结尾、下一章开头与本章细纲"
                       "补写完整正文，注意与前后章无缝衔接")
+        char_state = project.read_file(project.get_tracking_path(proj, "角色状态"))[:1500] or "（无）"
+        foreshadows = memory.unfished_foreshadows(proj, limit=1200) or "（暂无待回收伏笔）"
+        recent = memory.read_recent_summaries(proj, num, n=3) or "（无更前章节摘要）"
         return (f"【焦点章节】锚定第 {num} 章（用户在编辑器打开的章；若与作者本轮所指不同，以作者为准并提醒）\n\n"
                 f"【本章细纲】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
+                f"【must 级自检】落笔前逐条核对上面 level=must 的规则：每条写出「本章落点」，"
+                f"给不出落点又与本章事件冲突的，先向作者提出确认，不得自行绕开或改写规则；"
+                f"世界书登记的实体身份/声口同样按条核对，不得当陌生人重新介绍\n\n"
+                f"【角色状态】\n{char_state}\n\n【未回收伏笔】\n{foreshadows}\n\n"
+                f"【前文摘要】\n{recent}\n\n"
                 f"【上一章结尾】\n{prev_ending}\n\n【下一章开头】\n{next_opening}\n\n"
                 f"【本章现状】{status}")
     return "（本阶段无参考块）"
@@ -351,7 +359,7 @@ class SupervisorWorker(QThread):
                 chapter_outline=chapter_outline,
                 chapter_text=chapter_text or "（本章正文尚在工作副本中）",
                 next_outline_brief=next_brief,
-                worldbook_block=project.worldbook_text(self.proj, 1200),
+                worldbook_block=project.worldbook_text(self.proj, 1200, num=self.num),
                 regex_block=project.regex_block(self.proj, "logic", 1000),
             )
             self.last_prompt = prompt
@@ -431,7 +439,7 @@ class OutlineBatchWorker(QThread):
             prompt = prompts.CO_UNIT_OUTLINE_PROMPT.format(
                 unit_block=prompts.unit_text(self.unit),
                 handoff=prev_handoff(state, st.STAGE_CW_UNIT),
-                worldbook_block=project.worldbook_text(self.proj, 1500),
+                worldbook_block=project.worldbook_text(self.proj, 1500, num=self.batch[0]),
                 regex_block=project.regex_block(self.proj, "logic", 1200),
                 genre_block=genre_presets.genre_block(state.get("genre_preset", "")),
                 nearby_outlines="\n\n".join(nearby) or "（无相邻细纲）",
@@ -488,7 +496,8 @@ class ReviewOutlinesWorker(QThread):
                 prev_ending = project.read_file(prev[2])[-400:]
             prompt = prompts.CO_OUTLINE_REVIEW_PROMPT.format(
                 outlines=outlines,
-                worldbook_block=project.worldbook_text(self.proj, 1500),
+                worldbook_block=project.worldbook_text(self.proj, 1500,
+                                                        num=(self.nums or [1])[0]),
                 regex_block=project.regex_block(self.proj, "logic", 1200),
                 previous_ending=prev_ending,
                 unit_block=prompts.unit_text(self.unit),
@@ -576,26 +585,25 @@ class CwProseCheckWorker(QThread):
         self.done.emit(rewritten)
 
     def _run_review(self):
+        from . import gates
         from . import memory
         from . import stages as stages_mod
-        sem = self.cfg.get("writing", {}).get("regex_semantics", "logic")
-        prompt = prompts.FINAL_REVIEW_PROMPT.format(
-            prose=self.text[:6000],
-            core_setting=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
-                          or "（未提供）"),
-            global_summary=memory.read_global_summary(self.proj) or "（尚未开始）",
-            character_states=project.read_file(project.get_tracking_path(self.proj, "角色状态"))[:2000] or "（暂无）",
-            foreshadows=memory.unfished_foreshadows(self.proj) or "（暂无）",
-            timeline=project.read_file(project.get_tracking_path(self.proj, "时间线"))[:1500] or "（暂无）",
-            worldbook_block=project.worldbook_text(self.proj),
-            regex_block=project.regex_block(self.proj, sem),
-            genre_review_extra=stages_mod._genre_review_extra(self.proj),
-            outline=(project.read_file(project.get_outline_path(self.proj, self.num))[:1000]
-                     or "（未提供）"),
-        )
+        # 字数预检（本地，零 LLM）：短章直接拼 v2 规范报告短路，不花审校槽
+        _items, blocking, verdict = gates.word_count_precheck(
+            self.proj, self.num, self.text, self.cfg)
+        if verdict:
+            report = (f"===VERDICT===\n{verdict}\n\n"
+                      f"===D_PLOT=== fail {blocking[0]} → root: ROOT_PROSE\n")
+            self.last_prompt = ""
+            self.result_text = report
+            self.done.emit(report)
+            return
+        prompt = stages_mod.build_final_review_prompt(self.proj, self.cfg, self.num, self.text)
         self.last_prompt = prompt
         result = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW)
-                                  .chat_stream(prompt, on_chunk=self.chunk.emit))
+                                  .chat_stream(prompt, on_chunk=self.chunk.emit,
+                                               temperature=self.cfg.get("gates", {})
+                                               .get("review_temperature", 0.2)))
         if self.isInterruptionRequested():
             return
         if not result.strip():
@@ -603,3 +611,95 @@ class CwProseCheckWorker(QThread):
             return
         self.result_text = result
         self.done.emit(result)
+
+
+# ---------- 剧情反哺 worker：定稿正文 → 新实体/新规则/伏笔变动 回写设定档案 ----------
+
+class MemoryBackflowWorker(QThread):
+    """反哺提取与回写（helper 槽，单章一次调用）
+
+    流程：MEMORY_BACKFLOW_PROMPT → parse_backflow → 世界书「追加登记」/伏笔表补丁/
+    一句话摘要链 → mark_backflowed 登记。LLM 返回后、落盘前检查中断请求，
+    中断则一个字节都不写。done(num, 报告)，error(num, 消息)。
+    """
+    done = Signal(int, str)
+    error = Signal(int, str)
+
+    def __init__(self, cfg: dict, proj: str, num: int, prose: str,
+                 router=None, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.proj = proj
+        self.num = int(num)
+        self.prose = prose or ""
+        self.router = router or ModelRouter(cfg)
+        self.last_prompt = ""
+        self.result_text = ""
+        self.report = ""
+
+    def run(self):
+        try:
+            self._run_backflow()
+        except Exception as e:  # noqa: BLE001
+            self.error.emit(self.num, str(e))
+
+    def _chapter_title(self) -> str:
+        for n, name, path in project.list_chapters(self.proj):
+            if n != self.num:
+                continue
+            for line in project.read_file(path).splitlines():
+                s = line.strip()
+                if s.startswith("# "):
+                    return s[2:].strip() or f"第{self.num}章"
+            base = re.sub(r"\.md$", "", name)
+            base = re.sub(r"^第\d+章[_\s]*", "", base)
+            return base or f"第{self.num}章"
+        return f"第{self.num}章"
+
+    def _run_backflow(self):
+        from . import stages as stages_mod
+        prompt = prompts.MEMORY_BACKFLOW_PROMPT.format(
+            chapter_num=self.num,
+            prose=self.prose[:8000],
+            worldbook=project.worldbook_text(self.proj, 2500, num=self.num) or "（世界书为空）",
+            roster=stages_mod._roster(self.proj),
+            character_state=project.read_file(
+                project.get_tracking_path(self.proj, "角色状态"))[:2000] or "（暂无）",
+            foreshadows=project.read_file(
+                project.get_tracking_path(self.proj, "伏笔"))[:2000] or "（暂无）",
+            outline=project.read_file(
+                project.get_outline_path(self.proj, self.num))[:1200] or "（无本章细纲）",
+        )
+        self.last_prompt = prompt
+        result = clean_llm_output(self.router.client(cfg_mod.SLOT_HELPER).chat(prompt))
+        if self.isInterruptionRequested():
+            return
+        if not result.strip():
+            self.error.emit(self.num, "反哺提取返回为空，请重试")
+            return
+        self.result_text = result
+        parsed = memory.parse_backflow(result)
+
+        wb = memory.upsert_worldbook_entries(
+            self.proj, self.num, parsed["entities"], parsed["rules"],
+            parsed["evolutions"], parsed["revelations"])
+        fs = memory.apply_foreshadow_diff(
+            self.proj, self.num, parsed["foreshadow_adds"], parsed["foreshadow_payoffs"])
+        if parsed["summary"]:
+            memory.append_chapter_summary(self.proj, self.num,
+                                          self._chapter_title(), parsed["summary"])
+
+        parts = [f"反哺 第{self.num}章："]
+        parts.append(f"世界书 新增{wb['added']}·更新{wb['updated']}·演进{wb['evolved']}·跳过{wb['skipped']}")
+        if wb["proposed"]:
+            parts.append(f"修正提案{wb['proposed']}（见 设定/世界书_修正提案.md）")
+        parts.append(f"伏笔 新增{fs['added']}·回收{fs['payoff']}·跳过{fs['skipped']}")
+        if parsed["summary"]:
+            parts.append("摘要已入链")
+        report = "；".join(parts)
+        if parsed["deviations"]:
+            report += "\n偏离点（%d 条，需人工核对）：\n" % len(parsed["deviations"])
+            report += "\n".join("- " + d for d in parsed["deviations"][:10])
+        self.report = report
+        st.mark_backflowed(self.proj, st.load_state(self.proj), self.num, report)
+        self.done.emit(self.num, report)

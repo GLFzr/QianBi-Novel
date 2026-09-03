@@ -46,7 +46,8 @@ class Orchestrator(QThread):
         super().__init__(parent)
         self.proj = proj
         self.cfg = cfg
-        self.router = ModelRouter(cfg)
+        # 预设参数覆盖两层（P1）：采样基线打底 + 阶段档压顶；建路由先装一次，章循环里按「下一章生效」重绑
+        self.router = ModelRouter(cfg, **stages.preset_param_layers(proj))
         self._pause = threading.Event()
         self._resume_evt = threading.Event()   # 暂停唤醒事件（T3.3：去 0.15s 轮询）
         self._stop = False
@@ -285,6 +286,12 @@ class Orchestrator(QThread):
                 # 大纲已存在（续跑）：若上次回退留下想法，带进细纲
                 pass
 
+            # 阶段②.5 世界书首版（仅当缺失/为空；对已有世界书的书零影响）
+            wb_path = os.path.join(self.proj, "设定", "世界书.md")
+            if not project.read_file(wb_path).strip():
+                stages.stage_worldbook_gen(self)
+                self.sig_queue.emit()
+
             # 计划总章数
             chapter_words = self.cfg.get("writing", {}).get("chapter_word_target", 3000)
             total = state.get("total_chapters", 0) or project.planned_chapters(self.proj, chapter_words)
@@ -299,6 +306,9 @@ class Orchestrator(QThread):
             done_nums = project.chapter_nums(self.proj)
             while total == 0 or num <= total:
                 self.checkpoint()
+                # 每章重绑预设参数两层：暂停期间用户换预设 → 下一章生效（与题材块同一口径）
+                self.router.set_preset_params(**stages.preset_param_layers(self.proj))
+                stages.begin_gen_trace(self)   # P2 轨迹容器：本章细纲/正文/审校各次调用都记在这里
                 if num in done_nums:
                     num += 1
                     continue
@@ -336,6 +346,7 @@ class Orchestrator(QThread):
                 if g5_idea:
                     guidance = (guidance + "\n" + g5_idea) if guidance else g5_idea
                 record = stages.chapter_microcycle(self, num, guidance=guidance, ideas=ideas)
+                stages.write_gen_config(self, num)   # 先落快照再发信号：闸门/信号链异常不该丢可追溯性
                 self.sig_chapter_done.emit(record)
                 done_nums.add(num)
 

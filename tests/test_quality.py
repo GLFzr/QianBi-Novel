@@ -52,7 +52,7 @@ class FakeClient:
         return ("===第1章===\n### 第 1 章：测试\n- 核心事件：x\n"
                 "===第2章===\n### 第 2 章：测试2\n- 核心事件：y")
 
-    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None):
+    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None, **kw):
         result = self.chat(prompt)
         if on_chunk:
             on_chunk(result)
@@ -74,8 +74,17 @@ class FakeCtx:
     def checkpoint(self):
         pass
 
+    def consume_gate_idea(self):
+        return ""
+
     def stream_chunk(self, text):
         self.streamed.append(text)
+
+    def stream_stage(self, label):
+        pass
+
+    def stream_reasoning(self, text):
+        pass
 
 
 class _FakeRouter:

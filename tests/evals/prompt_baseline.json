@@ -1,0 +1,306 @@
+{
+ "count": 43,
+ "entries": [
+  {
+   "i": 0,
+   "kind": "core",
+   "slot": "writing",
+   "chars": 2985,
+   "sha256": "2d451afb25ed1c4df36e106d4b82146586c36a55c2b51599b85fdc0fdf9dd828"
+  },
+  {
+   "i": 1,
+   "kind": "volume",
+   "slot": "writing",
+   "chars": 2248,
+   "sha256": "b7d6882bcd33f1696511be4143de1933f5e4b29a0a93e278737e2224c7435cfc"
+  },
+  {
+   "i": 2,
+   "kind": "worldbook_gen",
+   "slot": "helper",
+   "chars": 1677,
+   "sha256": "4daf01dbfac416f22f0f20d0694f2cc4cb65dc55069c4b97f7037b64dea899fc"
+  },
+  {
+   "i": 3,
+   "kind": "outline",
+   "slot": "helper",
+   "chars": 4438,
+   "sha256": "e7f7968ed0c7b655585789271fabbb8578ffec9c8c4a4e05e75f23cc2908cb98"
+  },
+  {
+   "i": 4,
+   "kind": "prose",
+   "slot": "writing",
+   "chars": 7741,
+   "sha256": "d49130a24379eaac85adc5b097e4eedc6384ef0b78a77720a68d8a3d235cdc1b"
+  },
+  {
+   "i": 5,
+   "kind": "review",
+   "slot": "review",
+   "chars": 9537,
+   "sha256": "2653cfb2c7bde96be91deb2fe3e6789ba56493c3b0a153c1583851a14c130a09"
+  },
+  {
+   "i": 6,
+   "kind": "tracking",
+   "slot": "helper",
+   "chars": 5040,
+   "sha256": "f9042a91dcfe73ffd0fd7361b8abeb4ee60f82854645d7cb0927b8639ef5299f"
+  },
+  {
+   "i": 7,
+   "kind": "chapter_summary",
+   "slot": "helper",
+   "chars": 3037,
+   "sha256": "1755670aecc863373dbb75590b77866df9480430550ff8b181940bf4137f3f0c"
+  },
+  {
+   "i": 8,
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 209,
+   "sha256": "01b71f4cadf9fbbfff0df508fa77abeb523edad4fabaa034ce9094dc267f6b10"
+  },
+  {
+   "i": 9,
+   "kind": "prose",
+   "slot": "writing",
+   "chars": 9011,
+   "sha256": "ce11abcc07292f7611dc18ee2a881e166e2c81ccd9a1b96dbd21b0298fe866eb"
+  },
+  {
+   "i": 10,
+   "kind": "review",
+   "slot": "review",
+   "chars": 9653,
+   "sha256": "5a3353c00d0536c8a6a476d07832202e2daa61ea4c46fdaf7f12bc77fa758525"
+  },
+  {
+   "i": 11,
+   "kind": "review_fix",
+   "slot": "review",
+   "chars": 3709,
+   "sha256": "cfb64cc15b9a8953a855f7bc9e15898681fdf7e4837a3c56a52e68482ce532bd"
+  },
+  {
+   "i": 12,
+   "kind": "review",
+   "slot": "review",
+   "chars": 9653,
+   "sha256": "5a3353c00d0536c8a6a476d07832202e2daa61ea4c46fdaf7f12bc77fa758525"
+  },
+  {
+   "i": 13,
+   "kind": "root_cause",
+   "slot": "review",
+   "chars": 4252,
+   "sha256": "04e98f2f542a01e2a92c37434dec9b527af464149bc68c3ea661cdc12d7edfa6"
+  },
+  {
+   "i": 14,
+   "kind": "review_fix",
+   "slot": "review",
+   "chars": 3643,
+   "sha256": "ba46e9f759411722883c5d16053918a6e132a99021c46e13939d0f879e0dc87c"
+  },
+  {
+   "i": 15,
+   "kind": "review",
+   "slot": "review",
+   "chars": 9653,
+   "sha256": "5a3353c00d0536c8a6a476d07832202e2daa61ea4c46fdaf7f12bc77fa758525"
+  },
+  {
+   "i": 16,
+   "kind": "tracking",
+   "slot": "helper",
+   "chars": 5014,
+   "sha256": "99b91dbf2820c3516858401d77bc7048c22aea5c1acde38d75d398e8b9485b00"
+  },
+  {
+   "i": 17,
+   "kind": "chapter_summary",
+   "slot": "helper",
+   "chars": 3037,
+   "sha256": "af2629983a38dd4a3cf68f24e1661d631ffc353f7eebca438335770bb57ab712"
+  },
+  {
+   "i": 18,
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 230,
+   "sha256": "4afea40ba457e3abecf731c8f30b762b1ba8e0531edb98106293fa39e98cd386"
+  },
+  {
+   "i": 19,
+   "kind": "prose",
+   "slot": "writing",
+   "chars": 9038,
+   "sha256": "95bca9484822b4b2f4b9387ca49eb4634cb413a083439c49a07262b7e524f7ae"
+  },
+  {
+   "i": 20,
+   "kind": "enrich",
+   "slot": "writing",
+   "chars": 2713,
+   "sha256": "2cc4afd69c154877be6be04e59599a740e57fce2d0ef87f4939ade7cd2ed6aee"
+  },
+  {
+   "i": 21,
+   "kind": "enrich",
+   "slot": "writing",
+   "chars": 2713,
+   "sha256": "2cc4afd69c154877be6be04e59599a740e57fce2d0ef87f4939ade7cd2ed6aee"
+  },
+  {
+   "i": 22,
+   "kind": "tracking",
+   "slot": "helper",
+   "chars": 4114,
+   "sha256": "105b84f77af6df2760fc4ea91737461a469ef4db7709ad2e600958af21b69b66"
+  },
+  {
+   "i": 23,
+   "kind": "chapter_summary",
+   "slot": "helper",
+   "chars": 2137,
+   "sha256": "dac5bff89e43f32461221efdc0a955101210e2f78ecc35fde9992c854d8291af"
+  },
+  {
+   "i": 24,
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 230,
+   "sha256": "d5f3292a55e9e2fd9c2ed36a08018adee2904cdfaf0669d2011172771f3541ef"
+  },
+  {
+   "i": 25,
+   "kind": "prose",
+   "slot": "writing",
+   "chars": 8939,
+   "sha256": "b2fbca24ced4cb02be82229fb1890ca30c346276468bec79b6a28a464d2370ff"
+  },
+  {
+   "i": 26,
+   "kind": "trim",
+   "slot": "writing",
+   "chars": 5296,
+   "sha256": "1442b9bd97e3beb4f9ba30b9ea0a547090ac44f35e30565237ed5b1d8cc46a1f"
+  },
+  {
+   "i": 27,
+   "kind": "review",
+   "slot": "review",
+   "chars": 11253,
+   "sha256": "b44778f26223cb9361ba960f2db6db73f1d3abf667340ec5e449e04b157d0eb0"
+  },
+  {
+   "i": 28,
+   "kind": "tracking",
+   "slot": "helper",
+   "chars": 6614,
+   "sha256": "2aba7e0f0222174c8086c0eeddaacb415aefe00354e1d1b15917c484d9ce7f22"
+  },
+  {
+   "i": 29,
+   "kind": "chapter_summary",
+   "slot": "helper",
+   "chars": 2934,
+   "sha256": "2df94700d52a0c256cae9f29373181dd235a677e2b8b03c0c4a4a93452926c76"
+  },
+  {
+   "i": 30,
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 230,
+   "sha256": "b9ab567866cdfc9f4ec7183f7a56b7bd0ad0705f8a6f632d600e53cd98d3683f"
+  },
+  {
+   "i": 31,
+   "kind": "dialogue",
+   "slot": "writing",
+   "chars": 1785,
+   "sha256": "9a04014d6d4ac33a82dd42e9199a86e52565579d483e807a20a557035793d1b8"
+  },
+  {
+   "i": 32,
+   "kind": "review",
+   "slot": "review",
+   "chars": 9523,
+   "sha256": "5d34da5c37a256419cdf3c80346fcceb6e9b12358cdd61256699bf73eac7ac0f"
+  },
+  {
+   "i": 33,
+   "kind": "deslop",
+   "slot": "writing",
+   "chars": 952,
+   "sha256": "c734ad7c59cfe94714690d092bd7d97e86447381f7f44bf7512f0e24c2466d23"
+  },
+  {
+   "i": 34,
+   "kind": "backflow",
+   "slot": "helper",
+   "chars": 4616,
+   "sha256": "4acd32e1ba38fd2c1d26309e08fe437ffbd57e5ebadc8654e568839619e9bb53"
+  },
+  {
+   "i": 35,
+   "kind": "co_summarize",
+   "slot": "writing",
+   "chars": 381,
+   "sha256": "7433090ef86212263b53edfa9652689999868b60b02ba993a8be839eedb6582c"
+  },
+  {
+   "i": 36,
+   "kind": "blurb",
+   "slot": "helper",
+   "chars": 663,
+   "sha256": "ded6f4f946cffe465316da93efd251f7ab4af942bcb6757555b8b2e880ab77d8"
+  },
+  {
+   "i": 37,
+   "kind": "worldbook_text",
+   "slot": "budget=2000",
+   "chars": 288,
+   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+  },
+  {
+   "i": 38,
+   "kind": "worldbook_text",
+   "slot": "budget=600",
+   "chars": 288,
+   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+  },
+  {
+   "i": 39,
+   "kind": "worldbook_text",
+   "slot": "budget=2000",
+   "chars": 288,
+   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+  },
+  {
+   "i": 40,
+   "kind": "worldbook_assemble",
+   "slot": "budget=160 num=1 anchors=['陈更', '柳三更']",
+   "chars": 150,
+   "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
+  },
+  {
+   "i": 41,
+   "kind": "worldbook_assemble",
+   "slot": "budget=160 num=2 anchors=['陈更', '柳三更']",
+   "chars": 150,
+   "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
+  },
+  {
+   "i": 42,
+   "kind": "worldbook_assemble",
+   "slot": "budget=160 num=3 anchors=['陈更', '柳三更']",
+   "chars": 150,
+   "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
+  }
+ ]
+}

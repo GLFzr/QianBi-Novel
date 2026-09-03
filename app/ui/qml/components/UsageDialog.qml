@@ -33,7 +33,7 @@ Dialog {
         data = bridge.usageSummary()
     }
 
-    function fmt(n) { return (n || 0).toLocaleString() }
+    function fmt(n) { return Number(n || 0).toLocaleString(Qt.locale(), 'f', 0) }
 
     contentItem: ColumnLayout {
         spacing: 10

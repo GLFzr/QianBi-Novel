@@ -30,7 +30,7 @@ class StubClient:
         self.text = text
         self.calls = []
 
-    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None):
+    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None, **kw):
         self.calls.append(prompt)
         step = 7
         for i in range(0, len(self.text), step):

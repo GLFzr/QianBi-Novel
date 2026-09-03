@@ -7,10 +7,16 @@
 - _dispatch_cw_rewrite 幂等认领：首次派发消费报告，二次进入拒绝；
   报告被新一轮比对覆盖（ts 失配）→ 放弃派发。
 """
+import hashlib
 import os
+from types import SimpleNamespace
 
 from app.core import co_dialogue, co_writing, state as st
 from app.ui import bridge as bmod
+
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _mk_proj(tmp_path):
@@ -77,12 +83,36 @@ def test_review_worker_prompt_assembly(tmp_path):
     proj = _mk_proj(tmp_path)
     report = "===VERDICT===\nPASS"
     prose = "本章正文样本。" * 20
-    w = co_dialogue.CwProseCheckWorker({}, proj, 2, prose, mode="review",
+    cfg = {"writing": {"chapter_word_target": 100}}
+    # 低字数目标：样本 140 字放行预检，本用例只测 prompt 装配
+    w = co_dialogue.CwProseCheckWorker(cfg,
+                                       proj, 2, prose, mode="review",
                                        router=_FakeRouter(report))
     w.run()
     assert w.result_text == report
     assert "本章正文样本。" in w.last_prompt  # 工作副本正文进 prompt
     assert "乙事件标记物" in w.last_prompt    # 本章细纲注入
+    # W0c：共写查验与流水线共用同一终审装配点——两条渲染路径逐字相等
+    from app.core import stages
+
+    pipeline = stages.build_final_review_prompt(proj, cfg, 2, prose)
+    ctx = SimpleNamespace(proj=proj, cfg=cfg)
+    assert _sha(w.last_prompt) == _sha(pipeline) == _sha(
+        stages._build_final_review_prompt(ctx, 2, prose))
+
+
+def test_review_worker_short_circuits_on_word_count(tmp_path):
+    """短章查验：本地预检短路，审校槽零调用，报告为可解析的 v2 规范文本"""
+    from app.core import stages
+    proj = _mk_proj(tmp_path)
+    r = _FakeRouter("不应被调用的回复")
+    w = co_dialogue.CwProseCheckWorker({}, proj, 2, "太短的正文。", mode="review", router=r)
+    w.run()
+    assert r.c.prompts == []                        # 零 LLM 调用
+    assert "REJECT" in w.result_text and "[字数]" in w.result_text
+    v2 = stages.parse_final_review_v2(w.result_text)
+    assert v2["verdict"] == "REJECT"
+    assert v2["blocking"] and v2["blocking"][0].startswith("[字数]")
 
 
 # ---------- 报告消费态：_dispatch_cw_rewrite 幂等守卫 ----------

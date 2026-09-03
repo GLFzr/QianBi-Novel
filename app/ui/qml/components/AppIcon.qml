@@ -33,7 +33,7 @@ Canvas {
         function mv(x, y) { ctx.moveTo(x * s, y * s) }
         function ln(x, y) { ctx.lineTo(x * s, y * s) }
         function arc(x, y, r, a0, a1) { ctx.arc(x * s, y * s, r * s, a0, a1) }
-        function rect(x, y, w, h, r) { ctx.roundedRect(x * s, y * s, w * s, h * s, (r || 0) * s) }
+        function rect(x, y, w, h, r) { ctx.roundedRect(x * s, y * s, w * s, h * s, (r || 0) * s, (r || 0) * s) }
         function stroke2() { ctx.stroke() }
 
         switch (name) {
@@ -117,7 +117,7 @@ Canvas {
             break
         case "backup":  // 备份：数据库圆柱
             p(); arc(.5, .26, .24, Math.PI, 0); ln(.74, .74); arc(.5, .74, .24, 0, Math.PI); ln(.26, .26); stroke2()
-            p(); mv(.26, .5); arc(.5 * s, .5 * s, .24 * s, Math.PI, 0); stroke2()
+            p(); mv(.26, .5); arc(.5, .5, .24, Math.PI, 0); stroke2()
             break
         case "pen":  // 笔（局部改写）
             p(); mv(.56, .2); ln(.8, .44); ln(.38, .86); ln(.14, .86); ln(.14, .62); ctx.closePath(); stroke2()
@@ -128,6 +128,12 @@ Canvas {
             break
         case "stop":  // 停止 ■
             p(); rect(.3, .3, .4, .4, .06); stroke2()
+            break
+        case "library":  // 预设库：2×2 卡片格
+            p(); rect(.16, .16, .28, .28, .06); stroke2()
+            p(); rect(.56, .16, .28, .28, .06); stroke2()
+            p(); rect(.16, .56, .28, .28, .06); stroke2()
+            p(); rect(.56, .56, .28, .28, .06); stroke2()
             break
         }
     }

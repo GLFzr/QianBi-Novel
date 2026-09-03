@@ -7,8 +7,11 @@ from .client import LLMClient
 class ModelRouter:
     """按槽位分发 LLMClient；共享底层配置，调用统计聚合"""
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, stage_params: dict = None, payload_defaults: dict = None):
         self.cfg = cfg
+        # 预设覆盖层两层：全书采样基线打底 + 阶段参数表 {phase: {参数: 值}} 压顶
+        self.stage_params = dict(stage_params or {})
+        self.payload_defaults = dict(payload_defaults or {})
         self._clients = {}
 
     def client(self, slot: str) -> LLMClient:
@@ -23,8 +26,18 @@ class ModelRouter:
                 max_retries=llm_cfg.get("max_retries", 2),
                 backoff_base=llm_cfg.get("backoff_base", 2.0),
                 slot=slot,   # 用量统计维度（插件）
+                payload_defaults=self.payload_defaults,
+                stage_params=self.stage_params,
             )
         return self._clients[slot]
+
+    def set_preset_params(self, stage_params: dict = None, payload_defaults: dict = None):
+        """换预设/下一章生效入口：两层覆盖整表重绑（原地改写会让并发读看到半个表）"""
+        self.stage_params = dict(stage_params or {})
+        self.payload_defaults = dict(payload_defaults or {})
+        for client in self._clients.values():
+            client.stage_params = self.stage_params
+            client.payload_defaults = self.payload_defaults
 
     def invalidate(self):
         """配置变更后调用，丢弃缓存客户端"""

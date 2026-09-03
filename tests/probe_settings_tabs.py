@@ -5,6 +5,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from probe_guard import arm_config_guard
+
+arm_config_guard()
+
 import shiboken6
 from PySide6.QtCore import QUrl, QTimer, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication
@@ -17,8 +21,6 @@ sys.stderr.reconfigure(encoding="utf-8")
 from app.ui.bridge import Bridge
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, "tests_output", "settings_probe")
-os.makedirs(OUT, exist_ok=True)
 PROJ = os.path.abspath(os.path.join(ROOT, "tests_output", "m1_proj"))
 
 WARN = []
@@ -36,8 +38,13 @@ b = Bridge()
 engine.rootContext().setContextProperty("bridge", b)
 engine.load(QUrl.fromLocalFile(os.path.join(ROOT, "app", "ui", "qml", "Main.qml")))
 win = engine.rootObjects()[0]
-win.setProperty("width", 1440)
-win.setProperty("height", 900)
+W, H = (1440, 900)
+if len(sys.argv) > 1 and "x" in sys.argv[1]:
+    W, H = (int(v) for v in sys.argv[1].split("x"))
+OUT = os.path.join(ROOT, "tests_output", f"settings_probe_{W}x{H}")
+os.makedirs(OUT, exist_ok=True)
+win.setProperty("width", W)
+win.setProperty("height", H)
 win.setVisible(True)
 b._open_project(PROJ, silent=True)
 

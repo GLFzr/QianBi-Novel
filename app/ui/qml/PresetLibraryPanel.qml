@@ -21,8 +21,19 @@ Item {
     function refresh() {
         presets = bridge.presetList()
         if (selectedId) {
-            details[selectedId] = bridge.presetDetails(selectedId)
+            var d = {}
+            for (var k in details) d[k] = details[k]
+            d[selectedId] = bridge.presetDetails(selectedId)
+            details = d    // 新对象回赋触发 detailsChanged，预览绑定才会刷新
         }
+    }
+
+    function samplingText(d) {
+        var s = (d && d.sampling) ? d.sampling : ({})
+        var parts = []
+        var keys = Object.keys(s)
+        for (var i = 0; i < keys.length; i++) parts.push(s[keys[i]].label + "=" + s[keys[i]].value)
+        return parts.join(" · ")
     }
 
     Component.onCompleted: refresh()
@@ -70,16 +81,17 @@ Item {
             }
         }
 
-        // 主区：左列 DataTable + 右列预览
-        RowLayout {
+        // 主区：纵向叠放 —— 上预设列表 + 下详情预览（适配窄面板坞宽）
+        ColumnLayout {
+            id: mainCol
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 10
 
-            // 左：预设列表（ListView+Repeater）
+            // 上：预设列表（ListView+Repeater）
             Rectangle {
-                Layout.preferredWidth: 360
-                Layout.fillHeight: true
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(150, Math.round(mainCol.height * 0.36))
                 color: Theme.bgCard
                 radius: Theme.rCard
                 border.width: 1
@@ -105,9 +117,12 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: {
+                                var d = {}
+                                for (var k in library.details) d[k] = library.details[k]
+                                d[modelData.id] = bridge.presetDetails(modelData.id)
+                                library.details = d    // 新对象回赋触发 detailsChanged
                                 library.selectedId = modelData.id
                                 library.selectedIdx = index
-                                library.details[modelData.id] = bridge.presetDetails(modelData.id)
                             }
                         }
                         ColumnLayout {
@@ -150,7 +165,7 @@ Item {
                 }
             }
 
-            // 右：详情预览
+            // 下：详情预览
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -292,6 +307,44 @@ Item {
                                 }
                             }
                         }
+                        // P1 全书采样基线（不分相位打底；阶段档压在它之上，显式实参压过两者）
+                        Text {
+                            Layout.fillWidth: true
+                            readonly property string base: library.details[library.selectedId]
+                                                           ? library.samplingText(library.details[library.selectedId]) : ""
+                            visible: base !== ""
+                            text: "🧭 全书采样基线：" + base
+                            color: Theme.textSecondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                            wrapMode: Text.Wrap
+                        }
+                        // P1 阶段参数档（槽位/采样；审校温度由内核锁死，预设改不动）
+                        Text {
+                            text: "⚙ 阶段参数档"
+                            color: Theme.accent
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                            font.bold: true
+                            visible: library.details[library.selectedId]
+                                     ? Object.keys(library.details[library.selectedId].stage_params).length > 0
+                                     : false
+                        }
+                        Repeater {
+                            model: library.details[library.selectedId]
+                                   ? Object.keys(library.details[library.selectedId].stage_params)
+                                   : []
+                            delegate: Text {
+                                Layout.fillWidth: true
+                                text: "· " + library.details[library.selectedId].stage_params[modelData].label
+                                      + "：" + library.details[library.selectedId].stage_params[modelData].value
+                                      + (modelData === "review" ? "（温度锁 0.2，预设不改）" : "")
+                                color: Theme.textSecondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                            }
+                        }
                         // 底部 padding
                         Item { Layout.preferredHeight: 20 }
                     }
@@ -309,7 +362,7 @@ Item {
                 visible: library.selectedId === ""
                 Text {
                     anchors.centerIn: parent
-                    text: "← 左侧选一个预设查看详情"
+                    text: "↑ 上方列表选一个预设查看详情"
                     color: Theme.textTertiary
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.fsBody

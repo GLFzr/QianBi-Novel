@@ -58,7 +58,8 @@ check("_unit_contract 命中后段单元", "第31章-第60章" in contract2)
 # (c) 自动档全书大纲 stage 正常 format（读取器组装不抛 KeyError）
 volume_prompt = prompts.VOLUME_OUTLINE_PROMPT.format(
     core_setting=project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:4000],
-    total_words=100, chapter_words=3000)
+    total_words=100, chapter_words=3000,
+    genre_block=stages._genre_block(proj, "outline"))
 check("stage_volume_outline format 正常", "100 万字" in volume_prompt)
 
 # (d) 自动档计划章数（planned_chapters 读 预计总字数）

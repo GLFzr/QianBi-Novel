@@ -118,6 +118,29 @@ SCENE_CARDS = {
   },
 }
 
+# ---- 轴变体汉化（SCENE_CARDS["axes"] 是英文技法标签，中文注入时整行会漏英文）----
+
+AXES_ZH = {
+    "battle": ["快攻：3 回合内解决，动作精简",
+               "消耗：6 回合以上，损耗层层加码",
+               "心理：≤4 回合，双重意图暗写"],
+    "payoff": ["硬爽：反击当场到来，不隔夜",
+               "软爽：地位/尊重/归属发生位移",
+               "连环：两个爽点前后相接，前一个引出后一个"],
+    "emotion": ["压抑：身体反应重，语言反而轻",
+                "爆发：借在场者的眼睛来写",
+                "无声：只写身体与动作，不写一句心理"],
+    "dialogue": ["进逼：A 逼 B，B 再逼 C，压力单向传导",
+                 "对峙：赌注逐轮抬高，谁先退让谁说软话",
+                 "纯对话：短句推进，节拍靠小动作切开"],
+    "mystery": ["实物：重量/温度/接缝/成色",
+                "言行：行为与说法自相矛盾",
+                "数字：账目/时间/距离对不上"],
+    "lowkey": ["修复：把上一场留下的一道小裂缝补上",
+               "积累：攒下筹码、默契与信息",
+               "信物：埋下一件物件或一句承诺"],
+}
+
 
 # ---- 中英文双语关键词字典（路由更准）----
 
@@ -196,7 +219,8 @@ def chapter_to_cards(genre_block_main="", extra_keywords=""):
         # 日常过场章：可加一个 mystery 暗线或 dialogue 收尾
         if any(w in text for w in _KEYWORDS["mystery"]):
             sub.append("mystery")
-    return main, list(set(sub))
+    # 按插入序去重：set() 的顺序随进程哈希随机化，会让同一细纲每次拼出不同 prompt
+    return main, [k for i, k in enumerate(sub) if k not in sub[:i]]
 
 
 def render_cards(main_key, sub_keys, ch_no, total, lang="zh"):
@@ -219,7 +243,7 @@ def render_cards(main_key, sub_keys, ch_no, total, lang="zh"):
     for m in methods:
         out.append(f"- {m}")
     if lang == "zh":
-        out.append(f"### 轴变体：{main['axes'][axis]}")
+        out.append(f"### 轴变体：{AXES_ZH[main_key][axis]}")
     else:
         out.append(f"### axis: {main['axes'][axis]}")
     for sk in sub_keys:
@@ -248,3 +272,21 @@ def hint_for_chapter(num: int, total: int, outline: str, extra: str = "") -> str
         return f"## 本章主卡：{main_zh}"
     sub_zh = "、".join(SCENE_CARDS[s]["label_zh"] for s in subs)
     return f"## 本章主卡：{main_zh}｜子卡：{sub_zh}"
+
+
+def craft_block(num: int, total: int, outline: str, extra: str = "") -> str:
+    """正文用工艺路线：主卡全套手法 + 本章轴变体 + 子卡前两条手法。
+
+    与 hint_for_chapter 的分工：细纲只要知道「这章是什么戏」，正文要知道「这场戏怎么演」。
+    不含标题行（标题由 prompt 模板给）、不含 example（示例句会被模型当成情节抄）。
+    """
+    main, subs = chapter_to_cards(outline, extra)
+    axis = (num + total) % 3
+    card = SCENE_CARDS[main]
+    out = [f"主卡·{card['label_zh']}（本章演法：{AXES_ZH[main][axis]}）"]
+    out += [f"- {m}" for m in card["method_zh"]]
+    for sk in subs[:2]:
+        sub = SCENE_CARDS[sk]
+        out.append(f"叠加·{sub['label_zh']}")
+        out += [f"- {m}" for m in sub["method_zh"][:2]]
+    return "\n".join(out)

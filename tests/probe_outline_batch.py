@@ -27,7 +27,10 @@ if not KEY:
 BASE = os.environ.get("QIANBI_TEST_BASE", "https://opencode.ai/zen/go/v1")
 
 from app import project, prompts
-from app.core.stages import parse_outlines
+from app.config import load_config
+from app.core import memory
+from app.core.stages import (_genre_block, _sanitize_chapter_refs, _unit_contract,
+                             _wb_rg_blocks, parse_outlines)
 
 PROJ = os.path.join(os.getcwd(), "tests_output", "改命笔记_官方api")
 
@@ -49,12 +52,24 @@ prompt = prompts.CHAPTER_OUTLINE_PROMPT.format(
     volume_outline=volume_outline,
     nearby_outlines=nearby_text,
     core_setting_brief=core_setting,
+    global_summary=memory.read_global_summary(PROJ) or "（全书尚未开始）",
+    recent_summaries=_sanitize_chapter_refs(
+        memory.read_recent_summaries(PROJ, start, n=3)) or "（无更前章节摘要）",
+    character_states=project.read_file(
+        project.get_tracking_path(PROJ, "角色状态"))[:1500] or "（暂无）",
     start_chapter=start,
     end_chapter=end,
     count=count,
     chapter_words=2000,
     chapter_words_max=2200,
     next_chapter=start + 1,
+    previous_ending="（无）",
+    foreshadows="（无）",
+    unit_contract=_unit_contract(PROJ, start),
+    genre_block=_genre_block(PROJ, "unit_outline"),
+    worldbook_block=_wb_rg_blocks(PROJ, load_config(), start)[0],
+    regex_block=_wb_rg_blocks(PROJ, load_config(), start)[1],
+    user_directive="（无）",
 )
 
 import httpx
