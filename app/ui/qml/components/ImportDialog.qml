@@ -281,7 +281,7 @@ Dialog {
                                 objectName: "importExpandBtn"
                                 text: dlg.expanded === rowRect.modelData.index ? "收起" : "看内容"
                                 kind: "ghost"
-                                height: 22
+                                height: 24
                                 onClicked: dlg.expanded = (dlg.expanded === rowRect.modelData.index
                                                            ? -1 : rowRect.modelData.index)
                             }
@@ -349,10 +349,9 @@ Dialog {
         }
     }
 
-    footer: Row {
+    footer: RowLayout {
         spacing: 8
-        anchors.right: parent.right
-        anchors.margins: 12
+        Item { Layout.fillWidth: true }
         AppButton {
             text: "全选"
             kind: "ghost"

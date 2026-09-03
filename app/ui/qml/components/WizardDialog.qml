@@ -41,14 +41,14 @@ Dialog {
                 text: "这是一台运行在你电脑上的 AI 网文写作台：立项 → 设定 → 大纲 → 逐章写作，每一步都可以介入和回退。"
                 color: Theme.textPrimary
                 font.pixelSize: Theme.fsBody
-                wrapMode: Text.WrapAnywhere
+                wrapMode: Text.Wrap
             }
             Text {
                 Layout.fillWidth: true
                 text: "· 开源软件（MIT License），免费使用\n· 你自带模型 API Key，数据全部保存在本机 ~/.qianbi_novel/\n· 写作过程中每一步都会征求你的决定（可在设置中调整介入强度）"
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fsSmall
-                wrapMode: Text.WrapAnywhere
+                wrapMode: Text.Wrap
             }
             CheckBox {
                 id: eulaCheck
@@ -67,14 +67,14 @@ Dialog {
                 text: "最后一步：配置你的 AI 模型连接。"
                 color: Theme.textPrimary
                 font.pixelSize: Theme.fsBody
-                wrapMode: Text.WrapAnywhere
+                wrapMode: Text.Wrap
             }
             Text {
                 Layout.fillWidth: true
                 text: "点击下方按钮打开「设置 → 连接与模型」，粘贴你的 API Key（支持 DeepSeek / 通义百炼 / 任意 OpenAI 兼容接口）。填好后点「测试连接」确认可用。"
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fsSmall
-                wrapMode: Text.WrapAnywhere
+                wrapMode: Text.Wrap
             }
             AppButton {
                 text: "打开连接设置"
@@ -89,7 +89,7 @@ Dialog {
                 text: "也可以先跳过——回到书架新建一本书时再配置。"
                 color: Theme.textTertiary
                 font.pixelSize: Theme.fsTiny
-                wrapMode: Text.WrapAnywhere
+                wrapMode: Text.Wrap
             }
         }
 

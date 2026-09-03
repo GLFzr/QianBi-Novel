@@ -11,7 +11,8 @@ import ".."
 Dialog {
     id: needsFixDialog
     objectName: "needsFixDialog"
-    title: "待修章节"
+    // 标题由 contentItem 内自绘头部承担（QQC2 对非空 title 会再画一层默认 header，形成双标题）
+    title: ""
     modal: true
     standardButtons: Dialog.NoButton
     width: Math.min(800, parent.width * 0.92)

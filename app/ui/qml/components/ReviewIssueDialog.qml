@@ -12,7 +12,8 @@ import ".."
 Dialog {
     id: reviewDialog
     objectName: "reviewIssueDialog"
-    title: "6 维审校问题"
+    // 标题由 contentItem 内自绘头部承担（QQC2 对非空 title 会再画一层默认 header，形成双标题）
+    title: ""
     modal: true
     standardButtons: Dialog.NoButton
     width: Math.min(720, parent.width * 0.85)
@@ -129,6 +130,14 @@ Dialog {
                     }
                 }
                 Item { Layout.preferredHeight: 8 }
+            }
+            // 空态：0 项时不留整屏空白
+            AppEmptyState {
+                anchors.centerIn: parent
+                visible: reviewDialog.issues.length === 0
+                iconName: "check"
+                title: "没有待决策的审校问题"
+                hint: "审校检出问题后，可在这里逐条裁决"
             }
         }
 

@@ -19,12 +19,32 @@ ApplicationWindow {
     title: "千笔一文 Novel"
     color: Theme.bgPage
 
+    // 全局调色板：堵住 QQC2 Basic 默认亮色从 ComboBox 弹层/Menu/ToolTip 等缝隙漏出
+    palette.window: Theme.bgPanel
+    palette.windowText: Theme.textPrimary
+    palette.base: Theme.bgCard
+    palette.alternateBase: Theme.bgHover
+    palette.text: Theme.textPrimary
+    palette.button: Theme.bgCard
+    palette.buttonText: Theme.textPrimary
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentText
+    palette.placeholderText: Theme.textTertiary
+    palette.toolTipBase: Theme.bgCard
+    palette.toolTipText: Theme.textPrimary
+    palette.link: Theme.accent
+
     // v0.13 主题切换：从 C++ 端 cfg.ui_theme 读取，同步到 Theme 单例
     Connections {
         target: bridge
         function onThemeChanged() {
             Theme.setActive(bridge.currentTheme())
         }
+    }
+
+    // 模态弹窗全屏遮罩（Apple modal）：所有 Dialog 自动获得，不再裸浮在页面上
+    Overlay.modal: Component {
+        Rectangle { color: Theme.overlay }
     }
 
     readonly property var navItems: [
@@ -466,6 +486,7 @@ ApplicationWindow {
                     // 终稿锁定徽章 + 解锁（M4：章节确定=锁定；显式解锁唯一放行通道）
                     Rectangle {
                         visible: bridge.cwMode === "cw" && bridge.chapterLocked
+                        width: lockBadgeText.implicitWidth + 20
                         height: 22
                         radius: 11
                         color: Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.15)
@@ -473,13 +494,12 @@ ApplicationWindow {
                         border.color: Theme.success
                         Layout.alignment: Qt.AlignVCenter
                         Text {
+                            id: lockBadgeText
                             anchors.centerIn: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
                             text: "✓ 已确定（终稿锁定）"
                             color: Theme.success
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                         }
                     }
                     AppButton {
@@ -502,14 +522,14 @@ ApplicationWindow {
                         ToolTip.text: "读改揣摩：Agent 通读本章改动、揣摩你的修改意图（review 槽）"
                     }
                     Rectangle {
-                        // 未保存标记：黄色圆点（内容有改动即出现）
+                        // 未保存标记：警示圆点（内容有改动即出现）
                         visible: bridge.editorDirty
                         width: 9
                         height: 9
                         radius: 4.5
-                        color: "#E5B84E"
+                        color: Theme.warn
                         border.width: 1
-                        border.color: "#6E5620"
+                        border.color: Qt.rgba(Theme.warn.r, Theme.warn.g, Theme.warn.b, 0.5)
                         Layout.alignment: Qt.AlignVCenter
                         MouseArea {
                             id: ma
@@ -624,7 +644,7 @@ ApplicationWindow {
                     selectByMouse: true
                     persistentSelection: true
                     selectionColor: Theme.accent
-                    selectedTextColor: "#1D1B17"
+                    selectedTextColor: Theme.selectedText
                     // 正文限宽居中（阅读宽度 ~820px，可在设置-外观关闭）
                     leftPadding: mainWindow.edPrefs.narrow !== false
                                   ? Math.max(56, Math.min(320, (editorHolder.width - 820) / 2)) : 40
@@ -810,7 +830,7 @@ ApplicationWindow {
                     AppButton {
                         text: "×"
                         kind: "ghost"
-                        height: 22
+                        height: 24
                         onClicked: bridge.scanChapterText("")
                     }
                 }
@@ -840,7 +860,7 @@ ApplicationWindow {
                         AppButton {
                             text: "清空"
                             kind: "ghost"
-                            height: 20
+                            height: 24
                             onClicked: bridge.logModelProp.clear()
                         }
                     }
@@ -907,11 +927,22 @@ ApplicationWindow {
                 ToolTip.text: "今日用量（本地统计，含全部调用）· 点击查看统计面板（章节/字数/成本）"
             }
             Rectangle { width: 1; height: 12; color: Theme.border }
-            Text {
-                text: "⚡ 用量"
-                color: Theme.textTertiary
-                font.pixelSize: Theme.fsTiny
-                font.family: Theme.uiFont
+            Item {
+                width: usageRow.implicitWidth
+                height: 20
+                Row {
+                    id: usageRow
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 5
+                    AppIcon { name: "spark"; size: 11; color: Theme.textTertiary; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        text: "用量"
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
+                        font.family: Theme.uiFont
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
                 MouseArea {
                     id: usageHot
                     anchors.fill: parent
@@ -941,8 +972,10 @@ ApplicationWindow {
         z: 30
         width: selRow.implicitWidth + 20
         height: 36
-        radius: 10
+        radius: Theme.rLg
         color: Theme.bgCard
+        border.width: 1
+        border.color: Theme.borderStrong
         opacity: visible ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 120 } }
 
@@ -1158,7 +1191,7 @@ ApplicationWindow {
                     color: Theme.accent
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.fsSmall
-                    wrapMode: Text.WrapAnywhere
+                    wrapMode: Text.Wrap
                     maximumLineCount: 2
                     MouseArea {
                         anchors.fill: parent
@@ -1173,10 +1206,9 @@ ApplicationWindow {
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "简介与标签…"
                 enabled: bridge.hasProject
@@ -1271,10 +1303,9 @@ ApplicationWindow {
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "复制全文"
                 enabled: blurbDialog.content !== "" && !blurbDialog.busy
@@ -1346,6 +1377,7 @@ ApplicationWindow {
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
+            wrapMode: Text.Wrap
             padding: 16
         }
         contentItem: Column {
@@ -1382,10 +1414,9 @@ ApplicationWindow {
                 wrapMode: Text.Wrap
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "先不锁定"
                 kind: "ghost"
@@ -1417,6 +1448,7 @@ ApplicationWindow {
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
             font.bold: true
+            wrapMode: Text.Wrap
             padding: 16
         }
         contentItem: GridLayout {
@@ -1441,10 +1473,9 @@ ApplicationWindow {
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton { text: "关闭"; kind: "ghost"; onClicked: statsDialog.close() }
             AppButton { text: "备份项目 zip"; kind: "primary"; onClicked: bridge.backupProject() }
         }
@@ -1456,8 +1487,9 @@ ApplicationWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 40
-        width: Math.min(560, toastText.implicitWidth + 44)
-        height: 36
+        // 宽度跟「限宽后」的文本走，高度跟换行后的真实高度走——固定 36px 会让多行文字溢出压到下层 UI
+        width: toastText.width + 44
+        height: toastText.implicitHeight + 20
         radius: Theme.rBtn
         color: Theme.bgCard
         border.width: 1
@@ -1661,10 +1693,9 @@ ApplicationWindow {
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "放弃"
                 kind: "ghost"
@@ -1768,10 +1799,9 @@ ApplicationWindow {
                 lineHeight: 1.6
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "取消"
                 kind: "ghost"
@@ -1833,6 +1863,7 @@ ApplicationWindow {
                     anchors.fill: parent
                     anchors.margins: 8
                     spacing: 4
+                    clip: true
                     ListView {
                         id: versionList
                         Layout.fillWidth: true
@@ -1850,7 +1881,8 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 8
                                 spacing: 2
-                                Row {
+                                RowLayout {
+                                    width: parent.width
                                     spacing: 6
                                     Text {
                                         text: "v" + model.v
@@ -1860,17 +1892,21 @@ ApplicationWindow {
                                         font.bold: true
                                     }
                                     Text {
+                                        Layout.fillWidth: true
                                         text: model.source
                                         color: Theme.info
                                         font.family: Theme.uiFont
                                         font.pixelSize: Theme.fsTiny
+                                        elide: Text.ElideRight
                                     }
                                 }
                                 Text {
+                                    width: parent.width
                                     text: model.ts + "  ·  " + model.words + " 字"
                                     color: Theme.textTertiary
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.fsTiny
+                                    elide: Text.ElideRight
                                 }
                             }
                             MouseArea {
@@ -2017,10 +2053,9 @@ ApplicationWindow {
                 font.pixelSize: Theme.fsTiny
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "丢弃草稿"
                 kind: "ghost"

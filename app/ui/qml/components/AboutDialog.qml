@@ -67,7 +67,7 @@ Dialog {
             }
             color: updateState.hasNew ? Theme.accent : Theme.textTertiary
             font.pixelSize: Theme.fsTiny
-            wrapMode: Text.WrapAnywhere
+            wrapMode: Text.Wrap
         }
 
         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
@@ -75,7 +75,7 @@ Dialog {
         // 遥测开关（opt-in，默认关；仅本地落点）
         RowLayout {
             Layout.fillWidth: true
-            CheckBox {
+            AppCheck {
                 id: telemCheck
                 text: "匿名使用统计（仅保存在本机，帮助改进；默认关闭）"
                 checked: bridge.telemetryEnabled
@@ -85,7 +85,7 @@ Dialog {
         }
         RowLayout {
             Layout.fillWidth: true
-            CheckBox {
+            AppCheck {
                 objectName: "autoCheckRow"
                 text: "启动时检查更新（开机访问 GitHub 取版本清单；默认关闭）"
                 checked: bridge.updateAutoCheck
@@ -102,8 +102,8 @@ Dialog {
             text: "更新只覆盖程序目录，不会写入下面这些位置：\n书稿：" + bridge.defaultBooksRoot()
                   + "\n配置：" + bridge.dataDirPath()
             color: Theme.textTertiary
-            font.pixelSize: 10
-            wrapMode: Text.WrapAnywhere
+            font.pixelSize: Theme.fsMicro
+            wrapMode: Text.Wrap
         }
 
         RowLayout {
@@ -120,10 +120,11 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "本项目基于 MIT License 开源发布。第三方组件声明见安装目录 THIRD-PARTY-LICENSES.md。"
+            text: "本项目基于 MIT License 开源发布。
+第三方组件声明见安装目录 THIRD-PARTY-LICENSES.md 文件。"
             color: Theme.textTertiary
-            font.pixelSize: 10
-            wrapMode: Text.WrapAnywhere
+            font.pixelSize: Theme.fsMicro
+            wrapMode: Text.Wrap
         }
     }
 

@@ -126,7 +126,7 @@ Item {
                         text: "设置"
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsBody
+                        font.pixelSize: Theme.fsTitle
                         font.bold: true
                     }
                     Text {
@@ -205,13 +205,17 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: 10
-                spacing: 3
-                Text {
-                    text: "ℹ 关于连接与提示词适配"
-                    color: Theme.info
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.fsSmall
-                    font.bold: true
+                spacing: 4
+                RowLayout {
+                    spacing: 6
+                    AppIcon { name: "info"; size: 14; color: Theme.info }
+                    Text {
+                        text: "关于连接与提示词适配"
+                        color: Theme.info
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        font.bold: true
+                    }
                 }
                 Text {
                     Layout.fillWidth: true
@@ -225,56 +229,73 @@ Item {
             }
         }
 
-        // ---- 连接列表（横向滚动条）----
-        ListView {
+        // ---- 连接列表（横向滚动；右缘渐隐提示还有更多）----
+        Item {
             Layout.fillWidth: true
-            height: 54
-            orientation: ListView.Horizontal
-            spacing: 6
-            clip: true
-            anchors.margins: 10
-            model: bridge.connectionModelProp
-            delegate: Rectangle {
-                required property string cid
-                required property string name
-                required property string model
-                required property int index
-                width: 172
-                height: 52
-                radius: 9
-                color: settings.editingId === cid && !settings.isNew ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14)
-                     : hover.containsMouse ? Theme.bgHover : Theme.bgCard
-                border.width: 1
-                border.color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.border
-                Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1
-                           color: Theme.cardHighlight }
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 9
-                    spacing: 3
-                    Text {
-                        width: parent.width
-                        text: name
-                        color: Theme.textPrimary
-                        font.pixelSize: Theme.fsSmall
-                        font.family: Theme.uiFont
-                        font.bold: true
-                        elide: Text.ElideRight
+            height: 60
+            ListView {
+                id: connList
+                anchors.fill: parent
+                orientation: ListView.Horizontal
+                spacing: 6
+                clip: true
+                anchors.margins: 10
+                model: bridge.connectionModelProp
+                delegate: Rectangle {
+                    required property string cid
+                    required property string name
+                    required property string model
+                    required property int index
+                    width: 172
+                    height: 56
+                    radius: 9
+                    color: settings.editingId === cid && !settings.isNew ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14)
+                         : hover.containsMouse ? Theme.bgHover : Theme.bgCard
+                    border.width: 1
+                    border.color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.border
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 9
+                        spacing: 3
+                        Text {
+                            width: parent.width
+                            text: name
+                            color: Theme.textPrimary
+                            font.pixelSize: Theme.fsSmall
+                            font.family: Theme.uiFont
+                            font.bold: true
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            width: parent.width
+                            text: model
+                            color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.textTertiary
+                            font.pixelSize: Theme.fsTiny
+                            font.family: Theme.monoFont
+                            elide: Text.ElideRight
+                        }
                     }
-                    Text {
-                        width: parent.width
-                        text: model
-                        color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.textTertiary
-                        font.pixelSize: Theme.fsTiny
-                        font.family: Theme.monoFont
-                        elide: Text.ElideRight
+                    MouseArea {
+                        id: hover
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: settings.startEdit(cid)
                     }
                 }
-                MouseArea {
-                    id: hover
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: settings.startEdit(cid)
+            }
+            // 右缘渐隐：内容被裁切时有「还有更多」的视觉暗示，而不是像布局溢出
+            Rectangle {
+                anchors.right: parent.right
+                anchors.rightMargin: 1
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: parent.height - 8
+                radius: Theme.rSm
+                visible: connList.contentWidth > connList.width - 12
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: "transparent" }
+                    GradientStop { position: 1; color: Theme.bgPage }
                 }
             }
         }
@@ -286,8 +307,9 @@ Item {
             contentWidth: availableWidth
 
             ColumnLayout {
-                width: parent.width
-                Layout.margins: 12
+                x: 12
+                y: 12
+                width: parent.width - 24
                 spacing: 10
 
                 AppField { id: nameField; Layout.fillWidth: true; label: "名称"; placeholder: "连接名称" }
@@ -296,14 +318,10 @@ Item {
                     Layout.fillWidth: true
                     spacing: 6
                     Text { text: "服务商"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    ComboBox {
+                    AppSelect {
                         id: providerCombo
                         width: parent.width
                         model: bridge.providerOptions.map(function (p) { return p.label })
-                        palette.window: Theme.bgCard
-                        palette.text: Theme.textPrimary
-                        palette.buttonText: Theme.textPrimary
-                        background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                         onActivated: urlField.text = bridge.providerOptions[currentIndex].baseUrl
                     }
                 }
@@ -335,17 +353,12 @@ Item {
                     RowLayout {
                         width: parent.width
                         spacing: 6
-                        ComboBox {
+                        AppSelect {
                             id: modelField
                             Layout.fillWidth: true
                             editable: true
                             model: modelList
                             textRole: "m"
-                            palette.window: Theme.bgCard
-                            palette.base: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            palette.buttonText: Theme.textPrimary
-                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                         }
                         AppButton {
                             text: "拉取"
@@ -388,30 +401,22 @@ Item {
                         spacing: 6
                         width: (parent.width - 8) / 2
                         Text { text: "思考模式"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        ComboBox {
+                        AppSelect {
                             id: thinkingModeCombo
                             width: parent.width
                             model: ["默认", "禁用", "启用"]
-                            palette.window: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            palette.buttonText: Theme.textPrimary
-                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                         }
                     }
                     Column {
                         spacing: 6
                         width: (parent.width - 8) / 2
                         Text { text: "思考强度"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                        ComboBox {
+                        AppSelect {
                             id: effortCombo
                             width: parent.width
                             model: ["默认", "low", "high", "max"]
                             enabled: thinkingModeCombo.currentIndex === 2
                             opacity: enabled ? 1.0 : 0.45
-                            palette.window: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            palette.buttonText: Theme.textPrimary
-                            background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                         }
                     }
                 }
@@ -503,15 +508,11 @@ Item {
                                     font.family: Theme.uiFont
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
-                                ComboBox {
+                                AppSelect {
                                     id: slotCombo
                                     width: parent.width - 66
                                     property string slotKey: modelData.slot
                                     model: bridge.connectionOptions().map(function (c) { return c.name })
-                                    palette.window: Theme.bgCard
-                                    palette.text: Theme.textPrimary
-                                    palette.buttonText: Theme.textPrimary
-                                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                                     Component.onCompleted: refreshCurrent()
                                     function refreshCurrent() {
                                         var opts = bridge.connectionOptions()
@@ -555,9 +556,10 @@ Item {
             ScrollView {
                 contentWidth: availableWidth
                 ColumnLayout {
-                    width: parent.width
+                    x: 12
+                    y: 12
+                    width: parent.width - 24
                     spacing: 12
-                    Layout.margins: 12
 
                     Text {
                         text: "写作偏好"
@@ -746,7 +748,7 @@ Item {
                     // 全局写作偏好入口（在创作笔记面板）
                     Text {
                         Layout.fillWidth: true
-                        text: "💡 全局写作偏好（文风 / 禁忌 / 节奏，注入所有章节）在左侧「笔记」面板维护。"
+                        text: "全局写作偏好（文风 / 禁忌 / 节奏，注入所有章节）在左侧「笔记」面板维护。"
                         color: Theme.textTertiary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsTiny
@@ -761,9 +763,10 @@ Item {
             ScrollView {
                 contentWidth: availableWidth
                 ColumnLayout {
-                    width: parent.width
+                    x: 12
+                    y: 12
+                    width: parent.width - 24
                     spacing: 12
-                    Layout.margins: 12
 
                     // ---- v0.13：主题切换（夜间/羊皮纸/纯白）----
                     Rectangle {
@@ -951,9 +954,10 @@ Item {
             ScrollView {
                 contentWidth: availableWidth
                 ColumnLayout {
-                    width: parent.width
+                    x: 12
+                    y: 12
+                    width: parent.width - 24
                     spacing: 12
-                    Layout.margins: 12
 
                     Text {
                         text: "备份与统计"

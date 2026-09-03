@@ -67,11 +67,13 @@ Rectangle {
         }
         Text {
             Layout.alignment: Qt.AlignVCenter
+            Layout.maximumWidth: 180
             visible: text !== ""
             text: row.note !== "" ? row.note : (row.words > 0 ? Number(row.words).toLocaleString(Qt.locale(), 'f', 0) : "")
             color: row.state === "needs_fix" ? Theme.danger : Theme.textTertiary
             font.family: Theme.monoFont
             font.pixelSize: Theme.fsTiny
+            elide: Text.ElideRight
         }
         AppBadge {
             Layout.alignment: Qt.AlignVCenter

@@ -132,7 +132,7 @@ Rectangle {
             text: "快捷键：回车=继续 · Ctrl+回车=带想法继续 · R=回退重做（G5 软门无回退）"
             color: Theme.textTertiary
             font.family: Theme.uiFont
-            font.pixelSize: 10
+            font.pixelSize: Theme.fsMicro
         }
     }
 }

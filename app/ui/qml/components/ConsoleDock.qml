@@ -24,33 +24,31 @@ Rectangle {
 
     Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.border }
 
-    // ---- 折叠态：细窄把手 ----
+    // ---- 折叠态：细窄把手（图标 + tooltip，不再用竖排文字） ----
     ColumnLayout {
         anchors.fill: parent
         visible: !consoleDock.expanded
-        spacing: 10
+        spacing: 8
 
         Item { Layout.fillHeight: true }
-        Text {
+        AppIcon {
             Layout.alignment: Qt.AlignHCenter
-            text: "‹"
+            name: "log"
+            size: 14
             color: bridge && bridge.consoleExpanded ? Theme.accent : Theme.textSecondary
-            font.pixelSize: 14
-        }
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: "C\no\nn\ns\no\nl\ne"
-            color: Theme.textTertiary
-            font.pixelSize: 10
-            font.letterSpacing: 2
         }
         Item { Layout.fillHeight: true }
     }
     MouseArea {
+        id: collapseHandle
         anchors.fill: parent
         visible: !consoleDock.expanded
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: bridge && bridge.setConsoleExpanded(true)
+        ToolTip.visible: collapseHandle.containsMouse
+        ToolTip.text: "Agent Console（思考链 / 对话沉淀）"
+        ToolTip.delay: 400
     }
 
     // ---- 展开态：思考链 + 对话区 + 输入 ----
@@ -70,9 +68,12 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             AppButton {
-                text: "×"
-                height: 20
+                iconName: "close"
+                text: ""
+                height: 24
                 onClicked: bridge && bridge.setConsoleExpanded(false)
+                ToolTip.visible: hovered
+                ToolTip.text: "折叠 Console"
             }
         }
 
@@ -80,7 +81,7 @@ Rectangle {
         Text {
             text: "思考链（留存·当前章优先）"
             color: Theme.textTertiary
-            font.pixelSize: 10
+            font.pixelSize: Theme.fsMicro
         }
         ListView {
             id: thinkingList
@@ -107,7 +108,7 @@ Rectangle {
                               + modelData.slot + " · " + modelData.stage
                               + (modelData.num ? " · 第" + modelData.num + "章" : "")
                         color: modelData.is_current ? Theme.accent : Theme.textTertiary
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                         font.family: Theme.monoFont
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -115,8 +116,8 @@ Rectangle {
                     Text {
                         text: modelData.text
                         color: Theme.textSecondary
-                        font.pixelSize: 10
-                        wrapMode: Text.WrapAnywhere
+                        font.pixelSize: Theme.fsMicro
+                        wrapMode: Text.Wrap
                         Layout.fillWidth: true
                     }
                 }
@@ -127,7 +128,7 @@ Rectangle {
         Text {
             text: "对话"
             color: Theme.textTertiary
-            font.pixelSize: 10
+            font.pixelSize: Theme.fsMicro
         }
         ListView {
             id: dialogueList
@@ -148,8 +149,8 @@ Rectangle {
                 color: modelData.kind === "user" ? Theme.textPrimary
                      : modelData.kind === "gate" ? Theme.accent
                      : Theme.textSecondary
-                font.pixelSize: 10
-                wrapMode: Text.WrapAnywhere
+                font.pixelSize: Theme.fsMicro
+                wrapMode: Text.Wrap
             }
         }
 

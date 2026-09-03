@@ -28,6 +28,7 @@ GridLayout {
         model: pills.steps
         delegate: Row {
             Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter
             spacing: 4
             AppBadge {
                 readonly property int myIdx: index
@@ -42,7 +43,7 @@ GridLayout {
             Text {
                 visible: index % 3 !== 2 && index < pills.steps.length - 1
                 text: "→"
-                color: "#333A44"
+                color: Theme.borderStrong
                 font.pixelSize: Theme.fsTiny
                 anchors.verticalCenter: parent.verticalCenter
             }

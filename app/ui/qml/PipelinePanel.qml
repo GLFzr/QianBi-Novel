@@ -30,6 +30,13 @@ Item {
         trendMaxWords = mx
         blurb = bridge.blurbText()
     }
+    // 阶段卡图标：Python 侧给的是字符（✦❖☰✍），QML 侧映射到统一线性图标
+    function cardIcon(key) {
+        if (key === "setting") return "spark"
+        if (key === "outline") return "doc"
+        if (key === "ch_outline") return "chapters"
+        return "pen"
+    }
     Component.onCompleted: refresh()
     Connections {
         target: bridge
@@ -47,10 +54,10 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // 头部（ZCode 式紧凑头：48px · 中标题 · 状态右侧）
+        // 头部（统一面板头：56px · fsTitle 粗标题 + 弱化元信息 · 动作右侧）
         Rectangle {
             Layout.fillWidth: true
-            height: 48
+            height: 56
             color: Theme.bgPanel
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
             RowLayout {
@@ -59,13 +66,13 @@ Item {
                 anchors.rightMargin: 12
                 spacing: 8
                 Column {
-                    spacing: 0
+                    spacing: 1
                     Layout.fillWidth: true
                     Text {
                         text: bridge.bookTitle === "" ? "流水线" : bridge.bookTitle
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsBody
+                        font.pixelSize: Theme.fsTitle
                         font.bold: true
                         elide: Text.ElideRight
                         width: parent.width
@@ -149,9 +156,10 @@ Item {
             contentWidth: availableWidth
 
             ColumnLayout {
-                width: parent.width
+                x: 12
+                y: 12
+                width: parent.width - 24
                 spacing: 10
-                Layout.margins: 12
 
                 // ---- 阶段卡片（创作驾驶舱：设定→大纲→细纲→正文）----
                 Text {
@@ -189,11 +197,11 @@ Item {
                                 spacing: 4
                                 RowLayout {
                                     spacing: 6
-                                    Text {
-                                        text: modelData.icon
+                                    AppIcon {
+                                        name: pipeline.cardIcon(modelData.key)
+                                        size: 14
                                         color: modelData.status === "active" ? Theme.accent
                                              : modelData.status === "done" ? Theme.success : Theme.muted
-                                        font.pixelSize: 13
                                     }
                                     Text {
                                         text: modelData.label
@@ -214,7 +222,7 @@ Item {
                                     text: modelData.detail
                                     color: Theme.textTertiary
                                     font.family: Theme.monoFont
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fsMicro
                                     elide: Text.ElideMiddle
                                     Layout.fillWidth: true
                                 }
@@ -223,13 +231,13 @@ Item {
                                     Layout.alignment: Qt.AlignRight
                                     AppButton {
                                         text: "查看"
-                                        height: 22
+                                        height: 24
                                         visible: modelData.file !== ""
                                         onClicked: pipeline.openProjectFile(modelData.file)
                                     }
                                     AppButton {
                                         text: "重生成"
-                                        height: 22
+                                        height: 24
                                         visible: modelData.key !== "prose"
                                         enabled: !bridge.isRunning
                                         onClicked: {
@@ -308,7 +316,7 @@ Item {
                     running: bridge.isRunning && !bridge.isPaused
                 }
 
-                // 质量四格
+                // 质量四格（AppStatTile：数字为主，语义色只落在数值上）
                 GridLayout {
                     Layout.fillWidth: true
                     columns: 2
@@ -319,40 +327,20 @@ Item {
                             { "label": "AI味阻断", "key": "deslop_blocking", "bad": true },
                             { "label": "审校阻塞", "key": "review_blocking", "bad": true },
                             { "label": "AI味建议", "key": "deslop_advisory", "bad": false },
-                            { "label": "字数", "key": "words", "bad": false }
+                            { "label": "本章字数", "key": "words", "bad": false }
                         ]
-                        delegate: Rectangle {
+                        delegate: AppStatTile {
                             required property var modelData
                             Layout.fillWidth: true
-                            height: 42
-                            radius: 8
-                            color: Theme.bgCard
-                            Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1
-                                       color: Theme.cardHighlight }
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 8
-                                Text {
-                                    text: modelData.label
-                                    color: Theme.textTertiary
-                                    font.pixelSize: Theme.fsTiny
-                                    font.family: Theme.uiFont
-                                }
-                                Text {
-                                    text: bridge.lastRecord[modelData.key] !== undefined ? bridge.lastRecord[modelData.key] : "—"
-                                    color: modelData.bad && bridge.lastRecord[modelData.key] > 0 ? Theme.danger
-                                         : modelData.key === "words" ? Theme.success
-                                         : Theme.textPrimary
-                                    font.pixelSize: 15
-                                    font.family: Theme.monoFont
-                                    font.bold: true
-                                }
-                            }
+                            label: modelData.label
+                            value: bridge.lastRecord[modelData.key] !== undefined ? String(bridge.lastRecord[modelData.key]) : "—"
+                            valueColor: modelData.bad && bridge.lastRecord[modelData.key] > 0 ? Theme.danger
+                                        : Theme.textPrimary
                         }
                     }
                 }
 
-                // 质量历史趋势（近 20 章：字数柱 + 阻断点）
+                // 质量历史趋势（近 20 章：中性柱=字数 · 红点=有阻断）
                 Rectangle {
                     Layout.fillWidth: true
                     visible: pipeline.trend.length >= 2
@@ -366,7 +354,7 @@ Item {
                         anchors.margins: 10
                         spacing: 4
                         Text {
-                            text: "质量趋势 · 近 " + pipeline.trend.length + " 章（柱=字数 · 红点=阻断）"
+                            text: "质量趋势 · 近 " + pipeline.trend.length + " 章（柱=字数 · 红点=有阻断）"
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.fsTiny
@@ -388,8 +376,17 @@ Item {
                                         width: Math.max(4, parent.width - 2)
                                         height: Math.max(3, parent.height * modelData.words / pipeline.trendMaxWords)
                                         radius: 2
-                                        color: modelData.blocking > 0 ? Theme.danger : Theme.success
-                                        opacity: 0.75
+                                        color: modelData.blocking > 0 ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.36)
+                                             : Theme.bgActive
+                                    }
+                                    // 阻断标记：柱顶小红点（语义色只占小面积）
+                                    Rectangle {
+                                        visible: modelData.blocking > 0
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: Math.max(3, parent.height * modelData.words / pipeline.trendMaxWords) + 3
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        width: 5; height: 5; radius: 2.5
+                                        color: Theme.danger
                                     }
                                     ToolTip.visible: barHot.containsMouse
                                     ToolTip.text: "第" + modelData.num + "章 · " + modelData.words + "字 · 阻断" + modelData.blocking + " 建议" + modelData.advisory
@@ -520,8 +517,8 @@ Item {
         background: DialogBg {}
         header: Text {
             text: pipeline.regenKey.indexOf("chapter:") === 0
-                  ? "重写 " + pipeline.regenLabel + "？"
-                  : "重生成「" + pipeline.regenLabel + "」？"
+                  ? "重写 " + (pipeline.regenLabel || "本章") + "？"
+                  : "重生成「" + (pipeline.regenLabel || "该阶段") + "」？"
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
@@ -573,10 +570,9 @@ Item {
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "取消"
                 kind: "ghost"
@@ -657,7 +653,7 @@ Item {
                                 Rectangle {
                                     anchors.centerIn: parent
                                     width: 8; height: 8; radius: 2
-                                    color: "#FFFFFF"
+                                    color: Theme.accentText
                                     visible: parent.parent.checked
                                 }
                             }
@@ -680,20 +676,18 @@ Item {
                             text: modelData.desc + (wired ? "" : "（见 plan_step_gates_v1 阶段 2）")
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                             elide: Text.ElideRight
                         }
                     }
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "关闭"
-                kind: "primary"
                 onClicked: gatesDialog.close()
             }
         }

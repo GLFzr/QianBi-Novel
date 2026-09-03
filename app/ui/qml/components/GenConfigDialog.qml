@@ -38,6 +38,13 @@ Dialog {
         genDialog.open()
     }
 
+    // 直接 open()（不经 showFor）时给占位说明，避免「空壳弹窗」
+    onOpened: {
+        if (sections.length === 0)
+            sections = [{ title: "尚未选择章节",
+                          lines: ["从章节列表行右键菜单打开某一章的生成配置快照。"] }]
+    }
+
     contentItem: ColumnLayout {
         spacing: 0
 

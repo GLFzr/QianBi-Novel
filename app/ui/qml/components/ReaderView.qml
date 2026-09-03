@@ -110,20 +110,46 @@ Rectangle {
         textArea.text = toHtml(bodyText)
     }
 
-    // 纯文本 → 富文本：首行缩进 + 行距 + 已存高亮着色（读有缩进、写无缩进）
+    // 纯文本 → 富文本：标题层级 + 首行缩进 + 行距 + 中文引号 + 已存高亮着色
     function toHtml(text) {
         function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
+        // 直引号 → 中文引号（按出现次序配对；只作用于正文，不影响任何标记）
+        function cnQuotes(s) {
+            var out = "", dq = true, sq = true
+            for (var i = 0; i < s.length; i++) {
+                var ch = s.charAt(i)
+                if (ch === '"') { out += dq ? "\u201C" : "\u201D"; dq = !dq }
+                else if (ch === "'") { out += sq ? "\u2018" : "\u2019"; sq = !sq }
+                else out += ch
+            }
+            return out
+        }
         var hl = { highlight_yellow: th.hlY, highlight_green: th.hlG, highlight_red: th.hlR }
         var out = []
         var paras = String(text).split(/\n+/)
         for (var i = 0; i < paras.length; i++) {
-            var p = esc(paras[i])
+            var head = paras[i].match(/^\s*(#{1,3})\s*(.+)$/)
+            if (head) {
+                // Markdown 标题 → 真标题层级（更大字号加粗，不缩进，带节间距）
+                var lvl = head[1].length
+                var hSize = lvl === 1 ? Math.round(fontSize * 1.5) : Math.round(fontSize * 1.25)
+                out.push("<p style=\"text-indent:0; margin:"
+                         + (lvl === 1 ? "0.2em 0 1.1em 0" : "1em 0 0.6em 0")
+                         + "; line-height:1.5\"><b><span style=\"font-size:" + hSize + "px\">"
+                         + esc(cnQuotes(head[2])) + "</span></b></p>")
+                continue
+            }
+            var p = esc(cnQuotes(paras[i]))
             for (var a = 0; a < store.annotations.length; a++) {
                 var ann = store.annotations[a]
-                var q = esc(ann.quote || "")
-                if (q.length > 1 && hl[ann.kind] && p.indexOf(q) >= 0) {
-                    // 染色全部出现（split/join 全量替换），不只第一次
-                    p = p.split(q).join("<span style=\"background-color:" + hl[ann.kind] + "\">" + q + "</span>")
+                var qRaw = esc(ann.quote || "")
+                var qCn = esc(cnQuotes(ann.quote || ""))
+                if (qRaw.length > 1 && hl[ann.kind]) {
+                    // 引文按「转换后 → 原文」两种形态都试一次（染色全部出现）
+                    if (p.indexOf(qCn) >= 0)
+                        p = p.split(qCn).join("<span style=\"background-color:" + hl[ann.kind] + "\">" + qCn + "</span>")
+                    else if (p.indexOf(qRaw) >= 0)
+                        p = p.split(qRaw).join("<span style=\"background-color:" + hl[ann.kind] + "\">" + qRaw + "</span>")
                 }
             }
             out.push("<p style=\"text-indent:2em; margin:0 0 0.35em 0; line-height:" + lineH + "\">" + p + "</p>")
@@ -239,7 +265,7 @@ Rectangle {
                     text: isLive ? "AI 正在写作本章 · 流式内容实时更新"
                          : "当前为未保存的工作副本 · 保存后才成为版本"
                     color: th.faint
-                    font.family: Theme.uiFont; font.pixelSize: 10
+                    font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro
                 }
             }
 
@@ -380,7 +406,7 @@ Rectangle {
             Text {
                 text: (prefs.paged ? "翻页模式" : "滚动模式") + " · Esc 退出"
                 color: th.faint
-                font.family: Theme.uiFont; font.pixelSize: 10
+                font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro
             }
         }
     }
@@ -597,7 +623,7 @@ Rectangle {
                         Text {
                             text: modelData.words + "字"
                             color: reader.th.faint
-                            font.family: Theme.monoFont; font.pixelSize: 10
+                            font.family: Theme.monoFont; font.pixelSize: Theme.fsMicro
                         }
                     }
                     MouseArea {
@@ -658,7 +684,7 @@ Rectangle {
                                     Text {
                                         text: modelData.kind === "comment" ? "批注 · " + modelData.ts : "高亮 · " + modelData.ts
                                         color: reader.th.faint
-                                        font.family: Theme.uiFont; font.pixelSize: 10
+                                        font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro
                                     }
                                     Item { Layout.fillWidth: true }
                                     Text {
@@ -728,7 +754,7 @@ Rectangle {
                                 Text {
                                     text: Math.round((modelData.pos || 0) * 100) + "%"
                                     color: reader.th.faint
-                                    font.family: Theme.monoFont; font.pixelSize: 10
+                                    font.family: Theme.monoFont; font.pixelSize: Theme.fsMicro
                                 }
                                 Text {
                                     text: "×"
@@ -908,7 +934,7 @@ Rectangle {
     component RSegLabel: Text {
         text: ""
         color: reader.th.faint
-        font.family: Theme.uiFont; font.pixelSize: 10
+        font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro
     }
 
     component RSegment: Row {

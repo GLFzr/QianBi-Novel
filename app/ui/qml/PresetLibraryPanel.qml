@@ -43,12 +43,11 @@ Item {
         anchors.margins: 14
         spacing: 10
 
-        // 顶部标题 + 工具栏
+        // 顶部标题 + 工具栏（统一面板头：66px）
         Rectangle {
             Layout.fillWidth: true
-            height: 48
+            height: 66
             color: Theme.bgPanel
-            radius: Theme.rCard
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
             RowLayout {
                 anchors.fill: parent
@@ -69,13 +68,13 @@ Item {
                 Item { Layout.fillWidth: true }
                 AppButton {
                     text: "刷新"
-                    height: 24
+                    height: 26
                     onClicked: library.refresh()
                 }
                 AppButton {
                     text: "导入预设…"
                     kind: "primary"
-                    height: 24
+                    height: 26
                     onClicked: presetFileDlg.open()
                 }
             }
@@ -238,12 +237,16 @@ Item {
                             delegate: ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 4
-                                Text {
-                                    text: "📋 " + library.details[library.selectedId].fields[modelData].label
-                                    color: Theme.textSecondary
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.fsSmall
-                                    font.bold: true
+                                RowLayout {
+                                    spacing: 6
+                                    AppIcon { name: "doc"; size: 13; color: Theme.textSecondary }
+                                    Text {
+                                        text: library.details[library.selectedId].fields[modelData].label
+                                        color: Theme.textSecondary
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.fsSmall
+                                        font.bold: true
+                                    }
                                 }
                                 Rectangle {
                                     Layout.fillWidth: true
@@ -266,12 +269,16 @@ Item {
                             }
                         }
                         // v2 6 阶段 hint
-                        Text {
-                            text: "✨ 6 阶段特化提示（v2）"
-                            color: Theme.accent
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsSmall
-                            font.bold: true
+                        RowLayout {
+                            spacing: 6
+                            AppIcon { name: "spark"; size: 13; color: Theme.accent }
+                            Text {
+                                text: "6 阶段特化提示（v2）"
+                                color: Theme.accent
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.bold: true
+                            }
                         }
                         Repeater {
                             model: library.details[library.selectedId]
@@ -280,12 +287,16 @@ Item {
                             delegate: ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 4
-                                Text {
-                                    text: "🎯 " + library.details[library.selectedId].stage_hints[modelData].label
-                                    color: Theme.success
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.fsSmall
-                                    font.bold: true
+                                RowLayout {
+                                    spacing: 6
+                                    AppIcon { name: "check"; size: 13; color: Theme.success }
+                                    Text {
+                                        text: library.details[library.selectedId].stage_hints[modelData].label
+                                        color: Theme.success
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.fsSmall
+                                        font.bold: true
+                                    }
                                 }
                                 Rectangle {
                                     Layout.fillWidth: true
@@ -313,22 +324,26 @@ Item {
                             readonly property string base: library.details[library.selectedId]
                                                            ? library.samplingText(library.details[library.selectedId]) : ""
                             visible: base !== ""
-                            text: "🧭 全书采样基线：" + base
+                            text: "全书采样基线：" + base
                             color: Theme.textSecondary
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.fsTiny
                             wrapMode: Text.Wrap
                         }
                         // P1 阶段参数档（槽位/采样；审校温度由内核锁死，预设改不动）
-                        Text {
-                            text: "⚙ 阶段参数档"
-                            color: Theme.accent
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsSmall
-                            font.bold: true
+                        RowLayout {
+                            spacing: 6
                             visible: library.details[library.selectedId]
                                      ? Object.keys(library.details[library.selectedId].stage_params).length > 0
                                      : false
+                            AppIcon { name: "settings"; size: 13; color: Theme.accent }
+                            Text {
+                                text: "阶段参数档"
+                                color: Theme.accent
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.bold: true
+                            }
                         }
                         Repeater {
                             model: library.details[library.selectedId]
@@ -360,12 +375,11 @@ Item {
                 border.width: 1
                 border.color: Theme.border
                 visible: library.selectedId === ""
-                Text {
+                AppEmptyState {
                     anchors.centerIn: parent
-                    text: "↑ 上方列表选一个预设查看详情"
-                    color: Theme.textTertiary
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.fsBody
+                    iconName: "library"
+                    title: "选择一个预设查看详情"
+                    hint: "列表点选后，这里展示该题材的 6 阶段特化提示、全书采样基线与阶段参数档"
                 }
             }
         }

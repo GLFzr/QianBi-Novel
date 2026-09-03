@@ -73,8 +73,6 @@ Item {
                 color: itemHover.containsMouse ? Theme.bgHover : Theme.bgCard
                 border.width: 1
                 border.color: itemHover.containsMouse ? Theme.borderStrong : Theme.border
-                Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1
-                           color: Theme.cardHighlight }
 
                 RowLayout {
                     anchors.fill: parent
@@ -245,14 +243,10 @@ Item {
                     spacing: 6
                     width: parent.width / 2 - 4
                     Text { text: "平台"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                    ComboBox {
+                    AppSelect {
                         id: platformCombo
                         width: parent.width
                         model: ["番茄", "起点", "晋江", "七猫", "刺猬猫", "其他"]
-                        palette.window: Theme.bgCard
-                        palette.text: Theme.textPrimary
-                        palette.buttonText: Theme.textPrimary
-                        background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                     }
                 }
             }
@@ -260,16 +254,12 @@ Item {
                 spacing: 6
                 width: parent.width
                 Text { text: "题材预设（题材专项约束注入正文/细纲/审校，写作中可随时切换）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                ComboBox {
+                AppSelect {
                     id: newPresetCombo
                     width: parent.width
                     model: bridge.genrePresets()
                     textRole: "name"
                     font.pixelSize: Theme.fsSmall
-                    palette.window: Theme.bgCard
-                    palette.text: Theme.textPrimary
-                    palette.buttonText: Theme.textPrimary
-                    background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                 }
             }
             Column {

@@ -207,7 +207,7 @@ Item {
                                 text: d.level === "must" ? "must" : "should"
                                 color: d.level === "must" ? Theme.danger : Theme.info
                                 font.family: Theme.monoFont
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fsMicro
                                 font.bold: true
                             }
                         }
@@ -215,13 +215,13 @@ Item {
                             text: "范围 " + d.scope
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                         }
                         Item { Layout.fillWidth: true }
                         AppButton {
                             text: contractPanel.editing === index ? "收起" : "编辑"
                             kind: "ghost"
-                            height: 22
+                            height: 24
                             onClicked: {
                                 if (contractPanel.editing === index) contractPanel.editing = -1
                                 else contractPanel.startEdit(index)
@@ -230,7 +230,7 @@ Item {
                         AppButton {
                             text: contractPanel.pendingDelete === index ? "确认删除？" : "删除"
                             kind: contractPanel.pendingDelete === index ? "danger" : "ghost"
-                            height: 22
+                            height: 24
                             onClicked: contractPanel.askDelete(index)
                         }
                     }
@@ -252,14 +252,14 @@ Item {
                             text: "判定式"
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                         }
                         Text {
                             text: "`" + d.pattern + "` · "
                                   + (d.mode === "require" ? "必须有（缺失即提示）" : "不得出现（命中即拦）")
                             color: Theme.info
                             font.family: Theme.monoFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
@@ -271,7 +271,7 @@ Item {
                         text: "⚠ 这条判定式无法编译——闸门不会因它阻断，只会作为提示。请修正或删掉。"
                         color: Theme.danger
                         font.family: Theme.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                         wrapMode: Text.Wrap
                         Layout.fillWidth: true
                     }
@@ -280,7 +280,7 @@ Item {
                         text: "自然语言规则：靠注入 + AI 审校判定，属概率性约束，不是硬闸门。"
                         color: Theme.textTertiary
                         font.family: Theme.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                         wrapMode: Text.Wrap
                         Layout.fillWidth: true
                     }
@@ -315,7 +315,7 @@ Item {
                                 text: "等级"
                                 color: Theme.textTertiary
                                 font.family: Theme.uiFont
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fsMicro
                             }
                             Repeater {
                                 model: [["must", "must（违规拦锁定）"], ["should", "should（只提示）"]]
@@ -337,7 +337,7 @@ Item {
                                         color: contractPanel.editLevel === modelData[0]
                                                ? Theme.accent : Theme.textTertiary
                                         font.family: Theme.uiFont
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fsMicro
                                     }
                                     MouseArea {
                                         anchors.fill: parent
@@ -350,7 +350,7 @@ Item {
                                 text: "范围"
                                 color: Theme.textTertiary
                                 font.family: Theme.uiFont
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fsMicro
                             }
                             TextField {
                                 Layout.preferredWidth: 110
@@ -359,7 +359,7 @@ Item {
                                 placeholderTextColor: Theme.textTertiary
                                 color: Theme.textPrimary
                                 font.family: Theme.uiFont
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fsMicro
                                 selectByMouse: true
                                 onTextChanged: contractPanel.editScope = text
                                 background: Rectangle {
@@ -382,7 +382,7 @@ Item {
                             text: "改动只重写这一条所在的行，其余条目与标题原样保留。"
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                         }
                     }
                 }
@@ -448,7 +448,7 @@ Item {
                                   ? "确认撤销" : "撤销"
                             kind: contractPanel.pendingRevert === batchRow.modelData.id
                                   ? "danger" : "ghost"
-                            height: 22
+                            height: 24
                             onClicked: contractPanel.askRevert(batchRow.modelData.id)
                         }
                     }

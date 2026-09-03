@@ -63,7 +63,7 @@ Rectangle {
                           : "回看历史阶段（只读，点当前阶段卡片返回）"
                     color: Theme.textTertiary
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                 }
             }
         }
@@ -145,7 +145,7 @@ Rectangle {
                     text: "AI 回复中… 已等待 " + bridge.cwBusySeconds + " 秒"
                     color: Theme.accent
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                     SequentialAnimation on opacity {
                         running: cwDock.busy
                         loops: Animation.Infinite
@@ -181,7 +181,7 @@ Rectangle {
                     text: "打回到："
                     color: Theme.textTertiary
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                 }
                 Repeater {
                     model: bridge.cwReachedStages
@@ -199,7 +199,7 @@ Rectangle {
                             text: modelData.label
                             color: Theme.textPrimary
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                         }
                         MouseArea {
                             id: rlHot
@@ -218,7 +218,7 @@ Rectangle {
                     text: "打回会级联失效下游产物并归档"
                     color: Theme.textTertiary
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                 }
             }
         }
@@ -239,7 +239,7 @@ Rectangle {
                     text: "题材预设："
                     color: Theme.textTertiary
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                 }
                 Repeater {
                     model: bridge.genrePresets()
@@ -258,7 +258,7 @@ Rectangle {
                             text: modelData.name
                             color: bridge.cwPreset === modelData.id ? Theme.accent : Theme.textPrimary
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                             elide: Text.ElideRight
                         }
                         MouseArea {
@@ -292,7 +292,7 @@ Rectangle {
                 text: "「正则」默认=逻辑约束规则集（必须成立的规则清单，每条 level: must/should）——如需字面正则样本，在 设置→写作偏好 切换语义。"
                 color: Theme.textTertiary
                 font.family: Theme.uiFont
-                font.pixelSize: 10
+                font.pixelSize: Theme.fsMicro
                 elide: Text.ElideRight
             }
         }
@@ -313,7 +313,7 @@ Rectangle {
                     text: "单元范围"
                     color: Theme.textTertiary
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                 }
                 AppSpinBox {
                     id: unitStartBox
@@ -323,7 +323,7 @@ Rectangle {
                 Text {
                     text: "~"
                     color: Theme.textTertiary
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                 }
                 AppSpinBox {
                     id: unitEndBox
@@ -338,7 +338,7 @@ Rectangle {
                     placeholderTextColor: Theme.textTertiary
                     color: Theme.textPrimary
                     font.family: Theme.uiFont
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fsMicro
                     text: bridge.cwUnitInfo.topic !== undefined ? bridge.cwUnitInfo.topic : ""
                     selectByMouse: true
                     background: Rectangle {
@@ -380,7 +380,7 @@ Rectangle {
                         text: "主 Agent 报告" + (bridge.cwReportTs !== "" ? " · " + bridge.cwReportTs : "")
                         color: Theme.info
                         font.family: Theme.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                         font.bold: true
                     }
                     Item { Layout.fillWidth: true }
@@ -396,10 +396,13 @@ Rectangle {
                                       : "按报告里的【改写指令】派写作 Agent 改写（不受自动轮次限制；无指令时不可用）"
                     }
                     AppButton {
-                        text: "×"
+                        iconName: "close"
+                        text: ""
                         kind: "ghost"
-                        height: 18
+                        height: 20
                         onClicked: bridge.clearCwReport()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "关闭报告"
                     }
                 }
                 ScrollView {
@@ -410,7 +413,7 @@ Rectangle {
                         readOnly: true
                         color: Theme.textSecondary
                         font.family: Theme.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                         wrapMode: Text.Wrap
                         background: Rectangle { color: "transparent" }
                     }
@@ -474,7 +477,7 @@ Rectangle {
                             text: msgRole === "user" ? "你" : bridge.cwAgent
                             color: msgRole === "user" ? Theme.accent : Theme.info
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                             font.bold: true
                         }
                         Text {
@@ -491,7 +494,7 @@ Rectangle {
                             text: "▸ 点我看这批细纲"
                             color: Theme.accent
                             font.family: Theme.uiFont
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fsMicro
                         }
                     }
                     // 按下即放行给 Flickable，否则 MouseArea 会吃掉拖动（又变成拖不动）
@@ -513,16 +516,22 @@ Rectangle {
                 anchors.margins: 10
                 spacing: 6
                 AppButton {
-                    text: "▲ 顶部"
-                    kind: "ghost"
-                    height: 22
+                    iconName: "up"
+                    text: ""
+                    kind: "secondary"
+                    height: 24
                     onClicked: { cwDock.follow = false; msgList.positionViewAtBeginning() }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "回到顶部"
                 }
                 AppButton {
-                    text: "▼ 底部"
-                    kind: "ghost"
-                    height: 22
+                    iconName: "down"
+                    text: ""
+                    kind: "secondary"
+                    height: 24
                     onClicked: { cwDock.follow = true; cwDock.goToEnd() }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "跳到底部（并跟随新消息）"
                 }
             }
             Connections {

@@ -170,6 +170,11 @@ def main():
          "有组件编译失败（整棵树会加载不出来，界面白屏/双击无反应）"
          if r.returncode else "全部组件可编译")
 
+    r = subprocess.run([sys.executable, "tools/audit_tokens.py"], cwd=ROOT)
+    step("视觉 token 审计", r.returncode == 0,
+         "有裸字号/锚点 footer/裸 hex/无描边卡片回潮（见上方 [T*] 清单）"
+         if r.returncode else "零违例")
+
     r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
     if r.returncode == 2:
         # 退出码 2 = 目录无效；从本仓库跑 GUI 必然有效，故只可能是 TUI 未检出

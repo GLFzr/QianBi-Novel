@@ -32,7 +32,7 @@ Row {
                 color: modelData.status === "active" ? Theme.accent
                      : modelData.status === "done" ? Theme.textSecondary : Theme.textTertiary
                 font.family: Theme.uiFont
-                font.pixelSize: 10
+                font.pixelSize: Theme.fsMicro
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
             }

@@ -65,9 +65,10 @@ Item {
             contentWidth: availableWidth
 
             ColumnLayout {
-                width: parent.width
+                x: 12
+                y: 12
+                width: parent.width - 24
                 spacing: 10
-                Layout.margins: 12
 
                 // ---- 新增想法 ----
                 Rectangle {
@@ -226,13 +227,13 @@ Item {
                                     text: modelData.ts
                                     color: Theme.textTertiary
                                     font.family: Theme.monoFont
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fsMicro
                                 }
                                 Item { Layout.fillWidth: true }
                                 // 操作：编辑 / 标记已应用 / 删除
                                 AppButton {
                                     text: "编辑"
-                                    height: 20
+                                    height: 24
                                     visible: notes.editingId !== modelData.id
                                     onClicked: {
                                         notes.editingId = modelData.id
@@ -241,7 +242,7 @@ Item {
                                 }
                                 AppButton {
                                     text: "✓"
-                                    height: 20
+                                    height: 24
                                     ToolTip.visible: hovered
                                     ToolTip.text: modelData.status === "pending" ? "标记为已应用" : "重新启用（待应用）"
                                     onClicked: {
@@ -254,7 +255,7 @@ Item {
                                 AppButton {
                                     text: "×"
                                     kind: "danger"
-                                    height: 20
+                                    height: 24
                                     onClicked: bridge.removeIdea(modelData.id)
                                 }
                             }
@@ -368,21 +369,12 @@ Item {
                                 onClicked: presetFileDlg.open()
                             }
                         }
-                        ComboBox {
+                        AppSelect {
                             id: presetCombo
                             Layout.fillWidth: true
                             model: bridge.genrePresets()
                             textRole: "name"
-                            palette.window: Theme.bgCard
-                            palette.text: Theme.textPrimary
-                            palette.buttonText: Theme.textPrimary
                             font.pixelSize: Theme.fsSmall
-                            background: Rectangle {
-                                radius: Theme.rBtn
-                                color: Theme.bgHover
-                                border.width: 1
-                                border.color: presetCombo.activeFocus ? Theme.accent : Theme.border
-                            }
                             Component.onCompleted: {
                                 var cur = bridge.projectPreset()
                                 for (var i = 0; i < count; i++)

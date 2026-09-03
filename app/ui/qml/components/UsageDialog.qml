@@ -61,7 +61,7 @@ Dialog {
                         anchors.fill: parent
                         anchors.margins: 8
                         spacing: 2
-                        Text { text: modelData.k; color: Theme.textTertiary; font.pixelSize: 10; font.family: Theme.uiFont }
+                        Text { text: modelData.k; color: Theme.textTertiary; font.pixelSize: Theme.fsMicro; font.family: Theme.uiFont }
                         Text {
                             text: usageDialog.fmt((modelData.d["in"] || 0) + (modelData.d["out"] || 0)) + " tokens"
                             color: Theme.textPrimary; font.pixelSize: Theme.fsBody; font.bold: true
@@ -69,7 +69,7 @@ Dialog {
                         Text {
                             text: "调用 " + usageDialog.fmt(modelData.d.calls || 0) + " 次 · ≈ ¥" +
                                   (modelData.d.cost || 0).toFixed(2)
-                            color: Theme.textSecondary; font.pixelSize: 10
+                            color: Theme.textSecondary; font.pixelSize: Theme.fsMicro
                         }
                     }
                 }
@@ -79,7 +79,7 @@ Dialog {
         Text {
             text: "按模型明细（全部）"
             color: Theme.textTertiary
-            font.pixelSize: 10
+            font.pixelSize: Theme.fsMicro
             font.family: Theme.uiFont
         }
         ListView {
@@ -123,7 +123,7 @@ Dialog {
                         text: "入 " + usageDialog.fmt(modelData.v["in"]) + " · 出 " + usageDialog.fmt(modelData.v["out"]) +
                               " · " + usageDialog.fmt(modelData.v.calls) + " 次"
                         color: Theme.textSecondary
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                     }
                     Text {
                         text: {
@@ -135,7 +135,7 @@ Dialog {
                             return "≈ ¥" + c.toFixed(2)
                         }
                         color: Theme.textSecondary
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fsMicro
                     }
                 }
             }
@@ -145,8 +145,8 @@ Dialog {
             Layout.fillWidth: true
             text: "数据仅保存在本机 ~/.qianbi_novel/usage/usage.jsonl。成本为按模型费率的估算值（可在配置中覆盖费率），非账单。"
             color: Theme.textTertiary
-            font.pixelSize: 10
-            wrapMode: Text.WrapAnywhere
+            font.pixelSize: Theme.fsMicro
+            wrapMode: Text.Wrap
         }
 
         RowLayout {

@@ -41,7 +41,7 @@ Item {
                         text: "章节"
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsBody
+                        font.pixelSize: Theme.fsTitle
                         font.bold: true
                     }
                     Text {
@@ -176,10 +176,9 @@ Item {
                 }
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "取消"
                 kind: "ghost"
@@ -247,24 +246,28 @@ Item {
                         height: 32
                         radius: 6
                         color: fileList.currentIndex === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12) : "transparent"
-                        Row {
+                        RowLayout {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
                             anchors.leftMargin: 8
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
                             spacing: 6
                             Text {
+                                Layout.fillWidth: true
                                 text: model.dir
                                 color: Theme.textTertiary
                                 font.pixelSize: Theme.fsTiny
                                 font.family: Theme.uiFont
+                                elide: Text.ElideLeft
                             }
                             Text {
+                                Layout.preferredWidth: 130
                                 text: model.name
                                 color: fileList.currentIndex === index ? Theme.accent : Theme.textPrimary
                                 font.pixelSize: Theme.fsSmall
                                 font.family: Theme.uiFont
                                 elide: Text.ElideRight
-                                width: 130
                             }
                         }
                         MouseArea {
@@ -276,6 +279,14 @@ Item {
                                 fileDialog.currentRel = model.rel
                             }
                         }
+                    }
+                    // 空态：未从「项目文件」入口加载时的兜底说明
+                    AppEmptyState {
+                        anchors.centerIn: parent
+                        visible: fileModel.count === 0
+                        iconName: "doc"
+                        title: "没有可列出的项目文件"
+                        hint: "「项目文件」入口自动加载产物"
                     }
                 }
             }
@@ -360,10 +371,9 @@ Item {
                 wrapMode: Text.Wrap
             }
         }
-        footer: Row {
+        footer: RowLayout {
             spacing: 8
-            anchors.right: parent.right
-            anchors.margins: 12
+            Item { Layout.fillWidth: true }
             AppButton {
                 text: "取消"
                 kind: "ghost"

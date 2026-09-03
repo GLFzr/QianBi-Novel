@@ -33,7 +33,7 @@ Row {
                     anchors.verticalCenter: parent.verticalCenter
                     color: myIdx < curIdx ? Theme.success
                          : myIdx === curIdx ? Theme.accent
-                         : "#333A44"
+                         : Theme.borderStrong
                 }
                 Text {
                     readonly property int myIdx: stepper.order.indexOf(modelData.key)
@@ -55,7 +55,7 @@ Row {
                 width: 18
                 height: 1
                 anchors.verticalCenter: parent.verticalCenter
-                color: "#232830"
+                color: Theme.border
             }
         }
     }

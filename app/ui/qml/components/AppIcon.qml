@@ -115,6 +115,25 @@ Canvas {
         case "right":  // ›
             p(); mv(.4, .22); ln(.68, .5); ln(.4, .78); stroke2()
             break
+        case "down":  // ˅ 下箭头（下拉选择）
+            p(); mv(.24, .38); ln(.5, .64); ln(.76, .38); stroke2()
+            break
+        case "up":  // ˄ 上箭头
+            p(); mv(.24, .62); ln(.5, .36); ln(.76, .62); stroke2()
+            break
+        case "doc":  // 文档
+            p(); mv(.28, .14); ln(.6, .14); ln(.74, .28); ln(.74, .86); ln(.28, .86); ctx.closePath(); stroke2()
+            p(); mv(.38, .42); ln(.64, .42); mv(.38, .56); ln(.64, .56); mv(.38, .7); ln(.54, .7); stroke2()
+            break
+        case "inbox":  // 空收件箱（空态）
+            p(); mv(.16, .4); ln(.34, .4); ln(.42, .54); ln(.58, .54); ln(.66, .4); ln(.84, .4); stroke2()
+            p(); mv(.16, .4); ln(.24, .72); ln(.76, .72); ln(.84, .4); stroke2()
+            break
+        case "info":  // ⓘ 提示
+            p(); arc(.5, .5, .38, 0, 6.3); stroke2()
+            p(); mv(.5, .46); ln(.5, .68); stroke2()
+            p(); ctx.arc(.5 * s, .33 * s, 1.1 * ctx.lineWidth, 0, 6.3); ctx.fillStyle = color.toString(); ctx.fill()
+            break
         case "bookmark":  // 书签
             p(); mv(.3, .16); ln(.7, .16); ln(.7, .84); ln(.5, .66); ln(.3, .84); ctx.closePath(); stroke2()
             break

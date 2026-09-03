@@ -29,7 +29,7 @@ CheckBox {
             onPaint: {
                 var ctx = getContext("2d")
                 ctx.reset()
-                ctx.strokeStyle = "#FFFFFF"
+                ctx.strokeStyle = Theme.accentText
                 ctx.lineWidth = 1.8
                 ctx.lineCap = "round"
                 ctx.lineJoin = "round"
