@@ -350,9 +350,16 @@ def _stream(ctx, slot: str, prompt: str, label: str = "", *, phase: str = "") ->
         if callable(st_thinking):
             st_thinking(slot, r)
     client = ctx.router.client(slot)
+    # 停止请求要能打断「本次」流式，而不是等它跑完才在下一个 checkpoint 生效：
+    # 干净章最近的 checkpoint 在正文落盘之后，中间还白烧一轮多票审校。
+    # 旧 ctx 桩（测试 FakeCtx）无此属性 → 恒 False，行为与改动前一致。
+    _abort = (lambda: bool(getattr(ctx, "stopped", False)))
     text = clean_llm_output(client.chat_stream(
-        prompt, on_chunk=on_chunk, on_reasoning=on_reasoning, phase=phase))
+        prompt, on_chunk=on_chunk, on_reasoning=on_reasoning, phase=phase,
+        abort=_abort))
     _record_call(ctx, phase, slot, client, prompt)
+    if getattr(client, "last_aborted", False):
+        raise PipelineStopped()
     return text
 
 
@@ -568,6 +575,8 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
                 f"细纲解析失败：模型输出 {len(result)} 字，无法按格式解析出目标章"
                 f"（已解析 {[o[0] for o in outlines]}，待生成 {todo}）")
         return valid
+    except PipelineStopped:
+        raise   # 用户点停止 ≠ 批次失败：吞掉它就会报红 + 落一份假的失败现场
     except Exception as e:
         if len(todo) == 1:
             ctx.log("warn", f"第 {start} 章细纲生成失败：{e}（已跳过，下次运行自动补）")

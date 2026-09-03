@@ -281,13 +281,13 @@ Item {
                         onClicked: bridge.startPipeline()
                     }
                     AppButton {
-                        visible: bridge.isRunning && !bridge.isPaused
+                        visible: bridge.isRunning && !bridge.isPaused && !bridge.isStopping
                         text: "暂停"
                         Layout.fillWidth: true
                         onClicked: bridge.pausePipeline()
                     }
                     AppButton {
-                        visible: bridge.isRunning && bridge.isPaused
+                        visible: bridge.isRunning && bridge.isPaused && !bridge.isStopping
                         text: "继续"
                         kind: "primary"
                         Layout.fillWidth: true
@@ -295,8 +295,9 @@ Item {
                     }
                     AppButton {
                         visible: bridge.isRunning
-                        text: "停止"
+                        text: bridge.isStopping ? "正在停止…" : "停止"
                         kind: "danger"
+                        enabled: !bridge.isStopping
                         Layout.fillWidth: true
                         onClicked: bridge.stopPipeline()
                     }

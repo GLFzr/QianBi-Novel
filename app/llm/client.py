@@ -87,6 +87,7 @@ class LLMClient:
         self.last_latency = 0.0
         self.last_phase = ""        # 最近一次调用的阶段标签（选档与快照用）
         self.last_degraded = False  # 最近一次调用是否发生过「不支持参数」降级
+        self.last_aborted = False   # 最近一次流式调用是否被调用方 abort 中断
         self.last_sampling = {}     # 最近一次请求体实际下发的采样参数（章级配置快照）
 
     @classmethod
@@ -319,14 +320,21 @@ class LLMClient:
         raise last_err
 
     def chat_stream(self, prompt: str, system: str = "", temperature: float = None,
-                    on_chunk=None, on_reasoning=None, *, phase: str = "") -> str:
+                    on_chunk=None, on_reasoning=None, *, phase: str = "",
+                    abort=None) -> str:
         """流式单轮对话：stream=true 逐块回调（on_chunk 收到增量文本），返回完整文本。
 
         回调约定：
           on_chunk(text)      —— 内容增量
           on_reasoning(text)  —— 推理内容增量（DeepSeek 思考模式，可选）
         重试/错误语义与 chat() 一致；失败时已回调的增量不回收（UI 按现场处理）。
+
+        abort：可选的无参谓词，返回真即中断本次流式。逐块 + 退避等待时各查一次
+        （读一个 bool，相对网络往返可忽略）。**不在本层抛停止异常**——
+        PipelineStopped 属 core 的语义，本层只置 last_aborted 并回已收增量，
+        由调用方决定怎么中止。abort=None 时行为与改动前逐字一致。
         """
+        self.last_aborted = False
         self.last_prompt = prompt
         self.last_error = ""
         self.last_phase = phase or ""
@@ -365,6 +373,9 @@ class LLMClient:
                                 payload = fixed
                             continue
                         for line in resp.iter_lines():
+                            if abort is not None and abort():
+                                self.last_aborted = True
+                                break
                             if not line or not line.startswith("data:"):
                                 continue
                             data = line[5:].strip()
@@ -389,6 +400,10 @@ class LLMClient:
                                     on_chunk(c)
                             if r and on_reasoning:
                                 on_reasoning(r)
+                if self.last_aborted:
+                    # 中断优先于空内容判定：否则「点停止时还没吐字」会掉进下面的
+                    # 空内容分支 continue 重开连接，把重试预算烧光。
+                    break
                 if not "".join(parts).strip():
                     # 全程无内容（或只有空白）：thinking 模式先退化重发，否则记入可重试错误
                     last_err = LLMError("模型返回空内容 (stream)", retryable=True)
@@ -421,13 +436,28 @@ class LLMClient:
                 # 但 on_chunk 已投递给 UI 的旧增量无法回收——UI 流式区在重试期间可能短暂
                 # 显示重复尾巴，最终落盘内容以本函数返回值为准（正确）。
                 last_err = LLMError(f"流式读取中断: {e}", retryable=True)
+            if self.last_aborted:
+                break   # 用户主动中断：不再消耗重试预算
             if attempt < self.max_retries:
                 delay = self.backoff_base * (2 ** attempt)
                 logger.warning("LLM stream retry %s/%s after %.1fs: %s",
                                attempt + 1, self.max_retries, delay, last_err)
-                time.sleep(delay)
+                if abort is None:
+                    time.sleep(delay)
+                else:   # 退避等待也要可中断：否则点停止后还要白等数秒
+                    _end = time.monotonic() + delay
+                    while time.monotonic() < _end:
+                        if abort():
+                            self.last_aborted = True
+                            break
+                        time.sleep(0.1)
+                    if self.last_aborted:
+                        break
         content = "".join(parts).strip()
         self.last_latency = time.monotonic() - t0
+        if self.last_aborted:
+            # 已收增量交回调用方处置（core 据此抛 PipelineStopped），不当成错误
+            return content
         if last_err and not content:
             self.last_error = str(last_err)
             raise last_err

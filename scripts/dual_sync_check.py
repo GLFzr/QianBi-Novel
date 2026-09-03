@@ -103,7 +103,8 @@ DEFERRED_SYMBOLS = {
         "tui": "c70467cbfb69ceca",
     },
     ("app/core/stages.py", "_stream"): {
-        "reason": "TUI 独有 resume_base/resume_max_rounds 截断续写形参；GUI 独有 P2 调用记录链（phase 选档已双端同源）",
+        "reason": "TUI 独有 resume_base/resume_max_rounds 截断续写形参；GUI 独有 P2 调用记录链"
+                  "＋停止实时化（下传 abort 谓词，client 报中断即抛 PipelineStopped）",
         "tui": "55f9565d605f9244",
     },
     ("app/llm/client.py", "LLMClient._build_payload"): {

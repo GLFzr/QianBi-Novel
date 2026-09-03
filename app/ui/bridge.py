@@ -713,6 +713,7 @@ class Bridge(QObject):
     progressChanged = Signal()
     runningChanged = Signal()
     pausedChanged = Signal()
+    stoppingChanged = Signal()
     currentChapterChanged = Signal()
     currentStepChanged = Signal()
     tokensChanged = Signal()
@@ -773,6 +774,7 @@ class Bridge(QObject):
         self._workers = []
         self._running = False
         self._paused = False
+        self._stopping = False
         self._book_title = ""
         self._book_meta = ""
         self._stage_key = st.STAGE_INIT
@@ -851,6 +853,7 @@ class Bridge(QObject):
         return f"{int(done / total * 100)}%"
     def _get_running(self): return self._running
     def _get_paused(self): return self._paused
+    def _get_stopping(self): return self._stopping
     def _get_cur_num(self): return self._cur_num
     def _get_cur_title(self): return self._cur_title
     def _get_cur_step(self): return self._cur_step
@@ -899,6 +902,7 @@ class Bridge(QObject):
     progressPercentText = Property(str, _get_progress_percent_text, notify=progressChanged)
     isRunning = Property(bool, _get_running, notify=runningChanged)
     isPaused = Property(bool, _get_paused, notify=pausedChanged)
+    isStopping = Property(bool, _get_stopping, notify=stoppingChanged)
     currentChapterNum = Property(int, _get_cur_num, notify=currentChapterChanged)
     currentChapterTitle = Property(str, _get_cur_title, notify=currentChapterChanged)
     currentStepKey = Property(str, _get_cur_step, notify=currentStepChanged)
@@ -1106,7 +1110,7 @@ class Bridge(QObject):
         if self.orch and self._running:
             self.orch.pause()
             self._set_paused(True)
-            self.logModel.append("info", "已请求暂停（当前步骤完成后停）")
+            self.logModel.append("info", "暂停已受理：本次 LLM 调用跑完后停在当前步骤边界（不是立刻掐断）")
 
     @Slot()
     def resumePipeline(self):
@@ -1117,9 +1121,15 @@ class Bridge(QObject):
 
     @Slot()
     def stopPipeline(self):
-        if self.orch and self._running:
-            self.orch.stop()
-            self.logModel.append("warn", "已请求停止…")
+        if not (self.orch and self._running):
+            return
+        if self._get_stopping():
+            self.logModel.append("info", "已在停止中：等当前这步收尾，勿重复点")
+            return
+        self._stopping = True
+        self.stoppingChanged.emit()   # 按钮转「正在停止…」并禁用，避免「点了没反应」的体感
+        self.orch.stop()
+        self.logModel.append("warn", "停止已受理：正在生成的这一次调用会在下一 token 处中断")
 
     # ============ 步骤决策门（Step Gates）============
 
@@ -1943,6 +1953,8 @@ class Bridge(QObject):
     def _on_finished(self, reason: str):
         self._set_running(False)
         self._set_paused(False)
+        self._stopping = False
+        self.stoppingChanged.emit()
         self._streaming = False
         self._stream_stage_label = ""
         self._reasoning_text = ""
@@ -1966,6 +1978,8 @@ class Bridge(QObject):
     def _on_failed(self, msg: str):
         self._set_running(False)
         self._set_paused(False)
+        self._stopping = False
+        self.stoppingChanged.emit()
         self._streaming = False
         self._stream_stage_label = ""
         self.streamStageChanged.emit()

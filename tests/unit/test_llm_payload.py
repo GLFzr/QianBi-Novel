@@ -218,7 +218,7 @@ def test_stages_stream_passes_phase():
 
     class _Client:
         def chat_stream(self, prompt, system="", temperature=None,
-                        on_chunk=None, on_reasoning=None, phase=""):
+                        on_chunk=None, on_reasoning=None, phase="", **kw):
             seen["phase"] = phase
             return "正文"
 
@@ -440,7 +440,7 @@ def test_stream_slot_override_from_preset(monkeypatch):
 
     class _Client:
         def chat_stream(self, prompt, system="", temperature=None,
-                        on_chunk=None, on_reasoning=None, phase=""):
+                        on_chunk=None, on_reasoning=None, phase="", **kw):
             return "正文"
 
     class _Router:

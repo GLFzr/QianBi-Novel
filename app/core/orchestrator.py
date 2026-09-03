@@ -82,6 +82,11 @@ class Orchestrator(QThread):
     def paused(self) -> bool:
         return self._pause.is_set()
 
+    @property
+    def stopped(self) -> bool:
+        """只读停止标志：供流式循环当 abort 谓词轮询（checkpoint 之外的唯一实时出口）"""
+        return self._stop
+
     def stop(self):
         self._stop = True
         self._pause.clear()
@@ -112,6 +117,10 @@ class Orchestrator(QThread):
         回退重做在解锁前由 _apply_rollback 处理，本方法不返回"""
         if not self.gate_enabled(key):
             return ""
+        # 暂停优先于决策门：暂停态下弹门会出现两个语义不同的「继续」按钮
+        # （门条的 resolveStepGate 与流水线的 resumePipeline），用户无从判断点哪个。
+        # 先过 checkpoint 停在步骤边界，等用户恢复后再来要这个决策。
+        self.checkpoint()
         state = st.load_state(self.proj)
         state["gate_status"] = {"gate": key, "chapter": chapter,
                                 "summary": summary[:200], "ts": time.time()}

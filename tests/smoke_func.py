@@ -17,7 +17,7 @@ app = QGuiApplication(sys.argv)
 from app.ui.bridge import Bridge
 from app import project
 from app.core import state as st
-from app.core.orchestrator import Orchestrator
+from app.core.orchestrator import Orchestrator, PipelineStopped
 
 bridge = Bridge()
 
@@ -61,10 +61,20 @@ assert "雨夜" in memory.read_recent_summaries(proj, 2, 3)
 assert "改命笔记" in memory.read_global_summary(proj)
 print("4 memory chain OK")
 
-# 5. Orchestrator 可实例化（不启动）
+# 5. Orchestrator 控制：走 checkpoint 真路径
+#    旧写法只断言 orch.paused 这个 Event 标志——checkpoint() 就算写成空函数也照样绿，
+#    「点停止不生效」这类缺陷正好从它眼皮底下溜过。
 orch = Orchestrator(proj, bridge.cfg)
 orch.pause(); assert orch.paused
 orch.resume(); assert not orch.paused
+orch.checkpoint()                       # 未请求停止 → 正常返回不抛
+orch.stop()
+assert orch.stopped
+try:
+    orch.checkpoint()
+    raise AssertionError("stop() 后 checkpoint() 未抛 PipelineStopped")
+except PipelineStopped:
+    pass
 print("5 orchestrator control OK")
 
 # 6. 连接模型与槽位（找任意已绑定槽位的连接，不假设顺序）
