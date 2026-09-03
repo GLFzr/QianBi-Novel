@@ -61,6 +61,75 @@ def sha256(path: str) -> str:
     return h.hexdigest()
 
 
+def portable_readme(version: str) -> bytes:
+    """便携包内的《使用说明.txt》。
+
+    带 BOM：这个文件会被 Windows 记事本直接打开，无 BOM 的 UTF-8 在旧版
+    记事本上中文会乱码。
+    """
+    text = f"""千笔一文 Novel v{version} —— 便携版使用说明
+========================================
+
+怎么运行
+--------
+把整个文件夹解压到任意位置（路径含中文和空格都可以），双击 QianBi-Novel.exe。
+不需要安装 Python，也不需要联网安装任何东西。
+
+重要：便携版不会创建桌面快捷方式
+--------------------------------
+便携版刻意「什么都不装」：不建桌面快捷方式、不写注册表、不出现在
+「设置 → 应用」里，因此也没有卸载入口——不想用了直接把整个文件夹删掉。
+
+需要桌面快捷方式和「应用和功能」里的卸载入口，请改用安装版：
+    QianBi-Novel-v{version}-setup.exe
+安装版是 per-user 安装（不需要管理员权限），默认会勾选「创建桌面快捷方式」，
+卸载时会保留你的书稿。
+
+你的数据在哪里
+--------------
+两种版本共用同一个数据目录：
+
+    %USERPROFILE%\\.qianbi_novel\\
+        config.json     连接与闸门配置
+        books\\          你的小说项目（每本书一个文件夹）
+        presets\\        自定义题材预设
+        logs\\           运行日志与崩溃现场
+
+想备份或迁移，整个目录拷走即可。删掉该目录 = 彻底清除。
+
+API Key 存在哪
+--------------
+Key 不写进 config.json，而是存入 **Windows 凭据管理器**
+（项目名 QianBiNovel/connections）。config.json 里只留一个不可逆指纹。
+导出配置或截图提问时，不用担心 Key 泄露；反之，换电脑时 Key 需要重新填。
+
+校验下载完整性
+--------------
+发布页附有 SHA256SUMS.txt。PowerShell 里执行：
+
+    Get-FileHash .\\QianBi-Novel-v{version}-portable.zip -Algorithm SHA256
+
+输出的哈希应与清单中对应那一行完全一致。
+
+首次运行的 SmartScreen 提示
+---------------------------
+如果 Windows 弹出「Windows 已保护你的电脑 / 未知发布者」，这是正常的：
+本项目是开源免费软件，没有购买代码签名证书，因此二进制未签名。
+点「更多信息」→「仍要运行」即可。你也可以先用上面的 SHA256 比对确认来源。
+
+隐私
+----
+书稿、配置、日志全部留在本机，不上传任何地方。遥测默认关闭且只写本地文件。
+详见包内 PRIVACY.md。
+
+License
+-------
+MIT 开源。详见包内 LICENSE 与 THIRD-PARTY-LICENSES.md。
+项目地址：https://github.com/GLFzr/QianBi-Novel
+"""
+    return text.encode("utf-8-sig")
+
+
 def main():
     ap = argparse.ArgumentParser(description="千笔一文 Novel 一键发布流水线")
     ap.add_argument("--skip-tests", action="store_true", help="跳过质量闸门（发版禁用）")
@@ -120,12 +189,19 @@ def main():
     # ---- 6. 产物目录 + 便携 zip + SHA256SUMS ----
     out_dir = os.path.join(ROOT, "dist", "release", f"v{__version__}")
     os.makedirs(out_dir, exist_ok=True)
+    readme_name = "使用说明.txt"
+    readme_bytes = portable_readme(__version__)
+    readme_path = os.path.join(out_dir, readme_name)
+    with open(readme_path, "wb") as f:
+        f.write(readme_bytes)
     portable = os.path.join(out_dir, f"QianBi-Novel-v{__version__}-portable.zip")
     with zipfile.ZipFile(portable, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for dp, _, fs in os.walk(dist_dir):
             for f in fs:
                 full = os.path.join(dp, f)
                 z.write(full, os.path.relpath(full, dist_dir))
+        # 说明文件放在 zip 根目录，与 exe 并列，解压第一眼就能看到
+        z.writestr(readme_name, readme_bytes)
     step("便携 zip", os.path.exists(portable),
          f"{os.path.getsize(portable) / 1048576:.0f} MB")
 

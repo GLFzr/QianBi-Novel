@@ -23,8 +23,10 @@
 
 | 方式 | 文件 | 说明 |
 |---|---|---|
-| **安装版** | `QianBi-Novel-v0.15.0-setup.exe` | Inno Setup，per-user 安装（免管理员），卸载时**保留书稿** |
-| **便携版** | `QianBi-Novel-v0.15.0-portable.zip` | 解压即用，数据落在 `%USERPROFILE%\.qianbi_novel\` |
+| **安装版（推荐）** | `QianBi-Novel-v0.15.0-setup.exe` | Inno Setup，per-user 安装（免管理员）；**创建桌面快捷方式**，在「设置 → 应用」里可卸载，卸载时**保留书稿** |
+| **便携版** | `QianBi-Novel-v0.15.0-portable.zip` | 解压双击即用；**不建快捷方式、不写注册表、无卸载入口**（删文件夹即清除）。包内附《使用说明.txt》 |
+
+两者数据共用 `%USERPROFILE%\.qianbi_novel\`，换着用最方便。
 
 → **[Releases](https://github.com/GLFzr/QianBi-Novel/releases/latest)** ·
 每个版本附 `SHA256SUMS.txt`，校验后再运行。
