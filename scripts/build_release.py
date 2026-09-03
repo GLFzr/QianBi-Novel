@@ -153,7 +153,9 @@ def main():
 
     # ---- 8. SHA256SUMS（放在安装包之后，确保 setup.exe 也被收录）----
     sums = os.path.join(out_dir, "SHA256SUMS.txt")
-    with open(sums, "w", encoding="utf-8") as f:
+    # newline="\n"：默认文本模式在 Windows 上会写成 CRLF，行尾 \r 会让
+    # `sha256sum -c` 把文件名当成 "xxx.exe\r" 而报 no such file
+    with open(sums, "w", encoding="utf-8", newline="\n") as f:
         for fn in sorted(os.listdir(out_dir)):
             if fn == "SHA256SUMS.txt":
                 continue
