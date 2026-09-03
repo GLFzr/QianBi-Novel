@@ -431,10 +431,24 @@ def run_all(proj: str, cfg: dict, rec: Recorder) -> None:
     # 简介与标签（桥层 worker，内部自建 ModelRouter → 打桩替换）
     import app.llm as llm_mod
     real_router = llm_mod.ModelRouter
-    llm_mod.ModelRouter = lambda cfg_: MockRouter(rec)
+    llm_mod.ModelRouter = lambda cfg_, **kw: MockRouter(rec)
     try:
         from app.ui import bridge as bridge_mod
         bridge_mod._BlurbWorker(cfg, proj).run()
+
+        # 局部改写：SelectionRewriteWorker 在 __init__ 里用的 bridge.py:20 那个模块级
+        # ModelRouter 名字（已绑定），只打 app.llm.ModelRouter 打不到它，会真去建
+        # 路由发网络请求 —— 必须连 bridge 侧的绑定一起换掉。
+        # 跑两种 mode：setting 带核心设定块，only 不带，两种 prompt 形状都要进护栏。
+        real_bridge_router = bridge_mod.ModelRouter
+        bridge_mod.ModelRouter = lambda cfg_, **kw: MockRouter(rec)
+        try:
+            for mode in ("setting", "only"):
+                bridge_mod.SelectionRewriteWorker(
+                    cfg, "他推门进去。", "灯芯只剩一线，像随时要断。", "阿栾在门外等着。",
+                    "把这句写得更克制，别用比喻", mode=mode, proj=proj).run()
+        finally:
+            bridge_mod.ModelRouter = real_bridge_router
     finally:
         llm_mod.ModelRouter = real_router
 
@@ -468,19 +482,34 @@ def digest(proj: str, rec: Recorder) -> list:
 
 
 def _diff(old: list, new: list):
+    """按 (kind, slot) 分组比对，**不把索引当键**。
+
+    旧实现键是 (i, kind, slot)：中途插入一个新装配点会让其后每条同时报
+    「消失 + 新增」，纯位移被读成内容变化 —— 于是「加一条装配点」这种正当
+    改动变成不可审阅（也误触发「有消失就是 bug」的对账纪律）。
+    分组后：组内条数变化 = 真的新增/消失；组内摘要集合变化 = 内容变化。
+    """
+    def group(entries):
+        g = {}
+        for e in entries:
+            g.setdefault((e["kind"], e["slot"]), []).append(e)
+        return g
+
+    go, gn = group(old), group(new)
     lines = []
-    kinds_old = {(e["i"], e["kind"], e["slot"]): e["sha256"] for e in old}
-    kinds_new = {(e["i"], e["kind"], e["slot"]): e["sha256"] for e in new}
-    for key in sorted(set(kinds_new) - set(kinds_old)):
-        lines.append(f"[新增调用] #{key[0]} {key[1]}/{key[2]}")
-    for key in sorted(set(kinds_old) - set(kinds_new)):
-        lines.append(f"[消失调用] #{key[0]} {key[1]}/{key[2]}")
-    for key in sorted(set(kinds_old) & set(kinds_new)):
-        if kinds_old[key] != kinds_new[key]:
-            o = next(e for e in old if (e["i"], e["kind"], e["slot"]) == key)
-            n = next(e for e in new if (e["i"], e["kind"], e["slot"]) == key)
-            lines.append(f"[内容变化] #{key[0]} {key[1]}/{key[2]} "
-                         f"chars {o['chars']}→{n['chars']}")
+    for key in sorted(set(go) | set(gn)):
+        kind, slot = key
+        o, n = go.get(key, []), gn.get(key, [])
+        if len(o) != len(n):
+            lines.append(f"[调用次数] {kind}/{slot} {len(o)}→{len(n)} "
+                         f"（新增装配点或该装配点少跑了一次）")
+            continue
+        os_ = sorted(o, key=lambda e: e["sha256"])
+        ns_ = sorted(n, key=lambda e: e["sha256"])
+        for oe, ne in zip(os_, ns_):
+            if oe["sha256"] != ne["sha256"]:
+                lines.append(f"[内容变化] {kind}/{slot} "
+                             f"chars {oe['chars']}→{ne['chars']} (#{ne['i']})")
     return lines
 
 

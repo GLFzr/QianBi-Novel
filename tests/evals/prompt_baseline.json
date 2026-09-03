@@ -1,5 +1,5 @@
 {
- "count": 43,
+ "count": 45,
  "entries": [
   {
    "i": 0,
@@ -262,17 +262,17 @@
   },
   {
    "i": 37,
-   "kind": "worldbook_text",
-   "slot": "budget=2000",
-   "chars": 288,
-   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+   "kind": "selection",
+   "slot": "writing",
+   "chars": 500,
+   "sha256": "7638646d5f0b30cbb4051d5882e364d3353039cf9082ea8069a2f6e979851303"
   },
   {
    "i": 38,
-   "kind": "worldbook_text",
-   "slot": "budget=600",
-   "chars": 288,
-   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+   "kind": "selection",
+   "slot": "writing",
+   "chars": 408,
+   "sha256": "640cee20450a477a6177c76480eb78496fe3b7eb019914585303a09071e2717c"
   },
   {
    "i": 39,
@@ -283,20 +283,34 @@
   },
   {
    "i": 40,
+   "kind": "worldbook_text",
+   "slot": "budget=600",
+   "chars": 288,
+   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+  },
+  {
+   "i": 41,
+   "kind": "worldbook_text",
+   "slot": "budget=2000",
+   "chars": 288,
+   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+  },
+  {
+   "i": 42,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=1 anchors=['陈更', '柳三更']",
    "chars": 150,
    "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
   },
   {
-   "i": 41,
+   "i": 43,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=2 anchors=['陈更', '柳三更']",
    "chars": 150,
    "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
   },
   {
-   "i": 42,
+   "i": 44,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=3 anchors=['陈更', '柳三更']",
    "chars": 150,
