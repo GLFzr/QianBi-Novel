@@ -326,6 +326,8 @@ Dialog {
                             Layout.preferredHeight: 200
                             radius: Theme.rBtn
                             color: Theme.bgLog
+                            border.width: 1
+                            border.color: Theme.border
                             ScrollView {
                                 anchors.fill: parent
                                 anchors.margins: 6

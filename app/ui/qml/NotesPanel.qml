@@ -74,6 +74,8 @@ Item {
                     Layout.fillWidth: true
                     radius: Theme.rCard
                     color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
                     height: newIdeaCol.implicitHeight + 20
                     ColumnLayout {
                         id: newIdeaCol
@@ -336,6 +338,8 @@ Item {
                     Layout.fillWidth: true
                     radius: Theme.rCard
                     color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
                     height: presetCol.implicitHeight + 20
                     ColumnLayout {
                         id: presetCol
@@ -410,6 +414,8 @@ Item {
                     Layout.fillWidth: true
                     radius: Theme.rCard
                     color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
                     height: gpCol.implicitHeight + 20
                     ColumnLayout {
                         id: gpCol

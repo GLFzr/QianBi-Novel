@@ -469,6 +469,8 @@ Item {
                     Layout.fillWidth: true
                     radius: Theme.rCard
                     color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
                     implicitHeight: slotCol.implicitHeight + 24
                     Column {
                         id: slotCol
@@ -570,6 +572,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: wtCol.implicitHeight + 24
                         ColumnLayout {
                             id: wtCol
@@ -596,6 +600,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: rvCol.implicitHeight + 24
                         ColumnLayout {
                             id: rvCol
@@ -625,6 +631,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: modeCol.implicitHeight + 24
                         ColumnLayout {
                             id: modeCol
@@ -655,6 +663,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: rgCol.implicitHeight + 24
                         ColumnLayout {
                             id: rgCol
@@ -702,6 +712,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: rbCol.implicitHeight + 24
                         ColumnLayout {
                             id: rbCol
@@ -758,6 +770,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: themeCol.implicitHeight + 20
                         ColumnLayout {
                             id: themeCol
@@ -806,6 +820,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: libRow.implicitHeight + 20
                         RowLayout {
                             id: libRow
@@ -854,6 +870,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: edCol.implicitHeight + 24
                         ColumnLayout {
                             id: edCol
@@ -949,6 +967,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: bkCol.implicitHeight + 24
                         ColumnLayout {
                             id: bkCol
@@ -989,6 +1009,8 @@ Item {
                         Layout.fillWidth: true
                         radius: Theme.rCard
                         color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
                         implicitHeight: keysCol.implicitHeight + 24
                         ColumnLayout {
                             id: keysCol

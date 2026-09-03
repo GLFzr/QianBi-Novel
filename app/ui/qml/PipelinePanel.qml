@@ -358,6 +358,8 @@ Item {
                     visible: pipeline.trend.length >= 2
                     radius: Theme.rCard
                     color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
                     height: 86
                     ColumnLayout {
                         anchors.fill: parent
@@ -404,6 +406,8 @@ Item {
                     visible: bridge.hasProject
                     radius: Theme.rCard
                     color: Theme.bgCard
+                    border.width: 1
+                    border.color: Theme.border
                     height: blurbCol.implicitHeight + 20
                     ColumnLayout {
                         id: blurbCol
@@ -456,6 +460,8 @@ Item {
                             height: 150
                             radius: Theme.rBtn
                             color: Theme.bgLog
+                            border.width: 1
+                            border.color: Theme.border
                             clip: true
                             ScrollView {
                                 anchors.fill: parent

@@ -1115,6 +1115,8 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 radius: Theme.rCard
                 color: Theme.bgLog
+                border.width: 1
+                border.color: Theme.border
                 clip: true
                 ScrollView {
                     anchors.fill: parent

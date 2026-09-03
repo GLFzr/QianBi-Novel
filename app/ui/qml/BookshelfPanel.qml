@@ -212,6 +212,8 @@ Item {
         background: Rectangle {
             radius: Theme.rCard
             color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.border
         }
         header: Text {
             text: "新建项目"
