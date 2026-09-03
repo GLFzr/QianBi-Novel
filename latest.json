@@ -1,6 +1,6 @@
 {
-  "version": "0.14.0",
-  "url": "https://github.com/GLFzr/qianbi-novel/releases/tag/v0.14.0",
-  "notes": "0.14.0 首个公开版：AI 长篇全流程 + 用量统计 + 安装包",
-  "sha256": "d18f7ce37a33a2c13c470f1529c3182fe7f851004bf035e850101cb3b33e3491"
+  "version": "0.15.0",
+  "url": "https://github.com/GLFzr/qianbi-novel/releases/tag/v0.15.0",
+  "notes": "0.15.0 三件套深化：世界书条目化激活与分档预算、预设组装层全接线、章级生成配置快照与查看、三层审核（L0 预检/引证验真/多轮投票）与剧情反哺；打包态与开发态逐字节一致性门禁",
+  "sha256": "37cad77061492a339b8503cf9202e328f81814e7c1e977be7fa854d8594e59db"
 }
