@@ -25,6 +25,10 @@ smoke_tmp/
 *.exe.bak
 projects/
 .workbuddy/
+pb.txt
+
+# 示例书只作本地调试用，不随仓库发布
+examples/
 
 # ---- IDE / 系统 ----
 .idea/
