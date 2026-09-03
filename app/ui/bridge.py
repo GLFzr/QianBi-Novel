@@ -56,6 +56,9 @@ class SelectionRewriteWorker(QThread):
                 core = _pj.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1500]
             core_block = (prompts.SELECTION_CORE_SETTING_BLOCK.format(core_setting=core)
                           if core else "")
+            from ..core import stages as stages_mod
+            must_block = (stages_mod._must_block(self.proj, self.cfg) if self.proj
+                          else "（未打开书籍，暂无正则契约）")
             prompt = prompts.SELECTION_REWRITE_PROMPT.format(
                 user_idea=self.idea or "（无具体想法，请按你的判断润色这段）",
                 selected=self.selected,
@@ -63,6 +66,7 @@ class SelectionRewriteWorker(QThread):
                 after_context=self.after or "（选中段落在章节末尾）",
                 core_setting=core,
                 core_setting_block=core_block,
+                must_block=must_block,
             )
             client = self.router.client(cfg_mod.SLOT_WRITING)
             text = clean_llm_output(client.chat_stream(

@@ -569,6 +569,7 @@ class CwProseCheckWorker(QThread):
             prose=self.text,
             outline_brief=outline,
             tic_blacklist=stages_mod._tic_blacklist(self.proj),
+            must_block=stages_mod._must_block(self.proj, self.cfg),
         )
         self.last_prompt = prompt
         rewritten = clean_llm_output(self.router.client(cfg_mod.SLOT_WRITING)

@@ -221,6 +221,29 @@ def _tic_blacklist(proj: str, last_n: int = 10) -> str:
     return measured + "\n题材专属限量（本书腔调配额，超出即算 AI 味）：" + genre
 
 
+# 契约段前言：四张重写模板共用，单点措辞（分散抄四份必然互相漂）
+_MUST_POLICY = (
+    "优先级：作者显式指令 > 本节 must 契约 > 世界书 > 本章细纲 > 题材预设。\n"
+    "改写时**不得为凑下列规则改动字数或删掉本章信息增量**；某条契约在现有正文里"
+    "本就没有落点时，保持现状并在结尾用一句话说明，不要自行绕开，"
+    "也不要新增主线事件去补。"
+)
+
+
+def _must_block(proj: str, cfg: dict = None) -> str:
+    """扩写/压缩/去味/局部改写四张模板的近端契约段（与 _tic_blacklist 同侧）
+
+    这四张模板只有本槽、没有题材块，也从不带契约——而它们全在整章/整段重写正文：
+    为凑字数新写的句子、为压缩删掉的段落，都可能悄悄破掉 must 规则，只能等终审
+    概率性地抓。这里把 must 条直接送到改写的现场。
+
+    全量注入不截断：静默丢规则正是本机制要防的事故。max_chars 只作病态输入兜底，
+    且过滤路径是整行取舍 + 显式声明漏了几条，不会给模型半句残规则。
+    """
+    sem = ((cfg or {}).get("writing", {}) or {}).get("regex_semantics", "logic")
+    return _MUST_POLICY + "\n" + project.regex_block(proj, sem, 8000, levels=("must",))
+
+
 def _used_setpieces(proj: str) -> str:
     """从追踪/上下文 提取已用名场面清单"""
     ctx = project.read_file(project.get_tracking_path(proj, "上下文"))
@@ -749,7 +772,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
                                                      target=chapter_words, prose=prose,
                                                      outline_brief=outline[:600],
-                                                     tic_blacklist=_tic_blacklist(proj))
+                                                     tic_blacklist=_tic_blacklist(proj),
+                                                     must_block=_must_block(proj, ctx.cfg))
         ctx.last_prompt = enrich_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮",
                             phase=PHASE_ENRICH)
@@ -770,7 +794,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         trim_prompt = prompts.TRIM_PROMPT.format(chapter_num=num, actual=actual,
                                                  target=chapter_words, cut_pct=cut_pct,
                                                  prose=prose, outline_brief=outline[:600],
-                                                 tic_blacklist=_tic_blacklist(proj))
+                                                 tic_blacklist=_tic_blacklist(proj),
+                                                 must_block=_must_block(proj, ctx.cfg))
         ctx.last_prompt = trim_prompt
         prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩",
                         phase=PHASE_TRIM)
@@ -813,7 +838,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
         rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose,
                                                                outline_brief=outline[:600],
-                                                               tic_blacklist=_tic_blacklist(proj))
+                                                               tic_blacklist=_tic_blacklist(proj),
+                                                               must_block=_must_block(proj, ctx.cfg))
         ctx.last_prompt = rewrite_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮",
                             phase=PHASE_DESLOP)

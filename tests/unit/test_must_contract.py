@@ -165,3 +165,81 @@ def test_format_must_findings_placeholder_and_whole_lines():
     block = mustscan.format_must_findings(fs)
     assert "BLOCKING" in block and "L0-MUST" in block and "原文：" in block
     assert not block.rstrip().endswith("（")
+
+
+# ---------- 阶段 3：契约槽接线护栏 ----------
+
+import ast
+import string
+
+_APP_ROOT = os.path.join(os.path.dirname(os.path.dirname(  # tests/unit -> repo root
+    os.path.dirname(os.path.abspath(__file__)))), "app")
+
+# 会产出/改写正文的五张模板：都必须带 must 契约
+CONTRACT_TEMPLATES = ("PROSE_WRITING_PROMPT", "ENRICH_PROMPT", "TRIM_PROMPT",
+                      "DESLOP_REWRITE_PROMPT", "SELECTION_REWRITE_PROMPT")
+
+
+def _template_fields(name):
+    from app import prompts
+    text = getattr(prompts, name)
+    return {f for _, f, _, _ in string.Formatter().parse(text) if f}
+
+
+def test_no_prose_template_lacks_must_contract():
+    """五张产文模板都不许缺 must 契约——走哪个槽都行，但不能没有
+
+    正文生成走 {regex_block}（全量规则集，含 should），四次整章/整段重写走
+    {must_block}（只给 must，那四张已装着整章正文、预算更紧）。
+    断言「两条路至少有一条」，才是「没有哪一步在裸写正文」的正确表达。
+    """
+    from app import prompts
+    for name in CONTRACT_TEMPLATES:
+        text = getattr(prompts, name)
+        assert ("{must_block}" in text or "{regex_block}" in text), \
+            "%s 不带任何 must 契约槽，该步在裸写正文" % name
+    # 四张重写模板必须走 must 专属槽（它们没有题材块/全量规则块）
+    for name in CONTRACT_TEMPLATES[1:]:
+        assert "{must_block}" in getattr(prompts, name), name
+
+
+def _format_callsites(template_name):
+    """扫遍 app/，抓 `X.<template_name>.format(...)` 的关键字实参集合
+
+    刻意不写死调用点清单：将来谁再加一处调用，这里自动纳入断言。
+    test_barrier_removal._smoke_format 是从模板反推字段名再 format，
+    看不见「调用方漏传 kwarg」——那正是 KeyError 崩在运行期的成因。
+    """
+    hits = []
+    for dp, dns, fns in os.walk(_APP_ROOT):
+        dns[:] = [d for d in dns if d != "__pycache__"]
+        for fn in fns:
+            if not fn.endswith(".py"):
+                continue
+            path = os.path.join(dp, fn)
+            tree = ast.parse(project.read_file(path), filename=path)
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "format"):
+                    continue
+                recv = node.func.value
+                if (isinstance(recv, ast.Attribute)
+                        and recv.attr == template_name):
+                    hits.append((os.path.relpath(path, _APP_ROOT),
+                                 {kw.arg for kw in node.keywords if kw.arg}))
+    return hits
+
+
+def test_every_callsite_passes_every_placeholder():
+    """五张模板的每个调用点都必须传满占位符，漏一处就是运行期 KeyError"""
+    checked = 0
+    for name in CONTRACT_TEMPLATES:
+        fields = _template_fields(name)
+        sites = _format_callsites(name)
+        assert sites, "没找到 %s 的任何调用点，扫描逻辑失效了" % name
+        for where, kwargs in sites:
+            missing = fields - kwargs
+            assert not missing, "%s 在 %s 漏传 %s" % (name, where, sorted(missing))
+            checked += 1
+    assert checked >= 5, "只核到 %d 处调用点，覆盖面异常" % checked

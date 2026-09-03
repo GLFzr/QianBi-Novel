@@ -145,15 +145,15 @@
    "i": 20,
    "kind": "enrich",
    "slot": "writing",
-   "chars": 2713,
-   "sha256": "2cc4afd69c154877be6be04e59599a740e57fce2d0ef87f4939ade7cd2ed6aee"
+   "chars": 2985,
+   "sha256": "8e1dda7ec8cfd470d232e6cdb91be17400640bc687412fb32e44fb416f702bdf"
   },
   {
    "i": 21,
    "kind": "enrich",
    "slot": "writing",
-   "chars": 2713,
-   "sha256": "2cc4afd69c154877be6be04e59599a740e57fce2d0ef87f4939ade7cd2ed6aee"
+   "chars": 2985,
+   "sha256": "8e1dda7ec8cfd470d232e6cdb91be17400640bc687412fb32e44fb416f702bdf"
   },
   {
    "i": 22,
@@ -187,8 +187,8 @@
    "i": 26,
    "kind": "trim",
    "slot": "writing",
-   "chars": 5296,
-   "sha256": "1442b9bd97e3beb4f9ba30b9ea0a547090ac44f35e30565237ed5b1d8cc46a1f"
+   "chars": 5568,
+   "sha256": "0064e25d4511a7a908e2a28dd4b6df60f0337441d7e3a34d4b2243b40707e8f7"
   },
   {
    "i": 27,
@@ -236,8 +236,8 @@
    "i": 33,
    "kind": "deslop",
    "slot": "writing",
-   "chars": 952,
-   "sha256": "c734ad7c59cfe94714690d092bd7d97e86447381f7f44bf7512f0e24c2466d23"
+   "chars": 1224,
+   "sha256": "6629d1b0d065e8dba8e8d02606cdf302d042747a0867c59dc837f2ead31702cf"
   },
   {
    "i": 34,
@@ -264,15 +264,15 @@
    "i": 37,
    "kind": "selection",
    "slot": "writing",
-   "chars": 500,
-   "sha256": "7638646d5f0b30cbb4051d5882e364d3353039cf9082ea8069a2f6e979851303"
+   "chars": 772,
+   "sha256": "a9dc50d64f598ff2dd1adc7882d04d127aa1f8af7cbf7492131ded914dad9d60"
   },
   {
    "i": 38,
    "kind": "selection",
    "slot": "writing",
-   "chars": 408,
-   "sha256": "640cee20450a477a6177c76480eb78496fe3b7eb019914585303a09071e2717c"
+   "chars": 680,
+   "sha256": "664434e162632cebc4a609eda5e5fb8936b5f5ac3bfd1e4e86883155c5b7881d"
   },
   {
    "i": 39,

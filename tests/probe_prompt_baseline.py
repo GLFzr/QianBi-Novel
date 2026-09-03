@@ -513,11 +513,12 @@ def _diff(old: list, new: list):
     return lines
 
 
-def wiring_check(rec) -> list:
-    """P4 接线断言：预设里填了的字段，必须出现在承载它的那张最终 prompt 里
+def wiring_check(rec, proj: str) -> list:
+    """P4 接线断言：预设里填了的字段、书里声明的 must 契约，
+    都必须出现在承载它的那张最终 prompt 里
 
     基线只保证「字节不变」，字节不变地丢掉一个字段它测不出来——所以这里按
-    装配点正向取词：用户填的每个字段都要在它该在的地方出现一次。
+    装配点正向取词：用户填的每个字段、作者声明的每条 must，都要在它该在的地方出现。
     """
     from app import presets as genre_presets
 
@@ -562,6 +563,24 @@ def wiring_check(rec) -> list:
                 fails.append("review_extra 未进 review prompt")
         elif val not in all_prompts:
             fails.append(f"{key}（{label}）在任何装配点都没出现")
+
+    # —— must 契约接线：每条 must 都要出现在会改正文的装配点里 ——
+    # 扩写/压缩/去味/局部改写四张模板历史上不带契约，而它们全在整章/整段重写正文；
+    # 少一条 = 那一步在裸写，只能等终审概率性抓。规则文本从 regex_rules 动态取，
+    # 免得改了夹具 RG_FIXTURE 之后这条断言悄悄变成空转。
+    _MUST_KINDS = ("prose", "enrich", "trim", "deslop", "selection", "review")
+    must_rules = [r["rule"] for r in project.regex_rules(proj, "logic")
+                  if r["level"] == "must"]
+    if not must_rules:
+        fails.append("夹具 正则.md 没有 must 级规则，must 接线断言将空转")
+    for kind in _MUST_KINDS:
+        if not by_kind.get(kind):
+            fails.append(f"装配点 {kind} 本次未出现，无法验证 must 契约接线")
+            continue
+        for rule in must_rules:
+            if rule not in merged(kind):
+                fails.append("must 契约「%s…」未进 %s prompt（该步在裸写正文）"
+                             % (rule[:20], kind))
     return fails
 
 
@@ -577,7 +596,7 @@ def main() -> int:
     print(f"装配点调用次数={len(entries)}  "
           f"唯一 kind={sorted({e['kind'] for e in entries})}")
 
-    fails = wiring_check(rec)
+    fails = wiring_check(rec, proj)
     if fails:
         print(f"WIRING FAIL {len(fails)} 处预设字段断链：")
         for ln in fails:

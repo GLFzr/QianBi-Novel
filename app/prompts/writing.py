@@ -123,6 +123,9 @@ ENRICH_PROMPT = """你是网络小说写手。以下第 {chapter_num} 章正文�
 ## 专属口头禅黑名单（扩写新增内容同样适用）
 {tic_blacklist}
 
+## 本书正则契约（must 级）
+{must_block}
+
 ## 原文
 {prose}
 
@@ -146,6 +149,9 @@ TRIM_PROMPT = """你是网络小说写手。以下第 {chapter_num} 章正文当
 
 ## 专属口头禅黑名单（压缩后同样适用）
 {tic_blacklist}
+
+## 本书正则契约（must 级）
+{must_block}
 
 ## 原文
 {prose}
@@ -178,6 +184,9 @@ DESLOP_REWRITE_PROMPT = """你是文字编辑。以下章节正文被本地扫�
 9. 同一替换写法不要反复出现（不要每次都"垂下眼"）
 10. 保持字数基本不变（±10%），保持剧情与细纲一致，保持对白引号格式与原文一致
 
+## 本书正则契约（must 级）
+{must_block}
+
 ## 专属口头禅黑名单（改写中同样禁用/限量）
 {tic_blacklist}
 
@@ -200,6 +209,9 @@ SELECTION_REWRITE_PROMPT = """你是网络小说编辑。用户选中了章节�
 ## 选中段落之后的上下文（仅作衔接参考，不要改动）
 {after_context}
 {core_setting_block}
+## 本书正则契约（must 级）
+{must_block}
+
 ## 改写原则
 1. 只输出改写后的选中段落本身，不要包含任何解释、前后缀、引号包裹
 2. 严格围绕用户的修改想法展开；想法未提到的部分保持原文
