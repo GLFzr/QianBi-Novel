@@ -64,6 +64,11 @@ check("锁定/解锁不动版本历史", vs_before == vs_after and vs_before)
 b = Bridge()
 b.openProject(proj)
 b.openChapter(1)
+# 本探针只验锁语义：字数目标配成夹具实际字数（#41 闸门由 probe_word_block 覆盖）；
+# 锁定后的反哺打桩，保持零线程零网络
+b.cfg.setdefault("writing", {})["chapter_word_target"] = project.count_chars(
+    project.read_file(chapter_path))
+b._maybe_backflow = lambda num, force=False: None
 check("bridge 初始未锁", b.chapterLocked is False)
 b.confirmChapterLocked()
 check("confirmChapterLocked 锁定", b.chapterLocked is True)

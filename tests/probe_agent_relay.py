@@ -2,7 +2,7 @@
 """Agent 接力编排探针（M5 · router 打桩 · 无需 LLM / 无网络）：
 ① 每 Agent 只注入上环节产物/交接块（参考块内容与上限断言）
 ② SupervisorWorker 上下文 ≤6k 量级 + 只出报告不产正文
-③ bridge 触发点：定稿前已比对→确定即锁定；世界书变更→影响提示（locked 章）
+③ bridge 触发点：定稿前已比对→确定即锁定（仍受 #41 字数闸门约束）；世界书变更→影响提示（locked 章）
 """
 import os
 import sys
@@ -37,7 +37,7 @@ class StubClient:
     def chat(self, prompt):
         return self.text
 
-    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None):
+    def chat_stream(self, prompt, on_chunk=None, on_reasoning=None, **kw):
         return self.text
 
 
@@ -95,14 +95,36 @@ b = Bridge()
 b.openProject(proj)
 b.openChapter(1)
 b.setCwMode(True)
-# 触发点①：已比对过 → 确定即锁定（不触发 worker）
+# 本探针零线程零网络：比对 worker 与锁定后的反哺都只记账，不真起 QThread
+sup_started, blocked = [], []
+b._start_cw_supervisor = lambda: sup_started.append(1)
+b._maybe_backflow = lambda num, force=False: None
+b.lockBlocked.connect(lambda num, reason, actual, target: blocked.append((num, target)))
 s2 = st.load_state(proj)
-st.ensure_cw(s2)["supervised"] = {"1": "08-19 20:00"}
 st.ensure_cw(s2)["stage"] = st.STAGE_CW_PROSE
 st.save_state(proj, s2)
 b.selectCwStage(st.STAGE_CW_PROSE)   # 视图同步到机器阶段
+# 触发点①前半：本章还没比对过 → 「确定」先派主 Agent，而不是直接锁
+b.confirmCwStage()
+check("未比对→派主 Agent 比对而非直接锁定", sup_started == [1] and b.chapterLocked is False)
+# 触发点①后半：已比对过 → 确定即锁定（不重复派比对）
+s2 = st.load_state(proj)
+st.ensure_cw(s2)["supervised"] = {"1": "08-19 20:00"}
+st.save_state(proj, s2)
+# 夹具正文 345 字：把字数目标配成 350 走「达标即锁定」主路径（细纲目标受
+# gates ±50% 防幻觉回退约束，改配置才是正解）
+b.cfg.setdefault("writing", {})["chapter_word_target"] = 350
 b.confirmCwStage()
 check("已比对→确定即锁定", b.chapterLocked is True)
+check("已比对不再派比对 worker/不被闸门拦下", sup_started == [1] and blocked == [])
+project.attempt_unlock(proj, 1)
+# #41 边界：已比对不豁免字数闸门，短章只能 lockBlocked 走强锁确认，不得静默锁定
+b.cfg["writing"]["chapter_word_target"] = 3000
+project.write_file(chapter_path, "# 第1章 雨夜\n\n他很惊讶。")
+b.openChapter(1)
+b.confirmCwStage()
+check("已比对但字数未达标 → 拦截而非静默锁定",
+      b.chapterLocked is False and blocked == [(1, 3000)] and sup_started == [1])
 project.attempt_unlock(proj, 1)
 # 触发点②：世界书变更 → locked 章影响提示（纯逻辑，不发 LLM）
 project.set_chapter_locked(proj, 1, True)
