@@ -13,6 +13,9 @@
 
 - [ ] `python -m pytest tests/unit -q` 全绿
 - [ ] 探针全绿：probe_gate_flow / probe_gate_ui / probe_console / probe_chapter_lock（按改动面选）
+- [ ] 改过界面：`python tests/probe_qml_compile.py`（build_release 已必跑。QML 属性写错会让
+      整棵界面树静默加载失败，单测与 prompt 基线都看不见它）
+- [ ] 改过更新通道/关于页：`python tests/probe_about_ui.py`
 - [ ] TUI `run.py --smoke` 全绿（共享层改动时必跑）
 - [ ] 涉流水线改动：≥3 章真机小 e2e（产物留档）
 - [ ] **禁止 `--skip-tests` / `--skip-probe` 发版**
@@ -35,15 +38,19 @@
 
 - [ ] 安装器：安装 → 首启向导出现 → 完成向导
 - [ ] 新建项目 → 配置 Key → 跑 1 章（小 e2e）→ 定稿
-- [ ] 升级安装（旧版之上）→ 书架/配置保留
-- [ ] 卸载 → 程序目录移除、用户数据保留
+- [ ] 升级安装（旧版之上）→ 书架/配置保留；`{app}\_internal` 已清空重建（无上一版残留文件）
+- [ ] 故意把安装位置指到某本书的目录 → 目录页拦下不让继续
+- [ ] 卸载 → 程序目录移除、用户数据（`~/.qianbi_novel` 与书稿目录）保留
 - [ ] 单实例：双开第二次启动只唤起既有窗口
 - [ ] 崩溃对话框：无网/无效 Key 场景不出崩溃弹窗（走正常错误提示）
 
 ## 5. 更新通道
 
 - [ ] `latest.json` 已更新（version/url/notes/sha256）并推送到仓库/OSS
+- [ ] 清单里的 sha256 与本次实际产出的 setup.exe 复核一致（单测只验格式，指错包它看不见）
 - [ ] 旧版本应用内「检查更新」能看到新版（或 404 静默——首次发版属正常）
+- [ ] 开机自动检查默认关闭；开与关两条路径由 `probe_about_ui.py` 覆盖
+- [ ] README「如何更新」与 Release 正文的升级说明已按本版改动更新
 
 ## 6. 发布物
 

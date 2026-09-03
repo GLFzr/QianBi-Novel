@@ -87,15 +87,18 @@ def portable_readme(version: str) -> bytes:
 
 你的数据在哪里
 --------------
-两种版本共用同一个数据目录：
+程序与数据分开，两种版本共用同一套数据位置：
 
     %USERPROFILE%\\.qianbi_novel\\
         config.json     连接与闸门配置
-        books\\          你的小说项目（每本书一个文件夹）
         presets\\        自定义题材预设
         logs\\           运行日志与崩溃现场
+    %USERPROFILE%\\Documents\\千笔一文\\
+        <书名>\\          你的小说项目（每本书一个文件夹，
+                         新建时可在「保存位置」改到别处）
 
-想备份或迁移，整个目录拷走即可。删掉该目录 = 彻底清除。
+想备份或迁移，上面两个目录都要拷走——只拷 .qianbi_novel 会丢掉全部书稿。
+删掉这两个目录 = 彻底清除；程序目录里没有你的稿子。
 
 API Key 存在哪
 --------------
@@ -154,13 +157,18 @@ def main():
     else:
         print("[WARN] --skip-tests：质量闸门已跳过（发版禁用）")
 
-    # ---- 2.5 不可跳过的两道装配/同源闸门 ----
-    # 这两条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
-    # 一次静默的 prompt 断链或共享层漂移，照样能一路打完安装包。
+    # ---- 2.5 不可跳过的三道装配闸门 ----
+    # 这三条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
+    # 一次静默的 prompt 断链、一个写错的 QML 属性或共享层漂移，照样能一路打完安装包。
     # 刻意不受 --skip-tests / --skip-probe 管辖。
     r = subprocess.run([sys.executable, "tests/probe_prompt_baseline.py"], cwd=ROOT)
     step("提示词装配基线", r.returncode == 0,
          "漂移或接线断裂（确认是预期变更后 --update-baseline 重刷）" if r.returncode else "零漂移")
+
+    r = subprocess.run([sys.executable, "tests/probe_qml_compile.py"], cwd=ROOT)
+    step("QML 静态编译", r.returncode == 0,
+         "有组件编译失败（整棵树会加载不出来，界面白屏/双击无反应）"
+         if r.returncode else "全部组件可编译")
 
     r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
     if r.returncode == 2:

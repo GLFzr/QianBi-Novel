@@ -54,8 +54,13 @@ Dialog {
         Text {
             Layout.fillWidth: true
             text: {
-                if (updateState.hasNew)
-                    return "发现新版本 v" + updateState.version + (updateState.notes !== "" ? "\n" + updateState.notes : "")
+                if (updateState.hasNew) {
+                    var s = "发现新版本 v" + updateState.version
+                            + (updateState.notes !== "" ? "\n" + updateState.notes : "")
+                    if (updateState.sha256 !== "")
+                        s += "\n安装包 SHA-256：" + updateState.sha256
+                    return s
+                }
                 if (updateState.checking)
                     return "正在检查更新…"
                 return "开源软件（MIT License）· 本地数据 · 自带模型 Key"
@@ -78,11 +83,34 @@ Dialog {
                 onToggled: bridge.setTelemetryEnabled(checked)
             }
         }
+        RowLayout {
+            Layout.fillWidth: true
+            CheckBox {
+                objectName: "autoCheckRow"
+                text: "启动时检查更新（开机访问 GitHub 取版本清单；默认关闭）"
+                checked: bridge.updateAutoCheck
+                font.pixelSize: Theme.fsTiny
+                onToggled: bridge.setUpdateAutoCheck(checked)
+            }
+        }
+
+        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+
+        // 升级前该知道哪些目录不会被动：安装器只覆盖程序目录
+        Text {
+            Layout.fillWidth: true
+            text: "更新只覆盖程序目录，不会写入下面这些位置：\n书稿：" + bridge.defaultBooksRoot()
+                  + "\n配置：" + bridge.dataDirPath()
+            color: Theme.textTertiary
+            font.pixelSize: 10
+            wrapMode: Text.WrapAnywhere
+        }
 
         RowLayout {
             spacing: 8
             AppButton { text: "打开日志目录"; onClicked: bridge.openLogDir() }
             AppButton { text: "打开数据目录"; onClicked: bridge.openDataDir() }
+            AppButton { text: "打开书稿目录"; onClicked: bridge.openPath(bridge.defaultBooksRoot()) }
             Item { Layout.fillWidth: true }
             AppButton {
                 text: "关闭"
@@ -107,19 +135,22 @@ Dialog {
         property string version: ""
         property string notes: ""
         property string url: ""
+        property string sha256: ""
     }
     Connections {
         target: bridge
-        function onUpdateFound(version, notes, url) {
+        function onUpdateFound(version, notes, url, sha256) {
             updateState.hasNew = true
             updateState.checking = false
             updateState.version = version
             updateState.notes = notes
             updateState.url = url
+            updateState.sha256 = sha256
         }
     }
     onClosed: {
         updateState.hasNew = false
         updateState.checking = false
+        updateState.sha256 = ""
     }
 }

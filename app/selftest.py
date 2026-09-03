@@ -37,7 +37,7 @@ _IMPORT_TARGETS = [
     "httpx", "keyring.backends.Windows",
     "app.wb", "app.core.scan", "app.core.stages", "app.core.gates", "app.core.memory",
     "app.prompts.scene_cards", "app.presets", "app.llm.client", "app.importdoc",
-    "app.ui.bridge",
+    "app.update_check", "app.ui.bridge",
 ]
 
 # ---- 资源清单范围：datas 收了什么就比什么；None 表示该目录下全部文件 ----

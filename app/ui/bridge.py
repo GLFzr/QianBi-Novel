@@ -798,6 +798,37 @@ class _DocImportWorker(QThread):
             self.sig_done.emit(False, products, str(e))
 
 
+class _UpdateWorker(QThread):
+    """检查更新：清单在子线程拉，结果经 Qt 信号排队回主线程
+
+    不用裸 threading.Thread 直接 emit——那等于从别的线程调进正在求值的 QML 绑定。
+    三态分开报：`update_check.check` 把「网络失败」和「无新版」都吞成 None，
+    照它返回就会把断网说成「已是最新版本」，是假绿。
+    """
+    found = Signal(str, str, str, str)     # version, notes, url, sha256
+    latest = Signal()
+    failed = Signal(str)
+
+    def __init__(self, url: str, local_version: str, parent=None):
+        super().__init__(parent)
+        self._url, self._local = url, local_version
+
+    def run(self):
+        from .. import update_check
+        try:
+            m = update_check.fetch_manifest(self._url)
+        except Exception as e:  # noqa: BLE001
+            self.failed.emit(str(e))
+            return
+        if m is None:
+            self.failed.emit("无法获取版本清单")
+        elif update_check.is_newer(str(m.get("version", "")), self._local):
+            self.found.emit(str(m.get("version", "")), str(m.get("notes", "")),
+                            str(m.get("url", "")), str(m.get("sha256", "")))
+        else:
+            self.latest.emit()
+
+
 # ---------- 主桥 ----------
 
 class Bridge(QObject):
@@ -863,7 +894,7 @@ class Bridge(QObject):
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
     mainWindowReady = Signal()                  # 主窗口就绪（单实例唤起时序）
-    updateFound = Signal(str, str, str)         # 检查更新：version, notes, url
+    updateFound = Signal(str, str, str, str)    # 检查更新：version, notes, url, sha256
     generalChanged = Signal()                   # 向导/遥测等通用设置变更
     usageChanged = Signal()                     # token 用量统计刷新（插件）
 
@@ -917,6 +948,8 @@ class Bridge(QObject):
         self._console_timer.setInterval(120)   # 思考链增量合并窗口（见 _notify_console）
         self._console_timer.timeout.connect(self._flush_console)
         self._console_expanded = bool(self.cfg.get("general", {}).get("console_expanded", False))
+        # 检查更新：同一时间只允许一个清单请求
+        self._update_worker = None
         # 外部文档导入：原文留在内存，预览确认后才落盘
         self._import_worker = None
         self._import_busy = False
@@ -1396,25 +1429,55 @@ class Bridge(QObject):
         self.toast.emit("ok", "遥测已" + ("开启（数据仅保存在本地）" if on else "关闭"))
 
     # ---- 检查更新（T3.4，GitHub Releases 主通道）----
+    @Property(bool, notify=generalChanged)
+    def updateAutoCheck(self) -> bool:
+        return bool((cfg_mod.load_config().get("updates") or {}).get("auto_check", False))
+
+    @Slot(bool)
+    def setUpdateAutoCheck(self, on: bool):
+        cfg = cfg_mod.load_config()
+        cfg.setdefault("updates", {})["auto_check"] = bool(on)
+        cfg_mod.save_config(cfg)
+        self.generalChanged.emit()
+        self.toast.emit("ok", "启动时检查更新已" + ("开启" if on else "关闭"))
+
     @Slot(bool)
     def checkForUpdates(self, manual: bool):
         cfg = cfg_mod.load_config()
         u = cfg.get("updates") or {}
-        if not manual and not u.get("check_on_start", True):
+        if not manual and not u.get("auto_check", False):
+            return
+        if self._update_worker is not None and self._update_worker.isRunning():
             return
         from .. import __version__
-        url = u.get("manifest_url", "")
 
-        def work():
-            from .. import update_check
-            m = update_check.check(url, __version__)
-            if m:
-                self.updateFound.emit(str(m.get("version", "")),
-                                      str(m.get("notes", "")),
-                                      str(m.get("url", "")))
-            elif manual:
+        w = _UpdateWorker(u.get("manifest_url", ""), __version__, self)
+        self._update_worker = w
+
+        def done():
+            self._update_worker = None
+            w.deleteLater()
+
+        def on_found(version, notes, url, sha256):
+            done()
+            self.updateFound.emit(version, notes, url, sha256)
+            if not manual:   # 「关于」没打开时也要看得见，否则自动检查等于没检查
+                self.toast.emit("info", f"发现新版本 v{version}（「关于」页可前往下载）")
+
+        def on_latest():
+            done()
+            if manual:
                 self.toast.emit("ok", f"已是最新版本 v{__version__}")
-        threading.Thread(target=work, daemon=True).start()
+
+        def on_failed(reason):
+            done()
+            if manual:
+                self.toast.emit("warn", f"检查更新失败：{reason}")
+
+        w.found.connect(on_found)
+        w.latest.connect(on_latest)
+        w.failed.connect(on_failed)
+        w.start()
 
     @Slot(str)
     def openPath(self, path: str):
@@ -1426,11 +1489,16 @@ class Bridge(QObject):
 
     @Slot()
     def openLogDir(self):
-        self.openPath(os.path.join(os.path.expanduser("~"), ".qianbi_novel", "logs"))
+        from .. import logger
+        self.openPath(logger.LOG_DIR)
+
+    @Slot(result=str)
+    def dataDirPath(self) -> str:
+        return cfg_mod.CONFIG_DIR
 
     @Slot()
     def openDataDir(self):
-        self.openPath(os.path.join(os.path.expanduser("~"), ".qianbi_novel"))
+        self.openPath(self.dataDirPath())
 
     @Slot(str, str)
     def emitCrash(self, summary: str, path: str):

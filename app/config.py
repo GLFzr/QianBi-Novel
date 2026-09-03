@@ -4,6 +4,7 @@
 存于用户目录 ~/.qianbi_novel/config.json；自动迁移旧版（.oh_story_desktop）配置。
 """
 import json
+import logging
 
 from . import secrets
 import os
@@ -60,8 +61,10 @@ DEFAULT_CONFIG = {
     "recent_projects": [],
     "general": {"onboarded": False},          # 首启向导（T3.5）
     "telemetry": {"enabled": False},           # 遥测 opt-in（D6：默认关，本地落点）
-    "updates": {"manifest_url": "https://raw.githubusercontent.com/GLFzr/qianbi-novel/main/latest.json",
-                "check_on_start": True},       # GitHub Releases 主通道（D3，仓库公开后生效）
+    "updates": {"manifest_url": "https://raw.githubusercontent.com/GLFzr/QianBi-Novel/main/latest.json",
+                # 开机自连 GitHub 属于对外请求，与「数据不出本机」的默认承诺冲突，
+                # 所以默认只做手动检查；要开机自动查在「关于」里显式打开。
+                "auto_check": False},
 }
 
 
@@ -117,6 +120,19 @@ def _migrate_builtin_connections(cfg: dict) -> dict:
     return cfg
 
 
+def _migrate_updates(cfg: dict) -> dict:
+    """旧键 updates.check_on_start → auto_check
+
+    旧键在 v0.15 里从没被任何调用点读到（自动检查根本没接线），磁盘上那个 True
+    是出厂默认而不是用户选择，原样搬到新键上等于升级后偷偷开机联网。
+    """
+    u = cfg.get("updates")
+    if isinstance(u, dict) and "check_on_start" in u:
+        u.pop("check_on_start")
+        u.setdefault("auto_check", False)
+    return cfg
+
+
 def load_config() -> dict:
     os.makedirs(CONFIG_DIR, exist_ok=True)
     _migrate_legacy_dir()
@@ -142,14 +158,31 @@ def load_config() -> dict:
             if merged["slots"].get(slot) not in ids:
                 merged["slots"][slot] = merged["connections"][0]["id"]
         _migrate_builtin_connections(merged)
+        _migrate_updates(merged)
         # 补全新内置连接模板（如 ocgo-flash，无 key，用户在界面填写）
         for c in DEFAULT_CONNECTIONS:
             if c["id"] not in ids:
                 merged["connections"].append(json.loads(json.dumps(c)))
         merged = secrets.hydrate(merged)
         return merged
-    except Exception:
+    except Exception as e:  # noqa: BLE001
+        # 读不懂/读不到 ≠ 没有配置：先把用户那份另存，再回落默认值。
+        # 直接返回默认值会让下一次 save_config 覆盖掉连接档案与槽位绑定。
+        _quarantine_config()
+        logging.getLogger("qianbi.config").warning(
+            "config.json 解析失败（%s），已另存为 config.json.broken-* 并使用默认配置", e)
         return json.loads(json.dumps(DEFAULT_CONFIG))
+
+
+def _quarantine_config():
+    """把无法解析的 config.json 另存一份，保住用户设置的可恢复性"""
+    import time
+    bak = "%s.broken-%s" % (CONFIG_FILE, time.strftime("%Y%m%d%H%M%S"))
+    try:
+        os.replace(CONFIG_FILE, bak)
+        return bak
+    except OSError:
+        return ""   # 文件被占用等情况：不抛，交给调用方回落默认值
 
 
 def save_config(cfg: dict):

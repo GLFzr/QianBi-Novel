@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""运行日志落盘：~/.qianbi_novel/logs/qianbi.log（滚动，单文件 2MB × 5 份）
+"""运行日志落盘：配置目录下的 logs/qianbi.log（滚动，单文件 2MB × 5 份）
 
+- 目录与 config.json 同源：QIANBI_CONFIG_DIR 能一并重定向，探针不再写进真实家目录
 - 模块约定：llm 层用 logging.getLogger("qianbi.llm")，core 用 "qianbi.core"
 - UI 内存日志（logModel）之外的第二通道，崩溃/异常后仍可回溯
 """
@@ -8,7 +9,9 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-LOG_DIR = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "logs")
+from . import config as _cfg
+
+LOG_DIR = os.path.join(_cfg.CONFIG_DIR, "logs")
 LOG_FILE = os.path.join(LOG_DIR, "qianbi.log")
 
 _configured = False

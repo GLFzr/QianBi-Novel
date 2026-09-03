@@ -179,6 +179,8 @@ ApplicationWindow {
         if (bridge.hasRecoverableDraft) Qt.callLater(function () { recoverDialog.open() })
         // 首启向导（T3.5）：未完成过引导 → 自动弹出
         if (!bridge.onboarded) Qt.callLater(function () { wizardDialog.open() })
+        // 开机检查更新：要不要联网由 Python 侧读 updates.auto_check（默认关）
+        Qt.callLater(function () { bridge.checkForUpdates(false) })
         // 窗口位置超出屏幕可视区时重置居中（防窗口被拖出屏幕导致内容"被挡住"）
         Qt.callLater(function () {
             var aw = Screen.desktopAvailableWidth
