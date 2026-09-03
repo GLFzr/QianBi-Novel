@@ -154,6 +154,23 @@ def main():
     else:
         print("[WARN] --skip-tests：质量闸门已跳过（发版禁用）")
 
+    # ---- 2.5 不可跳过的两道装配/同源闸门 ----
+    # 这两条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
+    # 一次静默的 prompt 断链或共享层漂移，照样能一路打完安装包。
+    # 刻意不受 --skip-tests / --skip-probe 管辖。
+    r = subprocess.run([sys.executable, "tests/probe_prompt_baseline.py"], cwd=ROOT)
+    step("提示词装配基线", r.returncode == 0,
+         "漂移或接线断裂（确认是预期变更后 --update-baseline 重刷）" if r.returncode else "零漂移")
+
+    r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
+    if r.returncode == 2:
+        # 退出码 2 = 目录无效；从本仓库跑 GUI 必然有效，故只可能是 TUI 未检出
+        print("[WARN] 共享层同源检查：未找到 TUI 检出，已跳过（rc=2）")
+    else:
+        step("共享层同源检查", r.returncode == 0,
+             "有漂移：改 app/core|llm|prompts|presets 须双端同步或在 EXPECTED_DIFFS 登记"
+             if r.returncode else "同步")
+
     # ---- 3. version_info.txt（版本资源，动态生成不入库）----
     parts = __version__.split(".")
     while len(parts) < 3:
