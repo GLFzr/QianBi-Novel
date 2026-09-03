@@ -37,6 +37,11 @@ Canvas {
         function stroke2() { ctx.stroke() }
 
         switch (name) {
+        case "contract":  // 契约：盾牌 + 对勾
+            p(); mv(.5, .16); ln(.82, .3); ln(.82, .54)
+            ln(.5, .84); ln(.18, .54); ln(.18, .3); ln(.5, .16); stroke2()
+            p(); mv(.36, .48); ln(.47, .6); ln(.66, .38); stroke2()
+            break
         case "shelf":  // 书架：两本竖书
             p(); mv(.28, .22); ln(.28, .78); stroke2()
             p(); mv(.72, .22); ln(.72, .78); stroke2()

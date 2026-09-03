@@ -31,6 +31,7 @@ ApplicationWindow {
         { "label": "书架", "icon": "shelf", "key": "shelf" },
         { "label": "流水线", "icon": "play", "key": "pipeline" },
         { "label": "章节", "icon": "chapters", "key": "chapters" },
+        { "label": "契约", "icon": "contract", "key": "contract" },
         { "label": "笔记", "icon": "notes", "key": "notes" },
         { "label": "预设库", "icon": "library", "key": "library" },
         { "label": "设置", "icon": "settings", "key": "settings" }
@@ -57,6 +58,13 @@ ApplicationWindow {
             var n = Math.min(full.length, shown.length + Math.max(2, Math.ceil((full.length - shown.length) / 6)))
             mainWindow.streamShown = full.substring(0, n)
         }
+    }
+
+    // 面板序号由 navItems 推导：加一块面板不会再出现「索引和 key 对不上」
+    function panelIndexOf(key) {
+        for (var i = 0; i < navItems.length; i++)
+            if (navItems[i].key === key) return i
+        return 0
     }
 
     // 进入沉浸阅读：当前章含未保存工作副本时把编辑器内容一并带入（未定稿徽章）
@@ -304,11 +312,7 @@ ApplicationWindow {
                 id: panelStack
                 objectName: "panelStack"
                 anchors.fill: parent
-                currentIndex: mainWindow.activePanel === "shelf" ? 0
-                             : mainWindow.activePanel === "pipeline" ? 1
-                             : mainWindow.activePanel === "chapters" ? 2
-                             : mainWindow.activePanel === "notes" ? 3
-                             : mainWindow.activePanel === "library" ? 4 : 5
+                currentIndex: mainWindow.panelIndexOf(mainWindow.activePanel)
 
                 BookshelfPanel {}
                 PipelinePanel {
@@ -325,6 +329,9 @@ ApplicationWindow {
                         needsFixDialog.refresh()
                         needsFixDialog.open()
                     }
+                }
+                ContractPanel {
+                    onOpenProjectFile: function (rel) { chapterPanelProxy.openProjectFile(rel) }
                 }
                 NotesPanel {}
                 PresetLibraryPanel {}

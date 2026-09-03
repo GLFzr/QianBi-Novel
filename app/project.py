@@ -263,12 +263,14 @@ def regex_rules(proj: str, semantics: str = "logic") -> list:
       条目带 ｜disabled 标记即整条跳过（多行块内任一行行尾都算）
     - semantics="regex"（字面正则样本，备选）：只取条目内反引号包裹的 pattern 作 rule
     - 文件缺失/为空 → 空列表（组装方负责占位回退）
+    - line_start / line_end：条目在 设定/正则.md 里的行号区间（含端点）。
+      只给规则编辑器改单条/删单条用，不进 prompt 文本（regex_block 不读它们）
     """
     doc = read_file(os.path.join(proj, REGEX_PATH))
     if not doc.strip():
         return []
-    entries, cur = [], None
-    for raw in doc.splitlines():
+    entries, cur = [], None      # cur = [条目文本, 起始行, 结束行]
+    for i, raw in enumerate(doc.splitlines()):
         s = raw.strip()
         if not s or s.startswith("#"):
             if cur is not None:
@@ -278,15 +280,16 @@ def regex_rules(proj: str, semantics: str = "logic") -> list:
         if re.match(r"^[-•*]\s+", s):
             if cur is not None:
                 entries.append(cur)
-            cur = re.sub(r"^[-•*]\s+", "", s)
+            cur = [re.sub(r"^[-•*]\s+", "", s), i, i]
         elif cur is not None:
-            cur += " " + s
+            cur[0] += " " + s
+            cur[2] = i
         else:
-            entries.append(s)
+            entries.append([s, i, i])
     if cur is not None:
         entries.append(cur)
     rules = []
-    for entry in entries:
+    for entry, ln0, ln1 in entries:
         entry = entry.strip()
         if not entry:
             continue
@@ -296,7 +299,8 @@ def regex_rules(proj: str, semantics: str = "logic") -> list:
             m = re.search(r"`([^`]+)`", entry)
             rule = m.group(1) if m else entry
             rules.append({"rule": rule[:300], "level": "must", "scope": "样本",
-                          "pattern": (m.group(1) if m else "")[:200], "mode": "forbid"})
+                          "pattern": (m.group(1) if m else "")[:200], "mode": "forbid",
+                          "line_start": ln0, "line_end": ln1})
             continue
         level, scope = "must", "全书"
         m = re.search(r"level\s*[:：]\s*(must|should)", entry)
@@ -311,7 +315,8 @@ def regex_rules(proj: str, semantics: str = "logic") -> list:
         rule = re.sub(r"(?:[｜|]\s*)?(?:level|scope|mode)\s*[:：]\s*[^\s｜|]+", "", entry)
         rule = re.sub(r"\s{2,}", " ", rule).strip(" ｜|")
         rules.append({"rule": rule[:300], "level": level, "scope": scope[:60],
-                      "pattern": (pm.group(1) if pm else "")[:200], "mode": mode})
+                      "pattern": (pm.group(1) if pm else "")[:200], "mode": mode,
+                      "line_start": ln0, "line_end": ln1})
     return rules
 
 
@@ -344,6 +349,57 @@ def regex_block(proj: str, semantics: str = "logic", max_chars: int = 1500,
     if dropped:
         out.append(f"- …另有 {dropped} 条未注入（超出 {max_chars} 字预算）")
     return "\n".join(out)
+
+
+def _regex_rule_line(r: dict) -> str:
+    """把结构化规则写回成一行条目（与 regex_rules 的解析格式对偶）"""
+    body = re.sub(r"^规则\s*[:：]\s*", "", str(r.get("rule") or "")).strip()
+    pat = str(r.get("pattern") or "").strip()
+    if pat and pat not in body:
+        body = f"{body}：`{pat}`" if body else f"`{pat}`"
+    seg = [f"- 规则：{body}",
+           f"level：{r.get('level') if r.get('level') in ('must', 'should') else 'must'}",
+           f"scope：{(r.get('scope') or '全书').strip()}"]
+    if r.get("mode") == "require":
+        seg.append("mode：require")
+    return "｜".join(seg)
+
+
+def _splice_regex_lines(proj: str, start: int, end: int, replacement: list) -> bool:
+    """只替换 设定/正则.md 的 [start, end] 行区间：标题/注释/别的条目一律不动"""
+    path = os.path.join(proj, REGEX_PATH)
+    lines = read_file(path).splitlines()
+    if not lines or not (0 <= start <= end < len(lines)):
+        return False
+    lines[start:end + 1] = replacement
+    write_file(path, "\n".join(lines) + "\n")
+    return True
+
+
+def update_regex_rule(proj: str, index: int, **fields) -> bool:
+    """改一条正则规则（fields: rule / level / scope / pattern / mode）
+
+    index 是 regex_rules() 返回列表下标（即「未被 disabled 跳过」的条目序），
+    界面拿到的就是这个顺序，两边天然对齐。
+    """
+    rules = regex_rules(proj)
+    if not (0 <= index < len(rules)):
+        return False
+    merged = dict(rules[index])
+    for k, v in fields.items():
+        if v is not None and k in ("rule", "level", "scope", "pattern", "mode"):
+            merged[k] = v
+    return _splice_regex_lines(proj, merged["line_start"], merged["line_end"],
+                               [_regex_rule_line(merged)])
+
+
+def delete_regex_rule(proj: str, index: int) -> bool:
+    """删一条正则规则：连它自己的续行一起删，其它条目原样保留"""
+    rules = regex_rules(proj)
+    if not (0 <= index < len(rules)):
+        return False
+    r = rules[index]
+    return _splice_regex_lines(proj, r["line_start"], r["line_end"], [])
 
 
 def split_worldbook_product(product: str) -> tuple:

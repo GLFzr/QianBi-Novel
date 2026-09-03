@@ -798,6 +798,7 @@ class Bridge(QObject):
     cwStreamingChanged = Signal()
     cwLockedChanged = Signal()
     cwProsePolished = Signal(str)   # M6：手动去AI味完成，改写文本进编辑器工作副本（不落盘）
+    regexRulesChanged = Signal()    # 本书正则契约条目变动（界面无持久缓存，重取即可）
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -4355,6 +4356,51 @@ class Bridge(QObject):
         self.toast.emit("ok", on and "审校已启用（一致性检查 + 修改轮）" or "审校已停用（写完直接定稿）")
 
     # ---- 「正则」语义（M2：默认逻辑约束规则集；字面正则样本为备选，只影响解析与写入结构）----
+
+    @Slot(result="QVariantList")
+    def regexRuleList(self) -> list:
+        """本书正则契约条目：[{index, rule, level, scope, pattern, mode, broken}]
+
+        broken=True 表示 pattern 编译不了——闸门会把它降成 advisory（提示但不阻断），
+        界面要让用户看见这条**看着像规则、其实管不住**。
+        """
+        if not self.proj:
+            return []
+        out = []
+        for i, r in enumerate(project.regex_rules(self.proj)):
+            broken = False
+            if r.get("pattern"):
+                try:
+                    re.compile(r["pattern"])
+                except re.error:
+                    broken = True
+            out.append({"index": i, "rule": r.get("rule", ""),
+                        "level": r.get("level", "must"), "scope": r.get("scope", "全书"),
+                        "pattern": r.get("pattern", ""), "mode": r.get("mode", "forbid"),
+                        "broken": broken})
+        return out
+
+    @Slot(int, str, str, str)
+    def updateRegexRule(self, index: int, rule: str, level: str, scope: str):
+        """改一条契约（作者显式改，机器不再覆盖）"""
+        if not self.proj:
+            return
+        ok = project.update_regex_rule(self.proj, int(index), rule=rule.strip(),
+                                       level=level, scope=scope.strip() or "全书")
+        self._regex_rule_changed("已更新第 %d 条契约" % (int(index) + 1) if ok
+                                 else "该条目已不存在，请刷新后重试", ok)
+
+    @Slot(int)
+    def deleteRegexRule(self, index: int):
+        if not self.proj:
+            return
+        ok = project.delete_regex_rule(self.proj, int(index))
+        self._regex_rule_changed("已删除该条契约" if ok else "删除失败：条目已不存在", ok)
+
+    def _regex_rule_changed(self, msg: str, ok: bool):
+        self.regexRulesChanged.emit()
+        self.toast.emit("ok" if ok else "warn", msg)
+        self.logModel.append("info", msg + "（自下一次生成起生效，已锁定章节不自动回改）")
 
     @Slot(result=str)
     def regexSemantics(self) -> str:
