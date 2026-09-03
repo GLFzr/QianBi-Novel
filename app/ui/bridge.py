@@ -752,6 +752,52 @@ class _BlurbWorker(QThread):
             self.done.emit(False, str(e))
 
 
+class _DocImportWorker(QThread):
+    """外部文档拆解：长文档按段送辅助槽，逐段回报进度
+
+    只做「拿回模型原文」这一件事——解析、验真、落盘全在主线程，
+    因为验真要用到 scan/project/wb，放线程里反而不好测。
+    """
+    sig_progress = Signal(int, int)      # 已完成段数, 总段数
+    sig_reasoning = Signal(str)
+    sig_done = Signal(bool, list, str)   # ok, [每段模型原文], 错误信息
+
+    def __init__(self, cfg: dict, proj: str, chunks: list, parent=None):
+        super().__init__(parent)
+        self.cfg, self.proj, self.chunks = cfg, proj, chunks
+        self._abort = False
+        self.router = ModelRouter(cfg)
+
+    def abort(self):
+        self._abort = True
+
+    def run(self):
+        from .. import importdoc
+        products = []
+        try:
+            client = self.router.client(cfg_mod.SLOT_HELPER)
+            total = len(self.chunks)
+            for i, chunk in enumerate(self.chunks, 1):
+                if self._abort:
+                    break
+                prompt = importdoc.build_prompt(chunk, i, total, self.proj)
+                text = clean_llm_output(client.chat_stream(
+                    prompt, on_reasoning=self.sig_reasoning.emit,
+                    phase="import_doc", abort=lambda: self._abort))
+                if getattr(client, "last_aborted", False) or self._abort:
+                    break
+                if text.strip():
+                    products.append(text)
+                self.sig_progress.emit(i, total)
+            if self._abort or not products:
+                self.sig_done.emit(False, products,
+                                   "已取消导入" if self._abort else "模型返回为空")
+            else:
+                self.sig_done.emit(True, products, "")
+        except Exception as e:  # noqa: BLE001
+            self.sig_done.emit(False, products, str(e))
+
+
 # ---------- 主桥 ----------
 
 class Bridge(QObject):
@@ -799,6 +845,11 @@ class Bridge(QObject):
     cwLockedChanged = Signal()
     cwProsePolished = Signal(str)   # M6：手动去AI味完成，改写文本进编辑器工作副本（不落盘）
     regexRulesChanged = Signal()    # 本书正则契约条目变动（界面无持久缓存，重取即可）
+    importBusyChanged = Signal()
+    importStageChanged = Signal()
+    importSourceChanged = Signal()
+    importPlanChanged = Signal()        # 预览表内容变了（解析完成 / 勾选状态变化）
+    importResult = Signal(bool, str)    # ok, 落盘报告（对话框据此收起或留在原地报错）
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
@@ -866,6 +917,13 @@ class Bridge(QObject):
         self._console_timer.setInterval(120)   # 思考链增量合并窗口（见 _notify_console）
         self._console_timer.timeout.connect(self._flush_console)
         self._console_expanded = bool(self.cfg.get("general", {}).get("console_expanded", False))
+        # 外部文档导入：原文留在内存，预览确认后才落盘
+        self._import_worker = None
+        self._import_busy = False
+        self._import_stage = ""
+        self._import_name = ""
+        self._import_source = ""
+        self._import_plans = []
         # 共写档状态（CoWriting 状态机 + 一次性 worker）
         self._cw = None
         self._cw_view = ""                     # 对话区查看的阶段（回看历史用，机器阶段不动）
@@ -997,6 +1055,10 @@ class Bridge(QObject):
          "hint": PROVIDERS[k]["hint"], "models": PROVIDERS[k]["models"]}
         for k in PROVIDER_ORDER], constant=True)
     slotLabels = Property("QVariantMap", lambda self: dict(cfg_mod.SLOT_LABELS), constant=True)
+    # ---- 外部文档导入属性 ----
+    isImporting = Property(bool, lambda self: self._import_busy, notify=importBusyChanged)
+    importStageText = Property(str, lambda self: self._import_stage, notify=importStageChanged)
+    importSourceName = Property(str, lambda self: self._import_name, notify=importSourceChanged)
     # ---- 共写档属性（M1）----
     cwMode = Property(str, lambda self: self._get_cw_mode(), notify=cwModeChanged)
     cwStageKey = Property(str, lambda self: self._get_cw_stage_key(), notify=cwStageChanged)
@@ -4413,6 +4475,169 @@ class Bridge(QObject):
         cfg_mod.save_config(self.cfg)
         name = {"logic": "逻辑约束规则集", "regex": "字面正则样本"}[m]
         self.toast.emit("ok", f"「正则」语义已切换为「{name}」（影响解析与写入结构，不阻塞核心路径）")
+
+    # ---- 外部文档一键导入（拆解 → 预览映射 → 确认后才写盘）----
+
+    def _set_import_busy(self, on: bool):
+        if self._import_busy != on:
+            self._import_busy = on
+            self.importBusyChanged.emit()
+
+    def _set_import_stage(self, text: str):
+        if self._import_stage != text:
+            self._import_stage = text
+            self.importStageChanged.emit()
+
+    @Slot(str)
+    def startImportDocument(self, path):
+        """读外部文档并后台拆解；结果经 importPlanChanged 交给预览对话框"""
+        from .. import importdoc
+        if not self.proj:
+            self.toast.emit("warn", "请先打开一本书")
+            return
+        if self._import_busy:
+            self.toast.emit("warn", "上一次解析还在进行中")
+            return
+        real = importdoc.normalize_path(path)
+        text, err = importdoc.read_document(real)
+        if err:
+            self.toast.emit("error", "读不了这份文档：" + err)
+            return
+        chunks, covered = importdoc.split_chunks(text)
+        self._import_source, self._import_name = text, os.path.basename(real)
+        self._import_plans = []
+        self.importSourceChanged.emit()
+        self.importPlanChanged.emit()
+        if covered < len(text):
+            self.toast.emit("warn", "文档 %d 字，超出单次解析上限，本轮只拆解前 %d 字；"
+                                 "剩下的请再导一次" % (len(text), covered))
+        self._set_import_busy(True)
+        self._set_import_stage("拆解中 0/%d 段…" % len(chunks))
+        w = _DocImportWorker(self.cfg, self.proj, chunks, self)
+        w.sig_progress.connect(lambda i, n: self._set_import_stage("拆解中 %d/%d 段…" % (i, n)))
+        w.sig_done.connect(self._on_import_done)
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        self._import_worker = w
+        w.start()
+
+    def _on_import_done(self, ok: bool, products, err: str):
+        from .. import importdoc
+        self._import_worker = None
+        self._set_import_busy(False)
+        self._set_import_stage("")
+        if not ok:
+            msg = err or "模型没有返回可解析的内容"
+            self.importResult.emit(False, msg)
+            self.toast.emit("error", "文档拆解失败：" + msg)
+            return
+        try:
+            groups = [importdoc.parse_product(p) for p in products]
+            plans = importdoc.annotate(importdoc.merge_items(groups),
+                                       self._import_source, self.proj)
+        except Exception as e:  # noqa: BLE001  解析器异常不该把对话框卡死
+            logger.exception("导入拆解产物解析失败")
+            self.importResult.emit(False, "拆解结果解析失败：%s" % e)
+            return
+        self._import_plans = plans
+        self.importPlanChanged.emit()
+        if not plans:
+            self.importResult.emit(
+                False, "这份文档里没有识别出任何可导入的部分——"
+                       "程序只认逐字对得上原文的内容，模型补写的一律不算")
+        else:
+            bad = sum(1 for p in plans if not p["trust"])
+            self.toast.emit("info", "识别出 %d 个部分%s，请核对映射后确认导入"
+                            % (len(plans), ("（%d 个未验真）" % bad) if bad else ""))
+
+    @Slot(result="QVariantList")
+    def importItems(self) -> list:
+        """预览表（不含正文，正文按 index 用 importItemContent 取，避免整表来回拷）"""
+        return [{"index": i, "key": p["key"], "label": p["label"], "num": p["num"],
+                 "target": p["target"], "chars": p["chars"], "checked": p["checked"],
+                 "trust": p["trust"], "reason": p["reason"], "exists": p["exists"],
+                 "quotesOk": p["quotesOk"], "quotesTotal": p["quotesTotal"],
+                 "verbatim": p["verbatim"], "preview": p["preview"],
+                 "suggested": bool(p.get("suggested")), "canon": p.get("canon") or ""}
+                for i, p in enumerate(self._import_plans)]
+
+    @Slot(result="QVariantList")
+    def importBatches(self) -> list:
+        """历史导入批次（新→旧），契约页据此提供整批撤销"""
+        if not self.proj:
+            return []
+        from .. import importdoc
+        return importdoc.import_batches(self.proj)
+
+    @Slot(str)
+    def revertImport(self, batch_id: str):
+        """按导入清单回滚一批：只删确定属于这批的行/分区/文件，作者改过的一律不动"""
+        if not self.proj or not batch_id:
+            return
+        from .. import importdoc
+        r = importdoc.revert_import(self.proj, str(batch_id))
+        self.toast.emit("ok" if r["ok"] else "warn", r["report"])
+        self.logModel.append("info", "撤销导入：" + r["report"])
+        self.regexRulesChanged.emit()
+        self.refreshQueue()
+        self._refresh_progress()
+
+    @Slot(int, result=str)
+    def importItemContent(self, index: int) -> str:
+        i = int(index)
+        if 0 <= i < len(self._import_plans):
+            return self._import_plans[i]["content"]
+        return ""
+
+    @Slot(int, bool)
+    def setImportChecked(self, index: int, on: bool):
+        """单项勾选不发 importPlanChanged——整表重建会把滚动位置弹回顶部"""
+        i = int(index)
+        if 0 <= i < len(self._import_plans):
+            self._import_plans[i]["checked"] = bool(on)
+
+    @Slot(bool)
+    def setImportAllChecked(self, on: bool):
+        for p in self._import_plans:
+            p["checked"] = bool(on)
+        self.importPlanChanged.emit()
+
+    @Slot(result="QVariantMap")
+    def importSummary(self) -> dict:
+        from .. import importdoc
+        plans = self._import_plans
+        return {
+            "items": len(plans),
+            "trusted": sum(1 for p in plans if p["trust"]),
+            "untrusted": sum(1 for p in plans if not p["trust"]),
+            "checked": sum(1 for p in plans if p["checked"]),
+            "chars": sum(p["chars"] for p in plans if p["checked"]),
+            "sourceChars": len(self._import_source),
+            "missing": [m["label"] for m in importdoc.missing_slots(plans)],
+        }
+
+    @Slot()
+    def confirmImport(self):
+        from .. import importdoc
+        if self._import_busy or not self._import_plans:
+            return
+        if not any(p["checked"] for p in self._import_plans):
+            self.toast.emit("warn", "一个都没勾选，没有要导入的内容")
+            return
+        r = importdoc.apply_import(self.proj, self._import_plans, self._import_name)
+        self.importResult.emit(bool(r["written"]), r["report"])
+        self.toast.emit("ok" if r["written"] else "warn", r["report"])
+        self.logModel.append("info", "外部文档导入：" + r["report"])
+        self.regexRulesChanged.emit()
+        self.importPlanChanged.emit()
+        self.refreshQueue()
+        self._refresh_progress()
+
+    @Slot()
+    def cancelImport(self):
+        if self._import_worker is not None:
+            self._import_worker.abort()
+            self._set_import_stage("正在取消…")
 
     # ---- 导出（排版选项 + 预览 + 报告）----
 

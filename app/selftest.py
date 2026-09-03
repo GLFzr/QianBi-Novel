@@ -36,7 +36,8 @@ SECTIONS = ("imports", "manifest", "assembly", "qml")
 _IMPORT_TARGETS = [
     "httpx", "keyring.backends.Windows",
     "app.wb", "app.core.scan", "app.core.stages", "app.core.gates", "app.core.memory",
-    "app.prompts.scene_cards", "app.presets", "app.llm.client", "app.ui.bridge",
+    "app.prompts.scene_cards", "app.presets", "app.llm.client", "app.importdoc",
+    "app.ui.bridge",
 ]
 
 # ---- 资源清单范围：datas 收了什么就比什么；None 表示该目录下全部文件 ----
@@ -51,7 +52,8 @@ _QML_ERROR_KEYS = ("ReferenceError", "TypeError", "is not defined", "Cannot assi
                    "is not a member", "is not installed", "Module does not exist")
 
 _QML_OBJECTS = ["panelStack", "forceLockDialog", "genConfigDialog", "genConfigBody",
-                "exportDialog", "needsFixDialog", "reviewIssueDialog"]
+                "exportDialog", "needsFixDialog", "reviewIssueDialog",
+                "importDialog", "importBatchCard", "contractRuleList"]
 
 # ================= 夹具（固定字面量：两侧必须喂同一批字节） =================
 
@@ -335,6 +337,23 @@ def _sec_assembly() -> list:
                          ("干净", "他付了 30 元，走了。")):
         out.append(_entry("mustscan.check_patterns %s" % label,
                           mustscan.check_patterns(probe, _MUST_RULES)))
+
+    # —— 外部文档导入拆解（app/importdoc）：annotate 只算不写盘，可安全进自检 ——
+    _IMP_SRC = ("当铺收的不是东西，是时间。当票上写的期限一过，物归原主，人归回。\n\n"
+                "主角不得凭空变强，每次改命必须索回等价代价。")
+    _IMP_DOC = ("===核心设定===\n"
+                "当铺收的不是东西，是时间。当票上写的期限一过，物归原主，人归回。\n\n"
+                "===正则===\n- 主角不得凭空变强，每次改命必须索回等价代价\n"
+                "引证：主角不得凭空变强，每次改命必须索回等价代价\n\n"
+                "===正文 第7章===\n这一段是模型自己编的，原文里根本没有这句话。\n\n"
+                "===大纲===\n（无）\n")
+    from app import importdoc as _imp
+    out.append(_entry(
+        "importdoc.annotate",
+        [{"key": p["key"], "num": p["num"], "target": p["target"], "chars": p["chars"],
+          "trust": p["trust"], "verbatim": p["verbatim"], "quotes": p["quotesOk"]}
+         for p in _imp.annotate(
+             _imp.merge_items([_imp.parse_product(_IMP_DOC)]), _IMP_SRC, proj)]))
 
     # —— 流水线与共写共用的注入内核 ——
     for sem in ("logic", "regex"):

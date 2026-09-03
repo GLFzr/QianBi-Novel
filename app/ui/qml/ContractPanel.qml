@@ -26,11 +26,27 @@ Item {
     property string editLevel: "must"
     property string editScope: ""
     property int pendingDelete: -1  // 二次确认中的行下标
+    property var batches: []
+    readonly property int batchCount: batches ? batches.length : 0
+    property string pendingRevert: ""   // 二次确认中的批次号；"" = 没有
 
     // 复用「项目文件」编辑器改原文（批量调整时更快）
     signal openProjectFile(string rel)
 
-    function refresh() { rows = bridge.hasProject ? bridge.regexRuleList() : [] }
+    function refresh() {
+        rows = bridge.hasProject ? bridge.regexRuleList() : []
+        batches = bridge.hasProject ? bridge.importBatches() : []
+    }
+
+    function askRevert(id) {
+        if (pendingRevert === id) {
+            bridge.revertImport(id)
+            pendingRevert = ""
+            refresh()
+        } else {
+            pendingRevert = id
+        }
+    }
 
     function startEdit(i) {
         editing = i
@@ -367,6 +383,73 @@ Item {
                             color: Theme.textTertiary
                             font.family: Theme.uiFont
                             font.pixelSize: 10
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- 外部导入批次（借来的世界观要能整块还回去）----
+        Rectangle {
+            objectName: "importBatchCard"
+            visible: bridge.hasProject && contractPanel.batchCount > 0
+            Layout.fillWidth: true
+            radius: Theme.rCard
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.border
+            implicitHeight: batchCol.implicitHeight + 22
+            ColumnLayout {
+                id: batchCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 11
+                spacing: 6
+                Text {
+                    text: "外部导入 " + contractPanel.batchCount + " 批"
+                    color: Theme.textSecondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    font.bold: true
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "撤销只回滚确定属于该批的内容：整行匹配的条目、未被改动过的导入分区、"
+                          + "导入后没再编辑过的新建文件。你改过的一个字都不碰。"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTiny
+                    wrapMode: Text.Wrap
+                }
+                Repeater {
+                    model: contractPanel.batches
+                    delegate: RowLayout {
+                        id: batchRow
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text {
+                            objectName: "importBatchLabel"
+                            Layout.fillWidth: true
+                            text: (batchRow.modelData.canon !== ""
+                                   ? "原作《" + batchRow.modelData.canon + "》"
+                                   : batchRow.modelData.label)
+                                  + " · " + batchRow.modelData.items + " 项 · "
+                                  + batchRow.modelData.ts
+                            color: Theme.textSecondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                            elide: Text.ElideMiddle
+                        }
+                        AppButton {
+                            objectName: "importRevertBtn"
+                            text: contractPanel.pendingRevert === batchRow.modelData.id
+                                  ? "确认撤销" : "撤销"
+                            kind: contractPanel.pendingRevert === batchRow.modelData.id
+                                  ? "danger" : "ghost"
+                            height: 22
+                            onClicked: contractPanel.askRevert(batchRow.modelData.id)
                         }
                     }
                 }

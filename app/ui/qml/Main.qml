@@ -533,6 +533,15 @@ ApplicationWindow {
                         ToolTip.text: "版本历史（保存驱动）：查看 / 对比 / 回退 · Ctrl+B"
                     }
                     AppButton {
+                        objectName: "importBtn"
+                        iconName: "import"
+                        text: ""
+                        enabled: bridge.hasProject && !bridge.isStreaming
+                        onClicked: importDialog.open()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "导入外部文档（txt/md）：Agent 拆解 → 你确认映射 → 才写入"
+                    }
+                    AppButton {
                         iconName: "export"
                         text: ""
                         enabled: bridge.hasProject && !bridge.isStreaming
@@ -1294,6 +1303,9 @@ ApplicationWindow {
                 blurbDialog.content = text
         }
     }
+
+    // ---- 外部文档导入（拆解 → 预览映射 → 确认落盘）----
+    ImportDialog { id: importDialog }
 
     // ---- 锁定被字数闸门拦截：强锁确认框 ----
     property int lockBlockNum: 0
