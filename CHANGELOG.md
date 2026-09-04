@@ -75,6 +75,19 @@
 
 ### 修复
 
+- **载荷地址其实允许了明文**：计划写的是「清单里所有 URL 强制 https」，代码放行了 `http`。
+  现在两条通道分开定规矩——**清单那一侧允许 http**（它带签名，走明文最坏是晚一点拿到或拿不到），
+  **51MB 载荷与面板上「打开发布页 / 复制直链」拿到的地址只认 https**（明文链路上谁都能试着换包，
+  哈希会拦住但代价是一次「更新失败」，还能看清谁在何时拉了哪个版本）。
+  用户自己填的镜像前缀刻意豁免：局域网 `http://192.168.1.20/` 是明确意图，且照样过 sha256。
+- **`ProxyServer` 只写 `http=…` 的机器等于没配代理**：解析只认 `https=` 那一行，局域网代理
+  （WinINET 常见写法）被整个丢掉；`ProxyEnable=1` 而 `ProxyServer` 为空时还会断言「只给了 PAC 脚本」。
+  现在优先 `https=`、退回 `http=`、再退回裸 `host:port`，报告只说自己真看到的东西（带上 PAC 地址）。
+  另补 6 项注册表解析单测，**假 `winreg` 而不是读本机设置**——否则换台机器测的就不是同一段逻辑。
+- **「检查间隔」是个没接线的旋钮**：`interval_hours` 在白名单里、限流函数也读它，界面却没有任何控件，
+  和 v0.15 那个从没被读过的 `check_on_start` 是同一类缺陷（只是方向相反：一个读了没人改，
+  一个能改没人读）。面板现在给 6/12/24/72 小时四档，边界由 Python 侧兜：
+  非法值退回 24、下限 0.5 小时、上限 720 小时——0 等于绕开限流，不能让它在任何人手上成立。
 - **私钥泄漏扫描命中了自己**：`scripts/update_keys.py` 的源码里写着它要找的那串 PEM 字面量，
   于是这个新闸门第一次真跑就报「被跟踪的文件里出现了私钥材料」并拦死发版。假阳性的害处不是
   挡路，是让人去关掉闸门。改成运行时拼出的 `BEGIN … PRIVATE KEY` 形状正则（覆盖裸形式与
@@ -113,11 +126,11 @@
 ### 测试与闸门
 
 - 新增 `tests/unit/test_update_channels.py`（35 项）、`tests/unit/test_providers.py`（15 项）、
-  `tests/probe_update_ui.py`（40 项，零真网络，假 httpx transport 跑完整条通道与代理回退）。
+  `tests/probe_update_ui.py`（46 项，零真网络，假 httpx transport 跑完整条通道与代理回退）。
 - 不可跳过的发布闸门 += `probe_update_ui.py` 与私钥泄漏扫描。
 - `tests/probe_guard.py` 扩展：更新缓存目录改道临时目录，`QIANBI_OFFLINE` 在护栏内置起。
-- 本机已验证：单测 480 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
-  （更新功能不碰 LLM prompt）、`probe_update_ui` 40/40、`probe_about_ui` 9/9、
+- 本机已验证：单测 486 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
+  （更新功能不碰 LLM prompt）、`probe_update_ui` 46/46、`probe_about_ui` 9/9、
   `dual_sync_check` 无意外漂移（`app/llm/providers.py` 登记为 GUI 先行的受控差异——
   真同步要连带 TUI 自己的连接预设与槽位默认值一起改，只拷这张表会留悬空 id）、
   `run.py --selftest` 通过。
@@ -143,9 +156,8 @@
 - **真机矩阵仍欠跑**：安装版空闲/脏稿下一键升级、便携版只出链接、v0.17→v0.18.1 覆盖安装且旧进程
   仍开着、断网下离线导入清单 + 本地包校验安装。这些离线证明不了。
 - TUI 侧仍是旧三家连接预设，`providers.py` 已登记为受控差异（GUI 先行）；真同步要在 TUI 同一个 commit 里改这张表 + 它自己的连接预设与槽位默认值。
-- **有一处修复没进 0.18.1 的包**：`providers.py` 里 OpenRouter 的建议模型名 `x-ai/grok-4`
-  在它公开的 `/models`（427 条）里根本不存在，已在 main 修掉。发现于本版本发布之后——
-  重切一次同版本只会让已公布的哈希再来一回，所以它随下一个包走，而不是现在再动 v0.18.1。
+- OpenRouter 的建议模型名里 `x-ai/grok-4` 在它公开的 `/models`（427 条）中并不存在，已删；
+  它是**唯一能免 Key 核验模型名的平台**，所以别把这份确信推广到别家——其余模型名要 Key 才核得了。
 
 ## [0.17.0] - 2026-09-04（UI 成熟化 · 面板呼吸感 · 阅读排版升级）
 

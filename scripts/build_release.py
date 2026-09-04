@@ -246,7 +246,7 @@ def main():
     r = subprocess.run([sys.executable, "tests/probe_update_ui.py"], cwd=ROOT)
     step("更新链路探针", r.returncode == 0,
          "通道/验签/一键安装的接线断了（用户会卡在升级那天）"
-         if r.returncode else "40 项全过（零真网络）")
+         if r.returncode else "46 项全过（零真网络）")
 
     r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
     if r.returncode == 2:

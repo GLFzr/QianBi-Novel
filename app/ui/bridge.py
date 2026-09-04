@@ -1469,6 +1469,11 @@ class Bridge(QObject):
 
     # ========== 检查更新（多通道 + 验签 + 一键更新）==========
 
+    # 检查间隔的边界：与 app/config.py 的出厂 interval_hours 同值，改一处要改两处就是隐患
+    UPDATE_INTERVAL_DEFAULT_H = 24.0
+    UPDATE_INTERVAL_MIN_H = 0.5
+    UPDATE_INTERVAL_MAX_H = 720.0
+
     # 白名单：这个口子能写任意键的话，QML 里一次手滑就能改掉 connections
     _UPDATE_KEYS = ("auto_check", "auto_check_chosen", "interval_hours", "custom_url",
                     "proxy_mode", "proxy_url", "manifest_url", "dismissed_version")
@@ -1578,6 +1583,15 @@ class Bridge(QObject):
         w.finished.connect(on_done)
         w.start()
 
+    def _clamp_interval(self, value):
+        """检查间隔：0 或负数等于「每次启动都问」，那会把「一天最多一次」这句承诺抹掉"""
+        try:
+            hours = float(value)
+        except (TypeError, ValueError):
+            return self.UPDATE_INTERVAL_DEFAULT_H
+        return min(self.UPDATE_INTERVAL_MAX_H,
+                   max(self.UPDATE_INTERVAL_MIN_H, hours))
+
     @Slot(str)
     def setUpdateSettings(self, patch_json: str):
         """更新设置：QML 一次提交一份 JSON 补丁，键走白名单"""
@@ -1590,6 +1604,8 @@ class Bridge(QObject):
         clean = {k: v for k, v in patch.items() if k in self._UPDATE_KEYS}
         if not clean:
             return
+        if "interval_hours" in clean:
+            clean["interval_hours"] = self._clamp_interval(clean["interval_hours"])
         if "auto_check" in clean:
             clean["auto_check_chosen"] = True    # 用户显式表过态，版本迁移不许再翻它
             if clean["auto_check"]:
@@ -1607,8 +1623,8 @@ class Bridge(QObject):
     def openUpdateUrl(self, url: str):
         """打开清单里的链接。协议闸在这里，不在 QML——清单内容是外部输入"""
         from .. import update_check as uc
-        if not uc.is_http_url(url):
-            self.toast.emit("warn", "清单里的地址不是 http/https，已拒绝打开")
+        if not uc.is_https_url(url):
+            self.toast.emit("warn", "清单里的地址不是 https，已拒绝打开")
             return
         self.openPath(url)
 

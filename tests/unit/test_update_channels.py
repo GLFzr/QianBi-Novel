@@ -266,6 +266,11 @@ def test_auto_check_respects_switch_and_interval(monkeypatch):
     assert uc.should_auto_check(_cfg(auto_check=True, last_check_ts=now - 60), now) is False
     assert uc.should_auto_check(_cfg(auto_check=True, last_check_ts=now - 90000), now) is True
     assert uc.should_auto_check(_cfg(auto_check=True), now) is True
+    # 面板现在能改间隔：改了不生效就是又一个装饰开关
+    assert uc.should_auto_check(_cfg(auto_check=True, interval_hours=6,
+                                      last_check_ts=now - 7 * 3600), now) is True
+    assert uc.should_auto_check(_cfg(auto_check=True, interval_hours=6,
+                                      last_check_ts=now - 5 * 3600), now) is False
 
 
 def test_offline_env_kills_every_request(monkeypatch):
@@ -300,6 +305,75 @@ def test_asset_url_policy():
     assert uc.safe_asset_url("https://github.com/a/b") is True
     assert uc.safe_asset_url("file:///C:/x.exe") is False
     assert uc.safe_asset_url(r"\\nas\x.exe") is False
+    # 载荷只认 https：明文 51MB 谁都能在链路上试着换包（清单那一侧才允许 http，它有签名）
+    assert uc.safe_asset_url("http://mirror.lan/a.exe") is False
+    assert uc.is_http_url("http://mirror.lan/a.exe") is True   # 用户自填的局域网镜像照旧放行
+
+
+# ---------- 系统代理：注册表读法不能依赖本机当前设置 ----------
+
+def _fake_winreg(monkeypatch, values):
+    import sys
+    import types
+
+    class _Key:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    mod = types.ModuleType("winreg")
+    mod.HKEY_CURRENT_USER = 0x80000001
+    mod.OpenKey = lambda hive, sub: _Key()
+
+    def query_value_ex(_key, name):
+        if name not in values:
+            raise OSError(2, "file not found", name)
+        return (values[name], 1)
+
+    mod.QueryValueEx = query_value_ex
+    monkeypatch.setitem(sys.modules, "winreg", mod)
+    monkeypatch.setattr(uc.os, "name", "nt")     # 非 nt 时函数直接短路返回空
+    return mod
+
+
+def test_bare_proxy_server_gets_a_scheme(monkeypatch):
+    _fake_winreg(monkeypatch, {"ProxyEnable": 1, "ProxyServer": "127.0.0.1:7897"})
+    url, note = uc.system_proxy()
+    assert url == "http://127.0.0.1:7897" and note == "", (url, note)
+
+
+def test_http_only_proxy_server_is_still_used(monkeypatch):
+    """局域网代理常只写 http=…，旧解析只认 https= 那一行 → 用户开了代理却被当成没配"""
+    _fake_winreg(monkeypatch, {"ProxyEnable": 1, "ProxyServer": "http=192.168.1.9:8080"})
+    assert uc.system_proxy() == ("http://192.168.1.9:8080", "")
+
+
+def test_https_entry_wins_over_http(monkeypatch):
+    _fake_winreg(monkeypatch, {"ProxyEnable": 1,
+                               "ProxyServer": "http=10.0.0.1:3128;https=10.0.0.2:3129"})
+    assert uc.system_proxy()[0] == "http://10.0.0.2:3129"
+
+
+def test_disabled_proxy_with_pac_says_so_instead_of_guessing(monkeypatch):
+    _fake_winreg(monkeypatch, {"ProxyEnable": 0, "AutoConfigURL": "http://corp/proxy.pac"})
+    url, note = uc.system_proxy()
+    assert url == "" and "PAC" in note, (url, note)
+
+
+def test_enabled_proxy_without_address_reports_the_pac_it_found(monkeypatch):
+    """开着代理但 ProxyServer 是空的：能说清「只看到 PAC 脚本」就别含糊其辞"""
+    _fake_winreg(monkeypatch, {"ProxyEnable": 1, "ProxyServer": "",
+                               "AutoConfigURL": "http://corp/proxy.pac"})
+    url, note = uc.system_proxy()
+    assert url == "" and "proxy.pac" in note, (url, note)
+
+
+def test_system_mode_feeds_the_plan(monkeypatch):
+    _fake_winreg(monkeypatch, {"ProxyEnable": 1, "ProxyServer": "127.0.0.1:7897"})
+    plan = uc.resolve_proxy({"updates": {"proxy_mode": "system"}})
+    assert plan.proxy == "http://127.0.0.1:7897" and "跟随系统" in plan.label
+    assert plan.trust_env is False, "既然要用指定代理，就不该再让 httpx 去看环境变量"
 
 
 # ---------- 与既有接线保持一致 ----------

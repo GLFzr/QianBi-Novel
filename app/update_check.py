@@ -164,19 +164,26 @@ def system_proxy() -> tuple:
         return ("", "")
     if not enable:
         return ("", "系统未启用代理" + ("（配了 PAC 自动脚本，应用不解析，需要时请手填代理）" if pac else ""))
-    host = ""
+    https_val = http_val = bare = ""
     for part in (server or "").split(";"):
         p = part.strip()
         if not p:
             continue
         if "=" in p:
             scheme, _, rest = p.partition("=")
-            if scheme.strip().lower() == "https":
-                host = rest.strip()
-        elif not host:
-            host = p
+            scheme, value = scheme.strip().lower(), rest.strip()
+            if scheme == "https" and not https_val:
+                https_val = value
+            elif scheme == "http" and not http_val:
+                http_val = value
+        elif not bare:
+            bare = p
+    # WinINET 允许只写 http=…（局域网代理常见），只有 https= 时才优先它
+    host = https_val or http_val or bare
     if not host:
-        return ("", "系统代理只给了 PAC 脚本，应用无法解析，请手填代理地址")
+        return ("", "系统代理开着但 ProxyServer 里没有可用地址"
+                + ("（PAC 脚本 %s，应用不解析，请手填代理）" % pac if pac
+                   else "，请在面板里手填代理地址"))
     if not host.startswith("http"):
         host = "http://" + host
     return (host, "")
@@ -219,6 +226,13 @@ def resolve_proxy(cfg: dict) -> ProxyPlan:
         return ProxyPlan(proxy=url, trust_env=False, label="跟随系统 " + url)
     # 系统没配代理：交回 httpx 自己看环境变量，别把「没有系统代理」误读成「没有代理」
     return ProxyPlan(trust_env=True, label="跟随环境变量", note=note)
+
+
+def is_https_url(url: str) -> bool:
+    try:
+        return urlparse(url or "").scheme.lower() == "https"
+    except ValueError:
+        return False
 
 
 def is_http_url(url: str) -> bool:
@@ -513,8 +527,14 @@ def install_mode() -> str:
 # ---------- 下载落盘名的卫生 ----------
 
 def safe_asset_url(url: str) -> bool:
-    """清单里的地址是否允许被下载（`file:`/UNC 一律不算，见 is_http_url）"""
-    return is_http_url(url)
+    """清单里的地址是否允许被下载：**只认 https**
+
+    清单那一侧允许 http（它带签名，走明文最坏是晚一点拿到）；载荷这一侧不允许——
+    51MB 的 exe 走明文，链路上任何人都能试着换包（哈希会拦住，代价是一次「更新失败」），
+    还能看清谁在什么时候拉了哪个版本。用户自己填的镜像前缀不归本函数管，
+    那是局域网/自建源的明确意图，由调用方按 http/https 放行并照样过 sha256。
+    """
+    return is_https_url(url)
 
 
 def asset_sha(manifest: dict, kind: str = "setup") -> str:

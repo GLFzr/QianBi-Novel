@@ -307,6 +307,32 @@ def run_all():
     pump(300)
     check("关掉之后也不再提", "默认是开的" not in "\n".join(texts(dlg)))
 
+    # 检查间隔：面板里有控件，且边界由 Python 侧兜（QML 传什么是外部输入）
+    check("面板里有「检查间隔」可选", find(dlg, "intervalSelect") is not None)
+    check("关掉自动检查时不再问间隔",
+          "检查间隔" not in "\n".join(texts(dlg)))
+    reset(auto_check=True, auto_check_chosen=True)
+    pump(300)
+    check("开着自动检查时间隔就在面板上", "检查间隔" in "\n".join(texts(dlg)))
+    b.setUpdateSettings(json.dumps({"interval_hours": 0}))
+    pump(300)
+    with open(os.path.join(b.dataDirPath(), "config.json"), encoding="utf-8") as f:
+        disk = json.load(f).get("updates") or {}
+    check("间隔写 0 会被抬到下限而不是绕开限流",
+          float(disk.get("interval_hours") or 0) >= 0.5, str(disk.get("interval_hours")))
+    b.setUpdateSettings(json.dumps({"interval_hours": 999999}))
+    pump(300)
+    with open(os.path.join(b.dataDirPath(), "config.json"), encoding="utf-8") as f:
+        disk = json.load(f).get("updates") or {}
+    check("间隔有上限（不许设成事实上永不检查）",
+          float(disk.get("interval_hours") or 0) <= 720, str(disk.get("interval_hours")))
+    b.setUpdateSettings(json.dumps({"interval_hours": "乱七八糟"}))
+    pump(300)
+    with open(os.path.join(b.dataDirPath(), "config.json"), encoding="utf-8") as f:
+        disk = json.load(f).get("updates") or {}
+    check("读不懂的间隔退回 24 小时",
+          float(disk.get("interval_hours") or 0) == 24.0, str(disk.get("interval_hours")))
+
     b.setUpdateSettings(json.dumps({"connections": [{"id": "evil"}],
                                     "custom_url": "https://m.example/x.json"}))
     pump(300)

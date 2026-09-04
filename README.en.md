@@ -97,7 +97,10 @@ your machine". So the extra channels and the signature landed in the same releas
   compared the same way;
 - If either check fails, the panel **never renders an Install button**. The manifest is only
   displayed to you; the app downloads nothing and executes nothing on its authority.
-  URLs are forced to https, and `file://` / `unc:` forms are refused outright.
+  URLs the app will download from or open are **https-only** — `file://` and `unc:` forms are
+  refused outright. The manifest itself may come over http, because its signature, not the
+  transport, is what carries the trust; a mirror you typed yourself is allowed too, and every
+  byte it returns still has to match the signed SHA-256.
 
 ### "Windows protected your PC"
 
@@ -108,7 +111,7 @@ If you are unsure, compare the SHA-256 against the one listed in the panel / on 
 page — a match means it is the file I published.
 
 Checking at startup is **on by default**: at most one request per launch, downloading a
-~1KB public version manifest, throttled to once per 24 hours, **uploading nothing** (no book
+~1KB public version manifest, throttled to once per 24 hours (6/12/24/72 selectable in the panel), **uploading nothing** (no book
 title, no config, no key). Switch it off in the panel and startup makes zero requests.
 See [docs/PRIVACY.md](docs/PRIVACY.md).
 
@@ -331,7 +334,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 
 ```bash
 # Offline unit tests (no API key, ~3 seconds)
-.venv/Scripts/python -m pytest tests/unit -q        # 480 tests
+.venv/Scripts/python -m pytest tests/unit -q        # 486 tests
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
 .venv/Scripts/python tests/probe_agent_relay.py
@@ -351,7 +354,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 | `probe_word_block.py` | Word-count gate, lock interception, force-lock trail, stale queue |
 | `probe_backflow_chain.py` | Full backflow chain: idempotency, external edits, missing outline, interruption, re-queue |
 | `probe_import_ui.py` | External import: decompose only what exists → preview mapping → write only what's checked → revert by batch |
-| `probe_update_ui.py` | Update chain, 40 checks with zero real network: channel fallback and per-channel failure reasons, unsigned manifests getting no Install button, offline manifest import, local package hashing, the 24h throttle, the settings key whitelist, panel overflow |
+| `probe_update_ui.py` | Update chain, 46 checks with zero real network: channel fallback and per-channel failure reasons, unsigned manifests getting no Install button, offline manifest import, local package hashing, the 24h throttle, the settings key whitelist, panel overflow |
 | `probe_about_ui.py` | About dialog: book/config paths match the Bridge, and its "Update…" entry actually opens the panel |
 | `probe_packaged.py` | Packaged resource manifest audit + dev-vs-packaged assembly digest diff |
 | `probe_panel_fit.py` | Six panels: horizontal/vertical overflow, squeezing, out-of-bounds |
@@ -404,7 +407,7 @@ scripts/
                           smoke test → digest diff)
   dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
-  unit/                 36 files / 480 offline tests
+  unit/                 36 files / 486 offline tests
   probe_*.py            42 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice

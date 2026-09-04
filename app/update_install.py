@@ -34,7 +34,7 @@ def asset_urls(manifest: dict, kind: str = "setup", mirror_prefix: str = "") -> 
     if prefix:
         name = uc.setup_download_name(manifest)
         cand = prefix if prefix.lower().endswith(".exe") else prefix.rstrip("/") + "/" + name
-        if uc.safe_asset_url(cand) and cand not in seen:
+        if uc.is_http_url(cand) and cand not in seen:
             out.append(cand)
     return out
 

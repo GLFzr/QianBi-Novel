@@ -346,6 +346,28 @@ Dialog {
                 font.pixelSize: Theme.fsMicro
                 wrapMode: Text.Wrap
             }
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.cfgs.autoCheck === true
+                spacing: 6
+                Text {
+                    text: "检查间隔"
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTiny
+                }
+                AppSelect {
+                    objectName: "intervalSelect"
+                    Layout.preferredWidth: 150
+                    model: ["每 6 小时", "每 12 小时", "每天（默认）", "每 3 天"]
+                    property var hours: [6, 12, 24, 72]
+                    currentIndex: Math.max(0, hours.indexOf(Number(root.cfgs.intervalHours || 24)))
+                    onActivated: function (i) {
+                        root.patch({ interval_hours: hours[Math.max(0, Math.min(3, i))] })
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
