@@ -1161,8 +1161,9 @@ class Bridge(QObject):
 
     # ============ 项目管理 ============
 
-    @Slot(str, str, str, str, int, str, str, result=bool)
-    def newProject(self, location, name, genre, platform, totalWan, idea, presetId=""):
+    @Slot(str, str, str, str, int, str, str, str, result=bool)
+    def newProject(self, location, name, genre, platform, totalWan, idea, presetId="",
+                   worldbookFile=""):
         location, name = location.strip(), name.strip()
         if not location or not name:
             self.toast.emit("warn", "请填写保存位置与书名")
@@ -1174,6 +1175,17 @@ class Bridge(QObject):
             return False
         project.write_idea_info(path, genre.strip(), platform.strip() or "番茄",
                                 idea.strip(), int(totalWan or 0))
+        wb_msg = ""
+        if str(worldbookFile or "").strip():
+            from PySide6.QtCore import QUrl
+            wb_src = str(worldbookFile)
+            if wb_src.startswith("file://"):
+                wb_src = QUrl(wb_src).toLocalFile()
+            try:
+                wb_msg = " " + project.import_worldbook(path, wb_src)
+            except Exception as e:  # noqa: BLE001
+                wb_msg = ""
+                self.toast.emit("warn", "世界书导入失败：%s（项目已创建）" % e)
         preset_name = ""
         if presetId:
             from .. import presets as genre_presets
@@ -1185,6 +1197,8 @@ class Bridge(QObject):
         self.toast.emit("ok", f"项目《{name}》已创建"
                         + (f"（题材预设「{preset_name}」）" if preset_name else "")
                         + "，点击「开始」启动流水线")
+        if wb_msg:
+            self.toast.emit("info", wb_msg.strip())
         return True
 
     @Slot(str)

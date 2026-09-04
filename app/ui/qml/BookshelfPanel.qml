@@ -285,6 +285,36 @@ Item {
                     background: Rectangle { radius: Theme.rBtn; color: Theme.bgHover; border.width: 1; border.color: Theme.border }
                 }
             }
+            // ---- 原作世界书（同人档）：酒馆世界书 JSON 直接转条目；纯文本存档等人工拆解 ----
+            Column {
+                spacing: 6
+                width: parent.width
+                Text { text: "原作世界书（可选 · 写同人用）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
+                Row {
+                    spacing: 8
+                    width: parent.width
+                    AppField {
+                        id: wbField
+                        width: parent.width - 70
+                        label: ""
+                        placeholder: "选一个 世界书.json / 设定文本，可留空"
+                        text: ""
+                    }
+                    AppButton {
+                        text: "选择…"
+                        anchors.bottom: parent.bottom
+                        onClicked: worldbookDialog.open()
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: "SillyTavern 世界书 JSON 会转成世界书条目（蓝灯→常驻、关键词→触发词）；纯文本/Markdown 存进 设定/原作世界书.md，不进 prompt，由你自己拆解。"
+                    color: Theme.textTertiary
+                    font.pixelSize: Theme.fsMicro
+                    font.family: Theme.uiFont
+                    wrapMode: Text.Wrap
+                }
+            }
             Row {
                 spacing: 8
                 anchors.right: parent.right
@@ -298,12 +328,23 @@ Item {
                                             : (m ? m[newPresetCombo.currentIndex] : null)
                         if (bridge.newProject(locationField.text, nameField.text, genreField.text,
                                               platformCombo.currentText, totalWanSpin.value, ideaArea.text,
-                                              it ? it.id : "")) {
+                                              it ? it.id : "", wbField.text)) {
                             newProjectDialog.close()
                         }
                     }
                 }
             }
+        }
+    }
+
+    // 选择原作世界书文件
+    FileDialog {
+        id: worldbookDialog
+        objectName: "worldbookFileDialog"
+        title: "导入原作世界书"
+        nameFilters: ["世界书 / 设定文本 (*.json *.md *.txt)", "所有文件 (*)"]
+        onAccepted: {
+            wbField.text = selectedFile.toString().replace("file:///", "")
         }
     }
 

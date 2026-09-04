@@ -8,6 +8,7 @@
 └── 追踪/       (伏笔.md/时间线.md/角色状态.md/上下文.md)
 """
 import os
+import json
 import re
 import tempfile
 
@@ -47,6 +48,138 @@ def is_project(path: str) -> bool:
     if not os.path.isdir(path):
         return False
     return all(os.path.isdir(os.path.join(path, d)) for d in ["设定", "大纲", "正文", "追踪"])
+
+
+# ---------- 原作世界书导入（同人档：把原作世界观带进项目）----------
+
+WORLDBOOK_SOURCE_PATH = "设定/原作世界书.md"
+
+
+def read_text_guess(path: str) -> str:
+    """导入文件读入：utf-8(-sig) 优先，GBK 兜底——同人材料常来自别处导出"""
+    with open(path, "rb") as f:
+        raw = f.read()
+    for enc in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _st_book_entries(data: dict) -> list:
+    """SillyTavern 世界书/角色卡的条目列表：兼容三种壳
+
+    - 世界书导出：{"entries": {uid: {...}}}
+    - 世界书导出（列表壳）：{"entries": [...]}
+    - 角色卡 v2：{"data": {"character_book": {"entries": [...]}}}（顶层也认一次）
+    条目字段两套命名都认：keys/key、enabled/disable、name/comment。
+    """
+    book = data.get("character_book") or (data.get("data") or {}).get("character_book")
+    if isinstance(book, dict) and isinstance(book.get("entries"), (list, dict)):
+        raw = book["entries"]
+    elif isinstance(data.get("entries"), (list, dict)):
+        raw = data["entries"]
+    else:
+        return []
+    out = []
+    for e in (raw.values() if isinstance(raw, dict) else raw):
+        if not isinstance(e, dict):
+            continue
+        out.append(e)
+    return out
+
+
+def _clean_import_text(text: str) -> str:
+    """条目内容 sanitation：世界书条目块内禁 `#` 标题与 `>` 引用（wb.py 契约），
+    `｜` 是机器写回的分隔符也不能留。段落断行压成续行，空行会切断条目块。"""
+    lines = []
+    for ln in (text or "").replace("｜", "，").splitlines():
+        s = ln.strip()
+        if not s:
+            continue
+        lines.append(s.lstrip("#> ").strip() or "-")
+    return "\n  ".join(lines)
+
+
+def _st_entry_line(e: dict) -> str:
+    """单条 SillyTavern 条目 → 世界书反哺行 + 触发标记行（独立成行，遵守 wb.py 契约）"""
+    keys = [str(k).strip() for k in (e.get("key") or e.get("keys") or []) if str(k).strip()]
+    name = (str(e.get("comment") or e.get("name") or "").strip()
+            or (keys[0] if keys else "") or "未命名条目")
+    name = re.sub(r'[\\/:*?"<>|｜]', "", name)[:40] or "未命名条目"
+    content = _clean_import_text(str(e.get("content") or ""))
+    if not content:
+        return ""
+    disabled = e.get("disable") if e.get("disable") is not None \
+        else (not e.get("enabled", True))
+    if disabled:
+        return ""
+    # ST 的 constant=蓝灯（每次都注入）→ 本应用「常驻」；否则把触发词登记成关键词
+    marker = "  [常驻]" if e.get("constant") else (
+        "  [关键词：%s]" % "、".join(keys[:8]) if keys else "")
+    return "- **%s**（原作）：%s%s" % (name, content, marker)
+
+
+def import_worldbook(proj: str, src: str) -> str:
+    """新建项目/同人档导入原作世界书，返回给人看的导入结果（toast 用）
+
+    两种材料两条路：
+    - SillyTavern 世界书/角色卡 JSON → 转成「世界书.md」条目（constant→常驻、key→关键词），
+      立即被装配层（app/wb.py）识别；世界书.md 已有内容时**不覆盖**，退回存档路。
+    - 纯文本/Markdown（小说设定、wiki 搬运…）→ 原样存进 设定/原作世界书.md，
+      **不进写作 prompt**——拆解成 世界书.md/正则.md 条目是用户自己的活（同人写作流的本意）。
+
+    Raises: FileNotFoundError / ValueError（文件读不到或 JSON 壳认不出又无法当文本时不会——
+    非 JSON 一律按文本存档，只有空文件才 ValueError）
+    """
+    if not src or not os.path.isfile(src):
+        raise FileNotFoundError("找不到要导入的文件：%s" % src)
+    text = read_text_guess(src)
+    if not text.strip():
+        raise ValueError("文件是空的：%s" % os.path.basename(src))
+
+    converted = None
+    converted_n = 0
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        entries = [_st_entry_line(e) for e in _st_book_entries(data)]
+        lines = [ln for ln in entries if ln]
+        if lines:
+            converted = "\n".join(
+                ["## 世界书", "", "### 原作世界书（导入）", ""] + lines) + "\n"
+            converted_n = len(lines)
+
+    results = []
+    wb_path = os.path.join(proj, WORLDBOOK_PATH)
+    if converted is not None:
+        if not read_file(wb_path).strip():
+            write_file(wb_path, converted)
+            results.append("已把 %d 条原作条目写入 世界书.md（可再人工修订）" % converted_n)
+        else:
+            results.append("世界书.md 已有内容，导入条目未覆盖（原文件保留）")
+            converted = None
+    if converted is None and not data_is_st_json(data):
+        src_path = os.path.join(proj, WORLDBOOK_SOURCE_PATH)
+        if read_file(src_path).strip():
+            results.append("原作世界书.md 已存在，未覆盖")
+        else:
+            write_file(src_path, "# 原作世界书（导入存档）\n\n"
+                                 "> 原作世界观的**原始材料**：不进写作 prompt。\n"
+                                 "> 由你拆解进「世界书.md」与「正则.md」后才会生效。\n\n"
+                                 + text.strip() + "\n")
+            results.append("原作世界观已存到 设定/原作世界书.md（不进 prompt，等你拆解）")
+    if not results:
+        return "导入完成，但文件里没有可入库的内容"
+    return "；".join(results)
+
+
+def data_is_st_json(data) -> bool:
+    """这份解析结果是不是 SillyTavern 世界书壳（决定 JSON 走转换还是存档）"""
+    return bool(isinstance(data, dict) and _st_book_entries(data))
 
 
 def read_file(path: str) -> str:
