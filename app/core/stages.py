@@ -380,6 +380,10 @@ def stage_core_setting(ctx) -> str:
         total_words=info.get("total_words_wan", 0) or 100,
         genre_block=_genre_block(ctx.proj, "core_setting"),
     )
+    # 同人禁则（方案 D3）：拆解底册存在时，前期阶段也带着禁则走，不等到世界书阶段
+    canon = project.canon_digest(ctx.proj, 800)
+    if canon:
+        prompt += "\n\n" + canon + "\n（核心设定不得与上述禁则冲突。）"
     ctx.last_prompt = prompt
     result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="核心设定",
                      phase=PHASE_CORE_SETTING)
@@ -410,6 +414,10 @@ def stage_volume_outline(ctx, total_words_wan: int = 0) -> str:
         chapter_words=chapter_words,
         genre_block=_genre_block(ctx.proj, "outline"),
     )
+    # 同人禁则（方案 D3）：大纲剧情不得与禁则冲突，并按单元安排原作专名出场
+    canon_o = project.canon_digest(ctx.proj, 800)
+    if canon_o:
+        prompt += "\n\n" + canon_o + "\n（大纲剧情不得与禁则冲突，并按单元安排原作专名出场。）"
     ctx.last_prompt = prompt
     result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="全书大纲",
                      phase=PHASE_VOLUME_OUTLINE)
@@ -685,9 +693,30 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     gr = gates.GateResult()
     gr.word_target = chapter_words
 
+    # ---- 步骤级断点（方案 H）：草稿即文件，停在哪从哪继续 ----
+    # 恢复语义：重跑被打断的那一步，之前完成的步骤全部保留
+    # （草稿文件在盘、已投审校票持久化）——不再「停一次全章白写」。
+    _ORDER = ["assemble", "draft", "enrich", "scan", "deslop", "review", "finalize"]
+    saved_cs = st.get_chapter_step(proj)
+    resume_at = ""
+    saved_votes: list = []
+    if saved_cs.get("num") == num and saved_cs.get("step_done") in _ORDER:
+        resume_at = saved_cs["step_done"]
+        saved_votes = list(saved_cs.get("votes") or [])
+        ctx.log("info", f"第 {num} 章 断点续跑：已完成至 {resume_at}（审校票 {len(saved_votes)} 张保留），从断点继续")
+    resume_prose = ""
+    if resume_at:
+        resume_prose = project.read_file(project.chapter_draft_path(proj, num))
+        if not resume_prose.strip():
+            ctx.log("warn", "断点草稿文件丢失，本章从头重写")
+            resume_at = ""
+    # 断点在草稿之后时，后续步骤（去味/审校）仍需要的材料本地重读（零成本）
+    outline = _sanitize_chapter_refs(project.read_file(project.get_outline_path(proj, num)))
+    draft_rel = os.path.relpath(project.chapter_draft_path(proj, num), proj)
+
     # ---- ① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）----
     draft_extra_ideas: list = []
-    while True:
+    while resume_at == "" and True:
         ctx.step(num, st.STEP_ASSEMBLE)
         outline_path = project.get_outline_path(proj, num)
         outline = _sanitize_chapter_refs(project.read_file(outline_path))
@@ -724,108 +753,130 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             draft_extra_ideas.append(g4_idea)   # 带想法继续 → 注入草稿 user_ideas
         break
 
-    # ---- ② 草稿生成 ----
-    ctx.step(num, st.STEP_DRAFT)
-    ctx.checkpoint()
-    wb_block, rg_block, wb_meta = _worldbook_regex_blocks(ctx, num)
-    _record_worldbook(ctx, PHASE_PROSE, wb_meta)
-    # 阶段重生成时 bridge 写入的「阶段指导」：消费即删，拼进本章写作指导
-    sg_path = os.path.join(proj, "追踪", "阶段指导.md")
-    stage_guidance = project.read_file(sg_path).strip()
-    if stage_guidance:
-        guidance = f"{guidance}\n{stage_guidance}".strip() if guidance else stage_guidance
-        try:
-            os.remove(sg_path)
-        except OSError:
-            pass
-    prompt = prompts.PROSE_WRITING_PROMPT.format(
-        chapter_num=num,
-        core_setting=core_setting,
-        outline=outline,
-        next_chapter_brief=next_brief,
-        global_summary=global_summary,
-        recent_summaries=recent_summaries,
-        character_states=character_states,
-        foreshadows=foreshadows,
-        timeline=timeline,
-        previous_excerpt=previous_excerpt or "（本章为第一章）",
-        style_sample=style_sample,
-        user_guidance=_compose_guidance(guidance, ctx.cfg),
-        user_ideas="\n".join(f"- {t}" for t in ((ideas or []) + draft_extra_ideas)) or "（无）",
-        word_target=chapter_words,
-        tic_blacklist=_tic_blacklist(proj),
-        used_setpieces=_used_setpieces(proj),
-        genre_block=_genre_block(proj, "prose"),
-        worldbook_block=wb_block,
-        regex_block=rg_block,
-        craft_block=scene_cards.craft_block(num, _total_chapters(proj, chapter_words), outline),
-        author_note=_author_note(proj),
-    )
-    ctx.last_prompt = prompt
-    prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章",
-                    phase=PHASE_PROSE)
-    if not prose.strip():
-        raise StageError(f"第 {num} 章草稿生成失败：模型返回为空")
-    actual = project.count_chars(prose)
-    ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
+    if resume_at:
+        # 断点续跑：草稿已在盘上（正文/.drafts），跳过组装与草稿生成。
+        # 审校修复 prompt 仍需要 core_setting——本地重读
+        core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
+                        or "（未提供）")
+        prose = resume_prose
+        st.save_chapter_step(proj, num, step_done="enrich",
+                             draft_path=draft_rel, votes=saved_votes)
+        ctx.log("ok", f"第 {num} 章 已从断点恢复草稿（{project.count_chars(prose)} 字）")
 
-    # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
-    max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
-    low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-    enrich_rounds = 0
-    while not low_ok and enrich_rounds < max_enrich_rounds:
-        enrich_rounds += 1
-        ctx.step(num, st.STEP_ENRICH)
-        ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
+    # ---- ② 草稿生成 ----
+    if resume_at == "":
+        ctx.step(num, st.STEP_DRAFT)
         ctx.checkpoint()
-        enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
-                                                     target=chapter_words, prose=prose,
-                                                     outline_brief=outline[:600],
+        wb_block, rg_block, wb_meta = _worldbook_regex_blocks(ctx, num)
+        _record_worldbook(ctx, PHASE_PROSE, wb_meta)
+        # 阶段重生成时 bridge 写入的「阶段指导」：消费即删，拼进本章写作指导
+        sg_path = os.path.join(proj, "追踪", "阶段指导.md")
+        stage_guidance = project.read_file(sg_path).strip()
+        if stage_guidance:
+            guidance = f"{guidance}\n{stage_guidance}".strip() if guidance else stage_guidance
+            try:
+                os.remove(sg_path)
+            except OSError:
+                pass
+        prompt = prompts.PROSE_WRITING_PROMPT.format(
+            chapter_num=num,
+            core_setting=core_setting,
+            outline=outline,
+            next_chapter_brief=next_brief,
+            global_summary=global_summary,
+            recent_summaries=recent_summaries,
+            character_states=character_states,
+            foreshadows=foreshadows,
+            timeline=timeline,
+            previous_excerpt=previous_excerpt or "（本章为第一章）",
+            style_sample=style_sample,
+            user_guidance=_compose_guidance(guidance, ctx.cfg),
+            user_ideas="\n".join(f"- {t}" for t in ((ideas or []) + draft_extra_ideas)) or "（无）",
+            word_target=chapter_words,
+            tic_blacklist=_tic_blacklist(proj),
+            used_setpieces=_used_setpieces(proj),
+            genre_block=_genre_block(proj, "prose"),
+            worldbook_block=wb_block,
+            regex_block=rg_block,
+            craft_block=scene_cards.craft_block(num, _total_chapters(proj, chapter_words), outline),
+            author_note=_author_note(proj),
+        )
+        ctx.last_prompt = prompt
+        prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章",
+                        phase=PHASE_PROSE)
+        if not prose.strip():
+            raise StageError(f"第 {num} 章草稿生成失败：模型返回为空")
+        actual = project.count_chars(prose)
+        ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
+
+        # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
+        max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
+        low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+        enrich_rounds = 0
+        while not low_ok and enrich_rounds < max_enrich_rounds:
+            enrich_rounds += 1
+            ctx.step(num, st.STEP_ENRICH)
+            ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
+            ctx.checkpoint()
+            enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
+                                                         target=chapter_words, prose=prose,
+                                                         outline_brief=outline[:600],
+                                                         tic_blacklist=_tic_blacklist(proj),
+                                                         must_block=_must_block(proj, ctx.cfg))
+            ctx.last_prompt = enrich_prompt
+            rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮",
+                                phase=PHASE_ENRICH)
+            # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
+            if rewritten.strip() and project.count_chars(rewritten) >= actual:
+                prose = rewritten
+            low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+        if enrich_rounds:
+            ctx.log("ok" if low_ok else "warn",
+                    f"扩写后 {actual} 字" + ("，达标" if low_ok
+                                            else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
+        elif not high_ok:
+            ctx.step(num, st.STEP_ENRICH)
+            ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），自动压缩…")
+            ctx.checkpoint()
+            pre_prose, pre_actual = prose, actual
+            cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
+            trim_prompt = prompts.TRIM_PROMPT.format(chapter_num=num, actual=actual,
+                                                     target=chapter_words, cut_pct=cut_pct,
+                                                     prose=prose, outline_brief=outline[:600],
                                                      tic_blacklist=_tic_blacklist(proj),
                                                      must_block=_must_block(proj, ctx.cfg))
-        ctx.last_prompt = enrich_prompt
-        rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮",
-                            phase=PHASE_ENRICH)
-        # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
-        if rewritten.strip() and project.count_chars(rewritten) >= actual:
-            prose = rewritten
-        low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-    if enrich_rounds:
-        ctx.log("ok" if low_ok else "warn",
-                f"扩写后 {actual} 字" + ("，达标" if low_ok
-                                        else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
-    elif not high_ok:
-        ctx.step(num, st.STEP_ENRICH)
-        ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），自动压缩…")
-        ctx.checkpoint()
-        pre_prose, pre_actual = prose, actual
-        cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
-        trim_prompt = prompts.TRIM_PROMPT.format(chapter_num=num, actual=actual,
-                                                 target=chapter_words, cut_pct=cut_pct,
-                                                 prose=prose, outline_brief=outline[:600],
-                                                 tic_blacklist=_tic_blacklist(proj),
-                                                 must_block=_must_block(proj, ctx.cfg))
-        ctx.last_prompt = trim_prompt
-        prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩",
-                        phase=PHASE_TRIM)
-        low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-        if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
-            # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
-            prose, actual = pre_prose, pre_actual
-            ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
-        else:
-            ctx.log("ok" if high_ok else "warn",
-                    f"压缩后 {actual} 字" + ("，达标" if high_ok else "，仍超标，标记不阻断"))
+            ctx.last_prompt = trim_prompt
+            prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩",
+                            phase=PHASE_TRIM)
+            low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+            if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
+                # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
+                prose, actual = pre_prose, pre_actual
+                ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
+            else:
+                ctx.log("ok" if high_ok else "warn",
+                        f"压缩后 {actual} 字" + ("，达标" if high_ok else "，仍超标，标记不阻断"))
 
-    # ---- ③ AI 味扫描（本地，零成本）----
+    # 断点保存（方案 H）：草稿即文件——此后扫描/去味/审校/定稿任何位置停止，
+    # 重启都从盘上这份草稿继续，不再整章重写
+    project.write_file(project.chapter_draft_path(proj, num), prose)
+    st.save_chapter_step(proj, num, step_done="enrich",
+                         draft_path=draft_rel, votes=saved_votes)
+
+    # ---- ③ AI 味扫描（本地，零成本；断点在此步之后时跳过）----
+    skip_scan_deslop = resume_at in ("deslop", "review", "finalize")
+    blocking, advisory = ([], []) if skip_scan_deslop else ([], [])
     ctx.step(num, st.STEP_SCAN)
-    blocking, advisory = gates.scan_deslop(prose)
+    blocking, advisory = ([], []) if skip_scan_deslop else gates.scan_deslop(prose)
     gr.blocking_findings, gr.advisory_findings = blocking, advisory
-    ctx.log("info", f"第 {num} 章 本地扫描：阻断 {len(blocking)} 处 / 建议 {len(advisory)} 处")
+    ctx.log("info", "第 %d 章 本地扫描：阻断 %d 处 / 建议 %d 处%s"
+            % (num, len(blocking), len(advisory), "（断点续跑：跳过扫描与去味）" if skip_scan_deslop else ""))
 
     # ---- ③.5 决策门 G6：扫描完成后（T4.1 内侧门；回退=保留原稿跳过去味）----
     deslop_extra_text = ""
-    g6_idea = ctx.gate("G6", f"AI 味扫描完成：阻断 {len(blocking)} / 建议 {len(advisory)}"
+    g6_idea = ""
+    if not skip_scan_deslop:
+        g6_idea = ctx.gate("G6", f"AI 味扫描完成：阻断 {len(blocking)} / 建议 {len(advisory)}"
                              f"（下一步去味改写，最多 {max_deslop_rounds} 轮）", chapter=num)
     if g6_idea is None:
         g6_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
@@ -865,7 +916,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             ctx.log("ok", f"第 {num} 章 去味完成，复扫通过")
 
     # ---- ④.4 决策门 G7：去味完成后（T4.1 内侧门；回退=保留原稿=还原去味前文本）----
-    g7_idea = ctx.gate("G7", f"去味改写完成：{rounds} 轮 · 复扫{'通过' if not blocking else f'仍 {len(blocking)} 处阻断'}"
+    g7_idea = "" if skip_scan_deslop else ctx.gate("G7", f"去味改写完成：{rounds} 轮 · 复扫{'通过' if not blocking else f'仍 {len(blocking)} 处阻断'}"
                              f"（当前 {project.count_chars(prose)} 字，下一步审校）", chapter=num)
     if g7_idea is None:
         g7_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
@@ -885,14 +936,23 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         _store_inner_gate_idea(ctx, proj, num, "G7", g7_idea)
 
     # ---- ④.5 审校（v2 6 维最终审核，可开关；用审校槽）----
+    # 断点续跑（方案 H）：停在审校中途时，已投票数从 chapter_step 恢复，只补投剩余的票
+    skip_review = resume_at in ("review", "finalize")
     verdict_review, blocking_review, review_ran = "", [], False
     pre_review_prose = prose   # G8 回退还原点
     review_enabled = gates_cfg.get("review_enabled", True)
     if review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
-        review_ran = True
-        ctx.stream_stage(f"审校 第{num}章")
-        blocking_review, advisory_review, verdict_review = _chapter_review(ctx, num, prose)
-        gr.review_blocking = blocking_review
+        # resume="review" = 审校与 G8 都已走完 → 一并跳过，不二次问门
+        review_ran = not skip_review
+        if skip_review:
+            ctx.log("info", f"第 {num} 章 断点续跑：审校已完成，跳过（进入定稿）")
+        else:
+            ctx.stream_stage(f"审校 第{num}章")
+            blocking_review, advisory_review, verdict_review = _chapter_review(
+                ctx, num, prose, done_votes=saved_votes,
+                vote_saver=lambda pl: st.save_chapter_step(
+                    proj, num, step_done="deslop", draft_path=draft_rel, votes=pl))
+            gr.review_blocking = blocking_review
 
         def _demote_word_block():
             """全 [字数] 阻塞 → 降级建议：修复 prompt 有 ±5% 纪律扩不了字数，强修只会原地打转（#37 教训）"""
@@ -1082,6 +1142,23 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     except Exception as e:
         ctx.log("warn", f"摘要链更新失败（不阻断）：{e}")
 
+    # ---- 设定清算（方案 D1）：本章自创设定三分类对账（不阻断，产物落追踪/）----
+    try:
+        from .canon_audit import audit_chapter
+        audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router)
+        v = audit.get("violations") or []
+        hard = [x for x in v if x.get("severity") == "硬伤"]
+        adopt = audit.get("adoptions") or []
+        if v or adopt:
+            ctx.log("warn", f"第 {num} 章 设定清算：违反 {len(v)}（硬伤 {len(hard)}）· "
+                            f"可收编自创 {len(adopt)}——详见 追踪/设定清算_第{num:03d}.json")
+        else:
+            ctx.log("ok", f"第 {num} 章 设定清算：无越界")
+    except Exception as e:
+        ctx.log("warn", f"设定清算失败（不阻断）：{e}")
+
+    # 断点收尾（方案 H）：本章全流程完成，清除章内断点
+    st.clear_chapter_step(proj)
     gr.word_actual = project.count_chars(prose)
     record = {"num": num, "title": title, **gr.to_record()}
     return record
@@ -1237,11 +1314,14 @@ def _votes_identical(a: dict, b: dict) -> bool:
     return la == lb
 
 
-def review_with_votes(ctx, num: int, prose: str, votes: int) -> dict:
+def review_with_votes(ctx, num: int, prose: str, votes: int,
+                      done_votes: list = None, vote_saver=None) -> dict:
     """k 次独立审校投票（P5）：温度治理 + 引证验真后按维聚合。
 
-    第 1、2 票完全一致 → 早停省 1/3 成本。返回聚合后的 v2 结构；
-    ctx.review_raw 记录第 1 票原始输出（根因溯源复用）。
+    并发投票（方案 E1）：k 票并行下发（首票流式回显，其余静默），墙钟≈最慢一票。
+    断点续跑（方案 H）：done_votes 为已完成的票（章内断点恢复），只补投差额；
+    vote_saver 在每票落袋时被调用（持久化到 chapter_step，停止不丢票）。
+    返回聚合后的 v2 结构；ctx.review_raw 记录第 1 张新票原始输出。
     """
     votes = max(1, int(votes))
     gates_cfg = ctx.cfg.get("gates", {})
@@ -1249,31 +1329,72 @@ def review_with_votes(ctx, num: int, prose: str, votes: int) -> dict:
     prompt = _build_final_review_prompt(ctx, num, prose)
     ctx.last_prompt = prompt
     client = ctx.router.client(cfg_mod.SLOT_REVIEW)
-    parsed_list, raws = [], []
-    for i in range(votes):
-        raw = clean_llm_output(client.chat_stream(
-            prompt, on_chunk=ctx.stream_chunk, temperature=temp, phase=PHASE_REVIEW))
-        raws.append(raw)
+
+    def _parse(raw: str) -> dict:
         v2 = verify_review_quotes(prose, parse_final_review_v2(raw))
         if not v2["verdict"]:   # v1 兜底
             fb, fa = parse_review_findings(raw)
             v2["blocking"] = v2["blocking"] or fb
             v2["advisory"] = v2["advisory"] or fa
+        return v2
+
+    parsed_list = [dict(v) for v in (done_votes or [])][:votes]
+    remaining = votes - len(parsed_list)
+    if remaining <= 0:
+        return merge_review_votes(parsed_list) if len(parsed_list) > 1 else (parsed_list[0] if parsed_list else {})
+    raws = []
+
+    def _cast(vote_idx: int, stream: bool) -> tuple:
+        raw = clean_llm_output(client.chat_stream(
+            prompt,
+            on_chunk=ctx.stream_chunk if stream else None,
+            temperature=temp, phase=PHASE_REVIEW))
+        return raw, _parse(raw)
+
+    def _collect(batch: list, first_stream: bool):
+        """一批票并发下发（E1）：首票回显流式，其余静默——墙钟≈最慢一票"""
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(batch)) as ex:
+            futs = [ex.submit(_cast, i, first_stream and i == 0) for i in batch]
+            for f in futs:
+                raw, v2 = f.result()
+                raws.append(raw)
+                parsed_list.append(v2)
+                if vote_saver:
+                    try:
+                        vote_saver(parsed_list)
+                    except Exception:
+                        pass
+                try:
+                    ctx.log("info", f"第 {num} 章 审校第 {len(parsed_list)}/{votes} 票："
+                                    f"{v2['verdict'] or '格式未识别'}（fail={v2['summary']['fail']}）")
+                except Exception:
+                    pass
+
+    if remaining == 1:
+        raw, v2 = _cast(0, True)
+        raws.append(raw)
         parsed_list.append(v2)
-        if i == 1 and votes > 2 and _votes_identical(parsed_list[0], v2):
+    else:
+        # 前两票并行 → 早停判据仍可用（完全一致且还要更多票 → 省尾票）；
+        # 不一致 → 尾票并发补齐。两阶段并行，墙钟≈两轮中最慢一票
+        _collect([0, 1], first_stream=True)
+        if not (len(parsed_list) >= 2 and votes > 2 and _votes_identical(parsed_list[0], parsed_list[1])):
+            rest = list(range(2, remaining))
+            if rest:
+                _collect(rest, first_stream=False)
+        else:
             try:
                 ctx.log("info", f"第 {num} 章 审校投票 1/2 完全一致 → 早停（省第 3 票）")
             except Exception:
                 pass
-            break
-        if i < votes - 1:
-            try:
-                ctx.log("info", f"第 {num} 章 审校第 {i + 1}/{votes} 票："
-                                f"{v2['verdict'] or '格式未识别'}（fail={v2['summary']['fail']}）")
-            except Exception:
-                pass
+    if vote_saver:
+        try:
+            vote_saver(parsed_list)
+        except Exception:
+            pass
     merged = merge_review_votes(parsed_list) if len(parsed_list) > 1 else parsed_list[0]
-    ctx.review_raw = raws[0]
+    ctx.review_raw = raws[0] if raws else ""
     # A2 双轨裁决：【世界书修正】条目（正文自洽而世界书条目疑过时）→ 登记修正提案
     try:
         n_proposed = memory.propose_worldbook_corrections(ctx.proj, num, merged.get("items", []))
@@ -1285,7 +1406,8 @@ def review_with_votes(ctx, num: int, prose: str, votes: int) -> dict:
     return merged
 
 
-def _chapter_review(ctx, num: int, prose: str, votes: int = None) -> tuple:
+def _chapter_review(ctx, num: int, prose: str, votes: int = None,
+                    done_votes: list = None, vote_saver=None) -> tuple:
     """v2 6 维最终审核（多轮投票 + 引证验真；用 FINAL_REVIEW_PROMPT）
 
     Args:
@@ -1314,7 +1436,8 @@ def _chapter_review(ctx, num: int, prose: str, votes: int = None) -> tuple:
     if votes is None:
         votes = max(1, int(ctx.cfg.get("gates", {}).get("review_votes", 3)))
     try:
-        v2 = review_with_votes(ctx, num, prose, votes)
+        v2 = review_with_votes(ctx, num, prose, votes,
+                           done_votes=done_votes, vote_saver=vote_saver)
     except Exception as e:
         ctx.log("warn", f"第 {num} 章 6 维审校调用失败（不阻断）：{e}")
         return [], [], ""

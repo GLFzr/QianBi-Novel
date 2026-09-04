@@ -705,6 +705,35 @@ class _NetWorker(QThread):
                 self.models_done.emit(cid, [])
 
 
+class _CanonAuditWorker(QThread):
+    """F2 世界观对账：逐章设定清算（后台），报告落 追踪/设定清算_第NNN.json"""
+    done = Signal(int, int)                     # 已完成章数, 总章数
+    finished_ok = Signal(bool, str)             # ok, 摘要
+
+    def __init__(self, proj: str, cfg: dict, chapters: list, parent=None):
+        super().__init__(parent)
+        self.proj, self.cfg, self.chapters = proj, cfg, chapters
+        self._abort = False
+
+    def cancel(self):
+        self._abort = True
+
+    def run(self):
+        from ..core.canon_audit import audit_chapter
+        done, total, last_err = 0, len(self.chapters), ""
+        for n, _name, path in self.chapters:
+            if self._abort:
+                break
+            try:
+                audit_chapter(self.proj, n, project.read_file(path), self.cfg)
+            except Exception as e:  # noqa: BLE001
+                last_err = str(e)
+            done += 1
+            self.done.emit(done, total)
+        self.finished_ok.emit(done == total,
+                              f"{done}/{total} 章" + (f" · 末章错误 {last_err[:80]}" if last_err else ""))
+
+
 class _IdeaWorker(QThread):
     """选题展开（灵感 → 3 个选题方向）：用辅助槽，后台执行"""
     done = Signal(bool, str)                    # ok, result_or_error
@@ -897,6 +926,7 @@ class Bridge(QObject):
     # 共写档（co-write）状态
     cwModeChanged = Signal()
     cwStageChanged = Signal()
+    supervisorFailedChanged = Signal()         # C2：衔接比对失败 → 显示跳过锁定出口
     cwBusyChanged = Signal()
     cwReportChanged = Signal()
     cwStreamingChanged = Signal()
@@ -1005,6 +1035,8 @@ class Bridge(QObject):
         self._cw_cancelled = False             # 用户取消在途请求（#8）
         self._cw_busy_seconds = 0
         self._cw_reply = ""                    # 本轮 agent 流式回复缓冲
+        self._cw_mode = "discuss"              # 本轮回应模式（讨论/撰写，方案 A）
+        self._cw_supervisor_failed = False     # C2：比对失败 → 允许「跳过比对并锁定」
         self._cw_worker = None
         self._cw_sum_worker = None
         self._backflow_worker = None           # 剧情反哺 worker（helper 槽，后台串行）
@@ -1480,6 +1512,54 @@ class Bridge(QObject):
         cfg_mod.save_config(cfg)
         self.generalChanged.emit()
         self.toast.emit("ok", "遥测已" + ("开启（数据仅保存在本地）" if on else "关闭"))
+
+    # ---- 模型策略 / 连写（方案 B、F3）----
+
+    @Slot(str, result="QVariantList")
+    def modelPresetOptions(self, _arg=""):
+        from .. import model_strategy
+        return model_strategy.preset_options()
+
+    @Slot(str)
+    def applyModelPreset(self, preset_id: str):
+        from .. import model_strategy
+        cfg = cfg_mod.load_config()
+        cfg = model_strategy.apply_preset(cfg, preset_id)
+        cfg_mod.save_config(cfg)
+        self.cfg = cfg
+        self.connectionModel.refresh()
+        spec = model_strategy.PRESETS.get(preset_id)
+        self.toast.emit("ok", "模型策略已切换：" + (spec["label"] if spec else preset_id))
+
+    @Property(bool, notify=generalChanged)
+    def autoGate(self) -> bool:
+        return bool(cfg_mod.load_config().get("writing", {}).get("auto_gate", False))
+
+    @Slot(bool)
+    def setAutoGate(self, on: bool):
+        cfg = cfg_mod.load_config()
+        cfg.setdefault("writing", {})["auto_gate"] = bool(on)
+        cfg_mod.save_config(cfg)
+        self.generalChanged.emit()
+        self.toast.emit("ok", "连写模式（决策门自动放行）已" + ("开启" if on else "关闭"))
+
+    @Slot()
+    def runCanonAudit(self):
+        """F2 世界观对账：对本书全部已写章节跑设定清算（后台），报告落 追踪/"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        chapters = project.list_chapters(self.proj)
+        if not chapters:
+            self.toast.emit("warn", "本书还没有正文可对账")
+            return
+        self.toast.emit("info", f"世界观对账开始（{len(chapters)} 章，后台执行）…")
+        w = _CanonAuditWorker(self.proj, self.cfg, chapters, parent=self)
+        w.finished_ok.connect(lambda ok, msg: self.toast.emit(
+            "ok" if ok else "warn", "世界观对账完成：" + msg))
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        w.start()
 
     # ========== 检查更新（多通道 + 验签 + 一键更新）==========
 
@@ -3210,8 +3290,10 @@ class Bridge(QObject):
 
     # ---- 对话（每轮输入 → 一次性 DialogueWorker）----
 
-    @Slot(str)
-    def submitCwMessage(self, text: str):
+    @Slot(str, str)
+    def submitCwMessage(self, text: str, mode: str = "discuss"):
+        """mode：discuss（默认，确认/收敛，短回复）/ compose（直接产出草案）——
+        v1.1 方案 A：作者发「嗯」不该收到一篇作文"""
         if not self.proj or not self._cw:
             self.toast.emit("warn", "请先打开项目")
             return
@@ -3236,14 +3318,36 @@ class Bridge(QObject):
         co_dialogue.transcript_append(state, stage, "user", text)
         self._cw_save_state(state)
         focus = self._cur_num if stage == st.STAGE_CW_PROSE else 0
-        self._spawn_cw_dialogue(text, stage, focus)
+        self._spawn_cw_dialogue(text, stage, focus, mode=mode)
 
-    def _spawn_cw_dialogue(self, text: str, stage: str, focus_chapter: int = 0):
+    @Slot()
+    def generateCwDraft(self):
+        """「生成草案」：跳过讨论直接按本阶段结构产出草案（撰写模式的零输入入口）"""
+        stage = self._get_cw_stage_key()
+        if stage == st.STAGE_CW_PROJECT:
+            self.toast.emit("warn", "创建项目阶段请填写左侧选题表单后点「确定」")
+            return
+        request = prompts.CW_DRAFT_REQUESTS.get(stage)
+        if not request:
+            self.toast.emit("warn", "本阶段没有草案模板")
+            return
+        focus = self._cur_num if stage == st.STAGE_CW_PROSE else 0
+        if stage == st.STAGE_CW_PROSE and not self._cur_num:
+            self.toast.emit("warn", "请先在章节列表打开要写作的章")
+            return
+        state = self._cw.load()
+        co_dialogue.transcript_append(state, stage, "user", "（生成草案）" + request)
+        self._cw_save_state(state)
+        self._spawn_cw_dialogue(request, stage, focus, mode="compose")
+
+    def _spawn_cw_dialogue(self, text: str, stage: str, focus_chapter: int = 0,
+                           mode: str = "discuss"):
         """起一次性 DialogueWorker（QML 输入入口与主 Agent 派单共用）"""
         self._cw_reply = ""
+        self._cw_mode = mode if mode in ("discuss", "compose") else "discuss"
         self._set_cw_busy(True)
         worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self,
-                                            focus_chapter=focus_chapter)
+                                            focus_chapter=focus_chapter, mode=self._cw_mode)
         worker.chunk.connect(self._on_cw_chunk)
         worker.done.connect(self._on_cw_done)
         worker.error.connect(self._on_cw_error)
@@ -3300,6 +3404,10 @@ class Bridge(QObject):
             self._cw_reply = ""
             self.cwStreamingChanged.emit()
             return
+        # 讨论模式保险丝（方案 A）：模型不守短回复约束时机器截断——
+        # 截断的是进转写/展示的文本，完整原文已随流式看过
+        if self._cw_mode == "discuss":
+            text = co_dialogue.cap_discuss_reply(text)
         stage = self._get_cw_stage_key()
         state = self._cw.load()
         co_dialogue.transcript_append(state, stage, "agent", text)
@@ -3745,6 +3853,89 @@ class Bridge(QObject):
         self.toast.emit("ok", f"读改最小改动量阈值 = {max(0, int(v))} 字（低于不触发；0=每次都触发）")
 
     # ---- M5：主 Agent（Supervisor）——定稿前衔接比对 + 世界书变更影响提示 ----
+
+    def _start_cw_supervisor(self):
+        self._set_cw_busy(True)
+        self._cw_supervisor_failed = False
+        self.supervisorFailedChanged.emit()
+        # 工作副本优先：定稿时编辑器未保存内容（_working_text）才是「待定稿」，
+        # _chapter_text 是磁盘基准，只传它会在未保存时拿旧稿
+        editor_text = self._working_text or self._chapter_text if self._cur_num > 0 else ""
+        worker = co_dialogue.SupervisorWorker(self.cfg, self.proj, self._cur_num, parent=self,
+                                              chapter_text=editor_text)
+        worker.done.connect(self._on_cw_supervisor_done)
+        worker.error.connect(self._on_cw_supervisor_error)
+        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
+        self._cw_worker = worker
+        worker.start()
+        self.toast.emit("info", f"主 Agent 正在做第 {self._cur_num} 章定稿前衔接比对（review 槽）…")
+
+    @Property(bool, notify=supervisorFailedChanged)
+    def supervisorFailed(self) -> bool:
+        return self._cw_supervisor_failed
+
+    def _on_cw_supervisor_error(self, msg: str):
+        """比对失败不再静默卡死锁定（C2）：点亮「跳过比对并锁定」出口"""
+        self._cw_supervisor_failed = True
+        self.supervisorFailedChanged.emit()
+        self.toast.emit("error", f"衔接比对失败：{msg}——可重试，或跳过比对直接锁定（会留痕）")
+
+    @Slot()
+    def retrySupervisor(self):
+        if self._cur_num:
+            self._start_cw_supervisor()
+
+    @Slot()
+    def forceLockChapter(self):
+        """跳过衔接比对直接锁定（C2 出口）：比对不可用时不该卡死定稿——留痕可审计"""
+        if not self.proj or not self._cur_num:
+            return
+        state = self._cw.load()
+        cw = st.ensure_cw(state)
+        cw.setdefault("supervised", {})[str(self._cur_num)] = "skipped:" + time.strftime("%m-%d %H:%M")
+        st.save_state(self.proj, state)
+        self._cw_supervisor_failed = False
+        self.supervisorFailedChanged.emit()
+        self.confirmChapterLocked()
+
+    @Property(str, notify=cwStageChanged)
+    def cwStageMode(self) -> str:
+        """当前阶段的回应模式记忆（讨论/撰写；方案 A）"""
+        if not self.proj:
+            return "discuss"
+        state = st.load_state(self.proj)
+        cw = st.ensure_cw(state)
+        return (cw.get("stage_mode") or {}).get(self._get_cw_stage_key(), "discuss")
+
+    @Slot(str)
+    def setCwStageMode(self, mode: str):
+        if not self.proj or mode not in ("discuss", "compose"):
+            return
+        state = self._cw.load()
+        cw = st.ensure_cw(state)
+        cw.setdefault("stage_mode", {})[self._get_cw_stage_key()] = mode
+        self._cw_save_state(state)
+
+    @Slot()
+    def proseToEditor(self):
+        """C1：从最近一条 agent 正文回复提取正文 → 写进当前打开的章节（编辑器工作副本）"""
+        if not self.proj or self._get_cw_stage_key() != st.STAGE_CW_PROSE or not self._cur_num:
+            self.toast.emit("warn", "请先在正文阶段打开要落稿的章")
+            return
+        state = self._cw.load()
+        transcript = ((st.ensure_cw(state).get("transcript") or {})
+                      .get(st.STAGE_CW_PROSE) or [])
+        replies = [m.get("text", "") for m in transcript
+                   if isinstance(m, dict) and m.get("role") == "agent"] if transcript else []
+        if not replies:
+            self.toast.emit("warn", "对话区还没有正文草案")
+            return
+        body = co_dialogue.extract_prose_reply(replies[-1])
+        if not body.strip():
+            self.toast.emit("warn", "没能从回复中提取出正文")
+            return
+        self.saveChapterText(body)
+        self.toast.emit("ok", f"已提取正文到第 {self._cur_num} 章（{project.count_chars(body)} 字），请核对后点「确定」锁定")
 
     def _start_cw_supervisor(self):
         self._set_cw_busy(True)

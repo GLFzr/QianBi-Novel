@@ -50,6 +50,38 @@ def is_project(path: str) -> bool:
     return all(os.path.isdir(os.path.join(path, d)) for d in ["设定", "大纲", "正文", "追踪"])
 
 
+def chapter_draft_path(proj: str, num: int) -> str:
+    """章内断点（方案 H）的草稿落盘位：定稿前草稿就住在正文目录的隐藏层"""
+    return os.path.join(proj, "正文", ".drafts", f"第{num:03d}.md")
+
+
+def canon_digest(proj: str, budget: int = 800) -> str:
+    """同人禁则摘要（方案 D3）：正则.md 的 must 规则紧凑清单，无则空串。
+
+    注入点：共写 core/outline 参考块与自动档设定/大纲 prompt——
+    前期阶段不注入世界书全文，但必须带着禁则，否则核心设定就会发明
+    验证①里那种「执事堂/检测灵师」式自创制度。
+    """
+    try:
+        rules = regex_rules(proj)
+    except Exception:  # noqa: BLE001
+        return ""
+    musts = [str(r.get("rule", "")).strip() for r in rules if r.get("level") == "must"]
+    if not musts:
+        return ""
+    lines, used = [], 0
+    for r in musts:
+        if used + len(r) > budget:
+            break
+        lines.append("- " + r)
+        used += len(r) + 1
+    if not lines:
+        return ""
+    return ("【原作禁则（同人纪律，与下列任何一条冲突的设定不得出现）】\n"
+            + "\n".join(lines)
+            + "\n（同人为本：大纲与单元须安排原作专名出场，别让同人只剩人名。）")
+
+
 # ---------- 原作世界书导入（同人档：把原作世界观带进项目）----------
 
 WORLDBOOK_SOURCE_PATH = "设定/原作世界书.md"

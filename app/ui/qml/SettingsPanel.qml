@@ -981,7 +981,7 @@ Item {
                 }
             }
 
-            // ============ 页3：系统（备份 + 快捷键） ============
+            // ============ 页3：系统（模型策略 + 备份 + 快捷键） ============
             ScrollView {
                 contentWidth: availableWidth
                 ColumnLayout {
@@ -989,6 +989,50 @@ Item {
                     y: 12
                     width: parent.width - 24
                     spacing: 12
+
+                    // ---- 模型策略（方案 B）：一键把三槽切到 DeepSeek 官方 ----
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
+                        implicitHeight: msCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: msCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            spacing: 8
+                            Text {
+                                text: "模型策略（一键切换三槽）"
+                                color: Theme.textPrimary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsBody
+                                font.bold: true
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "官方全家桶 = 写作/辅助/审校全走 DeepSeek 官方 V4 Flash（实测审校 5-8 分钟 → 约 1 分钟）；严格审校 = 审校槽升官方 Pro。Key 复用已绑定的官方连接，无需重填。"
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                            }
+                            Repeater {
+                                model: bridge.modelPresetOptions()
+                                delegate: AppButton {
+                                    required property var modelData
+                                    text: modelData.label
+                                    kind: "secondary"
+                                    onClicked: bridge.applyModelPreset(modelData.id)
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: "切换三槽指向并保存（连接行自动确保存在）"
+                                }
+                            }
+                        }
+                    }
 
                     Text {
                         text: "备份与统计"

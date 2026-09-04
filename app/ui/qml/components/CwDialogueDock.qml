@@ -19,6 +19,11 @@ Rectangle {
     property bool rollbackOpen: false   // 打回目标选择展开（#5 跨阶段打回）
     // 是否跟随新内容钉底。默认关：用户没主动回底就不该被拽走视野（#6）。
     property bool follow: false
+    // 回应模式（方案 A）：讨论=确认收敛短回复（默认）；撰写=直接产出草案。
+    // 记忆在项目状态里（bridge.cwStageMode），切阶段自动回讨论。
+    property bool composeMode: bridge.cwStageMode === "compose"
+
+    onComposeModeChanged: bridge.setCwStageMode(composeMode ? "compose" : "discuss")
 
     function goToEnd() { msgList.positionViewAtEnd() }
 
@@ -26,7 +31,7 @@ Rectangle {
         var t = cwInput.text.trim()
         if (t === "") return
         cwInput.text = ""
-        bridge.submitCwMessage(t)
+        bridge.submitCwMessage(t, composeMode ? "compose" : "discuss")
         cwDock.follow = true      // 刚发的话当然要在眼前
         Qt.callLater(cwDock.goToEnd)
     }
@@ -138,6 +143,29 @@ Rectangle {
                     onClicked: bridge.reviewCwProse()
                     ToolTip.visible: hovered
                     ToolTip.text: "六维审校本章正文（读编辑器工作副本）——问题登记待修汇总，可一键修复"
+                }
+                // ---- C2：衔接比对失败 → 重试 / 跳过并锁定（留痕）----
+                AppButton {
+                    text: "重试比对"
+                    kind: "secondary"
+                    height: 28
+                    visible: bridge.supervisorFailed && cwDock.viewIsCurrent
+                             && bridge.cwStageKey === "cw_prose"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.retrySupervisor()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "重新做定稿前衔接比对"
+                }
+                AppButton {
+                    text: "跳过比对并锁定"
+                    kind: "danger"
+                    height: 28
+                    visible: bridge.supervisorFailed && cwDock.viewIsCurrent
+                             && bridge.cwStageKey === "cw_prose"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.forceLockChapter()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "比对服务不可用时的出口：直接锁定本章并在状态里留痕（skipped）"
                 }
                 Item { Layout.fillWidth: true }
                 Text {
@@ -587,6 +615,34 @@ Rectangle {
             Layout.fillWidth: true
             Layout.margins: 8
             spacing: 6
+            // 回应模式开关（方案 A）：讨论=确认收敛短回复；撰写=输入即产出草案。
+            // 默认讨论——「发两三个字收七百字」从交互层面根治。
+            Row {
+                spacing: 2
+                Layout.alignment: Qt.AlignBottom
+                Rectangle {
+                    width: 46; height: 30
+                    radius: Theme.rBtn
+                    color: !cwDock.composeMode ? Theme.bgActive : Theme.bgHover
+                    border.width: 1
+                    border.color: !cwDock.composeMode ? Theme.accent : Theme.border
+                    Text { anchors.centerIn: parent; text: "讨论"; color: !cwDock.composeMode ? Theme.accent : Theme.textTertiary
+                           font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: cwDock.composeMode = false }
+                }
+                Rectangle {
+                    width: 46; height: 30
+                    radius: Theme.rBtn
+                    color: cwDock.composeMode ? Theme.bgActive : Theme.bgHover
+                    border.width: 1
+                    border.color: cwDock.composeMode ? Theme.accent : Theme.border
+                    Text { anchors.centerIn: parent; text: "撰写"; color: cwDock.composeMode ? Theme.accent : Theme.textTertiary
+                           font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: cwDock.composeMode = true }
+                }
+            }
             // 输入区：随内容增高（旧 TextField 不折行且 height 写死 30，
             // 第二行起根本看不见），超过上限后内部滚动
             ScrollView {
@@ -599,7 +655,9 @@ Rectangle {
                     id: cwInput
                     objectName: "cwInput"
                     wrapMode: TextArea.Wrap
-                    placeholderText: "和 " + bridge.cwAgent + " 讨论这一步…（回车发送，Ctrl+回车换行）"
+                    placeholderText: cwDock.composeMode
+                        ? "描述要写什么，直接产出草案…（撰写模式）"
+                        : "和 " + bridge.cwAgent + " 讨论（会先复述确认你的意思）…（回车发送）"
                     placeholderTextColor: Theme.textTertiary
                     color: Theme.textPrimary
                     font.family: Theme.uiFont
@@ -623,13 +681,36 @@ Rectangle {
                     Keys.onEnterPressed: handleReturn(event)
                 }
             }
-            AppButton {
-                text: "发送"
-                kind: "primary"
-                height: 30
+            Column {
+                spacing: 4
                 Layout.alignment: Qt.AlignBottom
-                enabled: cwInput.enabled && cwInput.text.trim() !== ""
-                onClicked: cwDock.send()
+                AppButton {
+                    text: "发送"
+                    kind: "primary"
+                    height: 30
+                    enabled: cwInput.enabled && cwInput.text.trim() !== ""
+                    onClicked: cwDock.send()
+                }
+                AppButton {
+                    text: "生成草案"
+                    kind: "secondary"
+                    height: 30
+                    visible: cwDock.viewIsCurrent && bridge.cwStageKey !== "cw_project"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.generateCwDraft()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "跳过讨论，直接按本阶段产物结构产出草案（结果进对话区，标「草案」）"
+                }
+                AppButton {
+                    text: "提取正文到编辑器"
+                    kind: "secondary"
+                    height: 30
+                    visible: cwDock.viewIsCurrent && bridge.cwStageKey === "cw_prose"
+                    enabled: !cwDock.busy
+                    onClicked: bridge.proseToEditor()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "从最近一条正文草案中剥出正文本身（去掉开场白/元话语），写进当前打开的章——再点「确定」走锁定"
+                }
             }
         }
     }

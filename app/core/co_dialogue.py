@@ -75,6 +75,48 @@ def build_handoff(stage: str, summary_text: str):
     return product, handoff
 
 
+def cap_discuss_reply(text: str, cap: int = 320) -> str:
+    """讨论模式的回复保险丝：模型不守 ≤200 字约束时，bridge 侧截断并注明。
+
+    截断只在**超出**时发生；在最近一个句号/问号/叹号处收口，避免切半句。
+    （真机验证 P0-1：发两三个字收七百字——提示词约束之外再加一道机器闸。）
+    """
+    t = (text or "").strip()
+    if len(t) <= cap:
+        return t
+    cut = t[:cap]
+    for i in range(len(cut) - 1, max(len(cut) - 60, 0), -1):
+        if cut[i - 1] in "。！？!?…":
+            cut = cut[:i]
+            break
+    return cut.rstrip() + "\n\n……（讨论模式回复过长已截断；要完整草案请切「撰写」或点「生成草案」）"
+
+
+def extract_prose_reply(reply: str) -> str:
+    """共写正文提取（C1 落稿契约）：从 agent 回复中剥出正文本身。
+
+    优先级：① `<<<正文>>>…<<<正文完>>>` 包裹（提示词强约定的格式）；
+    ② 回退：自 `## 第N章`/`# 第N章` 标题起，到交接小节/「正文完」/「待确认」为止。
+    供「提取正文到编辑器」动作使用——开场白与元话语不许混进存盘正文。
+    """
+    text = (reply or "").strip()
+    m = re.search(r"<<<正文>>>\s*(.*?)\s*<<<正文完>>>", text, re.S)
+    if m:
+        return m.group(1).strip()
+    start = re.search(r"^(#{1,2}\s*第[一二三四五六七八九十百千\d]+章.*)$", text, re.M)
+    if not start:
+        return text
+    body = text[start.start():]
+    cut_at = None
+    for marker in ("→ 下阶段交接", "正文完。", "正文完", "待确认：", "---\n\n正文完"):
+        idx = body.find(marker)
+        if idx > 0 and (cut_at is None or idx < cut_at):
+            cut_at = idx
+    if cut_at:
+        body = body[:cut_at]
+    return body.rstrip().rstrip("-").rstrip()
+
+
 def prev_handoff(state: dict, stage: str) -> str:
     """上一阶段交接块（下一 Agent 的唯一上文来源）；无则占位"""
     order = st.CW_STAGE_ORDER
@@ -120,11 +162,17 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
         info = project.read_idea_info(proj)
         base = (f"【选题信息】题材：{info['genre'] or '（不限）'} · 平台：{info['platform']} · "
                 f"预计 {info['total_words_wan']} 万字\n灵感：{info['idea'] or '（无）'}")
+        canon = project.canon_digest(proj, 800)
+        if canon:
+            base += "\n\n" + canon + "\n（核心设定不得与上述禁则冲突。）"
         return base + "\n\n" + _grow(preset_id, "grow_core_template")
     if stage == st.STAGE_CW_OUTLINE:
         core = rd("设定", "题材定位.md")[:4000]
-        return (f"【核心设定（已确定）】\n{core or '（尚未确定，先请作者确定设定）'}\n\n"
-                + _grow(preset_id, "grow_outline_template"))
+        canon = project.canon_digest(proj, 800)
+        base = (f"【核心设定（已确定）】\n{core or '（尚未确定，先请作者确定设定）'}\n\n")
+        if canon:
+            base += canon + "\n\n（大纲剧情不得与禁则冲突，并按单元安排原作专名出场。）\n\n"
+        return base + _grow(preset_id, "grow_outline_template")
     if stage == st.STAGE_CW_WORLDBOOK:
         core = rd("设定", "题材定位.md")[:2000] or "（无）"
         outline = rd("大纲", "大纲.md")[:2000] or "（无）"
@@ -194,12 +242,14 @@ class DialogueWorker(QThread):
     error = Signal(str)
 
     def __init__(self, cfg: dict, proj: str, stage: str, user_text: str,
-                 router=None, parent=None, focus_chapter: int = 0):
+                 router=None, parent=None, focus_chapter: int = 0,
+                 mode: str = "discuss"):
         super().__init__(parent)
         self.cfg = cfg
         self.proj = proj
         self.stage = stage
         self.user_text = user_text
+        self.mode = mode if mode in ("discuss", "compose") else "discuss"
         self.router = router or ModelRouter(cfg)
         self.focus_chapter = int(focus_chapter or 0)
         self.last_prompt = ""
@@ -214,6 +264,7 @@ class DialogueWorker(QThread):
             state = st.load_state(self.proj)
             prompt = prompts.CO_DIALOGUE_PROMPT.format(
                 role_desc=role["role"],
+                mode_block=prompts.mode_block_for(self.stage, self.mode, self.user_text),
                 agent_name=role["agent"],
                 stage_label=st.CW_STAGE_LABELS.get(self.stage, self.stage),
                 handoff=prev_handoff(state, self.stage),
@@ -223,7 +274,13 @@ class DialogueWorker(QThread):
                 user_message=self.user_text,
             )
             self.last_prompt = prompt
-            text = clean_llm_output(self.router.client(role["slot"]).chat_stream(
+            # 讨论走辅助槽（快、便宜），撰写走本阶段职责槽——
+            # 「发两三个字等半天」的一半代价在槽位选错上
+            if self.mode == "discuss" and self.stage != st.STAGE_CW_WORLDBOOK:
+                slot = cfg_mod.SLOT_HELPER
+            else:
+                slot = role["slot"]
+            text = clean_llm_output(self.router.client(slot).chat_stream(
                 prompt, on_chunk=self.chunk.emit, on_reasoning=self.reasoning.emit))
             if not text.strip():
                 self.error.emit("模型返回为空，请重试")

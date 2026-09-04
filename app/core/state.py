@@ -392,6 +392,7 @@ def cw_defaults() -> CWStateTD:
         "unit": {},                  # 单元信息（M3）
         "supervised": {},            # {章号: 主 Agent 衔接比对时间戳}（M5 触发点①）
         "report": {},                # {ts, num, text} 主 Agent 报告（M5 报告区）
+        "stage_mode": {},            # {阶段key: discuss/compose} 回应模式记忆（方案 A）
     }
 
 
@@ -548,3 +549,39 @@ def update_history_status(proj: str, state: dict, num: int, status: str) -> bool
                 save_state(proj, state)
             return True
     return False
+
+
+# ---------- 章内断点（方案 H）：草稿即文件，步骤级 checkpoint ----------
+# chapter_step 在 _STATE_KEY_TYPES 里声明为 str（键早已预留）：存 JSON 串，尊重既有契约
+
+def save_chapter_step(proj: str, num: int, step_done: str,
+                      draft_path: str = "", votes: list = None):
+    """记录章内微循环最后完成的步骤（草稿/扩写/扫描/去味/审校/定稿）。
+
+    停在任何位置再重启，恢复语义 = 重跑被打断的那一步，之前完成的步骤
+    （草稿文件、已投的审校票）原样保留——不再「停一次全章白写」。
+    """
+    state = load_state(proj)
+    state["chapter_step"] = json.dumps(
+        {"num": int(num), "step_done": step_done, "draft_path": draft_path,
+         "votes": votes or [], "ts": time.time()},
+        ensure_ascii=False)
+    save_state(proj, state)
+
+
+def get_chapter_step(proj: str) -> dict:
+    raw = load_state(proj).get("chapter_step") or ""
+    if isinstance(raw, dict):
+        return raw
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except ValueError:
+        return {}
+
+
+def clear_chapter_step(proj: str):
+    state = load_state(proj)
+    if state.get("chapter_step"):
+        state["chapter_step"] = ""
+        save_state(proj, state)

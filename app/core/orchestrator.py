@@ -117,6 +117,10 @@ class Orchestrator(QThread):
         回退重做在解锁前由 _apply_rollback 处理，本方法不返回"""
         if not self.gate_enabled(key):
             return ""
+        # F3 连写会话：writing.auto_gate 开启时全部决策门自动放行（批量跑批用）
+        if (self.cfg or {}).get("writing", {}).get("auto_gate"):
+            self.log("info", f"[连写] 决策门 {key} 自动放行")
+            return ""
         # 暂停优先于决策门：暂停态下弹门会出现两个语义不同的「继续」按钮
         # （门条的 resolveStepGate 与流水线的 resumePipeline），用户无从判断点哪个。
         # 先过 checkpoint 停在步骤边界，等用户恢复后再来要这个决策。
@@ -354,6 +358,10 @@ class Orchestrator(QThread):
                     guidance = (guidance + "\n" + carry) if guidance else carry
                 if g5_idea:
                     guidance = (guidance + "\n" + g5_idea) if guidance else g5_idea
+                cs = st.get_chapter_step(self.proj)
+                if cs.get("num") == num and cs.get("step_done"):
+                    self.log("info", f"第 {num} 章断点续跑：从「{cs.get('step_done')}」之后继续"
+                                     f"（草稿与已投审校票已保留，方案 H）")
                 record = stages.chapter_microcycle(self, num, guidance=guidance, ideas=ideas)
                 stages.write_gen_config(self, num)   # 先落快照再发信号：闸门/信号链异常不该丢可追溯性
                 self.sig_chapter_done.emit(record)

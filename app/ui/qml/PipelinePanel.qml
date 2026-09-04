@@ -277,6 +277,16 @@ Item {
                 }
                 ThinProgress { Layout.fillWidth: true; value: bridge.progressValue }
 
+                // 连写模式（F3）：开启后所有决策门自动放行，批量跑批不等人
+                AppCheck {
+                    id: autoGateCheck
+                    Layout.fillWidth: true
+                    text: "连写模式：决策门（大纲/细纲/审校/定稿）自动放行，跑批不等人"
+                    checked: bridge.autoGate
+                    font.pixelSize: Theme.fsTiny
+                    onToggled: bridge.setAutoGate(checked)
+                }
+
                 // 主控制
                 RowLayout {
                     Layout.fillWidth: true
