@@ -26,6 +26,12 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 ShowLanguageDialog=no
+; 手动双击升级时程序常还开着，而它锁着自己的 exe：让它先问一句「请关闭应用」，
+; 比复制失败后把替换排到下次重启好（症状是「升级了但行为还是旧的」）。
+CloseApplications=yes
+; 关掉安装器自己的「重启应用程序」：[Run] 已经给了「立即运行」勾选，两处都启动会
+; 撞上单实例锁——第二个进程 raise 一下就退出，用户看到的是「更新完程序打不开」。
+RestartApplications=no
 ; 代码签名占位（D2：证书到位后取消注释并配置 Sign Tool）
 ;SignTool=signtool
 SetupIconFile=..\assets\icon.ico

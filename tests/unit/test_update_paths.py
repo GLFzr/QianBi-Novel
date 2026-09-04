@@ -78,6 +78,19 @@ def test_installer_blocks_install_dir_on_writing_data(tmp_path):
     assert "wpReady" in code, "升级安装会跳过目录页，准备页必须提醒"
 
 
+def test_installer_deals_with_a_running_app():
+    """升级时程序常还开着，而它锁着自己的 exe——这一段两条都不许反着改"""
+    text = _iss()
+    # 没有 CloseApplications：文件复制失败被排到重启后，症状是「升级了行为还是旧的」
+    assert "CloseApplications=yes" in text
+    # [Run] 已经提供「立即运行」，安装器再自己重启一次会撞单实例锁
+    # （第二个进程 raise 一下就退），用户看到的是「更新完程序打不开」
+    assert "RestartApplications=no" in text
+    # 也别退回 AppMutex + ctypes 具名互斥量：per-user 非管理员会话没有
+    # SeCreateGlobalPrivilege，互斥量静默落在 Local 前缀，而 Inno 找 Global 前缀
+    assert "AppMutex" not in text, "接不通的死重量：见 CloseApplications 上方的注释"
+
+
 def test_code_section_rejects_ini_style_comments():
     """[Code] 交给 Pascal 编译器：一行 ; 注释就能让整包编译不过（'BEGIN' expected）"""
     text = _iss()
