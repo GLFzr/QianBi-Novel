@@ -1531,6 +1531,8 @@ class Bridge(QObject):
             "package": dict(self._update_pkg or {}),
             "settings": {
                 "autoCheck": bool(self._updates().get("auto_check", False)),
+                # 没表过态的「开」是 v0.18 翻转默认值翻出来的，UI 要认得出来才能主动说明
+                "autoCheckChosen": bool(self._updates().get("auto_check_chosen", False)),
                 "intervalHours": float(self._updates().get("interval_hours") or 24),
                 "customUrl": str(self._updates().get("custom_url") or ""),
                 "proxyMode": str(self._updates().get("proxy_mode") or "system"),

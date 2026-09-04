@@ -138,15 +138,15 @@ mark_ctx = FakeMarkCtx()
 gates.resolve_failed(mark_ctx, "第 1 章去味未通过", gr2)
 check("mark_continue → needs_fix 不暂停", gr2.final_status == "needs_fix" and not mark_ctx.paused)
 
-print("5 内置连接 max_tokens 迁移")
+print("5 内置预设 max_tokens 迁移")
 cfg = {"connections": [
     {"id": "ds-v4-pro", "max_tokens": 8192},
-    {"id": "ds-v4-flash", "max_tokens": 8192},
+    {"id": "bl-qwen-max", "max_tokens": 8192},
     {"id": "custom-x", "max_tokens": 8192},
 ]}
 cfg_mod._migrate_builtin_connections(cfg)
 check("ds-v4-pro → 32768", cfg["connections"][0]["max_tokens"] == 32768)
-check("ds-v4-flash → 16384", cfg["connections"][1]["max_tokens"] == 16384)
+check("bl-qwen-max → 16384", cfg["connections"][1]["max_tokens"] == 16384)
 check("自定义不动", cfg["connections"][2]["max_tokens"] == 8192)
 
 print("6 HTTP 状态码重试分级")

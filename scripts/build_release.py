@@ -2,7 +2,11 @@
 """一键发布流水线（封装计划 T1.2）
 
 步骤：版本 → 质量闸门（可跳过）→ version_info 生成 → PyInstaller onedir
-    → 便携 zip → SHA256SUMS → 打包版冒烟探针 → （可选）Inno Setup 安装包
+    → 打包版冒烟探针 → 代码签名（配了证书才做）→ 便携 zip → SHA256SUMS
+    → （可选）Inno Setup 安装包 + 签名 → latest.json 回填与 Ed25519 签名
+
+签名：设 QIANBI_SIGN_PFX（+ QIANBI_SIGN_PASS / QIANBI_SIGN_SUBJECT）或
+      QIANBI_SIGN_SHA1，并确保能找到一个 signtool.exe；没配就照旧产出未签名包。
 
 用法：
   python scripts/build_release.py                 # 全流程（含质量闸门与冒烟）
@@ -10,6 +14,7 @@
   python scripts/build_release.py --no-installer  # 跳过 Inno Setup（未装 ISCC 时自动跳过）
 """
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -59,6 +64,60 @@ def sha256(path: str) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def find_signtool() -> str:
+    """signtool.exe：PATH 优先，其次 Windows 10/11 SDK 的 bin\\x64（取版本号最大的）"""
+    found = shutil.which("signtool")
+    if found:
+        return found
+    import glob
+    kits = [os.path.join(os.environ.get(k, ""), "Windows Kits", "10", "bin")
+            for k in ("ProgramFiles(x86)", "ProgramFiles")]
+    cands = []
+    for root in kits:
+        if root and os.path.isdir(root):
+            cands += glob.glob(os.path.join(root, "*", "x64", "signtool.exe"))
+            cands += glob.glob(os.path.join(root, "x64", "signtool.exe"))
+    return max(cands, key=os.path.dirname) if cands else ""
+
+
+def signing_plan():
+    """返回 (cert 或 None, 没配证书时的人话原因)
+
+    证书只从环境变量读，绝不写进仓库或 latest.json。pfx 口令走 signtool 的 argv，
+    意味着签名那几秒本机其它进程能在进程列表里看到它——自己机器上构建可以接受，
+    共享 CI runner 上要用 QIANBI_SIGN_SHA1（证书已装进存储）绕开这个暴露。
+    """
+    sha1 = (os.environ.get("QIANBI_SIGN_SHA1") or "").strip()
+    if sha1:
+        return {"sha1": sha1, "subject": ""}, ""
+    pfx = (os.environ.get("QIANBI_SIGN_PFX") or "").strip()
+    if not pfx:
+        return None, "未配置签名证书（QIANBI_SIGN_PFX / QIANBI_SIGN_SHA1），产物不签名"
+    if not os.path.exists(pfx):
+        return None, "QIANBI_SIGN_PFX 指向的文件不存在：%s" % pfx
+    return ({"pfx": pfx,
+             "pass": os.environ.get("QIANBI_SIGN_PASS") or "",
+             "subject": (os.environ.get("QIANBI_SIGN_SUBJECT") or "").strip()}), ""
+
+
+def sign(path: str, cert: dict, signtool: str):
+    """签一个文件。时间戳必须带：证书到期后无戳签名会一起失效。"""
+    cmd = [signtool, "sign", "/fd", "SHA256",
+           "/tr", "http://timestamp.digicert.com", "/td", "SHA256", "/sm"]
+    if cert.get("sha1"):
+        cmd += ["/sha1", cert["sha1"]]
+    elif cert.get("subject"):
+        cmd += ["/n", cert["subject"]]
+    else:
+        cmd += ["/f", cert["pfx"]]
+        if cert.get("pass"):
+            cmd += ["/p", cert["pass"]]
+    cmd.append(path)
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    return r.returncode == 0, ((r.stderr or r.stdout or "").strip().splitlines() or [""])[-1]
 
 
 def portable_readme(version: str) -> bytes:
@@ -157,9 +216,11 @@ def main():
     else:
         print("[WARN] --skip-tests：质量闸门已跳过（发版禁用）")
 
-    # ---- 2.5 不可跳过的三道装配闸门 ----
-    # 这三条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
+    # ---- 2.5 不可跳过的六道闸门 ----
+    # 这几条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
     # 一次静默的 prompt 断链、一个写错的 QML 属性或共享层漂移，照样能一路打完安装包。
+    # 私钥泄漏扫描与更新链路探针也放进来，是因为它们的坏法一样静默——
+    # 前者把「给所有用户推任意 exe」的能力推上公开仓库，后者坏在用户升级那天才听见。
     # 刻意不受 --skip-tests / --skip-probe 管辖。
     r = subprocess.run([sys.executable, "tests/probe_prompt_baseline.py"], cwd=ROOT)
     step("提示词装配基线", r.returncode == 0,
@@ -174,6 +235,18 @@ def main():
     step("视觉 token 审计", r.returncode == 0,
          "有裸字号/锚点 footer/裸 hex/无描边卡片回潮（见上方 [T*] 清单）"
          if r.returncode else "零违例")
+
+    # 私钥跟着公开仓库推出去 = 把「给所有用户推任意 exe」的能力公开。
+    # 这种事不能靠人记得查，必须挡在打包之前。
+    r = subprocess.run([sys.executable, "scripts/update_keys.py", "--check-repo"], cwd=ROOT)
+    step("私钥泄漏扫描", r.returncode == 0,
+         "被跟踪的文件里出现了私钥材料：立刻从历史清除并轮换密钥" if r.returncode else "仓库内无私钥")
+
+    # 更新面板是「升级那天才用得上」的代码，平时没人点，最容易烂在包里
+    r = subprocess.run([sys.executable, "tests/probe_update_ui.py"], cwd=ROOT)
+    step("更新链路探针", r.returncode == 0,
+         "通道/验签/一键安装的接线断了（用户会卡在升级那天）"
+         if r.returncode else "40 项全过（零真网络）")
 
     r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
     if r.returncode == 2:
@@ -216,6 +289,19 @@ def main():
     else:
         print("[WARN] --skip-probe：打包冒烟已跳过（发版禁用）")
 
+    # ---- 5.5 代码签名（检测到证书才做；没证书照旧产出，别把发版卡死）----
+    cert, no_cert_reason = signing_plan()
+    signtool = find_signtool() if cert else ""
+    if cert and not signtool:
+        no_cert_reason = "配了证书但找不到 signtool.exe（装 Windows SDK 或把它加进 PATH）"
+        print("[WARN] " + no_cert_reason + "，本次不签名")
+        cert = None
+    if not cert:
+        print("[SKIP] " + no_cert_reason)
+    else:
+        ok, detail = sign(exe, cert, signtool)
+        step("代码签名 · 主程序", ok, detail if not ok else os.path.basename(exe))
+
     # ---- 6. 产物目录 + 便携 zip + SHA256SUMS ----
     out_dir = os.path.join(ROOT, "dist", "release", f"v{__version__}")
     os.makedirs(out_dir, exist_ok=True)
@@ -244,6 +330,7 @@ def main():
             shutil.copy2(src, os.path.join(out_dir, os.path.basename(doc)))
 
     # ---- 7. Inno Setup 安装包（检测 ISCC，未装自动跳过）----
+    installer_built = False
     if not args.no_installer:
         iscc_candidates = [
             os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Inno Setup 6", "ISCC.exe"),
@@ -253,11 +340,70 @@ def main():
         if iscc:
             r = subprocess.run([iscc, f"/DAppVersion={__version__}",
                                 "tools/installer.iss"], cwd=ROOT)
-            step("Inno Setup 安装包", r.returncode == 0)
+            installer_built = r.returncode == 0 and os.path.exists(
+                os.path.join(out_dir, f"QianBi-Novel-v{__version__}-setup.exe"))
+            step("Inno Setup 安装包", installer_built)
+            if installer_built:
+                setup = os.path.join(out_dir, f"QianBi-Novel-v{__version__}-setup.exe")
+                if not cert:
+                    print("[SKIP] 安装包未签名 — " + no_cert_reason)
+                else:
+                    # 用户下载并双击的就是这个文件，SmartScreen 认的也是它
+                    ok, detail = sign(setup, cert, signtool)
+                    step("代码签名 · 安装包", ok, detail if not ok else os.path.basename(setup))
         else:
             print("[SKIP] 未检测到 Inno Setup 6（安装包跳过；安装后重跑 --no-installer --skip-tests --skip-probe 即可补齐）")
     else:
         print("[SKIP] --no-installer")
+
+    # ---- 7.5 版本清单回填 + 签名（客户端「检查更新」读的就是这份）----
+    manifest = os.path.join(ROOT, "latest.json")
+    setup_exe = os.path.join(out_dir, f"QianBi-Novel-v{__version__}-setup.exe")
+    slug = None
+    try:
+        from app import config as _cfg
+        from app import update_check as _uc
+        remote = (_cfg.DEFAULT_CONFIG.get("updates") or {}).get("manifest_url") or ""
+        pair = _uc.gh_slug(remote)
+        slug = "/".join(pair) if all(pair) else None
+    except Exception as e:  # noqa: BLE001
+        print("[WARN] 取仓库 slug 失败，latest.json 不会回填：%s" % e)
+    if not installer_built:
+        print("[SKIP] 本次没有安装包产物，latest.json 未回填（补齐安装包后重跑即可）")
+    elif not slug:
+        step("版本清单回填", False, "取不到仓库 slug，无法拼出下载地址")
+    else:
+        data = {}
+        if os.path.exists(manifest):
+            with open(manifest, encoding="utf-8") as f:
+                data = json.load(f)
+        base = "https://github.com/%s/releases/" % slug
+        data.update({
+            "version": __version__,
+            "url": base + "tag/v%s" % __version__,          # 老客户端点「前往下载」用它
+            "sha256": sha256(setup_exe),                     # 老客户端核对的必须是同一个值
+            "published": datetime.date.today().isoformat(),
+            "assets": {
+                "setup": {"name": os.path.basename(setup_exe),
+                          "url": base + "download/v%s/%s" % (__version__, os.path.basename(setup_exe)),
+                          "sha256": sha256(setup_exe), "size": os.path.getsize(setup_exe)},
+                "portable": {"name": os.path.basename(portable),
+                             "url": base + "download/v%s/%s" % (__version__, os.path.basename(portable)),
+                             "sha256": sha256(portable), "size": os.path.getsize(portable)},
+            },
+        })
+        with open(manifest, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        if __version__ not in str(data.get("notes") or ""):
+            print("[WARN] latest.json 的 notes 里没出现 v%s —— 用户看更新说明时会对不上号"
+                  % __version__)
+        r = subprocess.run([sys.executable, "scripts/sign_manifest.py", manifest], cwd=ROOT)
+        v = subprocess.run([sys.executable, "scripts/sign_manifest.py", "--verify", manifest],
+                           cwd=ROOT)
+        step("版本清单已签名", r.returncode == 0 and v.returncode == 0,
+             "没有私钥 → 客户端只会显示新版，不会给一键安装（发版请视为未完成）"
+             if (r.returncode or v.returncode) else manifest)
 
     # ---- 8. SHA256SUMS（放在安装包之后，确保 setup.exe 也被收录）----
     sums = os.path.join(out_dir, "SHA256SUMS.txt")

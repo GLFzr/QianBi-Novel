@@ -131,16 +131,27 @@ def test_manifest_url_points_at_the_file_we_test():
     assert url == ("https://raw.githubusercontent.com/%s/main/latest.json" % repo), url
 
 
-def test_auto_check_is_off_by_default():
-    """开机自连 GitHub 是对外请求，默认必须关；手动「检查更新」不受该开关影响"""
-    assert cfg_mod.DEFAULT_CONFIG["updates"]["auto_check"] is False
+def test_auto_check_default_is_on_but_bounded():
+    """v0.18 把默认翻成开：默认关的话「自动检测 + 常驻图标」这条链就名不副实。
+
+    翻默认值真正要钉住的不是那个布尔，而是它换来换去只可能换来一次什么请求——
+    所以下面三条必须同时成立，任何一条崩了这条默认就不该是 True。
+    """
+    u = cfg_mod.DEFAULT_CONFIG["updates"]
+    assert u["auto_check"] is True
+    # 出厂默认不能自带「用户已经表过态」的标记，否则升级路径再也翻不动它
+    assert u["auto_check_chosen"] is False
+    assert re.fullmatch(r"https://raw\.githubusercontent\.com/[^/]+/[^/]+/main/latest\.json",
+                        u["manifest_url"]), u["manifest_url"]
+    # 限流：默认一天一次，不是每次启动都问
+    assert float(u["interval_hours"]) >= 12
 
 
 # ---- 配置的升级安全 ----
 
-def _use_tmp_config(tmp_path, monkeypatch, raw):
+def _use_tmp_config(tmp_path, monkeypatch, raw, name="cfgdir"):
     from app import secrets as secrets_mod
-    d = tmp_path / "cfgdir"
+    d = tmp_path / name
     d.mkdir()
     f = d / "config.json"
     f.write_text(raw, encoding="utf-8")
@@ -163,22 +174,52 @@ def test_corrupt_config_is_kept_not_overwritten(tmp_path, monkeypatch):
         assert fh.read() == garbage
 
 
-def test_dead_check_on_start_key_does_not_become_auto_check(tmp_path, monkeypatch):
-    """v0.15 的 check_on_start 从没被任何调用点读到，那份 True 不是用户的选择，
-    搬到新键上等于升级后偷偷开机联网"""
-    raw = json.dumps({"connections": [{"id": "c1", "name": "N", "base_url": "u",
-                                       "api_key": "", "model": "m", "temperature": 0.7,
-                                       "max_tokens": 100, "timeout": 60}],
-                      "slots": {"writing": "c1", "helper": "c1", "review": "c1"},
-                      "updates": {"manifest_url": "https://example.invalid/m.json",
-                                  "check_on_start": True}}, ensure_ascii=False)
+def _cfg_with_updates(updates):
+    return json.dumps({"connections": [{"id": "c1", "name": "N", "base_url": "u",
+                                        "api_key": "", "model": "m", "temperature": 0.7,
+                                        "max_tokens": 100, "timeout": 60}],
+                       "slots": {"writing": "c1", "helper": "c1", "review": "c1"},
+                       "updates": updates}, ensure_ascii=False)
+
+
+def test_dead_check_on_start_key_never_becomes_a_user_decision(tmp_path, monkeypatch):
+    """v0.15 的 check_on_start 从没被任何调用点读到，那份 True 不是用户的选择。
+
+    默认翻成开之后这条换了个说法：它不该决定 auto_check 的真假（现在两种值都合法），
+    但它绝对不能冒充成「用户表过态」——冒充的代价是面板不再说明这事是谁开的。
+    """
+    raw = _cfg_with_updates({"manifest_url": "https://example.invalid/m.json",
+                             "check_on_start": True})
     _d, f = _use_tmp_config(tmp_path, monkeypatch, raw)
     cfg = cfg_mod.load_config()
     assert "check_on_start" not in cfg["updates"]
-    assert cfg["updates"]["auto_check"] is False
+    assert not cfg["updates"].get("auto_check_chosen"), "死键冒充成了用户的选择"
     assert cfg["updates"]["manifest_url"] == "https://example.invalid/m.json"
     with open(f, encoding="utf-8") as fh:
         assert fh.read() == raw, "load_config 不该把迁移结果顺手写回磁盘"
+
+
+def test_inherited_false_auto_check_gets_flipped(tmp_path, monkeypatch):
+    """老用户磁盘上那份 auto_check:false 分不清是他关的还是抄来的出厂默认；
+    没表过态的按新默认走，并且靠面板那条说明兜住，不做静默改写"""
+    _d, _f = _use_tmp_config(tmp_path, monkeypatch, _cfg_with_updates(
+        {"manifest_url": "https://example.invalid/m.json", "auto_check": False}))
+    cfg = cfg_mod.load_config()
+    assert cfg["updates"]["auto_check"] is True
+    assert not cfg["updates"].get("auto_check_chosen"), "翻转后仍要认得出这是默认，不是选择"
+
+
+def test_explicit_auto_check_choice_survives_migration(tmp_path, monkeypatch):
+    """真的拨过开关的人（写了 chosen 标记）不会被版本迁移再翻回去；
+    反过来他显式开着、还改过限流，也不该被默认值顶掉"""
+    _d, _f = _use_tmp_config(tmp_path, monkeypatch, _cfg_with_updates(
+        {"auto_check": False, "auto_check_chosen": True}))
+    assert cfg_mod.load_config()["updates"]["auto_check"] is False
+
+    _d, _f = _use_tmp_config(tmp_path, monkeypatch, _cfg_with_updates(
+        {"auto_check": True, "auto_check_chosen": True, "interval_hours": 3}), "cfgdir2")
+    cfg = cfg_mod.load_config()["updates"]
+    assert cfg["auto_check"] is True and cfg["interval_hours"] == 3, "用户自己的限流被默认值顶掉"
 
 
 def test_unknown_future_keys_survive_roundtrip(tmp_path, monkeypatch):

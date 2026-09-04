@@ -334,6 +334,18 @@ Dialog {
                 font.pixelSize: Theme.fsTiny
                 onToggled: root.patch({ auto_check: checked })
             }
+            Text {
+                objectName: "autoCheckNotice"
+                visible: root.cfgs.autoCheck === true && root.cfgs.autoCheckChosen !== true
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                text: "这一版起自动检查默认是开的（旧版本默认关）：开机后后台下载一份 1KB 的公开版本清单，"
+                      + "不上传任何内容，也不碰你的书稿和 Key。取消勾选就彻底关掉，这个提示也不会再出现。"
+                color: Theme.warn
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsMicro
+                wrapMode: Text.Wrap
+            }
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
@@ -392,7 +404,9 @@ Dialog {
             Layout.fillWidth: true
             text: "升级只覆盖程序目录，不会写入：书稿 " + bridge.defaultBooksRoot()
                   + " · 配置 " + bridge.dataDirPath()
-                  + "\n安装包没有代码签名证书，Windows 可能弹「未知发布者」，点「仍要运行」即可。"
+                  + "\n安装包没有代码签名证书，双击后 Windows 会弹蓝底「Windows 已保护你的电脑」："
+                  + "那是缺证书，不是文件坏了。点「更多信息」→「仍要运行」继续；"
+                    + "不确定就先对一下上面的 SHA-256，跟这里列的一致就是我发布的那个文件。"
             color: Theme.textTertiary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsMicro

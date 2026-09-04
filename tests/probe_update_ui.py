@@ -296,6 +296,17 @@ def run_all():
         disk = json.load(f).get("updates") or {}
     check("显式表过态，迁移不许再翻它", disk.get("auto_check_chosen") is True, str(disk)[:160])
 
+    # 「这一版起默认开着」的告知：只在「开着、但不是用户自己开的」时出现
+    reset(auto_check=True, auto_check_chosen=False)
+    pump(300)
+    check("默认翻开的自动检查会主动说明", "默认是开的" in "\n".join(texts(dlg)))
+    reset(auto_check=True, auto_check_chosen=True)
+    pump(300)
+    check("用户自己开的就不再教育一遍", "默认是开的" not in "\n".join(texts(dlg)))
+    reset(auto_check=False, auto_check_chosen=True)
+    pump(300)
+    check("关掉之后也不再提", "默认是开的" not in "\n".join(texts(dlg)))
+
     b.setUpdateSettings(json.dumps({"connections": [{"id": "evil"}],
                                     "custom_url": "https://m.example/x.json"}))
     pump(300)

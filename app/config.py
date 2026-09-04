@@ -30,18 +30,46 @@ DEFAULT_CONNECTIONS = [
     {"id": "ds-v4-pro", "name": "DeepSeek V4 Pro", "provider": "deepseek",
      "base_url": "https://api.deepseek.com", "api_key": "", "model": "deepseek-v4-pro",
      "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
-    {"id": "ds-v4-flash", "name": "DeepSeek V4 Flash", "provider": "deepseek",
-     "base_url": "https://api.deepseek.com", "api_key": "", "model": "deepseek-v4-flash",
-     "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "ocgo-flash", "name": "OpenCode Go · V4 Flash", "provider": "opencodego",
-     "base_url": "https://opencode.ai/zen/go/v1", "api_key": "", "model": "deepseek-v4-flash",
-     "temperature": 0.7, "max_tokens": 65536, "timeout": 600,
-     "thinking": "enabled", "reasoning_effort": "max"},
+    {"id": "bl-qwen-max", "name": "阿里云百炼 · Qwen3.8 Max", "provider": "bailian",
+     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "api_key": "",
+     "model": "qwen3.8-max", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "zp-glm-5", "name": "智谱 · GLM-5", "provider": "zhipu",
+     "base_url": "https://open.bigmodel.cn/api/paas/v4", "api_key": "",
+     "model": "glm-5", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "kimi-k3", "name": "Kimi · K3", "provider": "kimi",
+     "base_url": "https://api.moonshot.cn/v1", "api_key": "",
+     "model": "kimi-k3", "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
+    {"id": "ark-doubao", "name": "火山方舟 · Doubao Seed 2.1 Pro", "provider": "ark",
+     "base_url": "https://ark.cn-beijing.volces.com/api/v3", "api_key": "",
+     "model": "doubao-seed-2-1-pro-260628", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "hy-turbos", "name": "腾讯混元 · Turbos", "provider": "hunyuan",
+     "base_url": "https://api.hunyuan.cloud.tencent.com/v1", "api_key": "",
+     "model": "hunyuan-turbos-latest", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "mm-m3", "name": "MiniMax · M3", "provider": "minimax",
+     "base_url": "https://api.minimaxi.com/v1", "api_key": "",
+     "model": "MiniMax-M3", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "sf-dsv4-pro", "name": "硅基流动 · DeepSeek V4 Pro", "provider": "siliconflow",
+     "base_url": "https://api.siliconflow.cn/v1", "api_key": "",
+     "model": "deepseek-ai/DeepSeek-V4-Pro", "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
+    {"id": "or-claude", "name": "OpenRouter · Claude Sonnet 4.5", "provider": "openrouter",
+     "base_url": "https://openrouter.ai/api/v1", "api_key": "",
+     "model": "anthropic/claude-sonnet-4.5", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "gm-25-pro", "name": "Google Gemini 2.5 Pro", "provider": "gemini",
+     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "api_key": "",
+     "model": "gemini-2.5-pro", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "xai-grok", "name": "xAI · Grok", "provider": "xai",
+     "base_url": "https://api.x.ai/v1", "api_key": "",
+     "model": "grok-4.6", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "groq-oss", "name": "Groq · GPT-OSS 20B", "provider": "groq",
+     "base_url": "https://api.groq.com/openai/v1", "api_key": "",
+     "model": "openai/gpt-oss-20b", "temperature": 0.7, "max_tokens": 8192, "timeout": 300},
 ]
 
 DEFAULT_CONFIG = {
     "connections": DEFAULT_CONNECTIONS,
-    "slots": {SLOT_WRITING: "ds-v4-pro", SLOT_HELPER: "ds-v4-flash", SLOT_REVIEW: "ds-v4-flash"},
+    # 三槽同指 DeepSeek：内置提示词按 V4 系调校，且新用户填一把 Key 就能跑通全流程；
+    # 想压成本自己再加轻量模型或改指向（连接列表可以复制行）。
+    "slots": {SLOT_WRITING: "ds-v4-pro", SLOT_HELPER: "ds-v4-pro", SLOT_REVIEW: "ds-v4-pro"},
     "gates": {"strategy": GATE_MARK_CONTINUE, "deslop_max_rounds": 2, "word_tolerance": 0.1,
               "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
               "review_enabled": True, "review_max_rounds": 1,
@@ -62,9 +90,11 @@ DEFAULT_CONFIG = {
     "general": {"onboarded": False},          # 首启向导（T3.5）
     "telemetry": {"enabled": False},           # 遥测 opt-in（D6：默认关，本地落点）
     "updates": {"manifest_url": "https://raw.githubusercontent.com/GLFzr/QianBi-Novel/main/latest.json",
-                # 开机自连 GitHub 属于对外请求，与「数据不出本机」的默认承诺冲突，
-                # 所以默认只做手动检查；要开机自动查在「关于」里显式打开。
-                "auto_check": False,
+                # v0.18 起默认开：不自动查，「有新版时出现图标、点一下就能更新」这条链就名不副实。
+                # 边界写清楚——只下载一份 1KB 的公开版本清单，不上传任何东西，且在更新面板可关。
+                # 多条通道全挂时也只是等满 25s 的后台线程，不碰界面。
+                "auto_check": True,
+                "auto_check_chosen": False,     # 用户在界面上显式表过态；迁移逻辑只认这个标记
                 # 自己的镜像/CDN 上那份清单（GitHub 连不上时的第二条路），填了排最前
                 "custom_url": "",
                 "interval_hours": 24.0,           # 自动检查限流：一天最多问一次
@@ -115,7 +145,7 @@ def _migrate_legacy_format(cfg: dict) -> dict:
 
 
 def _migrate_builtin_connections(cfg: dict) -> dict:
-    """内置连接（ds-v4-pro/ds-v4-flash）参数升级：max_tokens 随版本调大
+    """内置预设的参数升级：max_tokens 随版本调大
 
     只升级仍持有旧默认值(8192)的内置连接，不覆盖用户自定义的修改。
     """
@@ -130,15 +160,23 @@ def _migrate_builtin_connections(cfg: dict) -> dict:
 
 
 def _migrate_updates(cfg: dict) -> dict:
-    """旧键 updates.check_on_start → auto_check
+    """v0.15 死键清理 + v0.18 默认翻转
 
-    旧键在 v0.15 里从没被任何调用点读到（自动检查根本没接线），磁盘上那个 True
-    是出厂默认而不是用户选择，原样搬到新键上等于升级后偷偷开机联网。
+    `check_on_start` 在 v0.15 从没被任何调用点读到（自动检查根本没接线），那份 True
+    不是用户的选择，搬到新键上等于升级后偷偷开机联网——直接丢弃。
+
+    翻转默认值有个真问题：首次运行时应用会把整份 DEFAULT 落盘，于是老用户磁盘上的
+    `auto_check: false` 分不清是「他关掉的」还是「抄来的出厂默认」。只有界面上真的
+    拨过开关才会写 `auto_check_chosen`，所以拿它当唯一凭据：没表过态的按新默认走，
+    不做静默改写。UI 那条「已为你默认开启」的告知也读这个标记，用户一旦亲自拨过
+    开关就自然消失，不需要再多存一个「提示已过」的键。
     """
     u = cfg.get("updates")
-    if isinstance(u, dict) and "check_on_start" in u:
-        u.pop("check_on_start")
-        u.setdefault("auto_check", False)
+    if not isinstance(u, dict):
+        return cfg
+    u.pop("check_on_start", None)
+    if not u.get("auto_check_chosen") and u.get("auto_check") is False:
+        u["auto_check"] = True
     return cfg
 
 
@@ -168,7 +206,7 @@ def load_config() -> dict:
                 merged["slots"][slot] = merged["connections"][0]["id"]
         _migrate_builtin_connections(merged)
         _migrate_updates(merged)
-        # 补全新内置连接模板（如 ocgo-flash，无 key，用户在界面填写）
+        # 补全新内置连接模板（v0.18.1 起十余家预设，老配置只补不删，自建连接照样留着）
         for c in DEFAULT_CONNECTIONS:
             if c["id"] not in ids:
                 merged["connections"].append(json.loads(json.dumps(c)))
