@@ -216,11 +216,12 @@ def main():
     else:
         print("[WARN] --skip-tests：质量闸门已跳过（发版禁用）")
 
-    # ---- 2.5 不可跳过的六道闸门 ----
+    # ---- 2.5 不可跳过的七道闸门 ----
     # 这几条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
     # 一次静默的 prompt 断链、一个写错的 QML 属性或共享层漂移，照样能一路打完安装包。
-    # 私钥泄漏扫描与更新链路探针也放进来，是因为它们的坏法一样静默——
-    # 前者把「给所有用户推任意 exe」的能力推上公开仓库，后者坏在用户升级那天才听见。
+    # 私钥泄漏扫描、更新链路与连接删除探针也放进来，是因为它们的坏法一样静默——
+    # 前者把「给所有用户推任意 exe」的能力推上公开仓库，第二条坏在用户升级那天，
+    # 第三条坏的时候少掉的是用户的 Key 与他亲手建的连接。
     # 刻意不受 --skip-tests / --skip-probe 管辖。
     r = subprocess.run([sys.executable, "tests/probe_prompt_baseline.py"], cwd=ROOT)
     step("提示词装配基线", r.returncode == 0,
@@ -247,6 +248,13 @@ def main():
     step("更新链路探针", r.returncode == 0,
          "通道/验签/一键安装的接线断了（用户会卡在升级那天）"
          if r.returncode else "46 项全过（零真网络）")
+
+    # 删连接现在会连带销毁凭据管理器里的 Key（不可恢复），退役出厂行的删除护栏同理：
+    # 这类逻辑坏掉的症状是「我的 Key / 我的连接不见了」，必须挡在打包之前。
+    r = subprocess.run([sys.executable, "tests/probe_conn_delete.py"], cwd=ROOT)
+    step("连接删除探针", r.returncode == 0,
+         "两步确认 / Key 随连接销毁 / 退役预设护栏有断裂" if r.returncode
+         else "20 项全过（凭据走进程内沙箱）")
 
     r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
     if r.returncode == 2:

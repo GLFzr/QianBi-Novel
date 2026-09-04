@@ -55,7 +55,8 @@ _QML_ERROR_KEYS = ("ReferenceError", "TypeError", "is not defined", "Cannot assi
 
 _QML_OBJECTS = ["panelStack", "forceLockDialog", "genConfigDialog", "genConfigBody",
                 "exportDialog", "needsFixDialog", "reviewIssueDialog",
-                "importDialog", "importBatchCard", "contractRuleList", "updateDialog"]
+                "importDialog", "importBatchCard", "contractRuleList", "updateDialog",
+                "deleteConnButton"]
 
 # ================= 夹具（固定字面量：两侧必须喂同一批字节） =================
 

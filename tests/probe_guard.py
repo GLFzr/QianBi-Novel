@@ -28,7 +28,30 @@ def arm_config_guard() -> str:
 
     atexit.register(_restore)
     _arm_update_guard()
+    _arm_secret_guard()
     return path
+
+
+def _arm_secret_guard():
+    """探针不碰真凭据管理器
+
+    `dehydrate()` 在每次 save_config 时把明文 Key 写进 Windows 凭据管理器，
+    而 deleteConnection 又会按连接 id 删凭据——两条都跑在真 Bridge 探针里，
+    动的就是用户真实的 Key。换成进程内字典：探针读写自己的沙箱，进程退出即蒸发。
+
+    打模块属性就够：hydrate/dehydrate 与 bridge 都是 `secrets.xxx(...)` 这样按名字取，
+    不是 `from ... import xxx` 复制了绑定，所以替换对全部调用点生效。
+    """
+    vault = {}
+    try:
+        from app import secrets
+        secrets.available = lambda: True
+        secrets.store_secret = lambda cid, key: (vault.__setitem__(cid, key), True)[1]
+        secrets.get_secret = lambda cid: vault.get(cid, "")
+        secrets.delete_secret = lambda cid: vault.pop(cid, None)
+        secrets._VAULT = vault
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _arm_update_guard():

@@ -130,3 +130,123 @@ def test_default_models_list_is_not_empty_for_builtins():
             assert pv.provider_default_models(key), key
             assert pv.provider_label(key) not in ("", key)
             assert pv.provider_default_url(key).startswith("https://"), key
+
+
+# ---- 退役预设的移除（老用户设置里那排点不动的僵尸卡）----
+
+def _row(cid, **kv):
+    base = {"id": cid, "api_key": ""}
+    base.update(kv)
+    return base
+
+
+FACTORY_FLASH = {"name": "DeepSeek V4 Flash", "provider": "deepseek",
+                 "base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash"}
+
+
+def _cfg_with(rows, slots=None):
+    return {"connections": rows, "slots": slots or {"writing": "ds-v4-pro",
+                                                    "helper": "ds-v4-pro", "review": "ds-v4-pro"}}
+
+
+def _no_credentials(monkeypatch):
+    """迁移只许**读**凭据：它在每次 load_config 都跑，探针与单测也在跑它"""
+    def boom(*a, **k):
+        raise AssertionError("退役迁移不许写或删除凭据")
+    monkeypatch.setattr(cfg_mod.secrets, "store_secret", boom)
+    monkeypatch.setattr(cfg_mod.secrets, "delete_secret", boom)
+    monkeypatch.setattr(cfg_mod.secrets, "get_secret", lambda cid: "")
+    cfg_mod._RETIRED_WITH_KEY.clear()
+
+
+def test_retired_untouched_row_is_removed(monkeypatch):
+    _no_credentials(monkeypatch)
+    cfg = _cfg_with([_row("ds-v4-pro"), _row("ds-v4-flash", **FACTORY_FLASH)])
+    out = cfg_mod._retire_builtin_connections(cfg)
+    assert [c["id"] for c in out["connections"]] == ["ds-v4-pro"]
+
+
+def test_retired_row_in_use_by_a_slot_survives(monkeypatch):
+    """删掉正被槽位引用的连接，等于悄悄换掉「用哪个模型写我的书」"""
+    _no_credentials(monkeypatch)
+    cfg = _cfg_with([_row("ds-v4-flash", **FACTORY_FLASH)],
+                    {"writing": "ds-v4-flash", "helper": "ds-v4-pro", "review": "ds-v4-pro"})
+    out = cfg_mod._retire_builtin_connections(cfg)
+    assert [c["id"] for c in out["connections"]] == ["ds-v4-flash"]
+
+
+def test_retired_row_edited_by_user_survives(monkeypatch):
+    """改过模型名/地址/名字的，已经是他的连接了，不是我们的预设"""
+    _no_credentials(monkeypatch)
+    edited = dict(FACTORY_FLASH, model="deepseek-v4-flash-0731")
+    cfg = _cfg_with([_row("ds-v4-flash", **edited)])
+    assert len(cfg_mod._retire_builtin_connections(cfg)["connections"]) == 1
+
+
+def test_provider_edited_row_survives(monkeypatch):
+    """本机真实形态：ocgo-flash 的 provider 被换成 custom，就不该被当成出厂行删掉"""
+    _no_credentials(monkeypatch)
+    row = _row("ocgo-flash", name="OpenCode Go · V4 Flash", provider="custom",
+               base_url="https://opencode.ai/zen/go/v1", model="deepseek-v4-flash")
+    assert len(cfg_mod._retire_builtin_connections({"connections": [row], "slots": {}})["connections"]) == 1
+
+
+def test_param_upgrade_alone_still_counts_as_untouched(monkeypatch):
+    """max_tokens 被升级逻辑抬过、温度被调过，都不算「用户改过身份」——
+    否则每次参数升级都会让用户手上多留一张僵尸卡"""
+    _no_credentials(monkeypatch)
+    row = _row("ds-v4-flash", temperature=0.3, **dict(FACTORY_FLASH, max_tokens=16384, timeout=99))
+    assert cfg_mod._retire_builtin_connections(_cfg_with([row]))["connections"] == []
+
+
+def test_retired_row_holding_a_key_survives(monkeypatch):
+    """连接删了 Key 就成了凭据管理器里的孤儿，比留一张卡更糟"""
+    _no_credentials(monkeypatch)
+    monkeypatch.setattr(cfg_mod.secrets, "get_secret", lambda cid: "sk-saved")
+    cfg = _cfg_with([_row("ds-v4-flash", **FACTORY_FLASH)])
+    assert len(cfg_mod._retire_builtin_connections(cfg)["connections"]) == 1
+
+
+def test_retired_check_reads_credential_once(monkeypatch):
+    """load_config 几乎每个界面动作都跑一次，凭据不能每次重读"""
+    _no_credentials(monkeypatch)
+    calls = []
+
+    def get_secret(cid):
+        calls.append(cid)
+        return "sk-saved"
+
+    monkeypatch.setattr(cfg_mod.secrets, "get_secret", get_secret)
+    rows = [_row("ds-v4-flash", **FACTORY_FLASH)]
+    for _ in range(3):
+        cfg_mod._retire_builtin_connections(_cfg_with(list(rows)))
+    assert len(calls) == 1, calls
+    cfg_mod._RETIRED_WITH_KEY.clear()
+
+
+def test_live_config_keeps_working_after_retirement(tmp_path, monkeypatch):
+    """真走一遍 load_config：删完不能留下指向空连接的槽位"""
+    _no_credentials(monkeypatch)
+    import json
+    import os
+    from app import secrets as secrets_mod
+    rows = [_row("ds-v4-pro", name="DeepSeek V4 Pro", provider="deepseek",
+                 base_url="https://api.deepseek.com", model="deepseek-v4-pro",
+                 temperature=0.7, max_tokens=32768, timeout=300),
+            _row("ds-v4-flash", **dict(FACTORY_FLASH, temperature=0.7, max_tokens=16384, timeout=300))]
+    d = tmp_path / "cfgdir"
+    d.mkdir()
+    f = d / "config.json"
+    f.write_text(json.dumps({"connections": rows,
+                             "slots": {"writing": "ds-v4-pro", "helper": "ds-v4-pro",
+                                       "review": "ds-v4-pro"}}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(cfg_mod, "CONFIG_DIR", str(d))
+    monkeypatch.setattr(cfg_mod, "CONFIG_FILE", str(f))
+    monkeypatch.setattr(secrets_mod, "SERVICE", "QianBiNovel/test-run")
+    cfg = cfg_mod.load_config()
+    ids = {c["id"] for c in cfg["connections"]}
+    assert "ds-v4-flash" not in ids
+    for slot in cfg_mod.SLOT_ORDER:
+        assert cfg["slots"][slot] in ids
+    # 老的 legacy 迁移行（provider=custom、模型名是 pro）不该被退役逻辑牵连
+    assert len(ids) >= len(cfg_mod.DEFAULT_CONNECTIONS)

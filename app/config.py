@@ -159,6 +159,54 @@ def _migrate_builtin_connections(cfg: dict) -> dict:
     return cfg
 
 
+# v0.18.1 下架的出厂预设：留着就是设置里一排点不动的僵尸卡（provider 已从 PROVIDERS 移除）
+RETIRED_BUILTINS = {
+    "ds-v4-flash": {"name": "DeepSeek V4 Flash", "provider": "deepseek",
+                    "base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash"},
+    "ocgo-flash": {"name": "OpenCode Go · V4 Flash", "provider": "opencodego",
+                   "base_url": "https://opencode.ai/zen/go/v1", "model": "deepseek-v4-flash"},
+}
+# load_config 几乎每个界面动作都会被调一次，凭据管理器读一次不算便宜：
+# 记住哪些退役行确实带着 Key，本进程内不再重读（只读缓存，不缓存「没有」以外的结论）。
+_RETIRED_WITH_KEY = set()
+
+
+def _retire_builtin_connections(cfg: dict) -> dict:
+    """删掉**从没被改过、也没在用、也没存过 Key** 的退役预设行
+
+    三个条件缺一就不删，因为每一种都对应一次真实的用户劳动：
+      · 改过身份字段（换过模型名/地址/名字）→ 那已经是他的连接了，不是我们的预设；
+      · 有槽位指着它 → 删了等于悄悄换掉「用哪个模型写我的书」；
+      · 凭据管理器里有它的 Key → 连接删了 Key 就成了孤儿，比留一张卡更糟。
+    max_tokens/temperature/timeout 不参与比对：上面那条升级会正当地把 8192 抬到出厂值。
+
+    **这里绝不写也绝不删凭据**：本函数每次 load_config 都会跑，探针与单测也在跑它，
+    只读凭据存储才安全。要搬 Key 得由用户在界面上动手（或删除逻辑自己负责收尾）。
+    """
+    conns = cfg.get("connections")
+    if not isinstance(conns, list):
+        return cfg
+    used = set((cfg.get("slots") or {}).values())
+    kept, dropped = [], []
+    for c in conns:
+        spec = RETIRED_BUILTINS.get(c.get("id")) if isinstance(c, dict) else None
+        if not spec or c.get("id") in used:
+            kept.append(c)
+            continue
+        if any(str(c.get(k) or "") != v for k, v in spec.items()):
+            kept.append(c)          # 被改过：这不是我们发出去的那一行预设了
+            continue
+        if c["id"] in _RETIRED_WITH_KEY or secrets.get_secret(c["id"]):
+            _RETIRED_WITH_KEY.add(c["id"])
+            kept.append(c)      # 存过 Key：宁可留一张卡，也不留一个没人认领的孤儿凭据
+            continue
+        dropped.append(c["id"])
+    if dropped:
+        cfg["connections"] = kept
+        logging.getLogger("qianbi.config").info("已移除退役的出厂预设连接：%s", ", ".join(dropped))
+    return cfg
+
+
 def _migrate_updates(cfg: dict) -> dict:
     """v0.15 死键清理 + v0.18 默认翻转
 
@@ -205,8 +253,10 @@ def load_config() -> dict:
             if merged["slots"].get(slot) not in ids:
                 merged["slots"][slot] = merged["connections"][0]["id"]
         _migrate_builtin_connections(merged)
+        _retire_builtin_connections(merged)
         _migrate_updates(merged)
-        # 补全新内置连接模板（v0.18.1 起十余家预设，老配置只补不删，自建连接照样留着）
+        # 补全新内置连接模板（v0.18.1 起十余家预设；退役的那两家在上面的移除里处理，
+        # 只补不删是老规矩，但删的是我们发出去、用户从没动过的行）
         for c in DEFAULT_CONNECTIONS:
             if c["id"] not in ids:
                 merged["connections"].append(json.loads(json.dumps(c)))

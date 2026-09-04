@@ -13,7 +13,7 @@ from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
                             Property, Signal, Slot, QThread, QTimer, QProcess)
 
 from .. import config as cfg_mod
-from .. import mustscan, project, deslop, prompts
+from .. import mustscan, project, deslop, prompts, secrets
 from ..core import gates, state as st, versions
 from ..core.orchestrator import Orchestrator
 from ..core.co_writing import CoWriting
@@ -2278,13 +2278,18 @@ class Bridge(QObject):
         if len(conns) <= 1:
             self.toast.emit("warn", "至少保留一条连接")
             return
+        name = next((c.get("name", "") for c in conns if c.get("id") == cid), cid)
         self.cfg["connections"] = [c for c in conns if c.get("id") != cid]
         for slot in cfg_mod.SLOT_ORDER:
             if self.cfg["slots"].get(slot) == cid:
                 self.cfg["slots"][slot] = self.cfg["connections"][0]["id"]
         cfg_mod.save_config(self.cfg)
+        # 删了连接、Key 却留在凭据管理器里 = 只进不出的孤儿凭据（secrets.delete_secret
+        # 定义了却零调用）。放在 save_config 之后：写盘失败不该连用户的 Key 一起毁掉。
+        secrets.delete_secret(cid)
         self.connectionModel.refresh()
         self.slotsTextChanged.emit()
+        self.toast.emit("ok", "已删除连接「%s」及其 Key" % name)
 
     @Slot(str, str)
     def setSlot(self, slot: str, cid: str):

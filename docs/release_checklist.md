@@ -15,8 +15,12 @@
 - [ ] 探针全绿：probe_gate_flow / probe_gate_ui / probe_console / probe_chapter_lock（按改动面选）
 - [ ] 改过界面：`python tests/probe_qml_compile.py`（build_release 已必跑。QML 属性写错会让
       整棵界面树静默加载失败，单测与 prompt 基线都看不见它）
-- [ ] 改过更新链路：`python tests/probe_update_ui.py`（40 项、零真网络：通道回退、逐条死因、
+- [ ] 改过更新链路：`python tests/probe_update_ui.py`（46 项、零真网络：通道回退、逐条死因、
       未验签不给安装按钮、离线导入、本机包哈希、限流、设置白名单、面板溢出）
+- [ ] 改过连接增删 / 配置迁移：`python tests/probe_conn_delete.py`（20 项：两步确认才删、
+      Key 随连接一起消失、只剩一条不许删、退役出厂行「改过 / 在用 / 有 Key 就不删」三条护栏）
+- [ ] 探针跑在凭据沙箱里（`probe_guard` 把 `secrets` 换成进程内字典）——
+      以前每次 `save_config` 都在写真凭据管理器，只是值相同看不出来；别把这道沙箱拆掉
 - [ ] 改过关于页：`python tests/probe_about_ui.py`
 - [ ] 更新功能不碰 LLM prompt：`probe_prompt_baseline` 必须仍是**零漂移**（漂了就是改错地方了）
 - [ ] TUI `run.py --smoke` 全绿（共享层改动时必跑）

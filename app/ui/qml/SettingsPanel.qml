@@ -11,10 +11,14 @@ Item {
 
     property string editingId: ""
     property bool isNew: false
+    // 删除连接现在连带清掉凭据管理器里的 Key——单次点击不该毁掉一个不可恢复的东西
+    property bool armedDelete: false
     property int settingsTab: 0
     property var wp: ({})
     property var ep: ({ fontScale: 1.0, narrow: true })
     property string regexSem: "logic"
+
+    onEditingIdChanged: armedDelete = false
 
     ListModel { id: modelList }
 
@@ -462,10 +466,16 @@ Item {
                     }
                     Item { Layout.fillWidth: true }
                     AppButton {
-                        text: "删除"
+                        objectName: "deleteConnButton"
+                        text: settings.armedDelete ? "确认删除（含 Key）" : "删除"
                         kind: "danger"
                         enabled: !settings.isNew && settings.editingId !== ""
-                        onClicked: { bridge.deleteConnection(settings.editingId); settings.startNew() }
+                        onClicked: {
+                            if (!settings.armedDelete) { settings.armedDelete = true; return }
+                            settings.armedDelete = false
+                            bridge.deleteConnection(settings.editingId)
+                            settings.startNew()
+                        }
                     }
                 }
 

@@ -327,6 +327,10 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 > not preset**: they need a `deployment_id` and an `account_id` respectively — neither is
 > expressible as base-url + key + model, and shipping them would only hand users a list of
 > connections that cannot be made to work.
+> The two factory rows dropped in this version (`ds-v4-flash` / `ocgo-flash`) are removed
+> automatically on upgrade — but only when all three hold: never edited, referenced by no
+> slot, and no Key stored under their id. Anything you changed, routed to, or typed a Key
+> into is kept exactly as it is.
 
 ---
 
@@ -334,13 +338,13 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 
 ```bash
 # Offline unit tests (no API key, ~3 seconds)
-.venv/Scripts/python -m pytest tests/unit -q        # 486 tests
+.venv/Scripts/python -m pytest tests/unit -q        # 494 tests
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_update_ui.py
-# …… 43 probe_*.py in total: the offline probes plus the unit tests form the release gate; a few
+# …… 44 probe_*.py in total: the offline probes plus the unit tests form the release gate; a few
 #     (probe_models, probe_flash_reasoning …) are real-LLM experiments needing QIANBI_TEST_KEY;
 #     probe_packaged is invoked by the release pipeline with --exe, and probe_ui_gallery
 #     renders the full UI screenshot set.
@@ -355,6 +359,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 | `probe_backflow_chain.py` | Full backflow chain: idempotency, external edits, missing outline, interruption, re-queue |
 | `probe_import_ui.py` | External import: decompose only what exists → preview mapping → write only what's checked → revert by batch |
 | `probe_update_ui.py` | Update chain, 46 checks with zero real network: channel fallback and per-channel failure reasons, unsigned manifests getting no Install button, offline manifest import, local package hashing, the 24h throttle, the settings key whitelist, panel overflow |
+| `probe_conn_delete.py` | Connection deletion, 20 checks: two clicks to delete, the Key disappears with the card, the last connection can't be deleted, and the three guards that decide when a retired factory preset row may be auto-removed |
 | `probe_about_ui.py` | About dialog: book/config paths match the Bridge, and its "Update…" entry actually opens the panel |
 | `probe_packaged.py` | Packaged resource manifest audit + dev-vs-packaged assembly digest diff |
 | `probe_panel_fit.py` | Six panels: horizontal/vertical overflow, squeezing, out-of-bounds |
@@ -407,7 +412,7 @@ scripts/
                           smoke test → digest diff)
   dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
-  unit/                 36 files / 486 offline tests
+  unit/                 36 files / 494 offline tests
   probe_*.py            42 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice

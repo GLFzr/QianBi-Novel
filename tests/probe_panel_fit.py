@@ -224,11 +224,36 @@ def _select_probe_preset():
     return False
 
 
+def _arm_conn_delete():
+    """让删除按钮的「确认态」进场景图
+
+    删除连接现在连带清掉凭据管理器里的 Key，所以第一次点击后按钮会换成
+    「确认删除（含 Key）」——那才是这一行里最宽的文案，溢出只可能出现在这一态。
+    从 Python 读 implicitWidth 拿的是没刷新的旧值（实测两态都报 54），
+    所以这个态必须由真实渲染来量，而不是在别处塞一条永远为真的宽度断言。
+    """
+    panel = next((it for it in win.findChildren(QQuickItem)
+                  if it.objectName() == "settingsPanel"), None)
+    conns = (b.cfg.get("connections") or []) if panel is not None else []
+    if panel is None or not conns:
+        return False
+    panel.setProperty("settingsTab", 0)
+    panel.setProperty("isNew", False)
+    panel.setProperty("editingId", conns[0].get("id", ""))
+    panel.setProperty("armedDelete", True)
+    return True
+
+
 def do_scan():
     global CUR
     if PANELS[CUR] == "library":
         if not _select_probe_preset():
             FAILS.append("预设库面板未找到（selectedId/refresh）")
+        QTimer.singleShot(600, finish_scan)
+        return
+    if PANELS[CUR] == "settings":
+        if not _arm_conn_delete():
+            FAILS.append("设置面板没进入「确认删除」态：没渲染就量不到，等于漏检")
         QTimer.singleShot(600, finish_scan)
         return
     finish_scan()

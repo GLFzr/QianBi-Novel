@@ -53,6 +53,17 @@
   （要 `deployment_id`）、Cloudflare Workers AI（URL 带 `{account_id}`）、百炼新版业务空间域名
   （URL 带 `{WorkspaceId}`）——它们没法用「地址+Key+模型」表达，塞进去只会给用户一堆调不通的连接。
   三个槽位出厂都指向 `deepseek` 的 `ds-v4-pro`：内置提示词按 V4 系调校，且填一把 Key 就能跑通全流程。
+- **退役出厂行自动清理**：换成 12 家后，`ds-v4-flash` 与 `ocgo-flash` 不在出厂表里了，
+  但配置合并是**按键补齐、从不删**，于是老用户设置里留着两张点不动的僵尸卡——
+  它们的 `provider` 已经从 `PROVIDERS` 里移除，界面上连「属于哪家」都显示不出来。
+  新增 `_retire_builtin_connections`，三条护栏缺一不删：
+  ① 身份字段（名字 / provider / 地址 / 模型名）仍与当年出厂那行**逐字相等**——
+  改过的已经是他的连接了（`max_tokens`/`temperature`/`timeout` 不参与比对，
+  因为参数升级会正当地上抬它们，比对就会永远删不掉）；
+  ② 没有任何槽位指着它——删掉正被引用的连接，等于悄悄换掉「用哪个模型写我的书」；
+  ③ 凭据管理器里没有以它 id 存着的 Key——连接删了 Key 就变孤儿，比留一张卡更糟。
+  外加一个进程内的记忆集合：`load_config` 几乎每个界面动作都要跑一次，
+  不能每次都回凭据管理器读一遍。**硬规矩：这段迁移只读凭据，绝不写也绝不删。**
 - **代码签名接口**：`scripts/build_release.py` 检测到 `QIANBI_SIGN_PFX` / `QIANBI_SIGN_SHA1`
   且找得到 `signtool.exe` 就自动签主程序与安装包（SHA-256 摘要 + RFC3161 时间戳，
   无戳签名会随证书到期一起失效）；没配证书照旧产出未签名包并打一行 `[SKIP]` 说明原因。
@@ -80,6 +91,17 @@
   **51MB 载荷与面板上「打开发布页 / 复制直链」拿到的地址只认 https**（明文链路上谁都能试着换包，
   哈希会拦住但代价是一次「更新失败」，还能看清谁在何时拉了哪个版本）。
   用户自己填的镜像前缀刻意豁免：局域网 `http://192.168.1.20/` 是明确意图，且照样过 sha256。
+- **删连接不删 Key，一次点击就删**：为了清掉三张残留的预设卡才撞出来——
+  `secrets.delete_secret` 定义了却**零调用**，所以每删一张卡，那把 Key 就永久留在
+  Windows 凭据管理器里没人认领（只进不出）。现在 `deleteConnection` 在 `save_config`
+  **成功之后**才删凭据（写盘失败不该连用户的 Key 一起毁），提示也写明「已删除连接与其 Key」。
+  同时这个动作改成两步确认：第一次点击按钮换成「确认删除（含 Key）」，第二次才真删；
+  **换选另一条连接时确认自动解除**，免得留着一次武装状态误删下一条。
+- **探针以前在动真凭据**：`dehydrate()` 每次 `save_config` 都会把明文 Key 写进凭据管理器，
+  而真 Bridge 探针照样保存配置——以前只是覆盖成相同的值所以看不出来，
+  加上「删连接」这条路径之后，探针就真的能删掉用户的 Key。
+  `probe_guard` 因此加了第三道沙箱：把 `secrets` 的四个函数换成进程内字典，
+  探针读写自己的 vault，进程退出即蒸发。
 - **`ProxyServer` 只写 `http=…` 的机器等于没配代理**：解析只认 `https=` 那一行，局域网代理
   （WinINET 常见写法）被整个丢掉；`ProxyEnable=1` 而 `ProxyServer` 为空时还会断言「只给了 PAC 脚本」。
   现在优先 `https=`、退回 `http=`、再退回裸 `host:port`，报告只说自己真看到的东西（带上 PAC 地址）。
@@ -117,20 +139,30 @@
 - **规则表（本轮核心）**：验签通过 + SHA-256 命中 + 安装版 → 才允许下载与执行；
   验签失败或清单没有 `sig` → 只显示版本号/说明/直链/哈希，**「立即安装」按钮根本不出现**；
   本机文件哈希 ≠ 清单 → 只报「不匹配：清单 X / 实际 Y」。应用永不替用户执行未经签名清单背书的字节。
-- 清单里所有 URL 强制 `https:`，`file://`（本地 PE）与 `\\UNC`（NTLM 泄漏）一律拒绝打开；
-  `version` 字段清洗（`../../` 塞不进下载文件名），所有落盘名过 `basename()`；
-  `notes` 强制 `Text.PlainText`，否则清单里的 HTML 能伪造对话框。
+- **载荷地址只认 `https:`**（安装包地址与面板替你打开的链接），`file://`（本地 PE）与网络共享路径
+  （NTLM 泄漏）一律拒绝；清单那一侧允许 http，因为兜底的是签名而不是传输层，
+  用户自填的局域网镜像同理，但照样过 sha256。`version` 字段清洗（`../../` 塞不进下载文件名），
+  所有落盘名过 `basename()`；`notes` 强制 `Text.PlainText`，否则清单里的 HTML 能伪造对话框。
+- 删连接会连带删掉它在凭据管理器里的 Key——一张没人认领的卡不该留着能用的秘密。
 - `setUpdateSettings` 的补丁键走白名单（这个口子不做过滤就能从 QML 写 `connections`/`slots`）。
 - 发布闸门 += 私钥泄漏扫描与清单验签检查。
 
 ### 测试与闸门
 
-- 新增 `tests/unit/test_update_channels.py`（35 项）、`tests/unit/test_providers.py`（15 项）、
+- 新增 `tests/unit/test_update_channels.py`（42 项）、`tests/unit/test_providers.py`（23 项）、
   `tests/probe_update_ui.py`（46 项，零真网络，假 httpx transport 跑完整条通道与代理回退）。
+- 新增 `tests/probe_conn_delete.py`（20 项）：真 Bridge + 真 QML 驱动两步删除，钉住
+  「Key 跟着连接一起消失」「槽位不指向已删连接」「只剩一条不许删」，
+  以及退役出厂行的三条护栏**走真 save/load 各验一遍**（填过 Key / 被槽位用着 / 改过模型名都不许删）。
+- **探针从此碰不到真凭据**：`probe_guard` 第三道沙箱把 `secrets` 换成进程内字典；
+  以前 `save_config` 就会把明文 Key 写进凭据管理器（值相同所以看不出来），
+  加了删连接这条路径之后，探针真的能删掉用户的 Key。
+- `probe_panel_fit.py` 现在把设置页切进「确认删除」态再量溢出——那是那一行最宽的文案；
+  打包态自检 += `deleteConnButton` 对象名（包里少了这个按钮就红，而不是等用户升级那天发现）。
 - 不可跳过的发布闸门 += `probe_update_ui.py` 与私钥泄漏扫描。
-- `tests/probe_guard.py` 扩展：更新缓存目录改道临时目录，`QIANBI_OFFLINE` 在护栏内置起。
-- 本机已验证：单测 486 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
-  （更新功能不碰 LLM prompt）、`probe_update_ui` 46/46、`probe_about_ui` 9/9、
+- 本机已验证：单测 494 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
+  （更新功能不碰 LLM prompt）、`probe_update_ui` 46/46、`probe_conn_delete` 20/20、
+  `probe_about_ui` 9/9、`probe_panel_fit` 零溢出、
   `dual_sync_check` 无意外漂移（`app/llm/providers.py` 登记为 GUI 先行的受控差异——
   真同步要连带 TUI 自己的连接预设与槽位默认值一起改，只拷这张表会留悬空 id）、
   `run.py --selftest` 通过。

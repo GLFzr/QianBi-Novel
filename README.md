@@ -265,6 +265,8 @@ python -m venv .venv
 > **刻意没有预置 Azure OpenAI 与 Cloudflare Workers AI**：它们分别要 `deployment_id` 和
 > `account_id`，不是「地址 + Key + 模型」三份参数能表达的东西，硬塞进预设只会给用户
 > 一堆调不通的连接——需要就走自定义。
+> 本版下架的那两行出厂预设（`ds-v4-flash` / `ocgo-flash`）会在升级时自动清掉，**只清三样都满足的**：
+> 从没被改过、没有槽位指着它、也没在凭据管理器里存过 Key。改过、在用、填过 Key 的一律原样留着。
 
 ---
 
@@ -272,13 +274,13 @@ python -m venv .venv
 
 ```bash
 # 离线单测（无需 API Key，约 3 秒）
-.venv/Scripts/python -m pytest tests/unit -q        # 486 项
+.venv/Scripts/python -m pytest tests/unit -q        # 494 项
 
 # 离线探针：真实 Bridge + QML 无头驱动，覆盖闸门/锁定/反哺/接力/导入/导出/更新等链路
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_update_ui.py
-# …… 共 43 个 probe_*.py：离线探针 + 单测构成发布闸门；probe_models / probe_flash_reasoning
+# …… 共 44 个 probe_*.py：离线探针 + 单测构成发布闸门；probe_models / probe_flash_reasoning
 # 等少数几个是真实 LLM 实验，需要 QIANBI_TEST_KEY；probe_packaged 由发布流水线带 --exe 调用，
 # probe_ui_gallery 产出全量 UI 截图
 ```
@@ -292,9 +294,10 @@ python -m venv .venv
 | `probe_backflow_chain.py` | 反哺全链路：幂等、外部直改、缺细纲、中断、补跑队列 |
 | `probe_import_ui.py` | 外部文档导入：只拆实有 → 预览映射 → 勾选才落盘 → 契约页整批撤销 |
 | `probe_update_ui.py` | 更新链路 46 项（零真网络）：多通道回退与逐条死因、未验签不给安装按钮、离线导入清单、本机包对哈希、24h 限流、设置白名单、面板溢出 |
+| `probe_conn_delete.py` | 连接删除 20 项：两步确认才删、Key 随连接一起从凭据管理器消失、只剩一条不许删、退役出厂行的三条删除护栏 |
 | `probe_about_ui.py` | 关于页：书稿/配置路径与 Bridge 一致，「更新…」入口把面板开起来 |
 | `probe_packaged.py` | 打包态资源清单审计 + 开发态/打包态装配摘要对拍 |
-| `probe_panel_fit.py` | 六面板横溢/纵溢/压扁/越界 |
+| `probe_panel_fit.py` | 六面板横溢/纵溢/压扁/越界（设置页含「确认删除」那一态，它是行内最宽的文案）|
 
 **真实 LLM e2e**（需 Key，约 20 分钟 / ¥0.07 量级）：
 
