@@ -57,6 +57,9 @@ EXPECTED_DIFFS = {
     # 空的「20. 动静配比」并入 21。TUI 调用点不传新 kwargs，同步过去即 KeyError。
     "app/prompts/writing.py": "P0b 正文工艺卡/作者按占位符 GUI 先行，TUI 待同步（同步时须补 stages 传参）",
     "app/prompts/__init__.py": "双端按需 re-export（GUI 导出 v2 审校族，TUI 导出 CO_WORLDBOOK_*）",
+    # ---- 方案 D1（2026-09-05，GUI 先行）：设定清算=共写/自动档定稿后的产物对账，
+    #      依赖 GUI 的 pipeline_state.chapter_step 与审校槽路由；TUI 无微循环定稿流，待同步
+    "app/core/canon_audit.py": "设定清算（正文 vs 拆解底册三分类对账）GUI 先行：依赖 GUI 微循环定稿流与审校槽路由，TUI 无此特性待排期",
     # ---- 平台管道：GUI 走 Qt Signal，TUI 走 bus._pub；stages 差异含 TUI resume 集成
     "app/core/orchestrator.py": "GUI sig_* 信号 vs TUI bus._pub 发布管道（T3.3 去轮询已双端同构）",
     "app/core/stages.py": "TUI resume 续写集成 + 平台管道；共享 prompt 组装逻辑改动仍须人工比对同步",
