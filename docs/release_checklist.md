@@ -60,8 +60,13 @@
 - [ ] 顶层兼容字段 `version/url/sha256` 与 `assets.setup.*` 逐字相等
       —— 不然 v0.15~0.17 的老客户端会拿到「发布页 URL + exe 哈希」这种对不上的组合
 - [ ] 清单里的 setup sha256 与本次实际产出的 `...-setup.exe` 复核一致（单测只验格式，指错包它看不见）
+- [ ] `latest.json` 的 `notes` 是人写的（`build_release` 只在该字段没出现本版号时打 WARN，
+      它不代笔）；改完**必须重新 `sign_manifest.py` 签名**，改一个字节都会让验签失败
 - [ ] GitHub Pages 已开且能吐清单：`curl -I https://<user>.github.io/<repo>/latest.json` 返 200，
       仓库根有 `.nojekyll`（否则 Jekyll 会处理这份 json）
+- [ ] 复验发布生效只看 **raw 与 Pages**（实测：raw 近乎即时、Pages 一两分钟重建完）。
+      **别用 jsDelivr 判断发没发出去**——它缓存分支 ref 长达约 12 小时（`s-maxage=43200`，
+      2026-09-04 实测响应头），只会「少报」不会「乱报」（清单带签名），但拿来验收会误判成没发
 - [ ] **反向验证**：手改清单里 `version` 的任意一个字节再跑 `--verify` → 必须拒签。
       没做过这一条，就等于验签路径从没被真实数据跑通过
 - [ ] 开机自动检查默认开 + 24h 限流 + 一次性告知 + `auto_check_chosen` 迁移，

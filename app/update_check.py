@@ -126,7 +126,10 @@ def channels(cfg: dict) -> list:
         out.append(("raw", primary))
         user, repo = gh_slug(primary)
         if user and repo:
-            # Pages 只认小写；jsDelivr 的 gh 路径区分大小写，必须用原样 slug
+            # Pages 只认小写；jsDelivr 的 gh 路径区分大小写，必须用原样 slug。
+            # jsDelivr 对分支 ref 的缓存实测 s-maxage=43200 / max-age=604800（2026-09-04 响应头）：
+            # 只连得上这一条通道的用户，最坏会晚约 12 小时才知道发了新版。这是延迟不是漏洞——
+            # 清单带签名，滞后的镜像只会「少报」，报不出一个不存在的新版本。
             out.append(("pages", "https://%s.github.io/%s/latest.json"
                         % (user.lower(), repo.lower())))
             out.append(("jsdelivr", "https://cdn.jsdelivr.net/gh/%s/%s@main/latest.json"
