@@ -89,10 +89,13 @@ PROVIDERS = {
         "label": "OpenRouter（聚合）",
         "builtin": True,
         "base_url": "https://openrouter.ai/api/v1",
-        "models": ["anthropic/claude-sonnet-4.5", "deepseek/deepseek-v4-pro", "x-ai/grok-4"],
+        "models": ["anthropic/claude-sonnet-4.5", "anthropic/claude-sonnet-4.6",
+                   "deepseek/deepseek-v4-pro", "x-ai/grok-4.6", "x-ai/grok-4.5"],
         "hint": "实测 401=只差鉴权，且 /models 直接 200。一家能调 Claude / GPT / Gemini /"
                 " DeepSeek，而且国内直连也通——这是它比别家国外平台更该排在前面的原因。模型名"
-                "同样是 provider/model；想要和本地提示词同源的写作效果，选 deepseek/ 那条。",
+                "同样是 provider/model；想要和本地提示词同源的写作效果，选 deepseek/ 那条。"
+                "**上面这几个名字是对着它公开的 /models 核过的**（2026-09-04，427 条里在路）——"
+                "别家平台的模型名没法这样验（要 Key），填错的症状是「model not found」。",
     },
     "gemini": {
         "label": "Google Gemini",
