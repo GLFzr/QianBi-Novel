@@ -321,3 +321,21 @@ def test_offline_manifest_import_reports_why_it_is_not_trusted(tmp_path):
     assert data and "未签名" in reason
     missing, err = uc.load_manifest_file(str(tmp_path / "nope.json"))
     assert missing is None and "读不到" in err
+
+
+def test_dead_proxy_is_reported_as_a_proxy_problem():
+    """死代理抛的是 ConnectError，照类型表会说成「DNS 被污染或被重置」。
+
+    面板逐条列出每条通道怎么死，全部意义就是让用户据此判断该修代理还是走离线；
+    诊断指错方向等于把这条设计反过来用。
+    """
+    import httpx
+    req = httpx.Request("GET", "https://raw.githubusercontent.com/x/y/main/latest.json")
+    err = httpx.ConnectError("all connection attempts failed", request=req)
+    assert type(err).__name__ == "ConnectError"      # 本函数按类型名分派，这里依赖那个前提
+    got = uc.error_reason(err, "http://127.0.0.1:7997")
+    assert "代理" in got and "127.0.0.1:7997" in got and "不使用代理" in got, got
+    assert "DNS" in uc.error_reason(err), "没走代理时仍然要说 DNS，别把两种情况混成一团"
+    # 连接阶段超时 = 代理本身没应答，该报代理；读取阶段超时 = 代理通了、上游慢，不该甩锅给它
+    assert "代理" in uc.error_reason(httpx.ConnectTimeout("t", request=req), "127.0.0.1:1")
+    assert uc.error_reason(httpx.ReadTimeout("t", request=req), "127.0.0.1:1") == "读取超时"

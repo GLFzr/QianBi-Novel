@@ -368,8 +368,16 @@ def should_auto_check(cfg: dict, now: float | None = None) -> bool:
 
 # ---------- 取清单 ----------
 
-def error_reason(err: Exception) -> str:
+def error_reason(err: Exception, via_proxy: str = "") -> str:
+    """人话版死因。
+
+    走代理时优先报代理：一台死掉的本地代理抛的是 ConnectError，
+    照类型表会说成「DNS 被污染或被重置」——用户于是去折腾 DNS，
+    而该做的是把代理地址填对、或者在面板里选「不使用代理」。
+    """
     name = type(err).__name__
+    if via_proxy and name in ("ConnectError", "ConnectTimeout", "ProxyError"):
+        return "代理 %s 连不上（核对代理地址，或选「不使用代理」）" % via_proxy
     return {"ConnectError": "连接失败（DNS 被污染或被重置）",
             "ConnectTimeout": "连接超时",
             "ReadTimeout": "读取超时",
@@ -391,7 +399,7 @@ def fetch_text(url: str, plan: ProxyPlan, timeout: float = TIMEOUT) -> tuple:
                 return ("", "HTTP %s（未发布或路径不对）" % r.status_code)
             return (r.text, "")
     except Exception as e:  # noqa: BLE001
-        return ("", error_reason(e))
+        return ("", error_reason(e, plan.proxy))
 
 
 def decode(text: str) -> tuple:

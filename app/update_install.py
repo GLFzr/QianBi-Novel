@@ -87,7 +87,7 @@ def download(url: str, dest: str, plan: uc.ProxyPlan, *, expected_sha: str = "",
                         if on_progress is not None:
                             on_progress(pos, total)
     except Exception as e:  # noqa: BLE001
-        result["reason"] = uc.error_reason(e)
+        result["reason"] = uc.error_reason(e, plan.proxy)
         result["sha256"] = h.hexdigest()
         return result
     result["sha256"] = h.hexdigest()
