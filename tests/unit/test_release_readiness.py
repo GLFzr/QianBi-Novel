@@ -273,3 +273,43 @@ def test_client_stream_records_usage(tmp_path, monkeypatch):
     assert c.chat_stream("hi") == "hello"
     rec = _json.loads((tmp_path / "usage.jsonl").read_text(encoding="utf-8").strip())
     assert rec["slot"] == "draft" and rec["in"] == 40 and rec["out"] == 20
+
+
+# ---- 发布闸门自身的可信度 ----
+
+def _load_update_keys():
+    """scripts/ 不是包，按路径加载（这个扫描器自己就是被测对象）"""
+    import importlib.util
+    import os
+    p = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))), "scripts", "update_keys.py")
+    spec = importlib.util.spec_from_file_location("update_keys_under_test", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_key_scanner_catches_every_pem_form():
+    """漏一种写法，就等于「带私钥的提交」能一路绿灯打完包"""
+    pat = _load_update_keys()._pem_pattern()
+    for line in (b"-----BEGIN PRIVATE KEY-----", b"-----BEGIN OPENSSH PRIVATE KEY-----",
+                 b"-----BEGIN RSA PRIVATE KEY-----", b"-----BEGIN ENCRYPTED PRIVATE KEY-----",
+                 b"-----BEGIN X9.42 EC PRIVATE KEY-----"):
+        assert pat.search(line), line
+
+
+def test_key_scanner_ignores_public_material():
+    pat = _load_update_keys()._pem_pattern()
+    for line in (b"-----BEGIN PUBLIC KEY-----", b"-----BEGIN CERTIFICATE-----",
+                 b'{"pub": "0yXI3cLydSg7X+yeUEE9mbtVJsBxWs7WwkXMpZ63xVY="}'):
+        assert not pat.search(line), line
+
+
+def test_key_scanner_does_not_flag_its_own_source():
+    """扫描器的源码里写着它要找什么。整串字面量留在文件里 = 闸门永远红，
+    而且红的理由是「提到了自己在扫什么」——这种假阳性会让人去关掉闸门"""
+    import os
+    mod = _load_update_keys()
+    with open(mod.__file__, "rb") as f:
+        src = f.read()
+    assert not mod._pem_pattern().search(src)

@@ -87,6 +87,17 @@ def do_show(path: str) -> int:
     return 0
 
 
+def _pem_pattern():
+    """PEM 私钥头的形状：-----BEGIN <任意中段> PRIVATE KEY-----（含 OPENSSH 变体）
+
+    常量拆写是为了本文件自己不再命中它——这个脚本就在被扫的文件清单里，
+    整串字面量写出来会让闸门永远红，而且红的理由是「扫描器提到了自己在找什么」。
+    """
+    import re
+    head, mid, tail = "-----BEGIN ", "[A-Z0-9. _-]*", "PRIVATE KEY-----"
+    return re.compile((head + mid + tail).encode("ascii"))
+
+
 def do_check_repo() -> int:
     """闸门：私钥材料一旦出现在被跟踪的文件里，立刻红
 
@@ -98,6 +109,7 @@ def do_check_repo() -> int:
     if out.returncode != 0:
         print("WARN 不是 git 仓库或 git 不可用，跳过私钥泄漏扫描")
         return 0
+    pat = _pem_pattern()
     names = [n.decode("utf-8", "replace") for n in out.stdout.split(b"\0") if n]
     hits = []
     for n in names:
@@ -107,12 +119,12 @@ def do_check_repo() -> int:
                 body = f.read()
         except OSError:
             continue
-        if b"PRIVATE KEY-----" in body:
+        if pat.search(body):
             hits.append(n)
     if hits:
         print("PRIVATE KEY IN REPO:", ", ".join(hits))
         print("被跟踪的文件里出现了私钥材料。立刻从历史里清掉并轮换密钥——"
-              "公开仓库里的这份密钥能給所有用户推包。")
+              "公开仓库里的这份密钥能给所有用户推包。")
         return 1
     print("私钥泄漏扫描 OK（%d 个被跟踪文件）" % len(names))
     return 0

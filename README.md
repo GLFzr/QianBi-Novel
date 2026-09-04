@@ -270,7 +270,7 @@ python -m venv .venv
 
 ```bash
 # 离线单测（无需 API Key，约 3 秒）
-.venv/Scripts/python -m pytest tests/unit -q        # 476 项
+.venv/Scripts/python -m pytest tests/unit -q        # 479 项
 
 # 离线探针：真实 Bridge + QML 无头驱动，覆盖闸门/锁定/反哺/接力/导入/导出/更新等链路
 .venv/Scripts/python tests/probe_agent_relay.py

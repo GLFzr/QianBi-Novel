@@ -71,6 +71,11 @@ EXPECTED_DIFFS = {
     # → 直接把 GUI router 同步过去即 TypeError（先同步 client.py，再同步本文件并删豁免）。
     "app/llm/router.py": "P1 两层参数透传 GUI 先行：TUI router 不传 stage_params/payload_defaults（TUI client 已支持 payload_defaults，故只需同步本文件）",
     "app/llm/resume.py": "TUI 独有截断续写模块（M 系特性，未排期移植 GUI）",
+    # ---- v0.18.1（2026-09-04，GUI 先行）：出厂连接预设从 3 家扩到 12 家。这张表与
+    #      app/config.py 的 DEFAULT_CONNECTIONS / 槽位指向是一件事（config.py 不在共享层），
+    #      只把 providers.py 拷过去会让 TUI 的连接预设与槽位指到解析不到的 id。
+    #      真同步 = TUI 同一个 commit 里改 providers.py + 它自己的连接预设与 slot 默认值。
+    "app/llm/providers.py": "v0.18.1 12 家预设表 GUI 先行；TUI 同步须连带其 config.py 的连接预设与槽位默认值（只拷本文件会留悬空 id）",
     # ---- 审校两代共存：GUI 保留 v1 真实 REVIEW_PROMPT/REVIEW_FIX_PROMPT（C6 链依赖），
     #      TUI 已将 v1 别名到 v2；v2 主体（FINAL_REVIEW/ROOT_CAUSE few-shot）已双端一致
     "app/prompts/review.py": "GUI 需真实 v1 审校 prompt（C6）；TUI v1=v2 别名；v2 正文已同步",

@@ -75,6 +75,10 @@
 
 ### 修复
 
+- **私钥泄漏扫描命中了自己**：`scripts/update_keys.py` 的源码里写着它要找的那串 PEM 字面量，
+  于是这个新闸门第一次真跑就报「被跟踪的文件里出现了私钥材料」并拦死发版。假阳性的害处不是
+  挡路，是让人去关掉闸门。改成运行时拼出的 `BEGIN … PRIVATE KEY` 形状正则（覆盖裸形式与
+  `X9.42 EC` 这类带点的多词标签），本文件不再自命中，另补三条单测同时钉住真阳性与假阳性。
 - **脏稿否决会卡死一键更新**：`Main.qml` 在 `editorDirty` 时 `close.accepted = false`，
   会让 Inno 的关闭请求卡住、安装器报「需要重启计算机」。新增 `bridge.quittingForUpdate` 显式旁路，
   确认步同时写明「未保存草稿会保留，下次启动可恢复」。
@@ -105,9 +109,11 @@
   `tests/probe_update_ui.py`（40 项，零真网络，假 httpx transport 跑完整条通道与代理回退）。
 - 不可跳过的发布闸门 += `probe_update_ui.py` 与私钥泄漏扫描。
 - `tests/probe_guard.py` 扩展：更新缓存目录改道临时目录，`QIANBI_OFFLINE` 在护栏内置起。
-- 本机已验证：单测 476 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
+- 本机已验证：单测 479 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
   （更新功能不碰 LLM prompt）、`probe_update_ui` 40/40、`probe_about_ui` 9/9、
-  `dual_sync_check` 无意外漂移（`app/llm/providers.py` 已同步到 TUI）、`run.py --selftest` 通过。
+  `dual_sync_check` 无意外漂移（`app/llm/providers.py` 登记为 GUI 先行的受控差异——
+  真同步要连带 TUI 自己的连接预设与槽位默认值一起改，只拷这张表会留悬空 id）、
+  `run.py --selftest` 通过。
 - 单测覆盖的反向用例：篡改签名/字段即验签失败、未 pinned 密钥签的清单被拒、未验签清单不给安装按钮、
   `file:` 与 UNC 地址被拒、`version: "../../x"` 被清洗、全链失败不等于「已最新」、
   显式 `auto_check:false` 不被默认值覆盖、缺 `cryptography` 时降级为「无法验证」而非崩溃。
@@ -121,7 +127,7 @@
 - 本机直连四路全 200，**国内真实可达性无法在本机证明**，Pages/jsDelivr 的价值按经验排序。
 - **真机矩阵仍欠跑**：安装版空闲/脏稿下一键升级、便携版只出链接、v0.17→v0.18.1 覆盖安装且旧进程
   仍开着、断网下离线导入清单 + 本地包校验安装。这些离线证明不了。
-- TUI 侧 `app/config.py` 的连接预设仍是旧三家（该文件不在共享层，`providers.py` 已同步）。
+- TUI 侧仍是旧三家连接预设，`providers.py` 已登记为受控差异（GUI 先行）；真同步要在 TUI 同一个 commit 里改这张表 + 它自己的连接预设与槽位默认值。
 
 ## [0.17.0] - 2026-09-04（UI 成熟化 · 面板呼吸感 · 阅读排版升级）
 

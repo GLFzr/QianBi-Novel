@@ -331,7 +331,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 
 ```bash
 # Offline unit tests (no API key, ~3 seconds)
-.venv/Scripts/python -m pytest tests/unit -q        # 476 tests
+.venv/Scripts/python -m pytest tests/unit -q        # 479 tests
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
 .venv/Scripts/python tests/probe_agent_relay.py
@@ -404,7 +404,7 @@ scripts/
                           smoke test → digest diff)
   dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
-  unit/                 36 files / 476 offline tests
+  unit/                 36 files / 479 offline tests
   probe_*.py            42 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice
