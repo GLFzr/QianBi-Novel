@@ -59,11 +59,26 @@ def delete_secret(conn_id: str):
         pass
 
 
+# 行丢过 key_ref（退役换血/旧版迁移弄丢指针）而凭据库里仍有同 id Key 的，领养回来。
+# 每个 id 每进程只探一次：load_config 是热路径，不能每次界面动作都跑一遍凭据库。
+_ADOPT_CHECKED: set = set()
+
+
 def hydrate(cfg: dict) -> dict:
     """load_config 出口：把 key_ref 指向的凭据回填到内存中的 api_key 字段"""
     for conn in cfg.get("connections", []):
-        if not conn.get("api_key") and conn.get("key_ref") == _KEY_REF:
-            conn["api_key"] = get_secret(conn.get("id", ""))
+        if conn.get("api_key"):
+            continue
+        cid = conn.get("id", "")
+        if conn.get("key_ref") == _KEY_REF:
+            conn["api_key"] = get_secret(cid)
+        elif _AVAILABLE and cid and cid not in _ADOPT_CHECKED:
+            # key_ref 没了 ≠ Key 没了：查一次凭据库，有同 id 的就领养并接回指针
+            _ADOPT_CHECKED.add(cid)
+            found = get_secret(cid)
+            if found:
+                conn["api_key"] = found
+                conn["key_ref"] = _KEY_REF
     return cfg
 
 

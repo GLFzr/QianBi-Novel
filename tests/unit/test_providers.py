@@ -6,6 +6,7 @@
 把 Key 抄进了仓库、以及槽位指向一个已经不存在的连接 id。
 """
 import re
+import json
 
 from app import config as cfg_mod
 from app.llm import providers as pv
@@ -155,10 +156,23 @@ def _no_credentials(monkeypatch):
     """迁移只许**读**凭据：它在每次 load_config 都跑，探针与单测也在跑它"""
     def boom(*a, **k):
         raise AssertionError("退役迁移不许写或删除凭据")
+    monkeypatch.setattr(cfg_mod.secrets, "available", lambda: True)
     monkeypatch.setattr(cfg_mod.secrets, "store_secret", boom)
     monkeypatch.setattr(cfg_mod.secrets, "delete_secret", boom)
     monkeypatch.setattr(cfg_mod.secrets, "get_secret", lambda cid: "")
     cfg_mod._RETIRED_WITH_KEY.clear()
+
+
+def test_retirement_skipped_entirely_when_keyring_unavailable(monkeypatch):
+    """keyring 不可用时 get_secret 把「读不到」和「真没有」都报成空串——
+    此刻删行可能把带着 Key 的行一起扔（Key 从此没人认领）。整轮跳过才安全"""
+    monkeypatch.setattr(cfg_mod.secrets, "available", lambda: False)
+    monkeypatch.setattr(cfg_mod.secrets, "get_secret",
+                        lambda cid: (_ for _ in ()).throw(AssertionError("不该读凭据")))
+    row = _row("zp-glm-5", name="智谱 · GLM-5", provider="zhipu",
+               base_url="https://open.bigmodel.cn/api/paas/v4", model="glm-5")
+    out = cfg_mod._retire_builtin_connections(_cfg_with([row]))
+    assert [c["id"] for c in out["connections"]] == ["zp-glm-5"]
 
 
 def test_retired_untouched_row_is_removed(monkeypatch):
@@ -297,3 +311,43 @@ def test_empty_model_fails_loud_not_as_api_400():
             assert "还没选模型" in str(e), str(e)
         else:
             raise AssertionError("空模型竟然发出去了请求")
+
+
+# ---- hydrate 的领养路径（行丢了 key_ref ≠ Key 没了）----
+
+def _hydrate_env(monkeypatch, vault):
+    from app import secrets as secrets_mod
+    monkeypatch.setattr(secrets_mod, "_AVAILABLE", True)
+    monkeypatch.setattr(secrets_mod, "get_secret", lambda cid: vault.get(cid, ""))
+    monkeypatch.setattr(secrets_mod, "_ADOPT_CHECKED", set())
+    return secrets_mod
+
+
+def test_hydrate_adopts_orphan_key(monkeypatch):
+    """换血换丢了 key_ref、凭据库里同 id 的 Key 还在：领养并接回指针——
+    本机 bl-qwen-max 的真实遭遇，不该要求用户重新粘一遍 Key"""
+    sm = _hydrate_env(monkeypatch, {"zp-glm-5": "sk-orphan-123"})
+    cfg = sm.hydrate({"connections": [{"id": "zp-glm-5", "name": "智谱 BigModel", "model": ""}]})
+    c = cfg["connections"][0]
+    assert c["api_key"] == "sk-orphan-123" and c["key_ref"] == "keyring", c
+
+
+def test_hydrate_adoption_probes_each_id_once(monkeypatch):
+    """load_config 是热路径：领养探测每个 id 每进程最多一次，查过没有就别再问"""
+    sm = _hydrate_env(monkeypatch, {})
+    calls = []
+    monkeypatch.setattr(sm, "get_secret", lambda cid: calls.append(cid) or "")
+    rows = {"connections": [{"id": "kimi-k3", "model": ""}]}
+    for _ in range(3):
+        sm.hydrate(json.loads(json.dumps(rows)))
+    assert calls == ["kimi-k3"], calls
+
+
+def test_hydrate_skips_adoption_when_keyring_unavailable(monkeypatch):
+    from app import secrets as secrets_mod
+    calls = []
+    monkeypatch.setattr(secrets_mod, "_AVAILABLE", False)
+    monkeypatch.setattr(secrets_mod, "get_secret", lambda cid: calls.append(cid) or "x")
+    monkeypatch.setattr(secrets_mod, "_ADOPT_CHECKED", set())
+    cfg = secrets_mod.hydrate({"connections": [{"id": "zp-glm-5", "model": ""}]})
+    assert not calls and not cfg["connections"][0].get("api_key")

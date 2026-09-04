@@ -224,6 +224,11 @@ def _retire_builtin_connections(cfg: dict) -> dict:
     **这里绝不写也绝不删凭据**：本函数每次 load_config 都会跑，探针与单测也在跑它，
     只读凭据存储才安全。要搬 Key 得由用户在界面上动手（或删除逻辑自己负责收尾）。
     """
+    if not secrets.available():
+        # 读不到凭据的环境（keyring 缺失/降级）里「没有 Key」这个结论不可信——
+        # get_secret 会把读失败和真没有都报成空串，此刻删行等于可能连 Key 一起扔。
+        # 整轮跳过：宁可这轮少删一张卡，下次在能读到凭据的环境里再清。
+        return cfg
     conns = cfg.get("connections")
     if not isinstance(conns, list):
         return cfg
