@@ -35,9 +35,11 @@ SECTIONS = ("imports", "manifest", "assembly", "qml")
 # ---- 关键导入目标：缺一个就是打包事故 ----
 _IMPORT_TARGETS = [
     "httpx", "keyring.backends.Windows",
+    # 清单验签靠 cryptography：它漏收时症状是「更新静默不可用」而不是崩，只能靠这条抓
+    "cryptography.hazmat.primitives.asymmetric.ed25519",
     "app.wb", "app.core.scan", "app.core.stages", "app.core.gates", "app.core.memory",
     "app.prompts.scene_cards", "app.presets", "app.llm.client", "app.importdoc",
-    "app.update_check", "app.ui.bridge",
+    "app.update_check", "app.update_install", "app.ui.bridge",
 ]
 
 # ---- 资源清单范围：datas 收了什么就比什么；None 表示该目录下全部文件 ----
@@ -53,7 +55,7 @@ _QML_ERROR_KEYS = ("ReferenceError", "TypeError", "is not defined", "Cannot assi
 
 _QML_OBJECTS = ["panelStack", "forceLockDialog", "genConfigDialog", "genConfigBody",
                 "exportDialog", "needsFixDialog", "reviewIssueDialog",
-                "importDialog", "importBatchCard", "contractRuleList"]
+                "importDialog", "importBatchCard", "contractRuleList", "updateDialog"]
 
 # ================= 夹具（固定字面量：两侧必须喂同一批字节） =================
 
@@ -483,6 +485,8 @@ def run(out_path: str = "-", sections=SECTIONS) -> int:
     home = tempfile.mkdtemp(prefix="qianbi_selftest_")
     os.environ["HOME"] = home
     os.environ["USERPROFILE"] = home
+    # 纪律 2 的兑现处：自动检查即将默认开，闸门里必须钉死零网络（app/update_check.offline）
+    os.environ["QIANBI_OFFLINE"] = "1"
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
     root = _resource_dir()

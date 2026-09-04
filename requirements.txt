@@ -5,6 +5,8 @@ httpx>=0.24
 psutil>=5.9        # 内存采样（长跑稳定性监控，缺失时自动降级）
 
 keyring>=25              # API key 凭据管理器存储（T3.3）
+cryptography>=42         # 版本清单 Ed25519 验签（v0.18 更新链路）
+                         # 漏打包不会崩，只会让自动更新静默失效——app/selftest.py 的导入清单钉着它
 
 # 打包（可选，仅构建 exe 需要）
 # pyinstaller>=6.0

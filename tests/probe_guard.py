@@ -5,6 +5,7 @@ arm_config_guard() 在进程启动时快照配置，退出时恢复，探针零�
 """
 import atexit
 import os
+import tempfile
 
 
 def arm_config_guard() -> str:
@@ -26,4 +27,22 @@ def arm_config_guard() -> str:
             pass
 
     atexit.register(_restore)
+    _arm_update_guard()
     return path
+
+
+def _arm_update_guard():
+    """探针零网络 + 清单缓存隔离
+
+    自动检查即将默认开。不钉这两条，探针会真发 HTTP；而 `~/.qianbi_novel/updates/`
+    里的清单缓存不在 config.json 快照范围内，于是「上次谁跑过什么」会决定这次探针
+    看到什么，24h 限流再把执行顺序变成结果。挂在 arm_config_guard 里是让新探针
+    没法忘记加。
+    """
+    os.environ.setdefault("QIANBI_OFFLINE", "1")
+    sandbox = tempfile.mkdtemp(prefix="qianbi_probe_updates_")
+    try:
+        from app import update_check as uc
+        uc.updates_dir = lambda: sandbox
+    except Exception:  # noqa: BLE001
+        pass

@@ -173,6 +173,10 @@ ApplicationWindow {
     }
 
     onClosing: function (close) {
+        // 为装新版而退出时让路：草稿已暂存，下次启动有恢复对话框兜底；
+        // 在这里否决关闭，安装器会等不到进程退出而报「需要重启计算机」
+        if (bridge.quittingForUpdate)
+            return
         if (bridge.editorDirty && !bridge.isStreaming) {
             mainWindow.pendingChapter = -2
             unsavedDialog.open()
@@ -199,7 +203,7 @@ ApplicationWindow {
         if (bridge.hasRecoverableDraft) Qt.callLater(function () { recoverDialog.open() })
         // 首启向导（T3.5）：未完成过引导 → 自动弹出
         if (!bridge.onboarded) Qt.callLater(function () { wizardDialog.open() })
-        // 开机检查更新：要不要联网由 Python 侧读 updates.auto_check（默认关）
+        // 开机检查更新：要不要联网、离上次多久了，全在 Python 侧 should_auto_check 判
         Qt.callLater(function () { bridge.checkForUpdates(false) })
         // 窗口位置超出屏幕可视区时重置居中（防窗口被拖出屏幕导致内容"被挡住"）
         Qt.callLater(function () {
@@ -285,6 +289,63 @@ ApplicationWindow {
                 }
 
                 Item { Layout.fillHeight: true }
+
+                // 更新：有新版画 accent 边框 + 角标，检查失败画 warn 边框
+                // ——「查不动」必须看得见，静默的图标等于没做自动检查
+                Item {
+                    id: updateNav
+                    Layout.alignment: Qt.AlignHCenter
+                    width: 36; height: 36
+                    readonly property var st: bridge.updateState
+                    readonly property bool failed: !bridge.updateAvailable
+                                                   && String(st.state || "") === "failed"
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: updHover.containsMouse ? Theme.bgHover : "transparent"
+                        border.width: bridge.updateAvailable ? 1.5 : (updateNav.failed ? 1 : 0)
+                        border.color: bridge.updateAvailable ? Theme.accent : Theme.warn
+                        Behavior on color { ColorAnimation { duration: 100 } }
+                    }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        name: "update"
+                        size: 18
+                        opacity: bridge.updateBusy ? 0.55 : 1.0
+                        color: bridge.updateAvailable ? Theme.accent
+                             : updateNav.failed ? Theme.warn : Theme.textSecondary
+                    }
+                    Rectangle {   // 角标：不靠图标本身表达「有货」
+                        visible: bridge.updateAvailable
+                        width: 9; height: 9; radius: 4.5
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.rightMargin: 4; anchors.topMargin: 4
+                        color: Theme.accent
+                        border.width: 1.5; border.color: Theme.bgPanel
+                    }
+                    MouseArea {
+                        id: updHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: updateDialog.open()
+                    }
+                    ToolTip.visible: updHover.containsMouse
+                    ToolTip.text: {
+                        var s = String(updateNav.st.state || "")
+                        if (bridge.updateAvailable)
+                            return "发现新版本 v" + String(updateNav.st.version || "") + " · 点击查看怎么装"
+                        if (bridge.updateBusy)
+                            return "正在检查/下载更新…"
+                        if (s === "failed")
+                            return "检查更新没成功：" + String(updateNav.st.errors || "").split("\n")[0]
+                                   + "\n点进去看每条通道怎么死的，或走离线导入"
+                        if (s === "latest")
+                            return "已是最新版本 v" + String(updateNav.st.localVersion || "")
+                        return "检查更新"
+                    }
+                }
 
                 // 日志开关
                 Item {
@@ -1033,8 +1094,13 @@ ApplicationWindow {
     // ---- Token 用量统计（插件）----
     UsageDialog { id: usageDialog }
 
-    // ---- 关于（T4.2）：F1 呼出，含检查更新/日志目录/遥测开关 ----
+    // ---- 关于（T4.2）：F1 呼出，更新只留入口 ----
     AboutDialog { id: aboutDialog }
+    UpdateDialog { id: updateDialog }
+    Connections {
+        target: aboutDialog
+        function onUpdateRequested() { updateDialog.open() }
+    }
     Shortcut {
         sequence: "F1"
         onActivated: aboutDialog.open()

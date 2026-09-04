@@ -8,6 +8,7 @@ Column {
     property alias text: input.text
     property alias placeholder: input.placeholderText
     property alias echoMode: input.echoMode
+    signal editingFinished()          // 转发内部时机：回车 *或* 失焦都算提交，只挂回车会让设置看着没生效
     spacing: 6
 
     Text {
@@ -19,6 +20,7 @@ Column {
     }
     TextField {
         id: input
+        onEditingFinished: field.editingFinished()
         width: field.width
         color: Theme.textPrimary
         font.family: Theme.uiFont

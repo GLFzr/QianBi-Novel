@@ -7,9 +7,10 @@ import threading
 import logging
 import os
 import re
+import time
 
 from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
-                            Property, Signal, Slot, QThread, QTimer)
+                            Property, Signal, Slot, QThread, QTimer, QProcess)
 
 from .. import config as cfg_mod
 from .. import mustscan, project, deslop, prompts
@@ -799,34 +800,60 @@ class _DocImportWorker(QThread):
 
 
 class _UpdateWorker(QThread):
-    """检查更新：清单在子线程拉，结果经 Qt 信号排队回主线程
+    """检查更新：清单在子线程拉，整份结果经 Qt 信号排队回主线程
 
     不用裸 threading.Thread 直接 emit——那等于从别的线程调进正在求值的 QML 绑定。
-    三态分开报：`update_check.check` 把「网络失败」和「无新版」都吞成 None，
-    照它返回就会把断网说成「已是最新版本」，是假绿。
+    结果不压成 bool/None：`update_check` 现在分开报「网络失败 / 无新版 / 有新版但未验签」，
+    把它们揉成一个值就会把断网说成「已是最新版本」，是假绿。
     """
-    found = Signal(str, str, str, str)     # version, notes, url, sha256
-    latest = Signal()
-    failed = Signal(str)
+    finished = Signal(object)          # update_check.CheckResult
 
-    def __init__(self, url: str, local_version: str, parent=None):
+    def __init__(self, cfg: dict, local_version: str, parent=None):
         super().__init__(parent)
-        self._url, self._local = url, local_version
+        self._cfg, self._local = cfg, local_version
 
     def run(self):
         from .. import update_check
         try:
-            m = update_check.fetch_manifest(self._url)
+            res = update_check.check(self._cfg, self._local)
         except Exception as e:  # noqa: BLE001
-            self.failed.emit(str(e))
-            return
-        if m is None:
-            self.failed.emit("无法获取版本清单")
-        elif update_check.is_newer(str(m.get("version", "")), self._local):
-            self.found.emit(str(m.get("version", "")), str(m.get("notes", "")),
-                            str(m.get("url", "")), str(m.get("sha256", "")))
-        else:
-            self.latest.emit()
+            res = update_check.CheckResult(
+                errors=[{"channel": "internal", "reason": "%s: %s" % (type(e).__name__, e)}])
+        self.finished.emit(res)
+
+
+class _DownloadWorker(QThread):
+    """下载更新包：候选地址依次试（官方直链 → 清单里的镜像 → 用户自配前缀）
+
+    进度经信号排队回主线程；取消保留半截文件——51MB 在慢链上断在半路是常态，
+    下次从断点续传比从头再来对用户友好得多。
+    """
+    progress = Signal(int, int)        # done, total（total=0 表示服务端没给长度）
+    finished = Signal(object)          # update_install.download 的返回 dict
+
+    def __init__(self, urls: list, dest: str, plan, expected_sha: str, parent=None):
+        super().__init__(parent)
+        self._urls, self._dest = urls, dest
+        self._plan, self._sha = plan, expected_sha
+        self._abort = False
+
+    def cancel(self):
+        self._abort = True
+
+    def run(self):
+        from .. import update_install
+        last = {"ok": False, "reason": "没有可用的下载地址", "sha256": "", "path": self._dest}
+        for url in self._urls:
+            if self._abort:
+                last = dict(last, reason="已取消", path=self._dest)
+                break
+            last = update_install.download(
+                url, self._dest, self._plan, expected_sha=self._sha,
+                on_progress=lambda done, total: self.progress.emit(done, total),
+                cancelled=lambda: self._abort)
+            if last.get("ok"):
+                break
+        self.finished.emit(last)
 
 
 # ---------- 主桥 ----------
@@ -894,8 +921,8 @@ class Bridge(QObject):
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
     mainWindowReady = Signal()                  # 主窗口就绪（单实例唤起时序）
-    updateFound = Signal(str, str, str, str)    # 检查更新：version, notes, url, sha256
     generalChanged = Signal()                   # 向导/遥测等通用设置变更
+    updateStateChanged = Signal()               # 更新状态：检查中/有新版/已最新/不可达/下载进度
     usageChanged = Signal()                     # token 用量统计刷新（插件）
 
     def __init__(self, parent=None):
@@ -948,8 +975,20 @@ class Bridge(QObject):
         self._console_timer.setInterval(120)   # 思考链增量合并窗口（见 _notify_console）
         self._console_timer.timeout.connect(self._flush_console)
         self._console_expanded = bool(self.cfg.get("general", {}).get("console_expanded", False))
-        # 检查更新：同一时间只允许一个清单请求
+        # 检查更新：同一时间只允许一个清单请求；结果整份留在内存给 UI 读
         self._update_worker = None
+        self._update_result = None            # update_check.CheckResult | None
+        self._update_checking = False
+        self._update_imported = None          # 离线导入的清单（本次运行内有效，不落缓存）
+        self._update_pkg = None               # 本地安装包校验结果
+        self._update_dl = {"done": 0, "total": 0, "path": "", "active": False}
+        self._dl_worker = None                # 同一时间只允许一个下载
+        self._quit_for_update = False         # 为装新版而退出：脏稿否决要让路
+        try:
+            from .. import __version__, update_check as _uc
+            self._update_result = _uc.cached_result(self.cfg, __version__)
+        except Exception:  # noqa: BLE001
+            self._update_result = None        # 缓存坏了不该影响开程序
         # 外部文档导入：原文留在内存，预览确认后才落盘
         self._import_worker = None
         self._import_busy = False
@@ -1428,56 +1467,303 @@ class Bridge(QObject):
         self.generalChanged.emit()
         self.toast.emit("ok", "遥测已" + ("开启（数据仅保存在本地）" if on else "关闭"))
 
-    # ---- 检查更新（T3.4，GitHub Releases 主通道）----
-    @Property(bool, notify=generalChanged)
-    def updateAutoCheck(self) -> bool:
-        return bool((cfg_mod.load_config().get("updates") or {}).get("auto_check", False))
+    # ========== 检查更新（多通道 + 验签 + 一键更新）==========
 
-    @Slot(bool)
-    def setUpdateAutoCheck(self, on: bool):
+    # 白名单：这个口子能写任意键的话，QML 里一次手滑就能改掉 connections
+    _UPDATE_KEYS = ("auto_check", "auto_check_chosen", "interval_hours", "custom_url",
+                    "proxy_mode", "proxy_url", "manifest_url", "dismissed_version")
+
+    def _updates(self) -> dict:
+        return dict(cfg_mod.load_config().get("updates") or {})
+
+    def _patch_updates(self, **kv):
         cfg = cfg_mod.load_config()
-        cfg.setdefault("updates", {})["auto_check"] = bool(on)
+        cfg.setdefault("updates", {}).update(kv)
         cfg_mod.save_config(cfg)
         self.generalChanged.emit()
-        self.toast.emit("ok", "启动时检查更新已" + ("开启" if on else "关闭"))
+        self.updateStateChanged.emit()
+
+    @Property(bool, notify=updateStateChanged)
+    def updateAvailable(self) -> bool:
+        """图标亮不亮：有新版且用户没说过「以后再说」
+
+        读的是内存里的最近结果（可能是上次成功缓存），断网时图标也该有话说——
+        只在网好时才亮的图标，恰好对最需要它的人沉默。
+        """
+        r = self._update_result
+        return bool(r and r.is_new and r.version() and r.version() != self._dismissed_version())
+
+    @Property(bool, notify=updateStateChanged)
+    def updateBusy(self) -> bool:
+        return self._update_checking or bool(self._update_dl.get("active"))
+
+    @Property(bool, notify=updateStateChanged)
+    def quittingForUpdate(self) -> bool:
+        """一键更新的退出要让路：脏稿否决会把「先退再装」卡成安装器报「需要重启」"""
+        return self._quit_for_update
+
+    @Property("QVariantMap", notify=updateStateChanged)
+    def updateState(self) -> dict:
+        from .. import __version__, update_check as uc
+        r = self._update_result
+        m = dict(r.to_map()) if r is not None else {}
+        mode = uc.install_mode()
+        can_install = bool(r and r.can_install and mode == "installed")
+        why = ""
+        if r is not None and r.is_new and not can_install:
+            if not r.verified:
+                why = r.verify_reason or "清单未通过验签"
+            elif mode != "installed":
+                why = ("便携版/源码运行：应用不会去覆盖正在运行的自己。"
+                       "请用安装版升级，或手动替换整个程序目录。")
+        m.update({
+            "checking": self._update_checking,
+            "busy": self.updateBusy,
+            "available": self.updateAvailable,
+            "dismissed": bool(r and r.version() == self._dismissed_version()),
+            "localVersion": __version__,
+            "installMode": mode,
+            "installDir": uc.install_dir(),
+            "canInstall": can_install,
+            "whyNotInstall": why,
+            "cryptoOk": uc.CRYPTO_OK,
+            "download": dict(self._update_dl),
+            "package": dict(self._update_pkg or {}),
+            "settings": {
+                "autoCheck": bool(self._updates().get("auto_check", False)),
+                "intervalHours": float(self._updates().get("interval_hours") or 24),
+                "customUrl": str(self._updates().get("custom_url") or ""),
+                "proxyMode": str(self._updates().get("proxy_mode") or "system"),
+                "proxyUrl": str(self._updates().get("proxy_url") or ""),
+            },
+        })
+        m.setdefault("state", "checking" if self._update_checking else "idle")
+        return m
+
+    def _dismissed_version(self) -> str:
+        return str(self._updates().get("dismissed_version") or "")
 
     @Slot(bool)
     def checkForUpdates(self, manual: bool):
+        from .. import __version__, update_check as uc
         cfg = cfg_mod.load_config()
-        u = cfg.get("updates") or {}
-        if not manual and not u.get("auto_check", False):
+        if not manual and not uc.should_auto_check(cfg, time.time()):
             return
         if self._update_worker is not None and self._update_worker.isRunning():
             return
-        from .. import __version__
-
-        w = _UpdateWorker(u.get("manifest_url", ""), __version__, self)
+        self._update_checking = True
+        self.updateStateChanged.emit()
+        w = _UpdateWorker(cfg, __version__, self)
         self._update_worker = w
 
-        def done():
+        def on_done(res):
             self._update_worker = None
             w.deleteLater()
-
-        def on_found(version, notes, url, sha256):
-            done()
-            self.updateFound.emit(version, notes, url, sha256)
-            if not manual:   # 「关于」没打开时也要看得见，否则自动检查等于没检查
-                self.toast.emit("info", f"发现新版本 v{version}（「关于」页可前往下载）")
-
-        def on_latest():
-            done()
-            if manual:
-                self.toast.emit("ok", f"已是最新版本 v{__version__}")
-
-        def on_failed(reason):
-            done()
-            if manual:
-                self.toast.emit("warn", f"检查更新失败：{reason}")
-
-        w.found.connect(on_found)
-        w.latest.connect(on_latest)
-        w.failed.connect(on_failed)
+            self._update_checking = False
+            self._update_result = res
+            # 失败也记时间：否则断网用户每次启动都要原地等完整条通道链
+            patch = {"last_check_ts": res.checked_at or time.time()}
+            if res.channel:
+                patch["last_channel"] = res.channel      # 记住成功通道，下次省一整轮失败连接
+            self._patch_updates(**patch)
+            if res.is_new:   # 「关于」没打开时也要看得见，否则自动检查等于没检查
+                self.toast.emit("info", "发现新版本 v%s（点左栏更新图标看怎么办）" % res.version())
+            elif manual and res.state == uc.STATE_LATEST:
+                self.toast.emit("ok", "已是最新版本 v%s" % __version__)
+            elif manual:
+                first = (res.errors or [{}])[0].get("reason", "未知")
+                self.toast.emit("warn", "检查更新失败：%s（更新面板里列出了每条通道的错）" % first)
+        w.finished.connect(on_done)
         w.start()
+
+    @Slot(str)
+    def setUpdateSettings(self, patch_json: str):
+        """更新设置：QML 一次提交一份 JSON 补丁，键走白名单"""
+        try:
+            patch = json.loads(patch_json or "{}")
+        except ValueError:
+            return
+        if not isinstance(patch, dict):
+            return
+        clean = {k: v for k, v in patch.items() if k in self._UPDATE_KEYS}
+        if not clean:
+            return
+        if "auto_check" in clean:
+            clean["auto_check_chosen"] = True    # 用户显式表过态，版本迁移不许再翻它
+            if clean["auto_check"]:
+                self._patch_updates(**clean)
+                self.checkForUpdates(True)       # 刚打开就查一次，别让人等到明天
+                return
+        self._patch_updates(**clean)
+
+    @Slot(str)
+    def dismissUpdate(self, version: str):
+        """「以后再说」：只压住这一版；下个新版本照样亮图标"""
+        self._patch_updates(dismissed_version=str(version or ""))
+
+    @Slot(str)
+    def openUpdateUrl(self, url: str):
+        """打开清单里的链接。协议闸在这里，不在 QML——清单内容是外部输入"""
+        from .. import update_check as uc
+        if not uc.is_http_url(url):
+            self.toast.emit("warn", "清单里的地址不是 http/https，已拒绝打开")
+            return
+        self.openPath(url)
+
+    # ---- 出路一：离线导入清单（连不上 GitHub 的机器，1KB 文件可以拷）----
+
+    @Slot(str, result="QVariantMap")
+    def importManifestFile(self, path: str) -> dict:
+        from .. import __version__, importdoc, update_check as uc
+        data, reason = uc.load_manifest_file(importdoc.normalize_path(path))
+        if data is None:
+            self._update_imported = None
+            self.toast.emit("warn", "导入清单失败：%s" % reason)
+            self.updateStateChanged.emit()
+            return {"ok": False, "reason": reason}
+        state = (uc.STATE_NEW if uc.is_newer(str(data.get("version")), __version__)
+                 else uc.STATE_LATEST)
+        verified, why = uc.verify_manifest(data)
+        res = uc.CheckResult(state=state, manifest=data, verified=verified, verify_reason=why,
+                             channel="file", errors=[], checked_at=time.time())
+        # 导入的清单只活在本回合：不写进缓存，免得下次开机把「用户手动塞的文件」
+        # 当成「上次从官方通道拿到的结果」来用
+        self._update_imported = res
+        self._update_result = res
+        self._update_pkg = None
+        self.updateStateChanged.emit()
+        if not verified:
+            self.toast.emit("warn", "这份清单没通过验签：可以看，不会照着它装")
+        return dict(res.to_map(), ok=True, verified=verified, reason=why)
+
+    # ---- 出路二：本机已有的安装包，对完哈希再谈安装 ----
+
+    @Slot(str, result="QVariantMap")
+    def checkLocalPackage(self, path: str) -> dict:
+        from .. import importdoc, update_check as uc, update_install
+        r = self._update_result
+        expected = uc.asset_sha((r.manifest if r else {}) or {})
+        out = update_install.verify_local(importdoc.normalize_path(path), expected)
+        if r is not None and r.is_new and not r.verified and out.get("ok"):
+            # 哈希命中只证明「这个文件等于清单描述的文件」，清单本身没验签就没人背书
+            out["ok"] = False
+            out["reason"] = "清单未通过验签，应用不会照着它执行程序"
+        self._update_pkg = out
+        self.updateStateChanged.emit()
+        self.toast.emit("ok" if out.get("ok") else "warn",
+                        "SHA-256 命中，可以安装" if out.get("ok")
+                        else out.get("reason", "校验失败"))
+        return dict(out)
+
+    @Slot(result=str)
+    def updateDownloadPath(self) -> str:
+        from .. import update_check as uc
+        return uc.updates_dir()
+
+    # ---- 出路三：在线一键（下载 → 校验 → 退出 → 拉起安装器）----
+
+    @Slot()
+    def startUpdateDownload(self):
+        from .. import update_check as uc, update_install
+        r = self._update_result
+        if r is None or not r.can_install:
+            self.toast.emit("warn", (r.verify_reason if r and not r.verified else "没有可安装的更新"))
+            return
+        u = self._updates()
+        dest = os.path.join(uc.updates_dir(), uc.setup_download_name(r.manifest))
+        if self._dl_worker is not None and self._dl_worker.isRunning():
+            return
+        if not update_install.disk_space_ok(dest, r.manifest):
+            self.toast.emit("warn", "磁盘剩余空间不够放这个安装包，先清一清再试")
+            return
+        update_install.stale_partial(dest)
+        urls = update_install.asset_urls(r.manifest, "setup", str(u.get("custom_url") or ""))
+        urls = [x for x in urls if x]
+        if not urls:
+            self.toast.emit("warn", "清单里没有可用的下载地址（只给了发布页）")
+            return
+        self._update_dl = {"done": 0, "total": 0, "path": dest, "active": True}
+        self.updateStateChanged.emit()
+        w = _DownloadWorker(urls, dest, uc.resolve_proxy({"updates": u}),
+                            uc.asset_sha(r.manifest), self)
+        self._dl_worker = w
+        w.progress.connect(self._on_dl_progress)
+        w.finished.connect(self._on_dl_done)
+        w.start()
+
+    def _on_dl_progress(self, done: int, total: int):
+        self._update_dl.update(done=done, total=total, active=True)
+        self.updateStateChanged.emit()
+
+    def _on_dl_done(self, res: dict):
+        from .. import update_check as uc
+        self._dl_worker = None
+        # done/total 由 progress 信号一路累积在这里，download() 的返回值只管结论
+        self._update_dl.update(active=False, reason=str(res.get("reason") or ""))
+        if res.get("ok"):
+            self._update_pkg = {"ok": True, "path": str(res.get("path") or ""),
+                                "actual": str(res.get("sha256") or ""),
+                                "expected": uc.asset_sha((self._update_result.manifest
+                                                          if self._update_result else {}) or {})}
+            self.toast.emit("ok", "新版已下载并校验通过，可以安装了")
+        elif res.get("reason"):
+            self.toast.emit("warn", "下载没成：%s" % res["reason"])
+        self.updateStateChanged.emit()
+
+    @Slot()
+    def cancelUpdateDownload(self):
+        if self._dl_worker is not None and self._dl_worker.isRunning():
+            self._dl_worker.cancel()
+            self.toast.emit("info", "正在取消（已下的部分留着，下次续传）")
+
+    @Slot()
+    def installUpdateNow(self):
+        """让应用执行程序的唯一路径：三道门一道都不能少
+
+        ① 清单验签通过且确实有更新；② 跑的是安装版（不覆盖正在运行的自己）；
+        ③ 落盘文件此刻重算一遍 SHA-256 仍然命中——校验过就被换掉是极小的窗口，
+        但重算只花几百毫秒，比赌它没被换便宜。
+        """
+        from .. import update_check as uc
+        r = self._update_result
+        pkg = self._update_pkg or {}
+        if r is None or not r.can_install:
+            self.toast.emit("warn", "清单未通过验签或没有新版，不会执行任何文件")
+            return
+        if uc.install_mode() != "installed":
+            self.toast.emit("warn", "便携版/源码运行请手动替换程序目录")
+            return
+        path = str(pkg.get("path") or "")
+        expected = uc.asset_sha(r.manifest)
+        if not path or not os.path.isfile(path):
+            self.toast.emit("warn", "找不到已下载的安装包，先下一个")
+            return
+        try:
+            actual = uc.sha256_file(path)
+        except OSError as e:
+            self.toast.emit("warn", "读不到安装包：%s" % e)
+            return
+        if actual.lower() != expected.strip().lower():
+            self._update_pkg = {"ok": False, "path": path, "actual": actual,
+                                "expected": expected, "reason": "文件在校验后被改动，已拒绝执行"}
+            self.updateStateChanged.emit()
+            self.toast.emit("error", self._update_pkg["reason"])
+            return
+        # 脏稿不再拦关闭：未保存草稿本来就会被暂存，下次启动有恢复对话框兜底
+        self._quit_for_update = True
+        if not QProcess.startDetached(path, []):
+            self._quit_for_update = False
+            self.toast.emit("error", "安装程序没能启动（路径：%s）" % path)
+            return
+        self.toast.emit("ok", "正在退出并安装 v%s" % r.version())
+        for h in logging.getLogger().handlers:
+            try:
+                h.flush()
+            except Exception:  # noqa: BLE001
+                pass
+        # Qt 静态析构会在退出时抛 0xC0000409（app/selftest.py 同一坑），
+        # 而此刻用户已经在看安装向导了，别把一次成功升级报成崩溃
+        os._exit(0)
 
     @Slot(str)
     def openPath(self, path: str):

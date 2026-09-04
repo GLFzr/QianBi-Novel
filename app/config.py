@@ -64,7 +64,16 @@ DEFAULT_CONFIG = {
     "updates": {"manifest_url": "https://raw.githubusercontent.com/GLFzr/QianBi-Novel/main/latest.json",
                 # 开机自连 GitHub 属于对外请求，与「数据不出本机」的默认承诺冲突，
                 # 所以默认只做手动检查；要开机自动查在「关于」里显式打开。
-                "auto_check": False},
+                "auto_check": False,
+                # 自己的镜像/CDN 上那份清单（GitHub 连不上时的第二条路），填了排最前
+                "custom_url": "",
+                "interval_hours": 24.0,           # 自动检查限流：一天最多问一次
+                "proxy_mode": "system",           # system 读注册表 | env 环境变量 | none 直连 | custom
+                "proxy_url": "",
+                # last_* 是运行时状态（不是用户设置）；清单正文另存 updates/manifest.json，
+                # 因为那是可重验的原始载荷，塞进 config 会被当成配置来回改写。
+                "last_channel": "",
+                "last_check_ts": 0.0},
 }
 
 

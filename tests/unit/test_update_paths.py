@@ -190,21 +190,46 @@ def _src(rel):
         return f.read()
 
 
-def test_update_signal_and_qml_handler_agree():
-    """信号加了参数而 QML 处理函数没跟着改：不报错，只是新版本静默显示不出来"""
-    sig = re.search(r"updateFound = Signal\(([^)]*)\)", _src("app/ui/bridge.py"))
-    assert sig, "找不到 updateFound 信号"
-    n_py = len([x for x in sig.group(1).split(",") if x.strip()])
-    qml = _src("app/ui/qml/components/AboutDialog.qml")
-    handler = re.search(r"function onUpdateFound\(([^)]*)\)", qml)
-    assert handler, "AboutDialog 不再监听 updateFound"
-    assert len([x for x in handler.group(1).split(",") if x.strip()]) == n_py
+def test_update_state_is_one_map_not_a_four_string_signal():
+    """以前 updateFound(str,str,str,str) 加一个参数就得同步改 QML 处理函数，
+    漏改的症状是「新版本静默显示不出来」。改成一份 QVariantMap 属性后，
+    字段错位在这条断言上就会红，而不是在用户眼睛里静默。"""
+    bridge = _src("app/ui/bridge.py")
+    assert "updateStateChanged = Signal()" in bridge
+    assert re.search(r'@Property\("QVariantMap", notify=updateStateChanged\)\s*\n\s*def updateState',
+                     bridge), "更新状态不再是 QVariantMap 属性，QML 读不到"
+    assert "updateFound" not in bridge, "旧的四字符串信号还在，等于两套真相"
+    assert "bridge.updateState" in _src("app/ui/qml/components/UpdateDialog.qml")
+    assert "bridge.updateAvailable" in _src("app/ui/qml/Main.qml"), "左栏图标没接更新状态"
 
 
-def test_startup_check_is_wired_and_guarded():
+def test_startup_check_is_wired_and_gated():
     bridge = _src("app/ui/bridge.py")
     assert "checkForUpdates(false)" in _src("app/ui/qml/Main.qml"), "开机检查没接线"
-    assert 'u.get("auto_check"' in bridge, "开机检查没读开关，设置里的勾选是假的"
+    body = re.search(r"    def checkForUpdates\(self, manual: bool\):(.*?)\n    @Slot",
+                     bridge, re.S).group(1)
+    # 开关 + QIANBI_OFFLINE 杀开关 + 24h 限流全在 should_auto_check 里，
+    # 绕过它就等于绕过「探针与打包自检零网络」那条纪律
+    assert "should_auto_check" in body, "开机检查没读开关与限流"
+
+
+def test_update_settings_patch_is_key_whitelisted():
+    """setUpdateSettings 收 QML 传来的 JSON：不做白名单就能从这里写 connections/slots"""
+    bridge = _src("app/ui/bridge.py")
+    keys = re.search(r"_UPDATE_KEYS = \((.*?)\)", bridge, re.S).group(1)
+    listed = {k.strip().strip('"') for k in keys.split(",") if k.strip().strip('"')}
+    assert {"auto_check", "custom_url", "proxy_mode", "proxy_url", "interval_hours"} <= listed
+    assert not listed & {"connections", "slots", "last_project", "gates"}, listed
+    assert "if k in self._UPDATE_KEYS" in bridge, "补丁没过滤键，白名单形同虚设"
+
+
+def test_install_path_keeps_all_three_gates():
+    """installUpdateNow 是应用唯一会执行下载文件的地方，三道门少一道就等于自动执行任意 exe"""
+    body = re.search(r"    def installUpdateNow\(self\):(.*?)\n    @Slot",
+                     _src("app/ui/bridge.py"), re.S).group(1)
+    assert "can_install" in body, "验签门没了"
+    assert 'install_mode() != "installed"' in body, "便携版会去覆盖正在运行的自己"
+    assert "sha256_file" in body, "装前不再重算哈希：校验过被换掉就没人发现"
 
 
 def test_update_check_does_not_emit_from_bare_thread():

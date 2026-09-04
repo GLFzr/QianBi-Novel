@@ -5,12 +5,13 @@ import ".."
 
 // ============================================================
 // AboutDialog · 关于（封装计划 T4.2）
-// 版本/构建 · 检查更新（GitHub Releases 主通道）· 日志/数据目录
+// 版本/构建 · 更新入口（细节全在 UpdateDialog）· 日志/数据目录
 // 遥测开关（opt-in，默认关）· 开源声明
 // ============================================================
 Dialog {
     id: aboutDialog
     objectName: "aboutDialog"
+    signal updateRequested()            // id 不跨文件作用域，让 Main.qml 去开 UpdateDialog
     modal: true
     width: 460
     x: parent ? Math.round((parent.width - width) / 2) : 0
@@ -34,38 +35,26 @@ Dialog {
             Text {
                 text: "版本 v" + bridge.appVersion
                 color: Theme.textPrimary
+                font.family: Theme.uiFont
                 font.pixelSize: Theme.fsBody
                 font.bold: true
             }
             Item { Layout.fillWidth: true }
             AppButton {
-                text: updateState.hasNew ? "前往下载" : "检查更新"
-                onClicked: {
-                    if (updateState.hasNew) {
-                        if (updateState.url !== "")
-                            Qt.openUrlExternally(updateState.url)
-                    } else {
-                        updateState.checking = true
-                        bridge.checkForUpdates(true)
-                    }
-                }
+                objectName: "openUpdateDialog"
+                // 更新的全部状态（通道/验签/进度/离线出路）都在 UpdateDialog 一处，
+                // 这里再留一份必然对不上账，所以只放入口
+                text: bridge.updateAvailable ? "有新版 · 更新…" : "更新…"
+                kind: bridge.updateAvailable ? "primary" : "secondary"
+                onClicked: { aboutDialog.close(); aboutDialog.updateRequested() }
             }
         }
         Text {
             Layout.fillWidth: true
-            text: {
-                if (updateState.hasNew) {
-                    var s = "发现新版本 v" + updateState.version
-                            + (updateState.notes !== "" ? "\n" + updateState.notes : "")
-                    if (updateState.sha256 !== "")
-                        s += "\n安装包 SHA-256：" + updateState.sha256
-                    return s
-                }
-                if (updateState.checking)
-                    return "正在检查更新…"
-                return "开源软件（MIT License）· 本地数据 · 自带模型 Key"
-            }
-            color: updateState.hasNew ? Theme.accent : Theme.textTertiary
+            textFormat: Text.PlainText
+            text: "开源软件（MIT License）· 本地数据 · 自带模型 Key"
+            color: Theme.textTertiary
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsTiny
             wrapMode: Text.Wrap
         }
@@ -83,25 +72,17 @@ Dialog {
                 onToggled: bridge.setTelemetryEnabled(checked)
             }
         }
-        RowLayout {
-            Layout.fillWidth: true
-            AppCheck {
-                objectName: "autoCheckRow"
-                text: "启动时检查更新（开机访问 GitHub 取版本清单；默认关闭）"
-                checked: bridge.updateAutoCheck
-                font.pixelSize: Theme.fsTiny
-                onToggled: bridge.setUpdateAutoCheck(checked)
-            }
-        }
 
         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
 
         // 升级前该知道哪些目录不会被动：安装器只覆盖程序目录
         Text {
             Layout.fillWidth: true
+            textFormat: Text.PlainText
             text: "更新只覆盖程序目录，不会写入下面这些位置：\n书稿：" + bridge.defaultBooksRoot()
                   + "\n配置：" + bridge.dataDirPath()
             color: Theme.textTertiary
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsMicro
             wrapMode: Text.Wrap
         }
@@ -120,38 +101,13 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
+            textFormat: Text.PlainText
             text: "本项目基于 MIT License 开源发布。
 第三方组件声明见安装目录 THIRD-PARTY-LICENSES.md 文件。"
             color: Theme.textTertiary
+            font.family: Theme.uiFont
             font.pixelSize: Theme.fsMicro
             wrapMode: Text.Wrap
         }
-    }
-
-    // 更新检查状态（跨 Connections 保持）
-    QtObject {
-        id: updateState
-        property bool hasNew: false
-        property bool checking: false
-        property string version: ""
-        property string notes: ""
-        property string url: ""
-        property string sha256: ""
-    }
-    Connections {
-        target: bridge
-        function onUpdateFound(version, notes, url, sha256) {
-            updateState.hasNew = true
-            updateState.checking = false
-            updateState.version = version
-            updateState.notes = notes
-            updateState.url = url
-            updateState.sha256 = sha256
-        }
-    }
-    onClosed: {
-        updateState.hasNew = false
-        updateState.checking = false
-        updateState.sha256 = ""
     }
 }
