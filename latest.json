@@ -2,21 +2,21 @@
   "version": "0.18.1",
   "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.1",
   "notes": "0.18.1 更新链路成型：\n· 开机自动检查有没有新版（默认开、24 小时最多一次，只下载一份约 1KB 的公开清单，不上传任何内容；可在更新面板关掉，关掉后启动零请求）\n· 左栏出现更新图标，点开是更新面板，四条路同屏：在线一键升级 / 复制直链 / 导入离线清单 / 校验本机已下载的安装包\n· GitHub 连不上也有路：清单走 自定义镜像 → raw → Pages → jsDelivr 四条通道，面板逐条列出每条为什么失败；系统代理自动读，全挂时再用直连试一遍\n· 没通过签名校验的清单只显示、不执行——「立即安装」按钮根本不会出现\n· 连接预设从 3 家换成 12 家实测平台（国内 8 + 国外 4）\n· 一键升级只覆盖程序目录，书稿与配置不动；脏稿会保留、下次启动可恢复\n安装：双击 setup.exe 装到原位置即可。若 Windows 弹蓝底「已保护你的电脑」，点「更多信息」→「仍要运行」——安装包没有代码签名证书，不是文件坏了；不放心就核对 SHA-256。",
-  "sha256": "021b74b6aa7a7579cea666453f3475357053572bbdae0eba7a2e2a7e6976a268",
+  "sha256": "aee2ae6f75dd5394f91083bd980189a9db130124f8416224d5942ea3013eb139",
   "published": "2026-09-04",
   "assets": {
     "setup": {
       "name": "QianBi-Novel-v0.18.1-setup.exe",
       "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.1/QianBi-Novel-v0.18.1-setup.exe",
-      "sha256": "021b74b6aa7a7579cea666453f3475357053572bbdae0eba7a2e2a7e6976a268",
-      "size": 53520421
+      "sha256": "aee2ae6f75dd5394f91083bd980189a9db130124f8416224d5942ea3013eb139",
+      "size": 53516991
     },
     "portable": {
       "name": "QianBi-Novel-v0.18.1-portable.zip",
       "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.1/QianBi-Novel-v0.18.1-portable.zip",
-      "sha256": "581588c32186aa30803c6f9f80b4d07fe01f680c8794ca6be5a8ac47ac434802",
-      "size": 78916996
+      "sha256": "5e39705cf2a0b3782d76275e6bb60b1b823e9ef64fe8eaf16b05151654e9635a",
+      "size": 78915294
     }
   },
-  "sig": "jGyTXlp3l4QRMY3Ou2vqLo7B67hzzfcmExHh1wpSQ82eep/TA6q+lZl2QjphSifGTdN0XhilNeExPvCblpiKAA=="
+  "sig": "i1SBXvaUpmGsKSDwGgOYUvbIh0FW5UyX6s5LWnevqLBFwxRVWlpRJ0tThgQFD20wwswYnUft1sBn+h6xrARZAA=="
 }
