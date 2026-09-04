@@ -289,27 +289,42 @@ def _load_update_keys():
     return mod
 
 
+def _pem(label=""):
+    """运行时拼装：仓库里任何被跟踪文件都不该出现完整的私钥头字面量，**测试也不例外**
+
+    扫描器故意做得很钝——它不区分「真 Key」和「测试里写的那行样子货」。这不是缺陷：
+    加白名单等于对某类文件永久失明，而一次 `git add -A` 把真 Key 落进 fixture
+    的代价，是把「给所有用户推任意 exe」的能力公开。所以规则是字面量不进仓库。
+    """
+    return ("-----BEGIN " + label + "PRIVATE KEY-----").encode("ascii")
+
+
 def test_key_scanner_catches_every_pem_form():
     """漏一种写法，就等于「带私钥的提交」能一路绿灯打完包"""
     pat = _load_update_keys()._pem_pattern()
-    for line in (b"-----BEGIN PRIVATE KEY-----", b"-----BEGIN OPENSSH PRIVATE KEY-----",
-                 b"-----BEGIN RSA PRIVATE KEY-----", b"-----BEGIN ENCRYPTED PRIVATE KEY-----",
-                 b"-----BEGIN X9.42 EC PRIVATE KEY-----"):
+    for line in (_pem(), _pem("OPENSSH "), _pem("RSA "), _pem("ENCRYPTED "),
+                 _pem("X9.42 EC ")):
         assert pat.search(line), line
 
 
 def test_key_scanner_ignores_public_material():
+    """公钥本来就该入库（pin 在 update_check.PUBKEYS 里），别把它当泄漏"""
     pat = _load_update_keys()._pem_pattern()
-    for line in (b"-----BEGIN PUBLIC KEY-----", b"-----BEGIN CERTIFICATE-----",
+    for line in (("-----BEGIN " + "PUBLIC" + " KEY-----").encode(),
+                 ("-----BEGIN " + "CERTIFICATE" + "-----").encode(),
                  b'{"pub": "0yXI3cLydSg7X+yeUEE9mbtVJsBxWs7WwkXMpZ63xVY="}'):
         assert not pat.search(line), line
 
 
-def test_key_scanner_does_not_flag_its_own_source():
-    """扫描器的源码里写着它要找什么。整串字面量留在文件里 = 闸门永远红，
-    而且红的理由是「提到了自己在扫什么」——这种假阳性会让人去关掉闸门"""
+def test_key_scanner_does_not_flag_the_files_that_describe_it():
+    """扫描器与它的测试都在被扫清单里；谁写出完整字面量，谁就让闸门红在空气上。
+    这条单测把同一个检查提前到 pytest 阶段，而不是等到发版那天才发现。"""
     import os
     mod = _load_update_keys()
-    with open(mod.__file__, "rb") as f:
-        src = f.read()
-    assert not mod._pem_pattern().search(src)
+    pat = mod._pem_pattern()
+    here = os.path.dirname(os.path.abspath(__file__))
+    targets = [mod.__file__, os.path.join(here, "test_release_readiness.py")]
+    for path in targets:
+        with open(path, "rb") as f:
+            body = f.read()
+        assert not pat.search(body), os.path.basename(path)
