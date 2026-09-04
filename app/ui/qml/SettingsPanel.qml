@@ -59,6 +59,19 @@ Item {
         return modelField.currentText
     }
 
+    // 预设不再预置模型（v0.18.2），但「选好服务商后下拉里该有候选」：
+    // 这里填的是建议列表，不替用户选——模型名得他自己点或拉取实时列表
+    function fillModelSuggestions(providerIndex) {
+        var opts = bridge.providerOptions
+        if (providerIndex < 0 || providerIndex >= opts.length) return
+        var models = opts[providerIndex].models || []
+        var typed = modelField.editText
+        modelList.clear()
+        for (var i = 0; i < models.length; i++) modelList.append({ "m": models[i] })
+        modelField.currentIndex = -1
+        modelField.editText = typed      // 换建议列表不打断已手填的模型名
+    }
+
     function currentThinking() {
         switch (thinkingModeCombo.currentIndex) {
         case 1: return "disabled"
@@ -81,6 +94,7 @@ Item {
         keyField.text = ""
         modelField.currentIndex = -1
         modelField.editText = ""
+        fillModelSuggestions(0)
         tempSpin.value = 7
         maxTokensSpin.value = 8192
         timeoutSpin.value = 300
@@ -100,6 +114,7 @@ Item {
         keyField.text = c.api_key || ""
         modelField.currentIndex = -1
         modelField.editText = c.model || ""
+        fillModelSuggestions(providerCombo.currentIndex)
         tempSpin.value = Math.round((c.temperature !== undefined ? c.temperature : 0.7) * 10)
         maxTokensSpin.value = c.max_tokens || 8192
         timeoutSpin.value = c.timeout || 300
@@ -236,7 +251,9 @@ Item {
         // ---- 连接列表（横向滚动；右缘渐隐提示还有更多）----
         Item {
             Layout.fillWidth: true
-            height: 60
+            // 高度 = 卡片 56 + ListView 上下 margins 各 10；凑不够的话卡片下半截被裁掉，
+            // 症状是「卡片有一半被遮住」——预设卡不预置模型后，第二行空着也不是被裁掉的理由
+            height: 76
             ListView {
                 id: connList
                 anchors.fill: parent
@@ -272,10 +289,11 @@ Item {
                         }
                         Text {
                             width: parent.width
-                            text: model
+                            text: model !== "" ? model : "未选模型"
                             color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.textTertiary
                             font.pixelSize: Theme.fsTiny
                             font.family: Theme.monoFont
+                            font.italic: model === ""
                             elide: Text.ElideRight
                         }
                     }
@@ -326,7 +344,10 @@ Item {
                         id: providerCombo
                         width: parent.width
                         model: bridge.providerOptions.map(function (p) { return p.label })
-                        onActivated: urlField.text = bridge.providerOptions[currentIndex].baseUrl
+                        onActivated: function (i) {
+                            urlField.text = bridge.providerOptions[i].baseUrl
+                            fillModelSuggestions(i)
+                        }
                     }
                 }
 

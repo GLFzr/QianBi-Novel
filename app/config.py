@@ -26,49 +26,54 @@ SLOT_LABELS = {SLOT_WRITING: "写作槽", SLOT_HELPER: "辅助槽", SLOT_REVIEW:
 GATE_STRICT = "strict"              # 自动修复 1 次仍失败 → 暂停等人
 GATE_MARK_CONTINUE = "mark_continue"  # 修复失败 → 标待修继续写（默认）
 
+# 出厂预设只预置「提供方」：名称、provider、base_url（v0.18.2 起）。
+# 不预置模型——模型名是各家变最快的参数，预置进去的症状是过期即误导；建议候选在
+# 表单选服务商时给下拉（providers.py 的 models），「拉取」到的实时列表优先。
+# id 保持稳定（槽位绑定与参数升级都按 id 认），尽管个别 id 里带着旧模型名的影子。
 DEFAULT_CONNECTIONS = [
-    {"id": "ds-v4-pro", "name": "DeepSeek V4 Pro", "provider": "deepseek",
-     "base_url": "https://api.deepseek.com", "api_key": "", "model": "deepseek-v4-pro",
+    {"id": "ds-v4-pro", "name": "DeepSeek 官方", "provider": "deepseek",
+     "base_url": "https://api.deepseek.com", "api_key": "", "model": "",
      "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
-    {"id": "bl-qwen-max", "name": "阿里云百炼 · Qwen3.8 Max", "provider": "bailian",
+    {"id": "bl-qwen-max", "name": "阿里云百炼", "provider": "bailian",
      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "api_key": "",
-     "model": "qwen3.8-max", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "zp-glm-5", "name": "智谱 · GLM-5", "provider": "zhipu",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "zp-glm-5", "name": "智谱 BigModel", "provider": "zhipu",
      "base_url": "https://open.bigmodel.cn/api/paas/v4", "api_key": "",
-     "model": "glm-5", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "kimi-k3", "name": "Kimi · K3", "provider": "kimi",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "kimi-k3", "name": "Kimi（Moonshot）", "provider": "kimi",
      "base_url": "https://api.moonshot.cn/v1", "api_key": "",
-     "model": "kimi-k3", "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
-    {"id": "ark-doubao", "name": "火山方舟 · Doubao Seed 2.1 Pro", "provider": "ark",
+     "model": "", "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
+    {"id": "ark-doubao", "name": "火山引擎方舟", "provider": "ark",
      "base_url": "https://ark.cn-beijing.volces.com/api/v3", "api_key": "",
-     "model": "doubao-seed-2-1-pro-260628", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "hy-turbos", "name": "腾讯混元 · Turbos", "provider": "hunyuan",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "hy-turbos", "name": "腾讯混元", "provider": "hunyuan",
      "base_url": "https://api.hunyuan.cloud.tencent.com/v1", "api_key": "",
-     "model": "hunyuan-turbos-latest", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "mm-m3", "name": "MiniMax · M3", "provider": "minimax",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "mm-m3", "name": "MiniMax", "provider": "minimax",
      "base_url": "https://api.minimaxi.com/v1", "api_key": "",
-     "model": "MiniMax-M3", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "sf-dsv4-pro", "name": "硅基流动 · DeepSeek V4 Pro", "provider": "siliconflow",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "sf-dsv4-pro", "name": "硅基流动", "provider": "siliconflow",
      "base_url": "https://api.siliconflow.cn/v1", "api_key": "",
-     "model": "deepseek-ai/DeepSeek-V4-Pro", "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
-    {"id": "or-claude", "name": "OpenRouter · Claude Sonnet 4.5", "provider": "openrouter",
+     "model": "", "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
+    {"id": "or-claude", "name": "OpenRouter（聚合）", "provider": "openrouter",
      "base_url": "https://openrouter.ai/api/v1", "api_key": "",
-     "model": "anthropic/claude-sonnet-4.5", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "gm-25-pro", "name": "Google Gemini 2.5 Pro", "provider": "gemini",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "gm-25-pro", "name": "Google Gemini", "provider": "gemini",
      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "api_key": "",
-     "model": "gemini-2.5-pro", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "xai-grok", "name": "xAI · Grok", "provider": "xai",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "xai-grok", "name": "xAI Grok", "provider": "xai",
      "base_url": "https://api.x.ai/v1", "api_key": "",
-     "model": "grok-4.6", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
-    {"id": "groq-oss", "name": "Groq · GPT-OSS 20B", "provider": "groq",
+     "model": "", "temperature": 0.7, "max_tokens": 16384, "timeout": 300},
+    {"id": "groq-oss", "name": "Groq", "provider": "groq",
      "base_url": "https://api.groq.com/openai/v1", "api_key": "",
-     "model": "openai/gpt-oss-20b", "temperature": 0.7, "max_tokens": 8192, "timeout": 300},
+     "model": "", "temperature": 0.7, "max_tokens": 8192, "timeout": 300},
 ]
 
 DEFAULT_CONFIG = {
     "connections": DEFAULT_CONNECTIONS,
-    # 三槽同指 DeepSeek：内置提示词按 V4 系调校，且新用户填一把 Key 就能跑通全流程；
-    # 想压成本自己再加轻量模型或改指向（连接列表可以复制行）。
+    # 三槽出厂都指向 DeepSeek 官方那条：内置提示词按 V4 系调校。但预设不再带模型——
+    # 新用户要先把这行的 Key 填上、模型选好（表单有候选下拉，或「拉取」实时列表），
+    # 全流程才跑得通；想压成本自己再加轻量模型或改指向（连接列表可以复制行）。
     "slots": {SLOT_WRITING: "ds-v4-pro", SLOT_HELPER: "ds-v4-pro", SLOT_REVIEW: "ds-v4-pro"},
     "gates": {"strategy": GATE_MARK_CONTINUE, "deslop_max_rounds": 2, "word_tolerance": 0.1,
               "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
@@ -159,13 +164,49 @@ def _migrate_builtin_connections(cfg: dict) -> dict:
     return cfg
 
 
-# v0.18.1 下架的出厂预设：留着就是设置里一排点不动的僵尸卡（provider 已从 PROVIDERS 移除）
+# 退役的出厂预设行：留着就是设置里一排误导人的卡（v0.18.1 下架的两家 provider 已从
+# PROVIDERS 移除；v0.18.2 把 12 家预设改成只预置提供方，带模型名的旧行整批退役）。
+# 身份字段必须与当年出厂那行逐字相等才认——比对逻辑见 _retire_builtin_connections。
 RETIRED_BUILTINS = {
+    # ---- v0.18.1 下架：provider 已不在 PROVIDERS 里 ----
     "ds-v4-flash": {"name": "DeepSeek V4 Flash", "provider": "deepseek",
                     "base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash"},
     "ocgo-flash": {"name": "OpenCode Go · V4 Flash", "provider": "opencodego",
                    "base_url": "https://opencode.ai/zen/go/v1", "model": "deepseek-v4-flash"},
 }
+# ---- v0.18.2 退役：同一 id 换成不带模型的出厂行（v0.18.1 的 12 家原样记录）----
+RETIRED_BUILTINS.update({
+    "ds-v4-pro": {"name": "DeepSeek V4 Pro", "provider": "deepseek",
+                  "base_url": "https://api.deepseek.com", "model": "deepseek-v4-pro"},
+    "bl-qwen-max": {"name": "阿里云百炼 · Qwen3.8 Max", "provider": "bailian",
+                    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    "model": "qwen3.8-max"},
+    "zp-glm-5": {"name": "智谱 · GLM-5", "provider": "zhipu",
+                 "base_url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-5"},
+    "kimi-k3": {"name": "Kimi · K3", "provider": "kimi",
+                "base_url": "https://api.moonshot.cn/v1", "model": "kimi-k3"},
+    "ark-doubao": {"name": "火山方舟 · Doubao Seed 2.1 Pro", "provider": "ark",
+                   "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+                   "model": "doubao-seed-2-1-pro-260628"},
+    "hy-turbos": {"name": "腾讯混元 · Turbos", "provider": "hunyuan",
+                  "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+                  "model": "hunyuan-turbos-latest"},
+    "mm-m3": {"name": "MiniMax · M3", "provider": "minimax",
+              "base_url": "https://api.minimaxi.com/v1", "model": "MiniMax-M3"},
+    "sf-dsv4-pro": {"name": "硅基流动 · DeepSeek V4 Pro", "provider": "siliconflow",
+                    "base_url": "https://api.siliconflow.cn/v1",
+                    "model": "deepseek-ai/DeepSeek-V4-Pro"},
+    "or-claude": {"name": "OpenRouter · Claude Sonnet 4.5", "provider": "openrouter",
+                  "base_url": "https://openrouter.ai/api/v1",
+                  "model": "anthropic/claude-sonnet-4.5"},
+    "gm-25-pro": {"name": "Google Gemini 2.5 Pro", "provider": "gemini",
+                  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+                  "model": "gemini-2.5-pro"},
+    "xai-grok": {"name": "xAI · Grok", "provider": "xai",
+                 "base_url": "https://api.x.ai/v1", "model": "grok-4.6"},
+    "groq-oss": {"name": "Groq · GPT-OSS 20B", "provider": "groq",
+                 "base_url": "https://api.groq.com/openai/v1", "model": "openai/gpt-oss-20b"},
+})
 # load_config 几乎每个界面动作都会被调一次，凭据管理器读一次不算便宜：
 # 记住哪些退役行确实带着 Key，本进程内不再重读（只读缓存，不缓存「没有」以外的结论）。
 _RETIRED_WITH_KEY = set()
@@ -247,19 +288,20 @@ def load_config() -> dict:
                 merged[k] = v
         if not merged.get("connections"):
             merged["connections"] = json.loads(json.dumps(DEFAULT_CONNECTIONS))
-        # 槽位指向失效连接的修复
+        _migrate_builtin_connections(merged)
+        _retire_builtin_connections(merged)
+        _migrate_updates(merged)
+        # 补全新内置连接模板（v0.18.1 起十余家预设；退役腾出的 id 在这里补上新的出厂行，
+        # 所以 ids 必须在退役之后才算——提前算会把换血后的 id 当成已存在）
+        ids = {c["id"] for c in merged["connections"]}
+        for c in DEFAULT_CONNECTIONS:
+            if c["id"] not in ids:
+                merged["connections"].append(json.loads(json.dumps(c)))
+        # 槽位指向失效连接的修复：放在连接集合定形之后，别把槽位指到刚被退役的行上
         ids = {c["id"] for c in merged["connections"]}
         for slot in SLOT_ORDER:
             if merged["slots"].get(slot) not in ids:
                 merged["slots"][slot] = merged["connections"][0]["id"]
-        _migrate_builtin_connections(merged)
-        _retire_builtin_connections(merged)
-        _migrate_updates(merged)
-        # 补全新内置连接模板（v0.18.1 起十余家预设；退役的那两家在上面的移除里处理，
-        # 只补不删是老规矩，但删的是我们发出去、用户从没动过的行）
-        for c in DEFAULT_CONNECTIONS:
-            if c["id"] not in ids:
-                merged["connections"].append(json.loads(json.dumps(c)))
         merged = secrets.hydrate(merged)
         return merged
     except Exception as e:  # noqa: BLE001

@@ -234,6 +234,9 @@ class LLMClient:
     def chat(self, prompt: str, system: str = "", temperature: float = None,
              *, phase: str = "") -> str:
         """单轮对话，分级重试（网络/超时/429/5xx 指数退避），返回文本内容"""
+        if not self.model:
+            # v0.18.2 起出厂预设只预置提供方：空模型不该变成 API 400 的一堆英文
+            raise LLMError("这条连接还没选模型——到 设置 · 连接与模型 里为它选一个（下拉候选或「拉取」）")
         self.last_prompt = prompt
         self.last_error = ""
         self.last_phase = phase or ""
@@ -334,6 +337,8 @@ class LLMClient:
         PipelineStopped 属 core 的语义，本层只置 last_aborted 并回已收增量，
         由调用方决定怎么中止。abort=None 时行为与改动前逐字一致。
         """
+        if not self.model:
+            raise LLMError("这条连接还没选模型——到 设置 · 连接与模型 里为它选一个（下拉候选或「拉取」）")
         self.last_aborted = False
         self.last_prompt = prompt
         self.last_error = ""

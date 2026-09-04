@@ -206,13 +206,32 @@ Dialog {
                 wrapMode: Text.Wrap
             }
 
+            Text {
+                // 没有可装的新版时，一键更新不能像不存在一样：说清它什么时候出现
+                Layout.fillWidth: true
+                visible: !root.hasNew && !root.downloading && root.pkg.ok !== true
+                textFormat: Text.PlainText
+                text: root.state === "latest"
+                      ? "已是最新。发布新版后，「一键更新」按钮会出现在这里——下载、校验、退出并拉起安装器一次完成。"
+                      : "查到新版且清单通过验签后，「一键更新」按钮会出现在这里。"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTiny
+                wrapMode: Text.Wrap
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
 
                 AppButton {
-                    visible: root.canInstall && root.pkg.ok !== true && !root.downloading
-                    text: "下载并校验 v" + String(st.version || "")
+                    // 一键更新必须「看得见」：可用时亮，不可用时禁用并写明为什么——
+                    // 把按钮整个藏起来，用户看到的面板就是「没有一键更新这个功能」。
+                    // 唯独清单没过验签时不出现：那不是能力不够，是不被信任（安全规则）。
+                    visible: root.hasNew && root.verified && root.pkg.ok !== true && !root.downloading
+                    enabled: root.canInstall
+                    text: root.canInstall ? "下载并校验 v" + String(st.version || "")
+                                          : "一键更新（仅安装版可用）"
                     kind: "primary"
                     iconName: "update"
                     onClicked: bridge.startUpdateDownload()

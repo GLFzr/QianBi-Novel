@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""出厂连接预设（v0.18.1 起 12 家）：填一把 Key 就能跑，不是一堆调不通的下拉项
+"""出厂连接预设（v0.18.1 起 12 家；v0.18.2 起只预置提供方不预置模型）
 
 预置连接是用户开机第一屏就会看见的东西，它坏了没有报错、只有「为什么连不上」。
 所以这里钉的是四类静默故障：URL 里留着模板占位符、endpoint 拼接拼出双 /v1、
@@ -77,16 +77,18 @@ def test_gemini_url_keeps_its_trailing_openai_path():
 
 
 def test_presets_ship_without_any_key():
-    """仓库里带 Key 就是泄露，也不许用假 Key 占位（症状是 401 而不是「请填 Key」）"""
+    """仓库里带 Key 就是泄露，也不许用假 Key 占位（症状是 401 而不是「请填 Key」）。
+    v0.18.2 起同样不带模型：模型名是各家变得最快的参数，预置进去过期即误导——
+    候选在 providers.models 里给，选择权留给用户"""
     for c in cfg_mod.DEFAULT_CONNECTIONS:
         assert c["api_key"] == "", c["id"]
-        assert c["model"], c["id"]
+        assert c["model"] == "", (c["id"], c["model"])
         assert 0 < c["temperature"] <= 1 and c["max_tokens"] >= 1024 and c["timeout"] >= 30, c["id"]
 
 
 def test_key_names_are_human_labels_not_ids():
     for c in cfg_mod.DEFAULT_CONNECTIONS:
-        assert c["name"] != c["id"] and " " in c["name"], c
+        assert c["name"] and c["name"] != c["id"], c
 
 
 def test_four_foreign_platforms_are_preset():
@@ -250,3 +252,48 @@ def test_live_config_keeps_working_after_retirement(tmp_path, monkeypatch):
         assert cfg["slots"][slot] in ids
     # 老的 legacy 迁移行（provider=custom、模型名是 pro）不该被退役逻辑牵连
     assert len(ids) >= len(cfg_mod.DEFAULT_CONNECTIONS)
+
+
+def test_v0181_model_rows_swap_for_provider_only(tmp_path, monkeypatch):
+    """v0.18.2 换血：v0.18.1 那行带模型的出厂预设（没动过/没Key/没槽位引用）退役后，
+    同 id 补进「仅提供方」新行——预设进化不留断档；改过身份字段或被槽位引用的照旧保留"""
+    _no_credentials(monkeypatch)
+    import json
+    from app import secrets as secrets_mod
+    rows = [
+        # 与 v0.18.1 出厂逐字相等 → 退役，换新的仅提供方行
+        _row("zp-glm-5", name="智谱 · GLM-5", provider="zhipu",
+             base_url="https://open.bigmodel.cn/api/paas/v4", model="glm-5"),
+        # 被槽位指着 → 保留（换掉它等于悄悄换掉「用哪个模型写我的书」）
+        _row("ds-v4-pro", name="DeepSeek V4 Pro", provider="deepseek",
+             base_url="https://api.deepseek.com", model="deepseek-v4-pro"),
+    ]
+    d = tmp_path / "cfgdir2"
+    d.mkdir()
+    f = d / "config.json"
+    f.write_text(json.dumps({"connections": rows,
+                             "slots": {"writing": "ds-v4-pro", "helper": "ds-v4-pro",
+                                       "review": "ds-v4-pro"}}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(cfg_mod, "CONFIG_DIR", str(d))
+    monkeypatch.setattr(cfg_mod, "CONFIG_FILE", str(f))
+    monkeypatch.setattr(secrets_mod, "SERVICE", "QianBiNovel/test-run")
+    cfg = cfg_mod.load_config()
+    by_id = {c["id"]: c for c in cfg["connections"]}
+    assert by_id["zp-glm-5"]["model"] == "" and by_id["zp-glm-5"]["name"] == "智谱 BigModel"
+    assert by_id["ds-v4-pro"]["model"] == "deepseek-v4-pro"   # 在用的行原样保留
+    for slot in cfg_mod.SLOT_ORDER:
+        assert cfg["slots"][slot] in by_id
+
+
+def test_empty_model_fails_loud_not_as_api_400():
+    """预设不带模型之后，空模型要在本层就喊出来，而不是变成一串英文 API 400"""
+    from app.llm.client import LLMError
+    c = LLMClient.from_connection({"base_url": "https://api.deepseek.com",
+                                   "api_key": "sk-x", "model": ""})
+    for call in (lambda: c.chat("hi"), lambda: c.chat_stream("hi")):
+        try:
+            call()
+        except LLMError as e:
+            assert "还没选模型" in str(e), str(e)
+        else:
+            raise AssertionError("空模型竟然发出去了请求")

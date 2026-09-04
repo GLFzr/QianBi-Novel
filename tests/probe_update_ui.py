@@ -204,6 +204,9 @@ def run_all():
           str(toasts[:2]))
     check("没查到东西时不给任何安装按钮",
           not any("下载并校验" in t or "立即安装" in t for t in texts(dlg)))
+    check("失败态也告诉用户一键更新何时出现",
+          any("「一键更新」按钮会出现在这里" in t for t in texts(dlg)),
+          "\n".join(texts(dlg))[:200])
 
     # ---- ② 有新版但未验签 ----
     requests.clear()
@@ -232,7 +235,23 @@ def run_all():
           and st.get("installMode") == "dev", str(st.get("installMode")))
     check("说清了为什么不能一键", "便携版" in str(st.get("whyNotInstall")),
           str(st.get("whyNotInstall")))
-    check("不能一键时也没有下载按钮", not any("下载并校验" in t for t in texts(dlg)))
+    # v0.18.2：一键更新不许静默消失——按钮还在，只是禁用并把原因写在按钮上
+    check("不能一键时按钮禁用但可见，写明仅安装版",
+          any("一键更新（仅安装版可用）" in t for t in texts(dlg))
+          and not any("下载并校验" in t for t in texts(dlg)))
+
+    # ---- ③½ 已是最新：一键更新的入口提示要在，不能像没这个功能 ----
+    reset()
+    stub(raw=signed_manifest(version=__import__("app", fromlist=["__version__"]).__version__))
+    b.checkForUpdates(True)
+    pump(1500)
+    st = b.updateState
+    check("已是最新被认出来", st.get("state") == "latest", str(st.get("state")))
+    check("最新态提示一键更新入口",
+          any("「一键更新」按钮会出现在这里" in t for t in texts(dlg)),
+          "\n".join(texts(dlg))[:200])
+    check("最新态不给任何安装按钮",
+          not any("下载并校验" in t or "立即安装" in t for t in texts(dlg)))
 
     # ---- ④ 假装是安装版：门开了按钮才出现 ----
     uc.install_mode = lambda: "installed"

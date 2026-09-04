@@ -71,7 +71,7 @@ Dialog {
             }
             Text {
                 Layout.fillWidth: true
-                text: "点击下方按钮打开「设置 → 连接与模型」，粘贴你的 API Key（支持 DeepSeek / 通义百炼 / 任意 OpenAI 兼容接口）。填好后点「测试连接」确认可用。"
+                text: "点击下方按钮打开「设置 → 连接与模型」：选一家服务商，粘贴 API Key，再为它选一个模型（下拉里有候选，「拉取」可拿实时列表）。填好后点「测试连接」确认可用。"
                 color: Theme.textSecondary
                 font.pixelSize: Theme.fsSmall
                 wrapMode: Text.Wrap
