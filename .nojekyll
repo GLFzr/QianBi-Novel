@@ -1,0 +1,2 @@
+# 让 GitHub Pages 原样分发仓库文件：没有这个空文件，Pages 会走 Jekyll 处理，
+# latest.json 这类静态资源可能被改写或跳过，而更新通道读的就是它。

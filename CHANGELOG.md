@@ -4,6 +4,125 @@
 
 > 版本号唯一来源为 `app/__init__.py` 的 `__version__` 常量，本文件与 README、git tag 均以其为准。
 
+## [0.18.1] - 2026-09-04（更新链路成型 · 验签才准执行 · 12 家连接预设）
+
+> 动机：把「自动检测 → 有新版出现图标 → 点一下就能更新」这条链真的跑通，并且让
+> **没有代理、连不上 GitHub 的用户也还有出路**。设计上的核心判断是：**可达性不是难点，信任才是**——
+> 一旦允许镜像、自定义源、离线导入一份 1KB 清单，「能给你推新版本」的人就等于「能在你机器上跑
+> 任意 exe」的人，而这个应用持有你凭据管理器里的 Key、能写你的书稿目录。所以「多通道」和
+> 「签名清单」必须同一轮落地，不能先开洞再补。这与 README 头条那句「会拒绝的流水线」是同一件事。
+>
+> 注：0.18.0 未单独发布，更新链路与本轮的连接预设改造合并为 0.18.1 出包。
+
+### 新增
+
+- **结构化检查结果 `CheckResult`**（`app/update_check.py` 重写）：状态四态
+  `new / latest / failed / skipped`，每条通道带自己的错误原因。原先那个把 404、DNS 污染、
+  TLS 失败、验签不过统统吞成 `None` 的函数，症状是「检查失败」被界面说成「已是最新」——假绿。
+- **四条清单通道依次回退**：自定义镜像 → GitHub raw → GitHub Pages → jsDelivr，第一条成功即停，
+  并记住上次成功的通道（`updates.last_channel`）下次优先试，省掉一整轮必然失败的连接。
+  整链全局 deadline 25s、单请求 6s，跑在后台线程里，全挂也只是等满 25 秒，不碰界面。
+- **代理解析**：`system` 用 `winreg` 读 `HKCU\...\Internet Settings` 的
+  `ProxyEnable/ProxyServer`；`env` / `none` / `custom` 三种模式在面板里可切。
+  PAC 自动脚本（`AutoConfigURL`）**刻意不解析**，直接告诉你识别不了、请手填地址。
+  另外补一条**陈旧代理兜路**：按解析出的代理跑完整链仍全失败时，**再用无代理跑一遍**——
+  一台配错了代理的机器不该因此永远更新不了。
+- **更新缓存** `~/.qianbi_novel/updates/manifest.json`：存**原始已签名载荷**而不是解析结果，
+  每次读都重新验签；重启后图标立刻亮起来不用等网络。
+- **`QIANBI_OFFLINE=1` 杀开关**：单测、打包态自检与所有探针的零网络纪律由它兜底
+  （默认开启自动检查之后，这条不再是洁癖而是必需——否则闸门会真发 HTTP）。
+- **Ed25519 清单验签**：公钥以列表 pin 在 `app/update_check.py` 的 `PUBKEYS`（带 `kid`，为轮换留位）；
+  `scripts/update_keys.py` 生成/查看密钥，**路径落在仓库内则拒绝写入并报错**（防止一次
+  `git add -A` 把私钥变成公开）；`scripts/sign_manifest.py` 按 canonical payload
+  （去掉 `sig` 后的 JSON，`sort_keys=True`、`separators=(",",":")`、UTF-8）签名并回写。
+- **常驻更新图标**：左栏底部新增 `update` glyph（下箭头 + 落定横线），带 accent 角标点。
+  **有新版与检查失败两种状态都画边框**（accent / warn 区分），让「查不动」看得见而不是静默。
+- **`UpdateDialog.qml` 更新面板**：未检查 / 检查中 / 可更新 / 已最新 / 不可达五态，
+  不可达时**逐条列出每条通道的死法**（raw: 连接被重置 / Pages: 404 / 镜像: 超时）——
+  这是「没有代理怎么办」的 UI 答案：你据此判断该配代理还是走离线。四条出路同屏：
+  ① 在线一键更新；② 复制直链 / 打开发布页 / 显示 SHA-256；③ **导入离线清单**（朋友或手机拷来的
+  1KB 文件）；④ **选择已下载的安装包** → 本机算哈希 → 与验签清单比对 → 命中才出现「立即安装」。
+- **一键更新**（`app/update_install.py` 新建）：流式下载 + 边下边算 SHA-256 + 进度 + 断点续传
+  （服务端不理会 `Range` 返回 200 时从头来），完成后 `QProcess.startDetached()` 拉起
+  `setup.exe`、flush 日志、`os._exit(0)`。只对**安装版**开放（靠 `{app}\unins*.dat` 判定），
+  便携版与源码态不会去覆盖正在运行的自己。
+- **12 家连接预设**替换原三家：国内 DeepSeek / 阿里云百炼 / 智谱 / Kimi / 火山方舟 / 腾讯混元 /
+  MiniMax / 硅基流动，国外 OpenRouter / Google Gemini / xAI Grok / Groq。每条 `base_url`
+  都从本机实打过一次 `<base>/chat/completions`，各家 hint 里写的就是实测结论
+  （401=路径对只差鉴权、403=CDN 挡裸探测、本机直连超时）。**刻意没预置** Azure OpenAI
+  （要 `deployment_id`）、Cloudflare Workers AI（URL 带 `{account_id}`）、百炼新版业务空间域名
+  （URL 带 `{WorkspaceId}`）——它们没法用「地址+Key+模型」表达，塞进去只会给用户一堆调不通的连接。
+  三个槽位出厂都指向 `deepseek` 的 `ds-v4-pro`：内置提示词按 V4 系调校，且填一把 Key 就能跑通全流程。
+- **代码签名接口**：`scripts/build_release.py` 检测到 `QIANBI_SIGN_PFX` / `QIANBI_SIGN_SHA1`
+  且找得到 `signtool.exe` 就自动签主程序与安装包（SHA-256 摘要 + RFC3161 时间戳，
+  无戳签名会随证书到期一起失效）；没配证书照旧产出未签名包并打一行 `[SKIP]` 说明原因。
+
+### 变更
+
+- **开机自动检查更新默认改为「开」**（推翻 0.16/0.17 写进 PRIVACY 的默认关）：默认关的话，
+  「自动检测 + 有新版出现图标」这条链就名不副实。边界同步改口——只有一个下载请求、
+  24h 限流、不带书名/配置/Key/设备标识，关掉后启动阶段零请求。
+- **`updates.auto_check_chosen` 标记**：只有用户在界面上真的拨过开关才会写它。版本迁移只认这个
+  标记，所以「抄来的出厂 false」会被翻成新的默认 true，而**显式关过的人不会被翻回来**；
+  面板上那条「这一版起默认是开的」的告知读的也是它，用户一旦亲自表过态就自然消失。
+- 死键 `updates.check_on_start`（0.15 起从没被任何调用点读到）直接丢弃。
+- 更新状态从四个字符串的 `updateFound(str,str,str,str)` 信号换成一份 `QVariantMap` 属性
+  `bridge.updateState`：旧信号加一个字段就得同步改 QML 处理函数，漏改的症状是
+  「新版本静默显示不出来」。
+- 更新 UI 从「关于」对话框迁到独立面板；「关于」只留一个「更新…」入口。
+- `requirements.txt` 补 `cryptography`（原先只因孤儿安装存在）并加进打包自检的导入目标——
+  PyInstaller 漏收 `_rust.pyd` 时闸门直接红，而不是静默失去更新能力。
+
+### 修复
+
+- **脏稿否决会卡死一键更新**：`Main.qml` 在 `editorDirty` 时 `close.accepted = false`，
+  会让 Inno 的关闭请求卡住、安装器报「需要重启计算机」。新增 `bridge.quittingForUpdate` 显式旁路，
+  确认步同时写明「未保存草稿会保留，下次启动可恢复」。
+- **安装版升级时程序还开着**：`tools/installer.iss` 加 `CloseApplications=yes` +
+  `RestartApplications=no`，手动双击升级时至少问一句，而不是静默排到下次重启。
+  **刻意没加 `AppMutex`**：Inno 对无前缀名按 `Global\` 找，而 per-user 非管理员会话没有
+  `SeCreateGlobalPrivilege`，互斥量会静默落在 `Local\` 永远匹配不上——纯死重量。
+- GitHub Pages 通道的主机名与路径大小写：Pages 必须小写、jsDelivr 的 `gh` 路径区分大小写，
+  出厂默认仓库名 `QianBi-Novel` 与用户磁盘上可能的小写 `qianbi-novel` 都归一到正确形态。
+- `cached_result` 遇到损坏缓存改为返回 `None`：原先会返回一个 FAILED 结果，
+  症状是界面把「本地文件读坏了」说成「更新源不可达」。
+- `AppField` 补 `editingFinished` 转发信号（回车或失焦即提交），代理/镜像地址不必再手动点别处。
+
+### 安全
+
+- **规则表（本轮核心）**：验签通过 + SHA-256 命中 + 安装版 → 才允许下载与执行；
+  验签失败或清单没有 `sig` → 只显示版本号/说明/直链/哈希，**「立即安装」按钮根本不出现**；
+  本机文件哈希 ≠ 清单 → 只报「不匹配：清单 X / 实际 Y」。应用永不替用户执行未经签名清单背书的字节。
+- 清单里所有 URL 强制 `https:`，`file://`（本地 PE）与 `\\UNC`（NTLM 泄漏）一律拒绝打开；
+  `version` 字段清洗（`../../` 塞不进下载文件名），所有落盘名过 `basename()`；
+  `notes` 强制 `Text.PlainText`，否则清单里的 HTML 能伪造对话框。
+- `setUpdateSettings` 的补丁键走白名单（这个口子不做过滤就能从 QML 写 `connections`/`slots`）。
+- 发布闸门 += 私钥泄漏扫描与清单验签检查。
+
+### 测试与闸门
+
+- 新增 `tests/unit/test_update_channels.py`（35 项）、`tests/unit/test_providers.py`（15 项）、
+  `tests/probe_update_ui.py`（40 项，零真网络，假 httpx transport 跑完整条通道与代理回退）。
+- 不可跳过的发布闸门 += `probe_update_ui.py` 与私钥泄漏扫描。
+- `tests/probe_guard.py` 扩展：更新缓存目录改道临时目录，`QIANBI_OFFLINE` 在护栏内置起。
+- 本机已验证：单测 476 项、`probe_qml_compile` 41/41、`probe_prompt_baseline` 零漂移
+  （更新功能不碰 LLM prompt）、`probe_update_ui` 40/40、`probe_about_ui` 9/9、
+  `dual_sync_check` 无意外漂移（`app/llm/providers.py` 已同步到 TUI）、`run.py --selftest` 通过。
+- 单测覆盖的反向用例：篡改签名/字段即验签失败、未 pinned 密钥签的清单被拒、未验签清单不给安装按钮、
+  `file:` 与 UNC 地址被拒、`version: "../../x"` 被清洗、全链失败不等于「已最新」、
+  显式 `auto_check:false` 不被默认值覆盖、缺 `cryptography` 时降级为「无法验证」而非崩溃。
+
+### 已知不足
+
+- **安装包无代码签名证书**：SmartScreen「Windows 已保护你的电脑」必然出现，需点
+  「更多信息 → 仍要运行」。这不是 bug，是缺证书；对话框、README、Release 说明都主动写明。
+- **51MB 载荷无法凭空翻墙**：客户端能做的只有把检测降到 1KB 多通道、把离线路径做成一等公民、
+  把完整性钉死。不宣称「连不上也能下包」。
+- 本机直连四路全 200，**国内真实可达性无法在本机证明**，Pages/jsDelivr 的价值按经验排序。
+- **真机矩阵仍欠跑**：安装版空闲/脏稿下一键升级、便携版只出链接、v0.17→v0.18.1 覆盖安装且旧进程
+  仍开着、断网下离线导入清单 + 本地包校验安装。这些离线证明不了。
+- TUI 侧 `app/config.py` 的连接预设仍是旧三家（该文件不在共享层，`providers.py` 已同步）。
+
 ## [0.17.0] - 2026-09-04（UI 成熟化 · 面板呼吸感 · 阅读排版升级）
 
 > 动机：功能已经齐了，这一版解决「看起来不像成品」——

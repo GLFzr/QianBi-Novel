@@ -68,13 +68,49 @@ Requirements: Windows 10/11 x64. No Python needed.
 
 ## Updating
 
-An upgrade never touches your manuscripts. Pick whichever matches what you installed:
+An upgrade never touches your manuscripts. When a newer version exists, **a download icon
+appears in the left rail** and opens the Update panel. That one screen always offers all
+four routes — pick the one that matches your network situation:
 
-| You are using | How to upgrade |
+| Your situation | What to do |
 |---|---|
-| **Installer** | Download the new `...-setup.exe` and run it into the same location (in-place upgrade). A running instance will be detected and asked to close. |
-| **Portable** | Unzip the new folder over the old one — or keep both and launch whichever you like. |
-| **In-app** | **About → Check for updates**: shows the release notes and the installer's SHA-256; "Download" opens that release page directly. |
+| GitHub reachable | Click **Download & verify**, then **Install**: the app quits itself, launches the installer and reopens afterwards. You never leave the app. |
+| GitHub unreachable | **Open release page** / **Copy link**, get `...-setup.exe` onto the machine by any means that currently works (phone, cloud drive, a friend), then **Pick a downloaded installer** so the app re-computes its SHA-256. Install unlocks only on a match. |
+| Can't even reach the manifest | **Import an offline manifest**: hand the ~1KB `latest.json` from the repo root to any online device, bring the file back, import it. Then same as the row above. |
+| Portable / from source | Links and hashes only — the app **will not overwrite the binary that is currently running** (that always fails). Unzip over the old folder as before. |
+
+The manifest itself is tried over four ordered channels — custom mirror → GitHub raw →
+GitHub Pages → jsDelivr — and the first success stops the chain. The panel **lists how each
+channel died** (connection reset / 404 / timeout), which is how you decide whether to
+configure a proxy or go offline. Your Windows system proxy is read automatically, and if the
+whole chain fails the app repeats it **without a proxy** — a stale proxy setting should not
+be able to block updates.
+
+### Why letting you type a mirror or import a friend's file is safe
+
+Because "whoever can push you a new version" is the same person as "whoever can run an exe on
+your machine". So the extra channels and the signature landed in the same release:
+
+- The manifest must verify against an **Ed25519 public key pinned in the source**
+  (`PUBKEYS` in `app/update_check.py`);
+- The installer's **SHA-256 must match the manifest** — a locally picked file is hashed and
+  compared the same way;
+- If either check fails, the panel **never renders an Install button**. The manifest is only
+  displayed to you; the app downloads nothing and executes nothing on its authority.
+  URLs are forced to https, and `file://` / `unc:` forms are refused outright.
+
+### "Windows protected your PC"
+
+The installer has **no code-signing certificate** (an annual certificate is not worth it for
+a side project), so after downloading and double-clicking it SmartScreen will show the blue
+warning. That is the missing certificate, not a broken file: click **More info → Run anyway**.
+If you are unsure, compare the SHA-256 against the one listed in the panel / on the release
+page — a match means it is the file I published.
+
+Checking at startup is **on by default**: at most one request per launch, downloading a
+~1KB public version manifest, throttled to once per 24 hours, **uploading nothing** (no book
+title, no config, no key). Switch it off in the panel and startup makes zero requests.
+See [docs/PRIVACY.md](docs/PRIVACY.md).
 
 "Not eating your data" is machine-enforced here, not a polite reminder:
 
@@ -88,8 +124,6 @@ An upgrade never touches your manuscripts. Pick whichever matches what you insta
   profiles survive. If the file is unreadable, it is first preserved as
   `config.json.broken-<timestamp>` instead of being silently discarded.
 
-Two defaults worth knowing: **checking for updates at startup is off by default** (turn it on
-explicitly in About; only then does each launch fetch one public version manifest from GitHub).
 Outside of actions you take in the app, no background task ever rewrites your manuscript.
 Backups are those two directories — copying only `.qianbi_novel` loses every book.
 
@@ -276,10 +310,20 @@ On first launch, add your API key under *Settings → Connections & models*.
 fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all redacted.
 
 > **Prompt tuning scope**: the built-in prompt engineering (prose / de-taste / review) is tuned
-> for the **DeepSeek API** — its thinking, reasoning_effort and parameter habits. The built-in
-> official presets cover DeepSeek official and OpenCode Go official only. Anything else
-> (relays, local Ollama / LM Studio) can be connected as "Custom (OpenAI-compatible)", but
-> prose quality and gate stability may suffer.
+> for the **DeepSeek API** — its thinking, reasoning_effort and parameter habits. That is why
+> **all three slots ship pointing at DeepSeek V4 Pro**: one key gets the entire pipeline running.
+> Twelve OpenAI-compatible platforms are preconfigured — eight domestic (DeepSeek / Alibaba
+> Bailian / Zhipu / Kimi / Volcengine Ark / Tencent Hunyuan / MiniMax / SiliconFlow) and four
+> overseas (OpenRouter / Google Gemini / xAI Grok / Groq); every address was probed from this
+> machine against `<base>/chat/completions`, and each platform's note in the app records what
+> actually came back (401 means the path is right and only auth is missing; a couple of overseas
+> endpoints simply time out from within China). Non-DeepSeek models speak the protocol fine,
+> but prose quality and gate convergence are not guaranteed at the same level (run three chapters
+> and watch the gates before committing a book to one). Relays and local Ollama / LM Studio go
+> through "Custom (OpenAI-compatible)". **Azure OpenAI and Cloudflare Workers AI are deliberately
+> not preset**: they need a `deployment_id` and an `account_id` respectively — neither is
+> expressible as base-url + key + model, and shipping them would only hand users a list of
+> connections that cannot be made to work.
 
 ---
 
@@ -287,25 +331,28 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 
 ```bash
 # Offline unit tests (no API key, ~3 seconds)
-.venv/Scripts/python -m pytest tests/unit -q        # 421 tests
+.venv/Scripts/python -m pytest tests/unit -q        # 476 tests
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
-.venv/Scripts/python tests/probe_backflow_chain.py
-# …… 42 probe_*.py in total: 30 run offline, 5 need a real key, probe_packaged is invoked
-#     by the release pipeline with --exe
+.venv/Scripts/python tests/probe_update_ui.py
+# …… 43 probe_*.py in total: the offline probes plus the unit tests form the release gate; a few
+#     (probe_models, probe_flash_reasoning …) are real-LLM experiments needing QIANBI_TEST_KEY;
+#     probe_packaged is invoked by the release pipeline with --exe, and probe_ui_gallery
+#     renders the full UI screenshot set.
 ```
 
 | Probe | Covers |
 |---|---|
 | `probe_prompt_baseline.py` | 45 assembly-point prompt digests + positive wiring assertions for preset fields |
-| `probe_qml_compile.py` | Compiles all 40 QML components (a wrong property silently prevents the whole tree from loading) |
+| `probe_qml_compile.py` | Compiles all 41 QML components (a wrong property silently prevents the whole tree from loading) |
 | `probe_agent_relay.py` | Co-writing relay orchestration: each agent sees only the previous stage's output, Supervisor context cap, lock trigger point |
 | `probe_word_block.py` | Word-count gate, lock interception, force-lock trail, stale queue |
 | `probe_backflow_chain.py` | Full backflow chain: idempotency, external edits, missing outline, interruption, re-queue |
 | `probe_import_ui.py` | External import: decompose only what exists → preview mapping → write only what's checked → revert by batch |
-| `probe_about_ui.py` | Update channel: startup check off by default, failures never reported as "up to date", SHA-256 shown |
+| `probe_update_ui.py` | Update chain, 40 checks with zero real network: channel fallback and per-channel failure reasons, unsigned manifests getting no Install button, offline manifest import, local package hashing, the 24h throttle, the settings key whitelist, panel overflow |
+| `probe_about_ui.py` | About dialog: book/config paths match the Bridge, and its "Update…" entry actually opens the panel |
 | `probe_packaged.py` | Packaged resource manifest audit + dev-vs-packaged assembly digest diff |
 | `probe_panel_fit.py` | Six panels: horizontal/vertical overflow, squeezing, out-of-bounds |
 
@@ -357,7 +404,7 @@ scripts/
                           smoke test → digest diff)
   dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
-  unit/                 34 files / 421 offline tests
+  unit/                 36 files / 476 offline tests
   probe_*.py            42 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice
@@ -401,9 +448,10 @@ time" — if the watermark changed, the TUI was edited too, and it fails loudly.
 
 - **Your data never leaves the machine.** Manuscripts default to `~/Documents/千笔一文/`;
   config, presets, logs and version history live in `~/.qianbi_novel/`. Apart from your model
-  API calls there is no cloud. The one exception is the update check: pressing "Check for
-  updates" (or explicitly enabling the startup check) fetches one public version manifest from
-  GitHub. Nothing is uploaded, and it is off by default.
+  API calls there is no cloud. The only automatic outbound request is the update check: on by
+  default at startup, at most once per 24 hours, **downloading** one ~1KB public version manifest
+  from GitHub (or a mirror you configured) and uploading nothing — no book title, no config, no
+  key. Switch it off in the Update panel and startup makes zero requests.
 - **API keys live in the Windows Credential Manager**; no plaintext in the config file. Logs and
   crash dumps are redacted uniformly.
 - **Telemetry is off by default**, writes only to local files, and uploads nothing.
@@ -430,8 +478,13 @@ Listed honestly so you don't trip over them:
 - **External import is "excerpt + mapping", not "read the whole book".** Long documents are
   chunked at 30k characters, capped at 8 chunks; only content genuinely present is processed
   (missing targets are reported explicitly), and anything the model embellishes fails verification.
-- **Update checking stops at "notice + direct download".** There is no silent self-install:
-  upgrading always means you running the installer, and the startup check is off by default.
+- **Three things the update chain still cannot do**: ① the installer has **no code-signing
+  certificate**, so SmartScreen will always prompt; ② **Install** is offered only to the
+  installed build — portable and source builds must not overwrite the binary that is running,
+  so they get links and hashes instead; ③ a ~51MB payload **cannot conjure bandwidth**. What
+  the app does is shrink "is there a new version?" to one 1KB multi-channel manifest, make the
+  offline route a first-class citizen, and pin integrity to the signature and the hash — it
+  does not pretend to download a package for you when no network path exists.
 
 ---
 
@@ -442,7 +495,9 @@ Full history in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Theme |
 |---|---|
+| **v0.18.1** | The update chain matures: automatic startup check (on by default, 24h throttle) + persistent left-rail icon + four-channel manifest fetch with per-channel failure reasons + **Ed25519 signature required before anything downloads or runs** + offline manifest import and local-package hash verification + one-click upgrade for installed builds (download → verify → quit → relaunch); connection presets grow from 3 measured platforms to 12 |
 | **v0.17.0** | UI maturation: design system 2.0 (luminance steps/self-drawn controls/desaturated semantics) + modal overlays & five text-overlap fixes + reader heading hierarchy & CJK quotes + root-cause fix for zero panel padding (ScrollView ignores Layout.margins) |
+| **v0.16.0** | External document import (fan-fiction path: decompose only what exists · preview mapping · batch revert) + per-book contract panel + both update paths stop eating data + interruptible streaming with visible reasoning + panel outlining and outline-batch navigation |
 | v0.15.0 | Entry-based worldbook activation + preset assembly layer (scene cards / per-phase sampling / per-chapter snapshots / solidify as template) + three-layer review + plot backflow + word-count gate + packaging parity gate |
 | v0.14.0 | Commercial packaging: installer & portable zip, single-instance lock, crash handling, keys into Credential Manager, update check, first-run wizard |
 | v0.13.0 | Full port of the TUI's strengths: 10 v2 presets, 6-dimension review + repair loop, 6 scene-card types, 3 themes |
