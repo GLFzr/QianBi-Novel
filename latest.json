@@ -1,21 +1,21 @@
 {
-  "version": "0.18.2",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.2",
-  "notes": "0.18.2 一键更新看得见：\n· 更新面板不再让人找不到一键更新：不可用时按钮改为禁用并写明原因（仅安装版可用），已是最新时告诉你会出现在哪；清单未过验签时照旧不给任何可执行按钮\n· 连接预设只预置提供方、不再预置模型：模型名变得快，预置即误导；选服务商时下拉给候选，「拉取」可拿实时列表，选择权在你\n· 修复预设卡片下半截被裁掉的问题\n· v0.18.1 的旧预设行自动换成「仅提供方」新行；你改过的、存过 Key 的、正在用的行原样保留\n· 空模型直接提示「还没选模型」，不再报一串英文错误\n安装：双击 setup.exe 装到原位置即可。若 Windows 弹蓝底「已保护你的电脑」，点「更多信息」→「仍要运行」——安装包没有代码签名证书，不是文件坏了；不放心就核对 SHA-256。",
-  "sha256": "e95f1bc531ccbeee15f8e98b74ddc045845ad1c176bff95b9ea4140d34ffc3ab",
-  "published": "2026-09-04",
+  "version": "0.18.3",
+  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.3",
+  "notes": "0.18.3 共写体验重做：\n· 共写对话新增「讨论/撰写」双模式：讨论模式（默认）只复述确认你的意图、列待拍板点（≤200 字），发「嗯」不再收到一篇作文；点「生成草案」或切撰写模式才出稿\n· 断点续跑：流水线在任何位置停止（含审校进行中），重启都从断点继续——草稿与已投审校票保留，只补剩余步骤，不再整章白写\n· 模型策略一键切换：设置→系统 可把三槽切到 DeepSeek 官方 V4 Flash（审校从 5-8 分钟降到约 1 分钟）\n· 设定清算：每章定稿自动对账正文 vs 世界观底册，自创设定当场点名；新增世界观对账按钮\n· 审校票并发（17 分钟 → ≈最慢一票）、同人禁则前置注入、正文落稿提取契约、比对失败重试/跳过出口\n安装：双击 setup.exe 装到原位置即可。若 Windows 弹蓝底「已保护你的电脑」，点「更多信息」→「仍要运行」。",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "published": "2026-09-05",
   "assets": {
     "setup": {
-      "name": "QianBi-Novel-v0.18.2-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.2/QianBi-Novel-v0.18.2-setup.exe",
-      "sha256": "e95f1bc531ccbeee15f8e98b74ddc045845ad1c176bff95b9ea4140d34ffc3ab",
-      "size": 53521564
+      "name": "QianBi-Novel-v0.18.3-setup.exe",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.3/QianBi-Novel-v0.18.3-setup.exe",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
     },
     "portable": {
-      "name": "QianBi-Novel-v0.18.2-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.2/QianBi-Novel-v0.18.2-portable.zip",
-      "sha256": "3ef578bba9c8860ea898d6e88e8a769d1ebd860d4f8dc98eb02fa2b2dedc6567",
-      "size": 78921117
+      "name": "QianBi-Novel-v0.18.3-portable.zip",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.3/QianBi-Novel-v0.18.3-portable.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
     }
   },
   "sig": "WxibUZjZwk4ppkTxP0sehratOyLraEd1423jgmgPl57J3q3qPYBT5nVw31nDmLCdWKBM6MBTJWceRxjKTN1RBw=="

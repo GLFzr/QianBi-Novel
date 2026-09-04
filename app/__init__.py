@@ -6,4 +6,4 @@
 - README / CHANGELOG / git tag 均以本常量为准
 """
 
-__version__ = "0.18.2"
+__version__ = "0.18.3"

@@ -221,9 +221,9 @@
   {
    "i": 31,
    "kind": "dialogue",
-   "slot": "writing",
-   "chars": 1788,
-   "sha256": "3133b091929f2f97d744a4cd4da27d3f13afd86dfbe6b3cb0f2bb5a31f56df30"
+   "slot": "helper",
+   "chars": 2055,
+   "sha256": "25863b4a993e1d7397acc582581950aede8bc3efd40ef4e6450f0a34a798e090"
   },
   {
    "i": 32,
