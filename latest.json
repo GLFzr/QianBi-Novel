@@ -1,22 +1,21 @@
 {
-  "version": "0.18.3",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.3",
-  "notes": "0.18.3 共写体验重做：\n· 共写对话新增「讨论/撰写」双模式：讨论模式（默认）只复述确认你的意图、列待拍板点（≤200 字），发「嗯」不再收到一篇作文；点「生成草案」或切撰写模式才出稿\n· 断点续跑：流水线在任何位置停止（含审校进行中），重启都从断点继续——草稿与已投审校票保留，只补剩余步骤，不再整章白写\n· 模型策略一键切换：设置→系统 可把三槽切到 DeepSeek 官方 V4 Flash（审校从 5-8 分钟降到约 1 分钟）\n· 设定清算：每章定稿自动对账正文 vs 世界观底册，自创设定当场点名；新增世界观对账按钮\n· 审校票并发（17 分钟 → ≈最慢一票）、同人禁则前置注入、正文落稿提取契约、比对失败重试/跳过出口\n安装：双击 setup.exe 装到原位置即可。若 Windows 弹蓝底「已保护你的电脑」，点「更多信息」→「仍要运行」。",
-  "sha256": "43c07eb9274f0406e07f6d9ec34bc138a15d808f281bec80c830e84c6c69c385",
+  "version": "0.18.4",
+  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.4",
+  "notes": "0.18.4 公测版：\n· 公测数据包：「关于」对话框一键导出匿名数据（token 用量/缓存命中率/各步骤耗时/清算计数），不含书稿正文、提示词、API Key——发到公测群帮助我们改进\n· 缓存命中架构：十张大模板统一稳定前缀 + 章级共享段，实测命中率 16% → 57.8%（同章复用 96-100%），写作成本显著下降\n· 相位思考预算：追踪/摘要/去味/扩写不再全档深想，单步从 200-600 秒降到秒级\n· 能力轮记忆层：连续性台账、拍点对表、设定清算定级纪律、日历偏差提案——长篇一致性的账房\n· 共写讨论/撰写双模式、章内断点续跑、模型策略一键切换（0.18.3 内容全部包含）\n安装：双击 setup.exe 装到原位置。公测期反馈渠道见 Release 说明。",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "published": "2026-09-05",
   "assets": {
     "setup": {
-      "name": "QianBi-Novel-v0.18.3-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.3/QianBi-Novel-v0.18.3-setup.exe",
-      "sha256": "43c07eb9274f0406e07f6d9ec34bc138a15d808f281bec80c830e84c6c69c385",
-      "size": 53552255
+      "name": "QianBi-Novel-v0.18.4-setup.exe",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.4/QianBi-Novel-v0.18.4-setup.exe",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
     },
     "portable": {
-      "name": "QianBi-Novel-v0.18.3-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.3/QianBi-Novel-v0.18.3-portable.zip",
-      "sha256": "804f2250ec9a36f2a1c535473d727513de3b17714d3286388cea7bcec0b6c720",
-      "size": 78952407
+      "name": "QianBi-Novel-v0.18.4-portable.zip",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.4/QianBi-Novel-v0.18.4-portable.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
     }
-  },
-  "sig": "7btfX3a+jz89lnbsuby2vMREhByGo37fzoZ1sUFlhLBeFko7sJhdtfHkOAbGK6RpVHbatLbEYanOZcyJXk4kBw=="
+  }
 }

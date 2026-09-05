@@ -56,6 +56,44 @@ def project_header(proj: str) -> str:
     return _header_cached(proj, _fingerprint(proj))
 
 
+def chapter_header(proj: str, num: int) -> str:
+    """章级共享段（体验轮终态）：同章所有调用间逐字节一致的内容。
+
+    组成：本章细纲（含冻结表）+ 角色状态 + 时间线 + 待回收伏笔 + 上一章结尾与文风样本。
+    这些内容在章循环开头组装一次、章内不变——把「同章恒定」从动态尾提升到
+    紧跟项目头的第二层前缀，同章 10+ 次调用全部命中第二层。
+    指纹含正文草稿路径（草稿定稿后内容更新，下一阶段调用看到的是新基准）。
+    """
+    parts = [f"【第 {num} 章共享上下文（同章所有步骤使用同一份，前后引用以此为准）】"]
+    outline = project.read_file(project.get_outline_path(proj, num))
+    if outline.strip():
+        parts.append("## 本章细纲" + chr(10) + outline.strip())
+    for rel, head in (("角色状态", "角色状态"), ("时间线", "时间线"), ("伏笔", "待回收伏笔")):
+        body = project.read_file(project.get_tracking_path(proj, rel))[:1500]
+        if body.strip():
+            parts.append("## " + head + chr(10) + body.strip())
+    from . import memory
+    recent = memory.read_recent_summaries(proj, num, n=2)
+    if recent:
+        parts.append("## 近章摘要" + chr(10) + recent.strip())
+    return "\n\n".join(parts) + "\n"
+
+
+def _chapter_fingerprint(proj: str, num: int) -> str:
+    import hashlib
+    h = hashlib.sha1()
+    for p in (project.get_outline_path(proj, num),
+              project.get_tracking_path(proj, "角色状态"),
+              project.get_tracking_path(proj, "时间线"),
+              project.get_tracking_path(proj, "伏笔")):
+        try:
+            h.update(str(os.path.getmtime(p)).encode())
+        except OSError:
+            pass
+    return h.hexdigest()[:12]
+
+
+
 @functools.lru_cache(maxsize=8)
 def _header_cached(proj: str, fp: str) -> str:
     from .. import wb

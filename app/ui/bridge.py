@@ -1520,6 +1520,23 @@ class Bridge(QObject):
         from .. import model_strategy
         return model_strategy.preset_options()
 
+    @Slot(result=str)
+    def exportBetaPack(self):
+        """公测数据包导出（v0.18.4）：返回导出路径或错误说明"""
+        try:
+            from .. import telemetry
+            path = telemetry.export_beta_pack(self.cfg)
+            self.toast.emit("ok", "公测数据包已导出")
+            return path
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"导出失败：{e}")
+            return f"导出失败：{e}"
+
+    @Slot()
+    def openBetaPackDir(self):
+        from .. import telemetry
+        self.openPath(telemetry.DIR)
+
     @Slot(str)
     def applyModelPreset(self, preset_id: str):
         from .. import model_strategy

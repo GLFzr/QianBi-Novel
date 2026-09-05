@@ -20,7 +20,7 @@ from .. import project, prompts, deslop, mustscan, wb
 from ..llm import clean_llm_output
 from ..prompts import scene_cards
 from . import gates, memory, scan, state as st, versions
-from .shared_prefix import project_header
+from .shared_prefix import chapter_header, project_header
 from .. import presets as genre_presets
 
 
@@ -837,6 +837,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             used_setpieces=_used_setpieces(proj),
             genre_block=_genre_block(proj, "prose"),
             project_header=project_header(proj),
+            chapter_header=chapter_header(proj, num),
             style_discipline=prompts.STYLE_DISCIPLINE,
             worldbook_block=wb_block,
             regex_block=rg_block,
@@ -865,6 +866,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                                          outline_brief=outline[:600],
                                                          tic_blacklist=_tic_blacklist(proj),
                                                          must_block=_must_block(proj, ctx.cfg),
+                                                     chapter_header=chapter_header(proj, num),
                                                          project_header=project_header(proj))
             ctx.last_prompt = enrich_prompt
             rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮",
@@ -888,6 +890,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                                      prose=prose, outline_brief=outline[:600],
                                                      tic_blacklist=_tic_blacklist(proj),
                                                      must_block=_must_block(proj, ctx.cfg),
+                                                 chapter_header=chapter_header(proj, num),
                                                      project_header=project_header(proj))
             ctx.last_prompt = trim_prompt
             prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩",
@@ -944,6 +947,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                                                outline_brief=outline[:600],
                                                                tic_blacklist=_tic_blacklist(proj),
                                                                must_block=_must_block(proj, ctx.cfg),
+                                                           chapter_header=chapter_header(proj, num),
                                                                project_header=project_header(proj))
         ctx.last_prompt = rewrite_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮",
@@ -1166,7 +1170,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             excerpt = prose[:3000]
         summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
             chapter_num=num, title=title or f"第{num}章",
-            prose_excerpt=excerpt, project_header=project_header(proj))
+            prose_excerpt=excerpt, project_header=project_header(proj),
+            chapter_header=chapter_header(proj, num))
         ctx.last_prompt = summary_prompt
         chapter_summary = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
             summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
@@ -1177,6 +1182,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
                 old_summary=old_global or "（全书刚开始）",
                 chapter_num=num, chapter_summary=chapter_summary,
+            chapter_header=chapter_header(proj, num),
                 project_header=project_header(proj))
             ctx.last_prompt = global_prompt
             new_global = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
@@ -1250,6 +1256,7 @@ def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str) -> str
     wb_block, rg_block, _meta = _wb_rg_blocks(proj, cfg, num)
     return prompts.FINAL_REVIEW_PROMPT.format(
         project_header=project_header(proj),
+        chapter_header=chapter_header(proj, num),
         prose=prose[:6000],
         core_setting=(project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1200]
                       or "（未提供）"),
@@ -1803,6 +1810,7 @@ def _update_tracking(ctx, num: int, prose: str) -> dict:
         or "（尚无写作上下文）",
         worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
         project_header=project_header(proj),
+        chapter_header=chapter_header(proj, num),
     )
     ctx.last_prompt = prompt
     result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(prompt,

@@ -73,6 +73,56 @@ Dialog {
             }
         }
 
+        // 公测数据包（v0.18.4）：一键导出命中率/成本/质量元数据，发给我们改进程序
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+            AppCheck {
+                id: betaNote
+                text: "公测版：我在参与公测，愿意提交匿名数据"
+                checked: bridge.telemetryEnabled
+                font.pixelSize: Theme.fsTiny
+                onToggled: bridge.setTelemetryEnabled(checked)
+            }
+            Text {
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                text: "数据包内容：token 用量与缓存命中率、各步骤耗时、章节完成/清算计数。"
+                      + "不含：书稿正文、提示词、API Key、连接配置。导出后发到公测群即可。"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsMicro
+                wrapMode: Text.Wrap
+            }
+            RowLayout {
+                spacing: 8
+                AppButton {
+                    text: "导出公测数据包"
+                    kind: "secondary"
+                    onClicked: {
+                        var r = bridge.exportBetaPack()
+                        packResult.text = r
+                        packResult.visible = true
+                    }
+                }
+                AppButton {
+                    text: "打开所在目录"
+                    kind: "ghost"
+                    onClicked: bridge.openBetaPackDir()
+                }
+            }
+            Text {
+                id: packResult
+                visible: false
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                color: Theme.success
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsMicro
+                wrapMode: Text.Wrap
+            }
+        }
+
         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
 
         // 升级前该知道哪些目录不会被动：安装器只覆盖程序目录
