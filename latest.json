@@ -2,20 +2,21 @@
   "version": "0.18.4",
   "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.4",
   "notes": "0.18.4 公测版：\n· 公测数据包：「关于」对话框一键导出匿名数据（token 用量/缓存命中率/各步骤耗时/清算计数），不含书稿正文、提示词、API Key——发到公测群帮助我们改进\n· 缓存命中架构：十张大模板统一稳定前缀 + 章级共享段，实测命中率 16% → 57.8%（同章复用 96-100%），写作成本显著下降\n· 相位思考预算：追踪/摘要/去味/扩写不再全档深想，单步从 200-600 秒降到秒级\n· 能力轮记忆层：连续性台账、拍点对表、设定清算定级纪律、日历偏差提案——长篇一致性的账房\n· 共写讨论/撰写双模式、章内断点续跑、模型策略一键切换（0.18.3 内容全部包含）\n安装：双击 setup.exe 装到原位置。公测期反馈渠道见 Release 说明。",
-  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "sha256": "70e078405cc642a211f62b200085349529144c2a2f7a97a528e1fb42a4bc64d7",
   "published": "2026-09-05",
   "assets": {
     "setup": {
       "name": "QianBi-Novel-v0.18.4-setup.exe",
       "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.4/QianBi-Novel-v0.18.4-setup.exe",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "size": 0
+      "sha256": "70e078405cc642a211f62b200085349529144c2a2f7a97a528e1fb42a4bc64d7",
+      "size": 53582777
     },
     "portable": {
       "name": "QianBi-Novel-v0.18.4-portable.zip",
       "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.4/QianBi-Novel-v0.18.4-portable.zip",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "size": 0
+      "sha256": "75a79a9eb0d84ae30dbdf0d88db8478ef60cfc5613c5d8d2dc7fa5f01dc37da9",
+      "size": 78973769
     }
-  }
+  },
+  "sig": "y6bn2fibRAnMdXp4NfGo2Vol3PS8QyEWu+ZIe8875qurlDALM/w6Jfs/aOegbPY5mWejqmUOjC8Yz27TqGTDAA=="
 }
