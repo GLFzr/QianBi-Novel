@@ -39,7 +39,7 @@ def _status_retryable(status: int) -> bool:
 
 # 预设 stage_params 可改写的参数（slot 只用于选客户端，不进请求体）
 STAGE_PARAM_KEYS = ("slot", "temperature", "top_p", "presence_penalty",
-                    "frequency_penalty", "max_tokens")
+                    "frequency_penalty", "max_tokens", "thinking", "reasoning_effort")
 # 值存在才进请求体的采样参数：无预设时请求体逐字不变（不凭空多出 "top_p": null）
 OPTIONAL_PARAM_KEYS = ("top_p", "presence_penalty", "frequency_penalty")
 # 章级配置快照（P2）留存的采样字段：只记实际进了请求体的，「没下发」本身也是信息
@@ -111,17 +111,21 @@ class LLMClient:
             stage_params=stage_params,
         )
 
-    def _record_usage(self, usage: dict, latency: float):
+    def _record_usage(self, usage: dict, latency: float, phase: str = ""):
         """token 用量统计埋点（插件）：本地 jsonl + 内存聚合，失败不影响调用"""
         try:
             tin = int(usage.get("prompt_tokens", 0) or 0)
             tout = int(usage.get("completion_tokens", 0) or 0)
+            # DeepSeek 上下文缓存命中/未命中 tokens（其他网关可能不返回，默认 0）
+            hit = int(usage.get("prompt_cache_hit_tokens", 0) or 0)
+            miss = int(usage.get("prompt_cache_miss_tokens", 0) or 0)
             if tin <= 0 and tout <= 0:
                 return
             self.total_prompt_tokens += tin
             self.total_completion_tokens += tout
             from .. import usage as _usage
-            _usage.record(None, self.model, self.slot, tin, tout, latency)
+            _usage.record(None, self.model, self.slot, tin, tout, latency,
+                          hit=hit, miss=miss, phase=phase)
         except Exception as e:  # noqa: BLE001
             logger.debug("用量埋点失败（忽略）: %s", e)
 
@@ -298,7 +302,7 @@ class LLMClient:
                         raise last_err
                     usage = data.get("usage") or {}
                     self.last_latency = time.monotonic() - t0
-                    self._record_usage(usage, self.last_latency)
+                    self._record_usage(usage, self.last_latency, phase=phase)
                     logger.info("LLM ok model=%s prompt_tokens=%s completion_tokens=%s latency=%.1fs",
                                 self.model, usage.get("prompt_tokens", 0),
                                 usage.get("completion_tokens", 0), self.last_latency)
@@ -426,7 +430,8 @@ class LLMClient:
                     self.last_error = str(last_err)
                     raise last_err
                 self.last_latency = time.monotonic() - t0
-                self._record_usage(stream_usage or {}, self.last_latency)   # 插件：用量统计
+                self._record_usage(stream_usage or {}, self.last_latency,
+                                   phase=phase)   # 插件：用量统计
                 break
             except httpx.TimeoutException:
                 last_err = LLMError("请求超时，请检查网络或增大 timeout", retryable=True)

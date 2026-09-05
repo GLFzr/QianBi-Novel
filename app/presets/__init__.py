@@ -230,6 +230,11 @@ STAGE_PARAM_PHASES = [
     ("review", "审校"),
     ("root_cause", "根因分析"),
     ("review_fix", "审校修复"),
+    # 体验轮 B1'：机械相位纳入合法相位（内置默认表关思考，genre 可显式覆盖）
+    ("tracking", "追踪更新"),
+    ("chapter_summary", "章节摘要"),
+    ("global_summary", "全局摘要"),
+    ("canon_audit", "设定清算"),
 ]
 
 # (键, 中文说明, 下限, 上限, 取整)；slot 只用于选客户端，不进 HTTP 请求体
@@ -240,6 +245,9 @@ STAGE_PARAM_FIELDS = [
     ("presence_penalty", "存在惩罚", -2.0, 2.0, False),
     ("frequency_penalty", "频率惩罚", -2.0, 2.0, False),
     ("max_tokens", "输出上限", 1, 1000000, True),
+    # 体验轮 B1'：思考预算入相位表（disabled/enabled；low/high/max）
+    ("thinking", "思考开关", None, None, False),
+    ("reasoning_effort", "思考强度", None, None, False),
 ]
 
 
@@ -253,6 +261,10 @@ def _coerce_param(key: str, val, lo, hi, as_int: bool):
     if key == "slot":
         s = str(val or "").strip()
         return s[:40] if s else None
+    if key in ("thinking", "reasoning_effort"):
+        s = str(val or "").strip().lower()
+        legal = {"enabled", "disabled"} if key == "thinking" else {"low", "medium", "high", "max"}
+        return s if s in legal else None
     if isinstance(val, str):
         try:
             val = float(val.strip())

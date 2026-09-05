@@ -20,10 +20,13 @@ from .. import config as cfg_mod
 from .. import mustscan, project
 from ..llm.client import LLMClient
 from . import state as st
+from .shared_prefix import constraints_block, project_header
 
 logger = logging.getLogger("qianbi.canon")
 
-AUDIT_PROMPT = """你是网文世界观的合规审校。下面是一部小说的【设定底册条目名】【全书连续性台账】
+AUDIT_PROMPT = """{project_header}
+
+你是网文世界观的合规审校。下面是一部小说的【设定底册条目名】【全书连续性台账】
 【核心设定约束条款】与【第 {num} 章正文】。
 找出正文中的世界观问题，每条独立说明，禁止复用同一句评语：
 1. violations：与底册冲突的陈述，或底册无依据的自创体系/机构/货币/职业/丹药名；
@@ -115,17 +118,6 @@ def authorized_inventions(proj: str) -> list:
     return out
 
 
-def constraints_block(proj: str, budget: int = 1200) -> str:
-    """核心设定约束注入块（Round 4）：金手指约束条款/全局红线/授权自创清单全文——
-    审校 Round 1-3 的漏报根源是这三节不在扫描范围（层数违约/红线擦边/授权自创记硬伤）"""
-    core = project.read_file(os.path.join(proj, "设定", "题材定位.md"))
-    blocks = []
-    for head in ("金手指约束条款", "全局红线", "授权自创清单"):
-        m = re.search(r"###?\s*%s(.*?)(?=\n###?\s|\Z)" % re.escape(head), core, re.S)
-        if m and m.group(1).strip():
-            blocks.append("【%s】%s" % (head, m.group(1).strip()[:600]))
-    out = "\n\n".join(blocks)
-    return out[:budget] if out else ""
 
 
 def load_ledger(proj: str) -> dict:
@@ -221,6 +213,7 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
                         or "（无）")
     outline_doc = project.read_file(project.get_outline_path(proj, num))
     prompt = AUDIT_PROMPT.format(num=num, names=names or "（无）",
+                                project_header=project_header(proj),
                                 authorized="、".join(authorized) or "（无）",
                                 constraints_block=constraints_block(proj),
                                 ledger_block=ledger_block(proj),
@@ -293,8 +286,32 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
     except Exception as e:  # noqa: BLE001
         logger.warning("台账更新失败（不阻断）：%s", e)
     beat_check = data.get("beat_check") or {}
+    # D1' 日历偏差提案：正文历法表述 vs 案发日历对表（只提案，不静默改写）
+    cal_path = os.path.join(proj, "追踪", "案发日历.md")
+    cal_doc = project.read_file(cal_path) if os.path.exists(cal_path) else ""
+    drift = []
+    if cal_doc:
+        def _num(tok):
+            cn = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5,
+                  "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+            return cn.get(tok, tok)
+        cal_days = {_num(x) for x in re.findall(r"第\s*([一二三四五六七八九十\d]+)\s*日", cal_doc)}
+        for m_day in re.finditer(r"([一二三四五六七八九十\d两]{1,3})\s*日\s*(?:后|之内|以内)", prose):
+            token = _num(m_day.group(1))
+            if token not in cal_days:
+                drift.append({"phrase": m_day.group(0), "why": "案发日历中无该历法表述的登记行"})
+    if drift:
+        try:
+            with open(os.path.join(proj, "追踪", "日历偏差提案.json"), "w", encoding="utf-8") as f:
+                json.dump({"num": num, "drifts": drift,
+                           "note": "人工裁决：改日历或改正文；裁决后同步案发日历.md"},
+                          f, ensure_ascii=False, indent=2)
+        except OSError:
+            pass
+
     report = {"num": num, "chars": len(prose), "failed": failed,
               "beat_check": beat_check,
+              "calendar_drift": drift,
               "violations": violations,
               "adoptions": data.get("adoptions") or [],
               "pattern_hits": pattern_hits,

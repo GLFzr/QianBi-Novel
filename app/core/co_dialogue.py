@@ -16,6 +16,7 @@ from .. import config as cfg_mod
 from .. import project, prompts
 from ..llm import ModelRouter, clean_llm_output
 from . import memory, state as st
+from .shared_prefix import project_header
 
 TRANSCRIPT_MAX = 4000   # 对话转写截断上限（最近 ≤4k 字）
 HANDOFF_MAX = 800       # 交接块上限
@@ -265,6 +266,7 @@ class DialogueWorker(QThread):
             prompt = prompts.CO_DIALOGUE_PROMPT.format(
                 role_desc=role["role"],
                 mode_block=prompts.mode_block_for(self.stage, self.mode, self.user_text),
+                project_header=project_header(self.proj),
                 agent_name=role["agent"],
                 stage_label=st.CW_STAGE_LABELS.get(self.stage, self.stage),
                 handoff=prev_handoff(state, self.stage),
@@ -314,6 +316,7 @@ class SummarizeWorker(QThread):
             prompt = prompts.CO_SUMMARIZE_PROMPT.format(
                 stage_label=st.CW_STAGE_LABELS.get(self.stage, self.stage),
                 product_structure=structure,
+                project_header=project_header(self.proj),
                 transcript=transcript_text(state, self.stage),
             )
             self.last_prompt = prompt
@@ -634,6 +637,7 @@ class CwProseCheckWorker(QThread):
             outline_brief=outline,
             tic_blacklist=stages_mod._tic_blacklist(self.proj),
             must_block=stages_mod._must_block(self.proj, self.cfg),
+            project_header=project_header(self.proj),
         )
         self.last_prompt = prompt
         rewritten = clean_llm_output(self.router.client(cfg_mod.SLOT_WRITING)

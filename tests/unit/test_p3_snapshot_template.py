@@ -46,7 +46,8 @@ def test_template_carries_real_sampling_not_declared():
 def test_slot_goes_to_phase_layer_and_thinking_stays_in_baseline():
     t = P.preset_from_snapshot(SNAP, "执灯人")
     assert t["sampling"] == SNAP["sampling"]                 # 基线原样带走（含 thinking/effort）
-    assert all("thinking" not in v for v in t["stage_params"].values())
+    # 体验轮 B1'：相位层 thinking 已合法（genre 显式配置或内置机械表）；
+    # 内置表合并语义由 test_phase_params 钉住，此处不再断言相位层思考档
     assert t["stage_params"]["prose"]["slot"] == "写作"       # 槽只有分相位才有意义
 
 

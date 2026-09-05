@@ -1,12 +1,12 @@
 {
- "count": 45,
+ "count": 49,
  "entries": [
   {
    "i": 0,
    "kind": "core",
    "slot": "writing",
-   "chars": 2985,
-   "sha256": "2d451afb25ed1c4df36e106d4b82146586c36a55c2b51599b85fdc0fdf9dd828"
+   "chars": 3186,
+   "sha256": "12d775ea591576eebac220380acbe8d04d250b912bd7c07de67327574ceb1656"
   },
   {
    "i": 1,
@@ -26,291 +26,319 @@
    "i": 3,
    "kind": "outline",
    "slot": "helper",
-   "chars": 4441,
-   "sha256": "5cb60c9d9696fceb42dbe5b75d164068393e3f8a1255a42d072d4b227a5f5179"
+   "chars": 4866,
+   "sha256": "ce3ac640ed48c7a533b201254ceafa5dc3ceeb092a915a43d82fadc60c181ca9"
   },
   {
    "i": 4,
    "kind": "prose",
    "slot": "writing",
-   "chars": 7744,
-   "sha256": "b07e88d53807ce8dd23b3cde0f01dddc241aa2435d4ad2e972d3655157f0bc98"
+   "chars": 10897,
+   "sha256": "de18893b377bc60bd1b9380a5fa6cc9829b7e1dcb546627c7e4d70d07c7406ad"
   },
   {
    "i": 5,
    "kind": "review",
    "slot": "review",
-   "chars": 9812,
-   "sha256": "7767c4bdbd7a5c17465398750aef4a58927761b7f07c5b9953eec30370f8e0ff"
+   "chars": 12497,
+   "sha256": "c7781da33440e5d73b8f6776061fa093d8a5e3b48160fabbde7d0136ecec9054"
   },
   {
    "i": 6,
    "kind": "tracking",
    "slot": "helper",
-   "chars": 5040,
-   "sha256": "f9042a91dcfe73ffd0fd7361b8abeb4ee60f82854645d7cb0927b8639ef5299f"
+   "chars": 7725,
+   "sha256": "beadbce6019d916a71641f06109c2f22e608287e326510456f46d3a325e60a0e"
   },
   {
    "i": 7,
    "kind": "chapter_summary",
    "slot": "helper",
-   "chars": 3037,
-   "sha256": "1755670aecc863373dbb75590b77866df9480430550ff8b181940bf4137f3f0c"
+   "chars": 5722,
+   "sha256": "c197bf10ffe1d193940ce4123cedccd741283379837d1c918472cee2160d75c3"
   },
   {
    "i": 8,
    "kind": "global_summary",
    "slot": "helper",
-   "chars": 209,
-   "sha256": "01b71f4cadf9fbbfff0df508fa77abeb523edad4fabaa034ce9094dc267f6b10"
+   "chars": 2894,
+   "sha256": "4a9cbb82e016d37fe7b09de2c1649f48c3b708c021ce36f9252515679bef6dc3"
   },
   {
    "i": 9,
-   "kind": "prose",
-   "slot": "writing",
-   "chars": 9014,
-   "sha256": "258544fa7ed65ba991c66dcd2db5f0577c78c06566d7138211b3467db4a56f8a"
+   "kind": "unknown",
+   "slot": "review",
+   "chars": 7397,
+   "sha256": "5c9a9d6271c3e329f14b25d679a8388c3def78fae9c70ffc7e6118a5b95b987d"
   },
   {
    "i": 10,
-   "kind": "review",
-   "slot": "review",
-   "chars": 9928,
-   "sha256": "b30691f78528f04d1b85613fdb5a9a49d84f468c4503595af460151acd7a92b7"
+   "kind": "prose",
+   "slot": "writing",
+   "chars": 12167,
+   "sha256": "7512fb07be7e150e2bf6e25ea71b62856ad6678445ca93b22daa9af64a74c9ab"
   },
   {
    "i": 11,
+   "kind": "review",
+   "slot": "review",
+   "chars": 12613,
+   "sha256": "ee6ee2bb55ddfcb018ba9c271d835e9a45e4b0cf06698cdf5ba1e6c8ab688728"
+  },
+  {
+   "i": 12,
    "kind": "review_fix",
    "slot": "review",
    "chars": 3709,
    "sha256": "cfb64cc15b9a8953a855f7bc9e15898681fdf7e4837a3c56a52e68482ce532bd"
   },
   {
-   "i": 12,
+   "i": 13,
    "kind": "review",
    "slot": "review",
-   "chars": 9928,
-   "sha256": "b30691f78528f04d1b85613fdb5a9a49d84f468c4503595af460151acd7a92b7"
+   "chars": 12613,
+   "sha256": "ee6ee2bb55ddfcb018ba9c271d835e9a45e4b0cf06698cdf5ba1e6c8ab688728"
   },
   {
-   "i": 13,
+   "i": 14,
    "kind": "root_cause",
    "slot": "review",
    "chars": 4291,
    "sha256": "07ba91ba9609c9831fba9231a4ad683e61dc533cf8d1a1e1b8572eb942e556e4"
   },
   {
-   "i": 14,
+   "i": 15,
    "kind": "review_fix",
    "slot": "review",
    "chars": 3643,
    "sha256": "ba46e9f759411722883c5d16053918a6e132a99021c46e13939d0f879e0dc87c"
   },
   {
-   "i": 15,
+   "i": 16,
    "kind": "review",
    "slot": "review",
-   "chars": 9928,
-   "sha256": "b30691f78528f04d1b85613fdb5a9a49d84f468c4503595af460151acd7a92b7"
-  },
-  {
-   "i": 16,
-   "kind": "tracking",
-   "slot": "helper",
-   "chars": 5014,
-   "sha256": "99b91dbf2820c3516858401d77bc7048c22aea5c1acde38d75d398e8b9485b00"
+   "chars": 12613,
+   "sha256": "ee6ee2bb55ddfcb018ba9c271d835e9a45e4b0cf06698cdf5ba1e6c8ab688728"
   },
   {
    "i": 17,
-   "kind": "chapter_summary",
+   "kind": "tracking",
    "slot": "helper",
-   "chars": 3037,
-   "sha256": "af2629983a38dd4a3cf68f24e1661d631ffc353f7eebca438335770bb57ab712"
+   "chars": 7699,
+   "sha256": "fc71f8cd7ff164cd269424b625e5107d8d645e5871f569972f63d87bbd63cfbc"
   },
   {
    "i": 18,
-   "kind": "global_summary",
+   "kind": "chapter_summary",
    "slot": "helper",
-   "chars": 230,
-   "sha256": "4afea40ba457e3abecf731c8f30b762b1ba8e0531edb98106293fa39e98cd386"
+   "chars": 5722,
+   "sha256": "c7d117d0917e20137b589cbb3e56b09364c08dd91bd85c24053d7dde1e6c6b59"
   },
   {
    "i": 19,
-   "kind": "prose",
-   "slot": "writing",
-   "chars": 9041,
-   "sha256": "ef299bf6929cf7f2dc0c12f6b92737b67edbabd4fe54bbbca77ae579b7e4ba2d"
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 2915,
+   "sha256": "d060977ea83a3e41da639f30a1d9ccd5636dff6c82ffcf3babedc65d9136023e"
   },
   {
    "i": 20,
-   "kind": "enrich",
-   "slot": "writing",
-   "chars": 2988,
-   "sha256": "20834ee6829a00402a79280aea6d985d443792a454a90704260a9194b4ce0bfb"
+   "kind": "unknown",
+   "slot": "review",
+   "chars": 7989,
+   "sha256": "4539af03b52ab9a8817c28c4447ae32d6a8f41f4b98215c77396779cad659b89"
   },
   {
    "i": 21,
-   "kind": "enrich",
+   "kind": "prose",
    "slot": "writing",
-   "chars": 2988,
-   "sha256": "20834ee6829a00402a79280aea6d985d443792a454a90704260a9194b4ce0bfb"
+   "chars": 12194,
+   "sha256": "8da8dfc4f5731a891c0b5b43e1e2d18b4c6559f47c3cf0fc0e4edf03907f38c7"
   },
   {
    "i": 22,
-   "kind": "tracking",
-   "slot": "helper",
-   "chars": 4114,
-   "sha256": "105b84f77af6df2760fc4ea91737461a469ef4db7709ad2e600958af21b69b66"
+   "kind": "enrich",
+   "slot": "writing",
+   "chars": 5673,
+   "sha256": "18d98457dda4cba08e1d8521275acffc22570c175eb7034db4b297412d4b8854"
   },
   {
    "i": 23,
-   "kind": "chapter_summary",
-   "slot": "helper",
-   "chars": 2137,
-   "sha256": "dac5bff89e43f32461221efdc0a955101210e2f78ecc35fde9992c854d8291af"
+   "kind": "enrich",
+   "slot": "writing",
+   "chars": 5673,
+   "sha256": "18d98457dda4cba08e1d8521275acffc22570c175eb7034db4b297412d4b8854"
   },
   {
    "i": 24,
-   "kind": "global_summary",
+   "kind": "tracking",
    "slot": "helper",
-   "chars": 230,
-   "sha256": "d5f3292a55e9e2fd9c2ed36a08018adee2904cdfaf0669d2011172771f3541ef"
+   "chars": 6799,
+   "sha256": "cc5d6170d22df7b5945dbe7255e2c7803c23354f635fc81d234ef36d12be313d"
   },
   {
    "i": 25,
-   "kind": "prose",
-   "slot": "writing",
-   "chars": 8942,
-   "sha256": "d134b678c5b556cdf00c7394da78904506156bcc480318d0d48d451e63a15f7f"
+   "kind": "chapter_summary",
+   "slot": "helper",
+   "chars": 4822,
+   "sha256": "c130a9a04db918dd1ef0671218400e567bff4ac85d52209652ea2fcf58112dbd"
   },
   {
    "i": 26,
-   "kind": "trim",
-   "slot": "writing",
-   "chars": 5571,
-   "sha256": "203d594e35c3df0ac85383eb11bed4fadbd117ecf5b94ad17ad804e944da62ba"
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 2915,
+   "sha256": "e042b47bc5bdfdf5803ff53997845ad286abafcc6c6f386bd272e7deb57c6b80"
   },
   {
    "i": 27,
-   "kind": "review",
+   "kind": "unknown",
    "slot": "review",
-   "chars": 11528,
-   "sha256": "16dfba6154d4ef367b85416852557dbde21854588c5a17b4f451a5a5ac96f821"
+   "chars": 7089,
+   "sha256": "af76a4799193403bbcfdf08257cd3d9dff40109d458e02fd4a97d42bf7eea37c"
   },
   {
    "i": 28,
-   "kind": "tracking",
-   "slot": "helper",
-   "chars": 6614,
-   "sha256": "2aba7e0f0222174c8086c0eeddaacb415aefe00354e1d1b15917c484d9ce7f22"
+   "kind": "prose",
+   "slot": "writing",
+   "chars": 12069,
+   "sha256": "de6045301cd226405fb7bd358d6345d06c4feede19d4a89233773e15c635f89e"
   },
   {
    "i": 29,
-   "kind": "chapter_summary",
-   "slot": "helper",
-   "chars": 2934,
-   "sha256": "2df94700d52a0c256cae9f29373181dd235a677e2b8b03c0c4a4a93452926c76"
+   "kind": "trim",
+   "slot": "writing",
+   "chars": 8256,
+   "sha256": "c512d9ccb80602d8820cd4136003e1749decfb15cde1027c8b00b96de57fea3e"
   },
   {
    "i": 30,
-   "kind": "global_summary",
-   "slot": "helper",
-   "chars": 230,
-   "sha256": "b9ab567866cdfc9f4ec7183f7a56b7bd0ad0705f8a6f632d600e53cd98d3683f"
+   "kind": "review",
+   "slot": "review",
+   "chars": 14213,
+   "sha256": "80ed2bff786ec09269439a1fbe9b00ce3b34108dce3a18c99c8d6dd8e94fadfa"
   },
   {
    "i": 31,
-   "kind": "dialogue",
+   "kind": "tracking",
    "slot": "helper",
-   "chars": 2055,
-   "sha256": "25863b4a993e1d7397acc582581950aede8bc3efd40ef4e6450f0a34a798e090"
+   "chars": 9299,
+   "sha256": "cc4ae44d1a7523ae2de235fbdbac490ce3535c4efaee0f9fba6e9daddccebddc"
   },
   {
    "i": 32,
-   "kind": "review",
-   "slot": "review",
-   "chars": 9798,
-   "sha256": "62735ba3cbf6453570a25d47151e4e14b153a179ee860e588f466124fd1c71d9"
+   "kind": "chapter_summary",
+   "slot": "helper",
+   "chars": 5619,
+   "sha256": "9b18deaa9a43d636c85bacb393fbb0685b398360e7d2484e98d10685beceee78"
   },
   {
    "i": 33,
-   "kind": "deslop",
-   "slot": "writing",
-   "chars": 1227,
-   "sha256": "9167e9ddeea2a2f8e96edb3c14d0897a3d283b05ded57467c94823e977ddf147"
+   "kind": "global_summary",
+   "slot": "helper",
+   "chars": 2915,
+   "sha256": "21c5d54c72a2bc795172ebfc8d7dd78079ba57019c4cc89abc7e861aa2585f8d"
   },
   {
    "i": 34,
+   "kind": "unknown",
+   "slot": "review",
+   "chars": 9589,
+   "sha256": "6da1b3c21dc1d5d4340e5fc1a07fba0fafa36d150975ace744f6e9ef6b828278"
+  },
+  {
+   "i": 35,
+   "kind": "dialogue",
+   "slot": "helper",
+   "chars": 4757,
+   "sha256": "07b8e10dd1f4fec0b66d8ab9f0af53b28929f56337763603a95b7feca4ed4190"
+  },
+  {
+   "i": 36,
+   "kind": "review",
+   "slot": "review",
+   "chars": 12483,
+   "sha256": "448334f9f87648eacd2a182dee33518019ad5078d23d2fcf2e74b872a16d741d"
+  },
+  {
+   "i": 37,
+   "kind": "deslop",
+   "slot": "writing",
+   "chars": 3912,
+   "sha256": "c59f9cccda183dd7798f07e3ee6cb8cb33cdd4ebe4d584e13796145c36e91df0"
+  },
+  {
+   "i": 38,
    "kind": "backflow",
    "slot": "helper",
    "chars": 4616,
    "sha256": "4acd32e1ba38fd2c1d26309e08fe437ffbd57e5ebadc8654e568839619e9bb53"
   },
   {
-   "i": 35,
+   "i": 39,
    "kind": "co_summarize",
    "slot": "writing",
-   "chars": 381,
-   "sha256": "7433090ef86212263b53edfa9652689999868b60b02ba993a8be839eedb6582c"
+   "chars": 3066,
+   "sha256": "3a018cbfc3e7497d200245037e40cbd712a7ebc3e89c850ad772be2dadcc08c5"
   },
   {
-   "i": 36,
+   "i": 40,
    "kind": "blurb",
    "slot": "helper",
    "chars": 663,
    "sha256": "ded6f4f946cffe465316da93efd251f7ab4af942bcb6757555b8b2e880ab77d8"
   },
   {
-   "i": 37,
+   "i": 41,
    "kind": "selection",
    "slot": "writing",
    "chars": 775,
    "sha256": "a564aa432134a76d3c1dcb262e358a09cbb4f796ab932d37ce065d8c9f9bb817"
   },
   {
-   "i": 38,
+   "i": 42,
    "kind": "selection",
    "slot": "writing",
    "chars": 683,
    "sha256": "5feede5e4b1de741e49efecdf9f4df3bd4416664ee8f28ff167a8dc5055a739e"
   },
   {
-   "i": 39,
+   "i": 43,
    "kind": "worldbook_text",
    "slot": "budget=2000",
    "chars": 288,
    "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
   },
   {
-   "i": 40,
+   "i": 44,
    "kind": "worldbook_text",
    "slot": "budget=600",
    "chars": 288,
    "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
   },
   {
-   "i": 41,
+   "i": 45,
    "kind": "worldbook_text",
    "slot": "budget=2000",
    "chars": 288,
    "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
   },
   {
-   "i": 42,
+   "i": 46,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=1 anchors=['陈更', '柳三更']",
    "chars": 150,
    "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
   },
   {
-   "i": 43,
+   "i": 47,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=2 anchors=['陈更', '柳三更']",
    "chars": 150,
    "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
   },
   {
-   "i": 44,
+   "i": 48,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=3 anchors=['陈更', '柳三更']",
    "chars": 150,

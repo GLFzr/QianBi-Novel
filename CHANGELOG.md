@@ -4,6 +4,37 @@
 
 > 版本号唯一来源为 `app/__init__.py` 的 `__version__` 常量，本文件与 README、git tag 均以其为准。
 
+## [未发布 · 体验轮]
+
+### 新增
+
+- **稳定前缀架构**（方案 A，缓存命中主力）：新模块 `app/core/shared_prefix.py` 产出项目级
+  逐字节稳定头部（题材预设/核心设定节选/金手指约束+红线+授权清单/must 全文/世界书常驻
+  条目/全局写作纪律），十张大模板（草稿/扩写/去味/压缩/终审/追踪/双摘要/设定清算/共写
+  对话与总结）统一前置——两章草稿公共前缀从 ~3.3k 字符提升到 ~13k+；`wb.constant_entries`
+  常驻条目独立出口（双端同步 TUI）。
+- **相位思考预算表**（方案 B）：`BUILTIN_PHASE_PARAMS` 内置机械相位默认（追踪/双摘要/
+  去味/扩写关思考、清算 high）——机械相位墙钟从 200-600s 降到秒级；预设白名单补
+  tracking/chapter_summary/global_summary/canon_audit 四相位与 thinking/reasoning_effort
+  两参数（键级 setdefault：genre 显式键优先，内置只补缺）。
+- **成本可观测**（方案 C）：`_record_usage` 记录 DeepSeek 返回的命中/未命中缓存 token 与
+  phase；`tests/report_cache.py` 按天/按 phase 报命中率与估算费用（命中率 <80% 告警）。
+- **日历偏差提案**（方案 D1'）：清算对正文历法表述（X日后/X之内）与案发日历对表，
+  偏差写 追踪/日历偏差提案.json（只提案不静默改写）。
+
+### 变更
+
+- 草稿动态尾瘦身（体验轮 A1-b）：近章摘要 n=3→2、角色状态 3000→1500、时间线 1500→800。
+- 共写对话 prompt 重排（方案 A5）：转写前置、mode_block 后移——同模式连续对话获得
+  append-only 缓存红利。
+- 相位字面量补齐：PHASE_TRACKING/PHASE_CH_SUMMARY/PHASE_G_SUMMARY/PHASE_CANON_AUDIT
+  与预设白名单一一对应（预设相位表静默失效的隐患由既有测试钉死）。
+
+### 测试
+
+- 新增 4 个测试文件（shared_prefix/phase_params/usage_cache_fields/wb_constant_entries，
+  共 19 用例）；全量 **551 passed**；提示词基线已刷新（模板重排预期漂移）。
+
 ## [0.18.3] - 2026-09-05（共写双模式 · 断点续跑 · 官方全家桶）
 
 ### 新增

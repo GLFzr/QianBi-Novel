@@ -114,7 +114,10 @@ def test_write_gen_config_freezes_layers_and_preset(tmp_path, monkeypatch):
 
     assert snap["preset"] == "snap" and snap["num"] == 7
     assert snap["sampling"] == {"temperature": 0.8, "thinking": "disabled"}
-    assert snap["stage_params"] == {"prose": {"temperature": 0.95, "slot": "写作"}}   # 脏相位已被丢
+    from app.core.stages import BUILTIN_PHASE_PARAMS
+    assert snap["stage_params"]["prose"] == {"temperature": 0.95, "slot": "写作"}   # 脏相位已被丢
+    for ph, kv in BUILTIN_PHASE_PARAMS.items():                                    # 内置机械相位已合并
+        assert snap["stage_params"][ph] == kv, (ph, snap["stage_params"].get(ph))
     assert len(snap["calls"]) == 1
     assert project.get_chapter_gen_config(proj, 7) == snap        # 落盘即读回
 
@@ -131,7 +134,9 @@ def test_write_gen_config_with_corrupt_preset_still_records(tmp_path, monkeypatc
     stages.begin_gen_trace(ctx)
     stages._record_call(ctx, "prose", "写作", _Client(), "提示词")
     snap = stages.write_gen_config(ctx, 2)
-    assert snap["sampling"] == {} and snap["stage_params"] == {}
+    from app.core.stages import BUILTIN_PHASE_PARAMS
+    assert snap["sampling"] == {}
+    assert snap["stage_params"] == dict(BUILTIN_PHASE_PARAMS)   # 内置机械相位与预设无关，恒在
     assert snap["calls"][0]["phase"] == "prose"
     assert project.get_chapter_gen_config(proj, 2)["calls"] == snap["calls"]
 

@@ -395,9 +395,14 @@ def test_preset_param_layers_are_read_together(tmp_path, monkeypatch):
                    "stage_params": {"prose": {"temperature": 0.9}},
                    "sampling": {"top_p": 0.8}}, f, ensure_ascii=False)
     monkeypatch.setattr(stages, "_preset_id", lambda proj: "probe_p1d" if proj else "")
-    assert stages.preset_param_layers("书") == {
-        "stage_params": {"prose": {"temperature": 0.9}}, "payload_defaults": {"top_p": 0.8}}
-    assert stages.preset_param_layers("") == {"stage_params": {}, "payload_defaults": {}}
+    layers = stages.preset_param_layers("书")
+    # 体验轮 B1'：内置机械相位表 setdefault 合并（genre 显式配置的 prose 不被覆盖）
+    assert layers["stage_params"]["prose"] == {"temperature": 0.9}
+    from app.core.stages import BUILTIN_PHASE_PARAMS
+    for ph, kv in BUILTIN_PHASE_PARAMS.items():
+        assert layers["stage_params"][ph] == kv, (ph, layers["stage_params"][ph])
+    assert stages.preset_param_layers("") == {
+        "stage_params": dict(BUILTIN_PHASE_PARAMS), "payload_defaults": {}}
 
 
 def test_stage_param_phases_match_stages_literals():

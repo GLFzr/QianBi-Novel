@@ -699,3 +699,30 @@ def assemble(proj: str, num: int = 0, budget: int = 2000, *, preset=None,
                         for i, e in enumerate(entries)
                         if e.kind != "prose" and i not in chosen and e.size > 0],
             "budget": budget, "phase": phase}
+
+
+def constant_entries(proj: str, budget: int = 0) -> str:
+    """常驻条目独立渲染（体验轮 A2'：跨章逐字节稳定，供共享前缀使用）。
+
+    - 只取 ``meta["constant"]`` 为真的条目，按 ``norm_name(name)`` 排序输出——
+      确定性是本函数的灵魂：同一世界书两次调用必须逐字节一致；
+    - budget>0 时按条截断（不切半条），截断时末尾注明；
+    - 无常驻条目返回空串。**不触碰 assemble 本体与其快速路径不变式。**
+    """
+    from . import project
+    doc = project.read_file(os.path.join(proj, project.WORLDBOOK_PATH))
+    if not (doc or "").strip():
+        return ""
+    entries = [e for e in parse(doc) if e.meta.get("constant") and e.body.strip()]
+    if not entries:
+        return ""
+    entries.sort(key=lambda e: norm_name(e.name) or "")
+    out, used = [], 0
+    for e in entries:
+        body = e.body
+        if budget and used + len(body) > budget and out:
+            out.append("…（常驻条目截断）")
+            break
+        out.append(body)
+        used += len(body) + 2
+    return "\n\n".join(out) + "\n"

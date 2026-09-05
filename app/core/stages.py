@@ -20,6 +20,7 @@ from .. import project, prompts, deslop, mustscan, wb
 from ..llm import clean_llm_output
 from ..prompts import scene_cards
 from . import gates, memory, scan, state as st, versions
+from .shared_prefix import project_header
 from .. import presets as genre_presets
 
 
@@ -44,6 +45,10 @@ PHASE_DESLOP = "deslop"
 PHASE_REVIEW = "review"
 PHASE_ROOT_CAUSE = "root_cause"
 PHASE_REVIEW_FIX = "review_fix"
+PHASE_TRACKING = "tracking"
+PHASE_CH_SUMMARY = "chapter_summary"
+PHASE_G_SUMMARY = "global_summary"
+PHASE_CANON_AUDIT = "canon_audit"
 
 
 def _wb_rg_blocks(proj: str, cfg: dict, num: int = 0) -> tuple:
@@ -147,13 +152,33 @@ def _preset_id(proj: str) -> str:
         return ""
 
 
+# 内置机械相位表（体验轮 B1'）：不需要发散思考的调用关思考、收 max_tokens。
+# 合并语义：genre 预设显式配置同相位时压过内置（setdefault，尊重预设作者）；
+# 创作相位（prose/outline/review）不内置——思考档位留给 genre/连接配置。
+BUILTIN_PHASE_PARAMS = {
+    "tracking":        {"thinking": "disabled", "max_tokens": 8192},
+    "chapter_summary": {"thinking": "disabled", "max_tokens": 2048},
+    "global_summary":  {"thinking": "disabled", "max_tokens": 2048},
+    "deslop":          {"thinking": "disabled", "max_tokens": 16384},
+    "enrich":          {"thinking": "disabled", "max_tokens": 16384},
+    "canon_audit":     {"thinking": "enabled", "reasoning_effort": "high",
+                        "max_tokens": 8192},
+}
+
+
 def preset_param_layers(proj: str) -> dict:
     """预设喂给路由的两层参数覆盖（ModelRouter kwargs）：一次 state 读取取全
 
     阶段档随「下一章生效」重绑；采样基线与它同源于同一个预设，不单独走第二条链。
+    内置机械相位表在此合并：genre 显式配置同相位时压过内置表。
     """
     pid = _preset_id(proj)
-    return {"stage_params": genre_presets.stage_params(pid),
+    sp = genre_presets.stage_params(pid)
+    for ph, kv in BUILTIN_PHASE_PARAMS.items():
+        tgt = sp.setdefault(ph, {})
+        for k, v in kv.items():
+            tgt.setdefault(k, v)     # 键级 setdefault：genre 显式键优先，内置只补缺
+    return {"stage_params": sp,
             "payload_defaults": genre_presets.sampling(pid)}
 
 
@@ -743,10 +768,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                         or "（未提供）")
         global_summary = memory.read_global_summary(proj) or "（全书尚未开始或暂无摘要）"
         recent_summaries = _sanitize_chapter_refs(
-            memory.read_recent_summaries(proj, num, n=3)) or "（无更近章节摘要）"
-        character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:3000] or "（暂无）"
+            memory.read_recent_summaries(proj, num, n=2)) or "（无更近章节摘要）"   # A1-b 尾瘦身
+        character_states = project.read_file(project.get_tracking_path(proj, "角色状态"))[:1500] or "（暂无）"
         foreshadows = memory.unfished_foreshadows(proj) or "（暂无）"
-        timeline = project.read_file(project.get_tracking_path(proj, "时间线"))[:1500] or "（暂无）"
+        timeline = project.read_file(project.get_tracking_path(proj, "时间线"))[:800] or "（暂无）"
         previous_excerpt = ""
         style_sample = "（本章为第一章，无上一章文风样本）"
         # 统一锚定：取小于本章的最近存在章（非线性安全——重写中间章时仍有衔接锚点）
@@ -811,6 +836,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             tic_blacklist=_tic_blacklist(proj),
             used_setpieces=_used_setpieces(proj),
             genre_block=_genre_block(proj, "prose"),
+            project_header=project_header(proj),
+            style_discipline=prompts.STYLE_DISCIPLINE,
             worldbook_block=wb_block,
             regex_block=rg_block,
             craft_block=scene_cards.craft_block(num, _total_chapters(proj, chapter_words), outline),
@@ -837,7 +864,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                                          target=chapter_words, prose=prose,
                                                          outline_brief=outline[:600],
                                                          tic_blacklist=_tic_blacklist(proj),
-                                                         must_block=_must_block(proj, ctx.cfg))
+                                                         must_block=_must_block(proj, ctx.cfg),
+                                                         project_header=project_header(proj))
             ctx.last_prompt = enrich_prompt
             rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮",
                                 phase=PHASE_ENRICH)
@@ -859,7 +887,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                                      target=chapter_words, cut_pct=cut_pct,
                                                      prose=prose, outline_brief=outline[:600],
                                                      tic_blacklist=_tic_blacklist(proj),
-                                                     must_block=_must_block(proj, ctx.cfg))
+                                                     must_block=_must_block(proj, ctx.cfg),
+                                                     project_header=project_header(proj))
             ctx.last_prompt = trim_prompt
             prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩",
                             phase=PHASE_TRIM)
@@ -914,7 +943,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose,
                                                                outline_brief=outline[:600],
                                                                tic_blacklist=_tic_blacklist(proj),
-                                                               must_block=_must_block(proj, ctx.cfg))
+                                                               must_block=_must_block(proj, ctx.cfg),
+                                                               project_header=project_header(proj))
         ctx.last_prompt = rewrite_prompt
         rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮",
                             phase=PHASE_DESLOP)
@@ -1136,20 +1166,21 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             excerpt = prose[:3000]
         summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
             chapter_num=num, title=title or f"第{num}章",
-            prose_excerpt=excerpt)
+            prose_excerpt=excerpt, project_header=project_header(proj))
         ctx.last_prompt = summary_prompt
         chapter_summary = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
-            summary_prompt)).splitlines()[0].strip()
+            summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
         if chapter_summary:
             memory.append_chapter_summary(proj, num, title or f"第{num}章", chapter_summary)
             old_global = memory.read_global_summary(proj)
             ctx.checkpoint()
             global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
                 old_summary=old_global or "（全书刚开始）",
-                chapter_num=num, chapter_summary=chapter_summary)
+                chapter_num=num, chapter_summary=chapter_summary,
+                project_header=project_header(proj))
             ctx.last_prompt = global_prompt
             new_global = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
-                global_prompt))
+                global_prompt, phase=PHASE_G_SUMMARY))
             if new_global.strip():
                 memory.write_global_summary(proj, new_global)
             ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
@@ -1218,6 +1249,7 @@ def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str) -> str
     """
     wb_block, rg_block, _meta = _wb_rg_blocks(proj, cfg, num)
     return prompts.FINAL_REVIEW_PROMPT.format(
+        project_header=project_header(proj),
         prose=prose[:6000],
         core_setting=(project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1200]
                       or "（未提供）"),
@@ -1770,9 +1802,11 @@ def _update_tracking(ctx, num: int, prose: str) -> dict:
         old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
         or "（尚无写作上下文）",
         worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+        project_header=project_header(proj),
     )
     ctx.last_prompt = prompt
-    result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(prompt))
+    result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(prompt,
+                                                    phase=PHASE_TRACKING))
     updates = parse_tracking_updates(result)
     # 反哺自动档⑤：同一次输出里的新实体/新规则/实体演进/世界观揭示 → 回写世界书（零新增 LLM）
     try:

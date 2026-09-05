@@ -57,6 +57,9 @@ EXPECTED_DIFFS = {
     # 空的「20. 动静配比」并入 21。TUI 调用点不传新 kwargs，同步过去即 KeyError。
     "app/prompts/writing.py": "P0b 正文工艺卡/作者按占位符 GUI 先行，TUI 待同步（同步时须补 stages 传参）",
     "app/prompts/__init__.py": "双端按需 re-export（GUI 导出 v2 审校族，TUI 导出 CO_WORLDBOOK_*）",
+    # ---- 体验轮 A1（2026-09-05，GUI 先行）：共享前缀构建器=缓存命中主力，
+    #      依赖 GUI prompts/co_writing 的 STYLE_DISCIPLINE 与 wb.constant_entries（已双端）；TUI 待同步
+    "app/core/shared_prefix.py": "共享前缀构建器（项目头逐字节稳定）GUI 先行：依赖 GUI co_writing.STYLE_DISCIPLINE；TUI 待排期同步",
     # ---- 方案 D1（2026-09-05，GUI 先行）：设定清算=共写/自动档定稿后的产物对账，
     #      依赖 GUI 的 pipeline_state.chapter_step 与审校槽路由；TUI 无微循环定稿流，待同步
     "app/core/canon_audit.py": "设定清算（正文 vs 拆解底册三分类对账）GUI 先行：依赖 GUI 微循环定稿流与审校槽路由，TUI 无此特性待排期",
