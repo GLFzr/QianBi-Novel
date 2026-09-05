@@ -252,6 +252,14 @@ class Orchestrator(QThread):
                 raise PipelineStopped()
         if self._stop:   # stop() 唤醒时 _pause 已被清，出循环后再查一次
             raise PipelineStopped()
+        # 离峰挂机（v0.19）：开启后 peak 时段在阶段边界等待，off-peak 自动续跑
+        # （v4 分时价 off-peak 全线半价；设置面板「离峰挂机」开关）
+        if (self.cfg or {}).get("writing", {}).get("offpeak_run"):
+            from .offpeak import is_peak, wait_until_offpeak
+            from datetime import datetime, timezone
+            if is_peak(datetime.now(timezone.utc)):
+                self.log("info", "离峰挂机：当前为 DeepSeek 高价时段，等待半价时段续跑…")
+                wait_until_offpeak(log=self.log, stop_check=lambda: self._stop)
 
     # ---------- 主流程 ----------
 

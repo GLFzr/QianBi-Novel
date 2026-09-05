@@ -52,6 +52,10 @@ def _sandbox(tmp_path, monkeypatch):
 def test_every_stage_hint_key_has_a_live_slot():
     assert set(HINT_SLOTS) == {k for k, _lab in P.STAGE_HINT_KEYS}
     for stage, (attr, ph) in HINT_SLOTS.items():
+        if stage == "prose":
+            # v0.19：prose 的题材预设并入 project_header（双层前缀），模板不再带 {genre_block}
+            assert "{project_header}" in getattr(prompts, attr)
+            continue
         assert "{%s}" % ph in getattr(prompts, attr), f"{stage} 的 {attr} 缺 {{{ph}}}"
 
 

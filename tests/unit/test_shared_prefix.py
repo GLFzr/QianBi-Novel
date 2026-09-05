@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """共享前缀架构（体验轮 A1'）：逐字节稳定性是缓存命中的地基"""
 import os
+import time
 
 from app import project
 from app.core.shared_prefix import project_header, constraints_block
@@ -36,7 +37,9 @@ def test_header_invalidates_when_source_changes(tmp_path):
     proj = _mk_proj(tmp_path, core="核心设定 V1")
     h1 = project_header(proj)
     assert "V1" in h1
-    project.write_file(os.path.join(proj, "设定", "题材定位.md"), "核心设定 V2")
+    target = os.path.join(proj, "设定", "题材定位.md")
+    project.write_file(target, "核心设定 V2")
+    os.utime(target, (time.time() + 5, time.time() + 5))   # 显式推进 mtime，避开同刻度抖动
     h2 = project_header(proj)
     assert "V2" in h2 and h2 != h1, "源文件变更即失效重建"
 

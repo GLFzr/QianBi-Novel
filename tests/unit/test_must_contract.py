@@ -203,12 +203,29 @@ def test_no_prose_template_lacks_must_contract():
         assert "{must_block}" in getattr(prompts, name), name
 
 
+def _dict_literal_keys(tree):
+    """收集模块内 `name = {...字符串键 dict 字面量}` 的键集合（v0.19 章会话
+    分支把 kwargs 抽成 dict 后 **var 解包传入，扫描器需解析才看得见字段）"""
+    out = {}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Dict)):
+            keys = set()
+            for k in node.value.keys:
+                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                    keys.add(k.value)
+            out[node.targets[0].id] = keys
+    return out
+
+
 def _format_callsites(template_name):
     """扫遍 app/，抓 `X.<template_name>.format(...)` 的关键字实参集合
 
     刻意不写死调用点清单：将来谁再加一处调用，这里自动纳入断言。
     test_barrier_removal._smoke_format 是从模板反推字段名再 format，
     看不见「调用方漏传 kwarg」——那正是 KeyError 崩在运行期的成因。
+    支持 `format(**kwargs_var)`：var 为同文件中的 dict 字面量时展开其键。
     """
     hits = []
     for dp, dns, fns in os.walk(_APP_ROOT):
@@ -218,6 +235,7 @@ def _format_callsites(template_name):
                 continue
             path = os.path.join(dp, fn)
             tree = ast.parse(project.read_file(path), filename=path)
+            dicts = _dict_literal_keys(tree)
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call)
                         and isinstance(node.func, ast.Attribute)
@@ -226,8 +244,11 @@ def _format_callsites(template_name):
                 recv = node.func.value
                 if (isinstance(recv, ast.Attribute)
                         and recv.attr == template_name):
-                    hits.append((os.path.relpath(path, _APP_ROOT),
-                                 {kw.arg for kw in node.keywords if kw.arg}))
+                    kwargs = {kw.arg for kw in node.keywords if kw.arg}
+                    for kw in node.keywords:
+                        if kw.arg is None and isinstance(kw.value, ast.Name)                                 and kw.value.id in dicts:
+                            kwargs |= dicts[kw.value.id]
+                    hits.append((os.path.relpath(path, _APP_ROOT), kwargs))
     return hits
 
 

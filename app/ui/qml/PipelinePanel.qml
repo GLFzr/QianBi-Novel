@@ -287,6 +287,16 @@ Item {
                     onToggled: bridge.setAutoGate(checked)
                 }
 
+                // 离峰挂机（v4 分时价）：peak 时段自动挂起等待，off-peak 自动续跑
+                AppCheck {
+                    id: offpeakCheck
+                    Layout.fillWidth: true
+                    text: "离峰挂机：DeepSeek 高价时段（北京时间工作日上午/午后）自动等待，半价时段自动续跑"
+                    checked: bridge.offpeakRun
+                    font.pixelSize: Theme.fsTiny
+                    onToggled: bridge.setOffpeakRun(checked)
+                }
+
                 // 主控制
                 RowLayout {
                     Layout.fillWidth: true

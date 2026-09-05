@@ -89,7 +89,9 @@ DEFAULT_CONFIG = {
                 "readback_on_save": True,       # 读改揣摩：保存有变时触发 1 次（复用 review 槽）
                 "readback_min_diff": 200,       # 最小改动量阈值（低于不触发；0=每次都触发）
                 "gate_hard": ["G2", "G5L", "G8", "G9"],   # G8 审校门入硬停（plan_step_gates_v1 §2 默认）
-                "gate_soft": ["G1", "G3", "G4", "G6", "G7"]},
+                "gate_soft": ["G1", "G3", "G4", "G6", "G7"],
+                "offpeak_run": False,           # 离峰挂机：peak 时段自动等待，off-peak 再跑
+                "chapter_session": True},       # 章会话消息栈：同章阶段共享前缀（关闭回退单轮）
     "last_project": "",
     "recent_projects": [],
     "general": {"onboarded": False},          # 首启向导（T3.5）
@@ -108,7 +110,8 @@ DEFAULT_CONFIG = {
                 # last_* 是运行时状态（不是用户设置）；清单正文另存 updates/manifest.json，
                 # 因为那是可重验的原始载荷，塞进 config 会被当成配置来回改写。
                 "last_channel": "",
-                "last_check_ts": 0.0},
+                "last_check_ts": 0.0,
+                "mirror": "auto"},
 }
 
 

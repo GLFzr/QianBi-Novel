@@ -93,6 +93,13 @@ EXPECTED_DIFFS = {
     #      deslop_extra 改走 stages._tic_blacklist 专属近端槽（扩写/压缩/去味三张模板只有该槽），
     #      genre_block 不再带它；TUI 仍从 genre_block 拿这份限量，字段不丢，只是槽位待统一。
     "app/presets/__init__.py": "P4 题材限量改走写作红线专属槽 GUI 先行；TUI 仍由 genre_block 注入（不丢字段，槽位待同步）",
+    # ---- v0.19（2026-09-05，GUI 先行）：章会话消息栈——一章一个会话，阶段=追加轮次，
+    #      依赖 client.chat_turn（GUI client 独有）与 writing.chapter_session 配置键；
+    #      TUI 无微循环会话调度，待同步
+    "app/core/chapter_session.py": "章会话消息栈 GUI 先行：依赖 GUI client.chat_turn 与章级调度，TUI 待排期",
+    # ---- v0.19（2026-09-05，GUI 先行）：离峰挂机闸门——v4 分时价 peak 等待，
+    #      依赖 GUI orchestrator.checkpoint 接线与 writing.offpeak_run 配置键；TUI 待排期
+    "app/core/offpeak.py": "离峰挂机纯逻辑 GUI 先行：TUI 主循环未接闸门，待排期",
 }
 
 # ---- 符号级门禁：绕开上面的文件级豁免，逐个函数盯同源 ----------------------

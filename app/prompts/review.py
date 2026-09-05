@@ -71,16 +71,14 @@ REVIEW_PROMPT = """你是长篇小说的连续性审校。请审阅刚写完的�
 只输出这两个小节，不要解释、不要给修改建议。"""
 
 
-REVIEW_FIX_PROMPT = """你是文字编辑。审校发现以下**阻塞级一致性问题**，请针对性修改第 {chapter_num} 章正文。
+REVIEW_FIX_PROMPT = """{project_header}
+
+{chapter_header}
+
+你是文字编辑。审校发现以下**阻塞级一致性问题**，请针对性修改第 {chapter_num} 章正文。
 
 ## 审校问题
 {findings}
-
-## 本章细纲（契约基准：修改不得偏离细纲剧情）
-{outline_brief}
-
-## 核心设定（节选，修改不得违背）
-{core_setting_brief}
 
 ## 原文
 {prose}
@@ -102,15 +100,14 @@ REVIEW_FIX_PROMPT = """你是文字编辑。审校发现以下**阻塞级一致�
 
 FINAL_REVIEW_PROMPT = """{project_header}
 
+{chapter_header}
+
 你是本书的「最终审核 Agent」，模拟番茄/起点头部责编的终审视角。读者读到这章会不会划走、会不会订阅、书评区会怎么骂——你必须给老板一个清晰判断，**不能打太极**。
 
 ## 本章正文（请逐段读）
 {prose}
 
 ## 上下文（你必须对照这些事实判）
-### 核心设定（主角/金手指/题材规则的权威基准）
-{core_setting}
-
 ### 世界书（必知设定·实体/规则/基准）
 {worldbook_block}
 
@@ -119,15 +116,6 @@ FINAL_REVIEW_PROMPT = """{project_header}
 
 ### 题材审校专项（本书 preset 的 review_extra）
 {genre_review_extra}
-
-### 全局摘要 + 角色状态 + 伏笔 + 时间线
-- 全局：{global_summary}
-- 角色：{character_states}
-- 伏笔：{foreshadows}
-- 时间线：{timeline}
-
-### 本章细纲（核心承诺与金手指预算）
-{outline}
 
 ### 本地确定性预检（程序核验结果，逐条裁决，不得无视）
 {l0_findings}

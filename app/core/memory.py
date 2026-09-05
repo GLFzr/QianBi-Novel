@@ -496,3 +496,40 @@ def apply_foreshadow_diff(proj: str, num: int, adds: list, payoffs: list) -> dic
             lines[last_table_idx + 1:last_table_idx + 1] = new_rows
     project.write_file(path, "\n".join(lines) + "\n")
     return result
+
+
+def sanitize_chapter_refs(text: str) -> str:
+    """清洗注入上下文的非正文字段里的「第N章」引用（真机硬伤修复）。
+
+    章节号会从细纲标题/章间摘要漏进正文台词（真机实例：角色说出
+    「第5章回溯中看到的画面」）。注入 prompt 前剥离行首章标题与句中
+    「第N章」标记，剧情指称不受影响。
+    （原 stages._sanitize_chapter_refs，移到本层供 shared_prefix 复用）
+    """
+    if not text:
+        return text
+    lines = []
+    for ln in text.splitlines():
+        ln = re.sub(r"^#{0,6}\s*第\s*\d+\s*章\s*[：:。]?\s*", "", ln)
+        ln = re.sub(r"第\s*\d+\s*章(?=[^\d])", "", ln)
+        lines.append(ln)
+    return "\n".join(lines).strip()
+
+
+def prev_chapter_pack(proj: str, num: int, tail: int = 800) -> tuple:
+    """上一章统一锚点：(结尾文本, 开头文风样本)，取小于本章的最近存在章。
+
+    非线性安全——重写/补写中间章时不再因「磁盘最后一章 != num-1」丢失衔接锚点。
+    无更前章或空文返回 ("", "")，占位文案由调用方按场景给。
+    （原 stages.prev_chapter_pack，移到本层供 shared_prefix 复用）
+    """
+    prev = project.nearest_chapter_before(proj, num)
+    if not prev:
+        return "", ""
+    text = project.read_file(prev[2]) or ""
+    if not text.strip():
+        return "", ""
+    ending = text[-tail:] if len(text) > tail else text
+    body_start = text.find("\n")   # 文风样本跳过标题行
+    sample = text[body_start + 1:body_start + 501] if body_start > 0 else text[:500]
+    return ending, sample.strip()

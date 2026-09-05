@@ -151,7 +151,12 @@ def _report(dim_line):
 _FAIL_LINE = '===D_PLOT=== fail 未演【原文引证："他忍了忍，决定改日再说"】 → root: ROOT_PROSE'
 
 
-def test_early_stop_when_first_two_votes_identical(tmp_path):
+def test_first_vote_solo_then_replicas_parallel(tmp_path):
+    """v0.19 投票调度：首票单发（写前缀缓存）→ 其余票并行重采样。
+
+    旧「前两票并行 + 早停」已移除：v4 thinking 下 temperature 无效、票间必不同构，
+    早停名存实亡；首票单发让并行票全量命中前缀缓存，墙钟与旧两阶段制相同。
+    """
     proj = str(tmp_path)
     project.write_file(os.path.join(proj, "大纲", "细纲_第002章.md"), "核心事件：反击")
     prose = "他忍了忍，决定改日再说。" * 50
@@ -159,9 +164,9 @@ def test_early_stop_when_first_two_votes_identical(tmp_path):
     client = _FakeClient([same, same, same])
     ctx = _FakeCtx(proj, client, votes=3)
     merged = stages.review_with_votes(ctx, 2, prose, votes=3)
-    assert client.calls == 2                      # 第 3 票被早停省掉
+    assert client.calls == 3                      # 三票全投（早停已移除）
     assert merged["summary"]["fail"] == 1
-    assert any("早停" in msg for _lvl, msg in ctx.logs)
+    assert any("审校第 1/3 票" in msg for _lvl, msg in ctx.logs)
 
 
 def test_three_votes_run_when_divergent(tmp_path):

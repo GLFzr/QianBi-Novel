@@ -273,7 +273,9 @@ def test_chapter_review_signature_3tuple():
     # (ctx, num, prose[, votes])：votes 为 P5 多轮投票可选参数
     params = list(sig.parameters.keys())
     assert params[:3] == ["ctx", "num", "prose"]
-    assert len(params) <= 4 and (len(params) == 3 or params[3] == "votes")
+    # v0.19：新增 session 关键字参数（章会话透传），位于既有参数之后
+    assert len(params) <= 7 and (len(params) == 3 or params[3] == "votes")
+    assert "session" in params
     print(f"  ✓ _chapter_review 签名: {tuple(params)} → 3 元组返回")
 
 

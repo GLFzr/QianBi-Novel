@@ -5,7 +5,10 @@
 - 可重试：网络错误 / 超时 / HTTP 429 / 5xx（指数退避，最多 max_retries 次）
 - 不可重试：4xx 其余错误 / 响应格式异常（立即抛出，不浪费重试）
 """
+import hashlib
+import json
 import logging
+import os
 import time
 
 import httpx
@@ -119,13 +122,17 @@ class LLMClient:
             # DeepSeek 上下文缓存命中/未命中 tokens（其他网关可能不返回，默认 0）
             hit = int(usage.get("prompt_cache_hit_tokens", 0) or 0)
             miss = int(usage.get("prompt_cache_miss_tokens", 0) or 0)
+            # 推理 tokens 口径（OpenAI 兼容 completion_tokens_details.reasoning_tokens，
+            # DeepSeek 思考模式等网关可能不返回，默认 0）
+            reasoning = int((usage.get("completion_tokens_details") or {})
+                            .get("reasoning_tokens") or 0)
             if tin <= 0 and tout <= 0:
                 return
             self.total_prompt_tokens += tin
             self.total_completion_tokens += tout
             from .. import usage as _usage
             _usage.record(None, self.model, self.slot, tin, tout, latency,
-                          hit=hit, miss=miss, phase=phase)
+                          hit=hit, miss=miss, phase=phase, reasoning=reasoning)
         except Exception as e:  # noqa: BLE001
             logger.debug("用量埋点失败（忽略）: %s", e)
 
@@ -210,6 +217,20 @@ class LLMClient:
         """
         over = self._overrides(phase)
         thinking = self._resolve("thinking", thinking, over) or ""
+        _dbg = os.environ.get("QIANBI_DEBUG_PAYLOAD")
+        if _dbg:
+            # 诊断门控（v0.19）：逐请求记录消息栈形状与会话前缀指纹，
+            # 用于离线核对前缀缓存为何未命中（不落正文，只落尺寸/哈希/角色序）
+            try:
+                _roles = [m.get("role", "") for m in messages]
+                _lens = [len(m.get("content", "")) for m in messages]
+                _h = hashlib.sha1(messages[0].get("content", "").encode("utf-8")).hexdigest()[:12] if messages else ""
+                _line = json.dumps({"phase": phase or "", "roles": _roles,
+                                    "lens": _lens, "sys_hash": _h}, ensure_ascii=False)
+                with open(_dbg, "a", encoding="utf-8") as _f:
+                    _f.write(_line + chr(10))
+            except Exception:
+                pass
         payload = {
             "model": self.model,
             "messages": messages,
@@ -341,15 +362,42 @@ class LLMClient:
         PipelineStopped 属 core 的语义，本层只置 last_aborted 并回已收增量，
         由调用方决定怎么中止。abort=None 时行为与改动前逐字一致。
         """
+        messages = self._build_messages(prompt, system)
+        return self._stream_messages(messages, on_chunk=on_chunk,
+                                     on_reasoning=on_reasoning, phase=phase,
+                                     temperature=temperature, abort=abort)
+
+    def chat_turn(self, messages: list, *, on_chunk=None, on_reasoning=None,
+                  phase: str = "", temperature=None, abort=None) -> str:
+        """多轮消息直通：messages 原样作为请求体（调用方持有会话栈）。
+
+        语义与 chat_stream 完全一致（重试/退避/abort/流式回调/用量埋点），
+        只是不再从 prompt+system 构造 messages。诊断字段 last_prompt 取
+        messages 中最后一条 user 轮内容。
+        """
+        return self._stream_messages(list(messages), on_chunk=on_chunk,
+                                     on_reasoning=on_reasoning, phase=phase,
+                                     temperature=temperature, abort=abort)
+
+    def _stream_messages(self, messages: list, *, on_chunk=None, on_reasoning=None,
+                         phase: str = "", temperature=None, abort=None) -> str:
+        """流式内核（chat_stream / chat_turn 共用）：messages 原样作为请求体。
+
+        请求/重试/退避/abort/流式回调/用量埋点即原 chat_stream 主体（逐字保留）；
+        chat_stream 只负责从 prompt+system 构造 messages 后转调，对外行为不变。
+        """
         if not self.model:
             raise LLMError("这条连接还没选模型——到 设置 · 连接与模型 里为它选一个（下拉候选或「拉取」）")
         self.last_aborted = False
-        self.last_prompt = prompt
+        # 诊断现场：单轮路径下恰为 prompt（最后一条 user 轮），多轮直通取最后一条 user
+        self.last_prompt = ""
+        for _m in messages:
+            if isinstance(_m, dict) and _m.get("role") == "user":
+                self.last_prompt = _m.get("content")
         self.last_error = ""
         self.last_phase = phase or ""
         self.last_degraded = False
         headers = self._headers()
-        messages = self._build_messages(prompt, system)
         payload = self._build_payload(messages, stream=True, phase=phase,
                                       temperature=temperature)
 

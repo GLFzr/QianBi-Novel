@@ -204,11 +204,13 @@ def test_new_placeholders_present():
     assert "{global_summary}" in prompts.CHAPTER_OUTLINE_PROMPT
     assert "{recent_summaries}" in prompts.CHAPTER_OUTLINE_PROMPT
     assert "{character_states}" in prompts.CHAPTER_OUTLINE_PROMPT
-    assert "{timeline}" in prompts.PROSE_WRITING_PROMPT
-    for t in (prompts.ENRICH_PROMPT, prompts.TRIM_PROMPT, prompts.DESLOP_REWRITE_PROMPT):
-        assert "{outline_brief}" in t
-    assert "{outline_brief}" in prompts.REVIEW_FIX_PROMPT
-    assert "{core_setting_brief}" in prompts.REVIEW_FIX_PROMPT
+    # v0.19 双层前缀架构：章级上下文（timeline/状态/摘要/上一章锚点）由 {chapter_header}
+    # 统一承载，不再散装注入各模板——散装占位符的移除是有意变更
+    for t in (prompts.PROSE_WRITING_PROMPT, prompts.ENRICH_PROMPT, prompts.TRIM_PROMPT,
+              prompts.DESLOP_REWRITE_PROMPT, prompts.FINAL_REVIEW_PROMPT,
+              prompts.REVIEW_FIX_PROMPT, prompts.CHAPTER_SUMMARY_PROMPT,
+              prompts.GLOBAL_SUMMARY_PROMPT, prompts.TRACKING_UPDATE_PROMPT):
+        assert "{project_header}" in t and "{chapter_header}" in t,             "模板缺双层前缀：%r" % t[:40]
     assert "{old_context}" in prompts.TRACKING_UPDATE_PROMPT
     # ROOT_CAUSE 真实锚定块占位（GUI 审校反馈环消费）
     from app.prompts import ROOT_CAUSE_PROMPT

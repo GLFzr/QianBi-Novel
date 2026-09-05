@@ -5,6 +5,8 @@
 
 TRACKING_UPDATE_PROMPT = """{project_header}
 
+{chapter_header}
+
 你是连续性管理员。刚写完第 {chapter_num} 章，请根据正文更新追踪文件。
 
 ## 本章正文
@@ -96,6 +98,8 @@ TRACKING_UPDATE_PROMPT = """{project_header}
 
 CHAPTER_SUMMARY_PROMPT = """{project_header}
 
+{chapter_header}
+
 你是剧情速记员。请把以下章节正文压缩成一句话摘要（80 字以内）。
 
 要求：包含本章核心事件 + 关键状态变化 + 结尾落点；写具体，不用"发生了一些事"式空泛表达。
@@ -109,6 +113,8 @@ CHAPTER_SUMMARY_PROMPT = """{project_header}
 # ========== 全局摘要链滚动更新（微循环第⑥步）==========
 
 GLOBAL_SUMMARY_PROMPT = """{project_header}
+
+{chapter_header}
 
 你是长篇小说的剧情档案管理员。基于【既有全局摘要】和【最新一章摘要】，输出更新后的全局摘要（500 字以内）。
 

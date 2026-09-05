@@ -13,10 +13,12 @@ from app.ui import bridge as bmod
 def test_review_fix_prompt_is_real_fix_prompt():
     assert "直接输出修改后的完整正文" in prompts.REVIEW_FIX_PROMPT
     assert "===REVISIONS===" not in prompts.REVIEW_FIX_PROMPT
-    # stages.py 修复环用 {chapter_num}/{findings}/{prose}/{outline_brief}/{core_setting_brief} 组装，必须可 format
+    # stages.py 修复环用 {chapter_num}/{findings}/{prose}/{project_header}/{chapter_header} 组装，必须可 format
+    # （v0.19：细纲/核心设定节选由双层前缀统一承载，不再散装注入）
     out = prompts.REVIEW_FIX_PROMPT.format(chapter_num=3, findings="- x", prose="正文",
-                                           outline_brief="细纲", core_setting_brief="设定")
+                                           project_header="项目基准", chapter_header="章级共享段")
     assert "第 3 章" in out and "- x" in out and "正文" in out
+    assert "项目基准" in out and "章级共享段" in out
 
 
 def test_revision_targets_prompt_still_available():

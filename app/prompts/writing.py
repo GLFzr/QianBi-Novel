@@ -5,22 +5,15 @@
 
 PROSE_WRITING_PROMPT = """{project_header}
 
-你是网络小说叙事写手。请根据细纲与上下文写作第 {chapter_num} 章正文。
+{chapter_header}
 
-## 全书核心设定（节选，必须严格遵守：主角姓名/身份/金手指/当前目标不得更改）
-{core_setting}
-
-## 题材预设（本书题材的专项约束，与通用规范冲突时以题材预设为准）
-{genre_block}
+你是网络小说叙事写手。请根据以上共享上下文写作第 {chapter_num} 章正文。
 
 ## 世界书（全书事实基准：实体身份/规则/世界观以登记为准；余额/道具/伤势等流水状态以「上一章结尾」为准；空串=尚未生成）
 {worldbook_block}
 
 ## 正则约束（必须成立的规则集：must 级违反=硬伤，should 级尽量遵守）
 {regex_block}
-
-## 本章细纲（必须严格遵守——只展开细纲已有事件，不得自造新主线、新角色、新反转）
-{outline}
 
 ## 法证级细节冻结（细纲冻结表中的死状/伤口/物证/日期，正文不得擅改）
 若细纲含「细节冻结表」，逐条按表执行；表中未列的照细纲正文写。
@@ -31,28 +24,6 @@ PROSE_WRITING_PROMPT = """{project_header}
 
 ## 下一章预告（章尾钩子须向此衔接，不得把下章事件提前写掉）
 {next_chapter_brief}
-
-## 全书剧情锚点（全局摘要，保证长篇一致性）
-{global_summary}
-
-## 最近三章摘要（近期剧情连续性）
-{recent_summaries}
-
-## 本节速记（本章写作必需的状态信息）
-### 角色状态
-{character_states}
-
-### 待回收/推进伏笔
-{foreshadows}
-
-### 时间线（故事内时间/日期对账基准：本章时间锚点必须与之一致，不得与前文矛盾）
-{timeline}
-
-### 上一章结尾（直接衔接用）
-{previous_excerpt}
-
-### 上一章开头（文风锚定样本：延续它的语感、句长密度与叙述温度，不要模仿其内容）
-{style_sample}
 
 ## 用户补充指导
 {user_guidance}
@@ -105,15 +76,16 @@ PROSE_WRITING_PROMPT = """{project_header}
 然后直接输出正文。不要输出任何解释、分析或写作笔记。
 **最后自检：全文长度必须落在 {word_target} 字 ±10% 内（写超了就删过渡段，写少了就加厚场景——对白与叙述都要有），超出 ±20% 即为失败。**"""
 
+_PROSE_BODY = PROSE_WRITING_PROMPT.split("{chapter_header}\n\n", 1)[1] if "{chapter_header}\n\n" in PROSE_WRITING_PROMPT else PROSE_WRITING_PROMPT
+
 
 # ========== 字数不足扩写（闸门触发）==========
 
 ENRICH_PROMPT = """{project_header}
 
-你是网络小说写手。以下第 {chapter_num} 章正文当前约 {actual} 字，未达到目标 {target} 字，请扩写到接近目标字数。
+{chapter_header}
 
-## 本章细纲（契约基准：扩写只能加厚细纲内事件的表现力，不得新增主线事件）
-{outline_brief}
+你是网络小说写手。以下第 {chapter_num} 章正文当前约 {actual} 字，未达到目标 {target} 字，请扩写到接近目标字数。
 
 ## 扩写原则
 1. 保持剧情与细纲完全一致，不新增主线事件、新角色、新反转
@@ -138,10 +110,9 @@ ENRICH_PROMPT = """{project_header}
 
 TRIM_PROMPT = """{project_header}
 
-你是网络小说写手。以下第 {chapter_num} 章正文当前约 {actual} 字，目标 {target} 字（允许 ±20%），需要**削减约 {cut_pct}%**。请压缩到目标区间。
+{chapter_header}
 
-## 本章细纲（契约基准：压缩不得删掉细纲核心事件/钩子，只删表达冗余）
-{outline_brief}
+你是网络小说写手。以下第 {chapter_num} 章正文当前约 {actual} 字，目标 {target} 字（允许 ±20%），需要**削减约 {cut_pct}%**。请压缩到目标区间。
 
 ## 压缩原则（按优先级）
 1. 删冗余：过渡段、重复强调、与主线无关的铺陈、可合并的环境描写——整段删，不留"修改痕迹"
@@ -167,10 +138,9 @@ TRIM_PROMPT = """{project_header}
 
 DESLOP_REWRITE_PROMPT = """{project_header}
 
-你是文字编辑。以下章节正文被本地扫描器检出若干 AI 味句式问题，请针对性改写。
+{chapter_header}
 
-## 本章细纲（契约基准：改写不得偏离细纲剧情）
-{outline_brief}
+你是文字编辑。以下章节正文被本地扫描器检出若干 AI 味句式问题，请针对性改写。
 
 ## 检出的问题
 {findings}

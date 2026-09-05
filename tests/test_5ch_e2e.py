@@ -62,6 +62,9 @@ print(f"  ✓ 预设: {bridge.projectPreset()}")
 bridge.setProjectPreset("urban_destiny")
 print(f"  ✓ 已切到 urban_destiny v2 预设")
 
+# headless 跑批：强制连写自动过门（真实配置若关着连写，G4 等门会永久阻塞）
+bridge.cfg.setdefault("writing", {})["auto_gate"] = True
+bridge.cfg.setdefault("writing", {})["chapter_session"] = True
 orch = Orchestrator(proj, bridge.cfg)
 
 # 报告初始
@@ -214,6 +217,19 @@ except Exception as e:
     traceback.print_exc()
     log_issue("error", f"异常: {e}")
     print(f"\n  ✗ 异常: {e}")
+
+# 产物留存（v0.19）：正文/追踪/大纲/用量先拷到 tests_output 再清理临时 home，
+# 供缓存命中率核算与质量盲评使用（此前直接 rmtree 连验证数据一起丢掉）
+try:
+    keep = os.path.join("tests_output", "5ch_e2e", "artifact")
+    os.makedirs(os.path.dirname(keep), exist_ok=True)
+    shutil.copytree(proj_root, keep, dirs_exist_ok=True)
+    u_src = os.path.join(_FH, ".qianbi_novel", "usage", "usage.jsonl")
+    if os.path.isfile(u_src):
+        shutil.copy2(u_src, os.path.join("tests_output", "5ch_e2e", "usage_run.jsonl"))
+    print("  ✓ 产物已留存: " + str(keep) + " + usage_run.jsonl")
+except Exception as _e:
+    print("  ⚠ 产物留存失败（不阻断）: " + str(_e))
 
 # 清理
 shutil.rmtree(_FH, ignore_errors=True)

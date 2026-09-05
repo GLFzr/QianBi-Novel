@@ -15,6 +15,7 @@ from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
 from .. import config as cfg_mod
 from .. import mustscan, project, deslop, prompts, secrets
 from ..core import gates, state as st, versions
+from ..core.shared_prefix import project_header, chapter_header
 from ..core.orchestrator import Orchestrator
 from ..core.co_writing import CoWriting
 from ..core import co_dialogue
@@ -349,10 +350,8 @@ class ChapterRepairWorker(QThread):
         versions.snapshot(self.proj, num, prose, "修复前备份")
         fix_prompt = prompts.REVIEW_FIX_PROMPT.format(
             chapter_num=num, findings=format_fix_targets(targets), prose=prose,
-            outline_brief=(project.read_file(project.get_outline_path(self.proj, num))[:600]
-                           or "（无本章细纲）"),
-            core_setting_brief=(project.read_file(os.path.join(self.proj, "设定", "题材定位.md"))[:1200]
-                                or "（未提供）"))
+            project_header=project_header(self.proj),
+            chapter_header=chapter_header(self.proj, num))
         rewritten = clean_llm_output(
             self.router.client(cfg_mod.SLOT_REVIEW).chat_stream(fix_prompt))
         # 修复稿健全性守卫（与 stages.py 修复环同款：拒绝修订计划/空文本/长度骤减）
@@ -1560,6 +1559,18 @@ class Bridge(QObject):
         self.generalChanged.emit()
         self.toast.emit("ok", "连写模式（决策门自动放行）已" + ("开启" if on else "关闭"))
 
+    @Property(bool, notify=generalChanged)
+    def offpeakRun(self) -> bool:
+        return bool(cfg_mod.load_config().get("writing", {}).get("offpeak_run", False))
+
+    @Slot(bool)
+    def setOffpeakRun(self, on: bool):
+        cfg = cfg_mod.load_config()
+        cfg.setdefault("writing", {})["offpeak_run"] = bool(on)
+        cfg_mod.save_config(cfg)
+        self.generalChanged.emit()
+        self.toast.emit("ok", "离峰挂机（peak 时段自动等待，电价半价档）已" + ("开启" if on else "关闭"))
+
     @Slot()
     def runCanonAudit(self):
         """F2 世界观对账：对本书全部已写章节跑设定清算（后台），报告落 追踪/"""
@@ -1793,7 +1804,7 @@ class Bridge(QObject):
 
     @Slot()
     def startUpdateDownload(self):
-        from .. import update_check as uc, update_install
+        from .. import update_check as uc, update_install, update_mirrors
         r = self._update_result
         if r is None or not r.can_install:
             self.toast.emit("warn", (r.verify_reason if r and not r.verified else "没有可安装的更新"))
@@ -1806,15 +1817,19 @@ class Bridge(QObject):
             self.toast.emit("warn", "磁盘剩余空间不够放这个安装包，先清一清再试")
             return
         update_install.stale_partial(dest)
-        urls = update_install.asset_urls(r.manifest, "setup", str(u.get("custom_url") or ""))
+        plan = uc.resolve_proxy({"updates": u})
+        # 无代理自动换镜像（v0.18.5）：确定性选一张实测主镜像放第一，
+        # 官方直链/清单镜像/用户自填殿后兜底（同文件同字节，跨源断点续传成立）
+        urls, via_mirror = update_mirrors.ordered_urls(
+            r.manifest, "setup", str(u.get("custom_url") or ""), {"updates": u}, plan)
         urls = [x for x in urls if x]
         if not urls:
             self.toast.emit("warn", "清单里没有可用的下载地址（只给了发布页）")
             return
-        self._update_dl = {"done": 0, "total": 0, "path": dest, "active": True}
+        self._update_dl = {"done": 0, "total": 0, "path": dest, "active": True,
+                           "viaMirror": via_mirror}
         self.updateStateChanged.emit()
-        w = _DownloadWorker(urls, dest, uc.resolve_proxy({"updates": u}),
-                            uc.asset_sha(r.manifest), self)
+        w = _DownloadWorker(urls, dest, plan, uc.asset_sha(r.manifest), self)
         self._dl_worker = w
         w.progress.connect(self._on_dl_progress)
         w.finished.connect(self._on_dl_done)

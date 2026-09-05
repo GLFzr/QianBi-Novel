@@ -57,35 +57,58 @@ def project_header(proj: str) -> str:
 
 
 def chapter_header(proj: str, num: int) -> str:
-    """章级共享段（体验轮终态）：同章所有调用间逐字节一致的内容。
+    """章级共享段（v0.19 八节终态）：同章所有调用间逐字节一致的内容。
 
-    组成：本章细纲（含冻结表）+ 角色状态 + 时间线 + 待回收伏笔 + 上一章结尾与文风样本。
-    这些内容在章循环开头组装一次、章内不变——把「同章恒定」从动态尾提升到
-    紧跟项目头的第二层前缀，同章 10+ 次调用全部命中第二层。
-    指纹含正文草稿路径（草稿定稿后内容更新，下一阶段调用看到的是新基准）。
+    组成：本章细纲（含冻结表）+ 全局摘要 + 近章摘要 + 角色状态 + 时间线
+    + 待回收伏笔 + 上一章结尾与文风样本——即 PROSE/REVIEW 原先散装注入的
+    全部章级上下文，统一收敛到紧跟 project_header 的第二层前缀。
+    截断取各消费方上限的最大值（角色状态 2000/时间线 1500/伏笔 2000），
+    保证替换散装段后信息只增不减。章循环开头组装一次、章内不变。
     """
+    from . import memory
     parts = [f"【第 {num} 章共享上下文（同章所有步骤使用同一份，前后引用以此为准）】"]
-    outline = project.read_file(project.get_outline_path(proj, num))
+    outline = memory.sanitize_chapter_refs(project.read_file(project.get_outline_path(proj, num)))
     if outline.strip():
         parts.append("## 本章细纲" + chr(10) + outline.strip())
-    for rel, head in (("角色状态", "角色状态"), ("时间线", "时间线"), ("伏笔", "待回收伏笔")):
-        body = project.read_file(project.get_tracking_path(proj, rel))[:1500]
-        if body.strip():
-            parts.append("## " + head + chr(10) + body.strip())
-    from . import memory
-    recent = memory.read_recent_summaries(proj, num, n=2)
-    if recent:
-        parts.append("## 近章摘要" + chr(10) + recent.strip())
+    gsum = memory.read_global_summary(proj)
+    if gsum.strip():
+        parts.append("## 全局摘要" + chr(10) + gsum.strip())
+    recent = memory.sanitize_chapter_refs(memory.read_recent_summaries(proj, num, n=2))
+    if recent.strip():
+        parts.append("## 最近章节摘要" + chr(10) + recent.strip())
+    body = project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000]
+    if body.strip():
+        parts.append("## 角色状态" + chr(10) + body.strip())
+    body = project.read_file(project.get_tracking_path(proj, "时间线"))[:1500]
+    if body.strip():
+        parts.append("## 时间线" + chr(10) + body.strip())
+    body = memory.unfished_foreshadows(proj)
+    if body.strip():
+        parts.append("## 待回收/推进伏笔" + chr(10) + body.strip())
+    prev_text, prev_style = memory.prev_chapter_pack(proj, num, tail=800)
+    if prev_text:
+        parts.append("## 上一章结尾（直接衔接用）" + chr(10) + prev_text)
+    if prev_style:
+        parts.append("## 上一章开头（文风锚定样本：延续它的语感、句长密度与叙述温度，不要模仿其内容）"
+                     + chr(10) + prev_style)
     return "\n\n".join(parts) + "\n"
 
 
 def _chapter_fingerprint(proj: str, num: int) -> str:
+    """章头失效指纹：覆盖八节全部数据源（含全局/章节摘要与上一章正文）"""
     import hashlib
+    from . import memory
+    paths = [project.get_outline_path(proj, num),
+             project.get_tracking_path(proj, "角色状态"),
+             project.get_tracking_path(proj, "时间线"),
+             project.get_tracking_path(proj, "伏笔"),
+             memory.chapter_summaries_path(proj),
+             memory.global_summary_path(proj)]
+    prev = project.nearest_chapter_before(proj, num)
+    if prev:
+        paths.append(prev[2])
     h = hashlib.sha1()
-    for p in (project.get_outline_path(proj, num),
-              project.get_tracking_path(proj, "角色状态"),
-              project.get_tracking_path(proj, "时间线"),
-              project.get_tracking_path(proj, "伏笔")):
+    for p in paths:
         try:
             h.update(str(os.path.getmtime(p)).encode())
         except OSError:

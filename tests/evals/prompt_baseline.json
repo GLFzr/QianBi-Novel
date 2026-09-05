@@ -5,15 +5,15 @@
    "i": 0,
    "kind": "core",
    "slot": "writing",
-   "chars": 3186,
-   "sha256": "12d775ea591576eebac220380acbe8d04d250b912bd7c07de67327574ceb1656"
+   "chars": 5624,
+   "sha256": "28e48ea9d967f299850459c54d71f2165eb87ea082474e00c21acfb1fb628b5a"
   },
   {
    "i": 1,
    "kind": "volume",
    "slot": "writing",
-   "chars": 2248,
-   "sha256": "b7d6882bcd33f1696511be4143de1933f5e4b29a0a93e278737e2224c7435cfc"
+   "chars": 4762,
+   "sha256": "0dffcc1e34201ff8622bf1f195547d91e67b74bdc11bc3198938bfc3e3d8eec2"
   },
   {
    "i": 2,
@@ -26,43 +26,43 @@
    "i": 3,
    "kind": "outline",
    "slot": "helper",
-   "chars": 4866,
-   "sha256": "ce3ac640ed48c7a533b201254ceafa5dc3ceeb092a915a43d82fadc60c181ca9"
+   "chars": 7630,
+   "sha256": "46eedd1aa3314ba7c6ebec2a7eb61ee2de3a06f94e6c76f899f6edab2be0c7ca"
   },
   {
    "i": 4,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10897,
-   "sha256": "de18893b377bc60bd1b9380a5fa6cc9829b7e1dcb546627c7e4d70d07c7406ad"
+   "chars": 9232,
+   "sha256": "66f9842e09726c08cb0e9b242f1bed07245f8b43cdda1f235bd698dea95d7573"
   },
   {
    "i": 5,
    "kind": "review",
    "slot": "review",
-   "chars": 12497,
-   "sha256": "c7781da33440e5d73b8f6776061fa093d8a5e3b48160fabbde7d0136ecec9054"
+   "chars": 12393,
+   "sha256": "a610815a30d2a6f22c3c2bc5f89abfe61486e7936cf35eecb5db48f1ca04b626"
   },
   {
    "i": 6,
    "kind": "tracking",
    "slot": "helper",
-   "chars": 7725,
-   "sha256": "beadbce6019d916a71641f06109c2f22e608287e326510456f46d3a325e60a0e"
+   "chars": 8024,
+   "sha256": "3b0f101a4acd108588691a4cedea4d041b1dcd1fcd5195f45b75ec1bca46c88b"
   },
   {
    "i": 7,
    "kind": "chapter_summary",
    "slot": "helper",
-   "chars": 5722,
-   "sha256": "c197bf10ffe1d193940ce4123cedccd741283379837d1c918472cee2160d75c3"
+   "chars": 5987,
+   "sha256": "02c7d9a2b7356f8db2ca9747df4891ea539152d93ea535f92c04756f9a9886fb"
   },
   {
    "i": 8,
    "kind": "global_summary",
    "slot": "helper",
-   "chars": 2894,
-   "sha256": "4a9cbb82e016d37fe7b09de2c1649f48c3b708c021ce36f9252515679bef6dc3"
+   "chars": 3159,
+   "sha256": "2163cfd7c0a9f3d3f30af015fac180ab64e3901fdea7c9dbd37a777ea258e029"
   },
   {
    "i": 9,
@@ -75,29 +75,29 @@
    "i": 10,
    "kind": "prose",
    "slot": "writing",
-   "chars": 12167,
-   "sha256": "7512fb07be7e150e2bf6e25ea71b62856ad6678445ca93b22daa9af64a74c9ab"
+   "chars": 10635,
+   "sha256": "1525cf2eece27109129e7459f369ad7ed6dd5b6da37323ae7a65dad5715a9e13"
   },
   {
    "i": 11,
    "kind": "review",
    "slot": "review",
-   "chars": 12613,
-   "sha256": "ee6ee2bb55ddfcb018ba9c271d835e9a45e4b0cf06698cdf5ba1e6c8ab688728"
+   "chars": 13925,
+   "sha256": "a88e8e1a8a2fdf2696e49d6bdd3b1e95764907a23f0e164ca52f212f92d25543"
   },
   {
    "i": 12,
    "kind": "review_fix",
    "slot": "review",
-   "chars": 3709,
-   "sha256": "cfb64cc15b9a8953a855f7bc9e15898681fdf7e4837a3c56a52e68482ce532bd"
+   "chars": 7845,
+   "sha256": "aed7dba216b5911d1e84eb8b4891df2c662fe02d5adf941abaef7b8b9d92230b"
   },
   {
    "i": 13,
    "kind": "review",
    "slot": "review",
-   "chars": 12613,
-   "sha256": "ee6ee2bb55ddfcb018ba9c271d835e9a45e4b0cf06698cdf5ba1e6c8ab688728"
+   "chars": 13925,
+   "sha256": "a88e8e1a8a2fdf2696e49d6bdd3b1e95764907a23f0e164ca52f212f92d25543"
   },
   {
    "i": 14,
@@ -110,36 +110,36 @@
    "i": 15,
    "kind": "review_fix",
    "slot": "review",
-   "chars": 3643,
-   "sha256": "ba46e9f759411722883c5d16053918a6e132a99021c46e13939d0f879e0dc87c"
+   "chars": 7779,
+   "sha256": "c348f48c92fdc958a5dbf934183a5cda9422206d016f487a57fe391be3e167bf"
   },
   {
    "i": 16,
    "kind": "review",
    "slot": "review",
-   "chars": 12613,
-   "sha256": "ee6ee2bb55ddfcb018ba9c271d835e9a45e4b0cf06698cdf5ba1e6c8ab688728"
+   "chars": 13925,
+   "sha256": "a88e8e1a8a2fdf2696e49d6bdd3b1e95764907a23f0e164ca52f212f92d25543"
   },
   {
    "i": 17,
    "kind": "tracking",
    "slot": "helper",
-   "chars": 7699,
-   "sha256": "fc71f8cd7ff164cd269424b625e5107d8d645e5871f569972f63d87bbd63cfbc"
+   "chars": 9400,
+   "sha256": "ae1c57fe9f05ad05c520825a11ce735b4ad465c5aec20e6c135165b25cb5ce66"
   },
   {
    "i": 18,
    "kind": "chapter_summary",
    "slot": "helper",
-   "chars": 5722,
-   "sha256": "c7d117d0917e20137b589cbb3e56b09364c08dd91bd85c24053d7dde1e6c6b59"
+   "chars": 7423,
+   "sha256": "a1f09e547237846e90ca0d7a987101ad130c9aef39e116b49d30c0d0e851077a"
   },
   {
    "i": 19,
    "kind": "global_summary",
    "slot": "helper",
-   "chars": 2915,
-   "sha256": "d060977ea83a3e41da639f30a1d9ccd5636dff6c82ffcf3babedc65d9136023e"
+   "chars": 4616,
+   "sha256": "1ac7b31065582e90b15131de5624aea2d65c9d47330e32ae9708456a923e976f"
   },
   {
    "i": 20,
@@ -152,43 +152,43 @@
    "i": 21,
    "kind": "prose",
    "slot": "writing",
-   "chars": 12194,
-   "sha256": "8da8dfc4f5731a891c0b5b43e1e2d18b4c6559f47c3cf0fc0e4edf03907f38c7"
+   "chars": 10662,
+   "sha256": "1fd7fb4a67e7a565daf31cb74d132038303cb66298a0017fa287ba5d9d176b67"
   },
   {
    "i": 22,
    "kind": "enrich",
    "slot": "writing",
-   "chars": 5673,
-   "sha256": "18d98457dda4cba08e1d8521275acffc22570c175eb7034db4b297412d4b8854"
+   "chars": 7222,
+   "sha256": "5258e5e0580e27609623f5fcee660a1c99d43893f84dea635f33db5eea58c51a"
   },
   {
    "i": 23,
    "kind": "enrich",
    "slot": "writing",
-   "chars": 5673,
-   "sha256": "18d98457dda4cba08e1d8521275acffc22570c175eb7034db4b297412d4b8854"
+   "chars": 7222,
+   "sha256": "5258e5e0580e27609623f5fcee660a1c99d43893f84dea635f33db5eea58c51a"
   },
   {
    "i": 24,
    "kind": "tracking",
    "slot": "helper",
-   "chars": 6799,
-   "sha256": "cc5d6170d22df7b5945dbe7255e2c7803c23354f635fc81d234ef36d12be313d"
+   "chars": 8526,
+   "sha256": "76ea0347341000d92fd5e1ac6a1bb4303216bd3258ce08c099654980c359910b"
   },
   {
    "i": 25,
    "kind": "chapter_summary",
    "slot": "helper",
-   "chars": 4822,
-   "sha256": "c130a9a04db918dd1ef0671218400e567bff4ac85d52209652ea2fcf58112dbd"
+   "chars": 6549,
+   "sha256": "f84cb13c9556ba141a7a21a24bc65383847b4ef3aa516eba178a97abb6ce21c1"
   },
   {
    "i": 26,
    "kind": "global_summary",
    "slot": "helper",
-   "chars": 2915,
-   "sha256": "e042b47bc5bdfdf5803ff53997845ad286abafcc6c6f386bd272e7deb57c6b80"
+   "chars": 4642,
+   "sha256": "24204841024d53d550ef6b3ccd787bbe6342bc0280aebf15403bab316d9b580e"
   },
   {
    "i": 27,
@@ -201,43 +201,43 @@
    "i": 28,
    "kind": "prose",
    "slot": "writing",
-   "chars": 12069,
-   "sha256": "de6045301cd226405fb7bd358d6345d06c4feede19d4a89233773e15c635f89e"
+   "chars": 10537,
+   "sha256": "b35ea083df177520c8b7973157621f4d9c037de7ec707d79f2c597d9977150d1"
   },
   {
    "i": 29,
    "kind": "trim",
    "slot": "writing",
-   "chars": 8256,
-   "sha256": "c512d9ccb80602d8820cd4136003e1749decfb15cde1027c8b00b96de57fea3e"
+   "chars": 9807,
+   "sha256": "acdcfb755986b8b7bfc297c2f0ac9e2531512a96338579c1a0c0d75472a5bb01"
   },
   {
    "i": 30,
    "kind": "review",
    "slot": "review",
-   "chars": 14213,
-   "sha256": "80ed2bff786ec09269439a1fbe9b00ce3b34108dce3a18c99c8d6dd8e94fadfa"
+   "chars": 15551,
+   "sha256": "4dfc2358c9873ac211ac364f6d57977a46aa0259fa2e4cb03851b1e9bf9bb2cc"
   },
   {
    "i": 31,
    "kind": "tracking",
    "slot": "helper",
-   "chars": 9299,
-   "sha256": "cc4ae44d1a7523ae2de235fbdbac490ce3535c4efaee0f9fba6e9daddccebddc"
+   "chars": 11026,
+   "sha256": "1b89d0754e99954af85979f3ee3eafd8b12ea0014c1b58f33b13b2f15ca04510"
   },
   {
    "i": 32,
    "kind": "chapter_summary",
    "slot": "helper",
-   "chars": 5619,
-   "sha256": "9b18deaa9a43d636c85bacb393fbb0685b398360e7d2484e98d10685beceee78"
+   "chars": 7346,
+   "sha256": "9002b026df0f8fe0e8ef289edce3bf95ec0d8438f2a4c7b93ecd44c5794c0e3e"
   },
   {
    "i": 33,
    "kind": "global_summary",
    "slot": "helper",
-   "chars": 2915,
-   "sha256": "21c5d54c72a2bc795172ebfc8d7dd78079ba57019c4cc89abc7e861aa2585f8d"
+   "chars": 4642,
+   "sha256": "57e368457d9a7c70190338fd22c188224bebc1a00e311149d2f9d4ac6b7e0159"
   },
   {
    "i": 34,
@@ -257,15 +257,15 @@
    "i": 36,
    "kind": "review",
    "slot": "review",
-   "chars": 12483,
-   "sha256": "448334f9f87648eacd2a182dee33518019ad5078d23d2fcf2e74b872a16d741d"
+   "chars": 12397,
+   "sha256": "55a6d58f1ee11cdad8470409a6d4d4d7a40ae766d2eca084c9c1670811b9f1a1"
   },
   {
    "i": 37,
    "kind": "deslop",
    "slot": "writing",
-   "chars": 3912,
-   "sha256": "c59f9cccda183dd7798f07e3ee6cb8cb33cdd4ebe4d584e13796145c36e91df0"
+   "chars": 4045,
+   "sha256": "196a59b88f7ed913e4000f64dc676db5b7dd830ce73580a2394c0c7bb30ba1c2"
   },
   {
    "i": 38,

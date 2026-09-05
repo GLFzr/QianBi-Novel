@@ -199,6 +199,7 @@ Dialog {
                         ? "下载中 " + root.mb(root.dl.done) + (Number(root.dl.total) > 0 ? " / " + root.mb(root.dl.total) : "")
                         : (String(root.dl.reason || "") !== "" ? "上次下载没成：" + String(root.dl.reason)
                                                               : "已下载 " + root.mb(root.dl.done)))
+                      + (String(root.dl.viaMirror || "") !== "" ? "\n" + String(root.dl.viaMirror) : "")
                       + (String(root.dl.path || "") !== "" ? "\n存放位置：" + String(root.dl.path) : "")
                 color: String(root.dl.reason || "") !== "" && !root.downloading ? Theme.warn : Theme.textTertiary
                 font.family: Theme.uiFont
