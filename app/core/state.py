@@ -555,16 +555,19 @@ def update_history_status(proj: str, state: dict, num: int, status: str) -> bool
 # chapter_step 在 _STATE_KEY_TYPES 里声明为 str（键早已预留）：存 JSON 串，尊重既有契约
 
 def save_chapter_step(proj: str, num: int, step_done: str,
-                      draft_path: str = "", votes: list = None):
+                      draft_path: str = "", votes: list = None,
+                      outline_fp: str = ""):
     """记录章内微循环最后完成的步骤（草稿/扩写/扫描/去味/审校/定稿）。
 
     停在任何位置再重启，恢复语义 = 重跑被打断的那一步，之前完成的步骤
     （草稿文件、已投的审校票）原样保留——不再「停一次全章白写」。
+    outline_fp：细纲内容指纹。细纲重生成后指纹变化，旧断点作废——
+    否则会拿旧断点恢复出新细纲根本没喂过的旧草稿（R4 实测事故）。
     """
     state = load_state(proj)
     state["chapter_step"] = json.dumps(
         {"num": int(num), "step_done": step_done, "draft_path": draft_path,
-         "votes": votes or [], "ts": time.time()},
+         "votes": votes or [], "outline_fp": outline_fp, "ts": time.time()},
         ensure_ascii=False)
     save_state(proj, state)
 

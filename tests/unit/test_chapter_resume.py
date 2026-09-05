@@ -24,22 +24,34 @@ def _mk_proj(tmp_path):
 
 
 class _FakeClient:
-    """draft 走 chat_stream，追踪/摘要走 chat——分开计数才能断言「草稿没重写」"""
+    """按 phase 分路计数：prose/desloal/enrich 是草稿系调用，
+    canon_audit 是设定清算调用——混在一起就分不清「草稿有没有重写」"""
 
     def __init__(self, draft_text: str):
         self.draft_text = draft_text
-        self.stream_calls = 0
-        self.chat_calls = 0
+        self.calls = {}
 
-    def chat_stream(self, prompt, on_chunk=None, **kw):
-        self.stream_calls += 1
-        if on_chunk:
+    def chat_stream(self, prompt, on_chunk=None, phase="", **kw):
+        self.calls[phase] = self.calls.get(phase, 0) + 1
+        if phase == "prose" and on_chunk:
             on_chunk(self.draft_text)
         return self.draft_text
 
     def chat(self, prompt, **kw):
-        self.chat_calls += 1
+        self.calls["chat"] = self.calls.get("chat", 0) + 1
         return ""
+
+    @property
+    def stream_calls(self):
+        return sum(self.calls.values())
+
+    @property
+    def prose_calls(self):
+        return self.calls.get("prose", 0)
+
+    @property
+    def chat_calls(self):
+        return self.calls.get("chat", 0)
 
 
 class _FakeRouter:
@@ -98,7 +110,7 @@ def test_fresh_run_persists_draft_and_clears_step(tmp_path):
     assert os.path.exists(project.chapter_draft_path(proj, 1))
     assert len(project.list_chapters(proj)) == 1, "定稿落库应有正式章文件"
     assert st.get_chapter_step(proj) == {}, "全流程走完断点应清除"
-    assert client.stream_calls >= 1
+    assert client.prose_calls >= 1
 
 
 def test_resume_from_deslop_keeps_draft_and_skips_rewrite(tmp_path):
@@ -107,12 +119,15 @@ def test_resume_from_deslop_keeps_draft_and_skips_rewrite(tmp_path):
     # 手工构造「停在过去味完成」的断点现场
     draft_rel = os.path.relpath(project.chapter_draft_path(proj, 1), proj)
     project.write_file(project.chapter_draft_path(proj, 1), draft_text)
+    import hashlib
+    fp = hashlib.sha1(project.read_file(project.get_outline_path(proj, 1)).encode("utf-8")).hexdigest()[:12]
     st.save_chapter_step(proj, 1, step_done="deslop", draft_path=draft_rel,
-                         votes=[{"verdict": "PASS_WITH_NOTES", "items": [], "summary": {}}])
+                         votes=[{"verdict": "PASS_WITH_NOTES", "items": [], "summary": {}}],
+                         outline_fp=fp)
 
     client, ctx = _run(proj, draft_text, client=_FakeClient(draft_text))
 
-    assert client.stream_calls == 0, "断点续跑不许重写草稿"
+    assert client.prose_calls == 0, "断点续跑不许重写草稿"
     assert any("断点续跑" in lg for lg in ctx.logs)
     chapters = project.list_chapters(proj)
     assert len(chapters) == 1, "应直接定稿落库"
@@ -128,8 +143,10 @@ def test_resume_stopped_mid_review_keeps_votes(tmp_path):
     draft_rel = os.path.relpath(project.chapter_draft_path(proj, 1), proj)
     project.write_file(project.chapter_draft_path(proj, 1), draft_text)
     saved_vote = {"verdict": "PASS", "items": [], "summary": {"pass": 3}}
+    import hashlib
+    fp = hashlib.sha1(project.read_file(project.get_outline_path(proj, 1)).encode("utf-8")).hexdigest()[:12]
     st.save_chapter_step(proj, 1, step_done="deslop", draft_path=draft_rel,
-                         votes=[saved_vote])
+                         votes=[saved_vote], outline_fp=fp)
 
     client = _FakeClient(draft_text)
     fake_conn = {"id": "rv", "name": "rv", "base_url": "https://example.test",
@@ -144,7 +161,7 @@ def test_resume_stopped_mid_review_keeps_votes(tmp_path):
     ctx = _FakeCtx(proj, cfg, client)
     stages.chapter_microcycle(ctx, 1)
 
-    assert client.stream_calls == 2, "只补投 2 张票（1 张已持久化保留）"
+    assert client.calls.get("review", 0) == 2, "只补投 2 张票（1 张已持久化保留）"
     assert len(project.list_chapters(proj)) == 1
 
 
@@ -154,5 +171,5 @@ def test_broken_draft_fallback_rewrites(tmp_path):
     st.save_chapter_step(proj, 1, step_done="deslop", draft_path="正文/.drafts/第001.md",
                          votes=[])
     client, _ctx = _run(proj, "## 第1章 起点\n\n重新写的草稿。" * 5)
-    assert client.stream_calls >= 1, "草稿丢失时应重写"
+    assert client.prose_calls >= 1, "草稿丢失时应重写"
     assert len(project.list_chapters(proj)) == 1

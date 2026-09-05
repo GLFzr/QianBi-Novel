@@ -697,22 +697,36 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 恢复语义：重跑被打断的那一步，之前完成的步骤全部保留
     # （草稿文件在盘、已投审校票持久化）——不再「停一次全章白写」。
     _ORDER = ["assemble", "draft", "enrich", "scan", "deslop", "review", "finalize"]
+    import hashlib
+    # 断点在草稿之后时，后续步骤（去味/审校）仍需要的材料本地重读（零成本）；
+    # 同时细纲内容是指纹——细纲重生成后旧断点作废
+    outline = _sanitize_chapter_refs(project.read_file(project.get_outline_path(proj, num)))
+    outline_fp = hashlib.sha1((outline or "").encode("utf-8")).hexdigest()[:12]
     saved_cs = st.get_chapter_step(proj)
     resume_at = ""
     saved_votes: list = []
     if saved_cs.get("num") == num and saved_cs.get("step_done") in _ORDER:
-        resume_at = saved_cs["step_done"]
-        saved_votes = list(saved_cs.get("votes") or [])
-        ctx.log("info", f"第 {num} 章 断点续跑：已完成至 {resume_at}（审校票 {len(saved_votes)} 张保留），从断点继续")
+        if saved_cs.get("outline_fp", "") != outline_fp:
+            # 无指纹的旧格式断点同样不可信（无法证明它属于当前细纲）
+            ctx.log("warn", f"第 {num} 章 章内断点作废：细纲与断点记录不一致，按新细纲全量重写")
+            saved_cs = {}
+        if saved_cs.get("num") == num and saved_cs.get("step_done") in _ORDER:
+            resume_at = saved_cs["step_done"]
+            saved_votes = list(saved_cs.get("votes") or [])
+            ctx.log("info", f"第 {num} 章 断点续跑：已完成至 {resume_at}（审校票 {len(saved_votes)} 张保留），从断点继续")
     resume_prose = ""
     if resume_at:
         resume_prose = project.read_file(project.chapter_draft_path(proj, num))
         if not resume_prose.strip():
             ctx.log("warn", "断点草稿文件丢失，本章从头重写")
             resume_at = ""
-    # 断点在草稿之后时，后续步骤（去味/审校）仍需要的材料本地重读（零成本）
-    outline = _sanitize_chapter_refs(project.read_file(project.get_outline_path(proj, num)))
     draft_rel = os.path.relpath(project.chapter_draft_path(proj, num), proj)
+    # 细纲预算闸门（迭代②）：细纲「预算合计：约 X—Y 字」优先于全局目标，
+    # 正文超预算上限 15% 在字数闸门处自然触发压缩/扩写
+    m_budget = re.search(r"预算合计[：:]\s*约?\s*(\d+)\s*[—\-～~]\s*(\d+)", outline or "")
+    if m_budget:
+        chapter_words = (int(m_budget.group(1)) + int(m_budget.group(2))) // 2
+        gr.word_target = chapter_words
 
     # ---- ① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）----
     draft_extra_ideas: list = []
@@ -760,7 +774,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                         or "（未提供）")
         prose = resume_prose
         st.save_chapter_step(proj, num, step_done="enrich",
-                             draft_path=draft_rel, votes=saved_votes)
+                             draft_path=draft_rel, votes=saved_votes,
+                             outline_fp=outline_fp)
         ctx.log("ok", f"第 {num} 章 已从断点恢复草稿（{project.count_chars(prose)} 字）")
 
     # ---- ② 草稿生成 ----
@@ -861,7 +876,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 重启都从盘上这份草稿继续，不再整章重写
     project.write_file(project.chapter_draft_path(proj, num), prose)
     st.save_chapter_step(proj, num, step_done="enrich",
-                         draft_path=draft_rel, votes=saved_votes)
+                         draft_path=draft_rel, votes=saved_votes, outline_fp=outline_fp)
 
     # ---- ③ AI 味扫描（本地，零成本；断点在此步之后时跳过）----
     skip_scan_deslop = resume_at in ("deslop", "review", "finalize")
@@ -951,7 +966,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             blocking_review, advisory_review, verdict_review = _chapter_review(
                 ctx, num, prose, done_votes=saved_votes,
                 vote_saver=lambda pl: st.save_chapter_step(
-                    proj, num, step_done="deslop", draft_path=draft_rel, votes=pl))
+                    proj, num, step_done="deslop", draft_path=draft_rel, votes=pl,
+                    outline_fp=outline_fp))
             gr.review_blocking = blocking_review
 
         def _demote_word_block():
@@ -1149,7 +1165,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         v = audit.get("violations") or []
         hard = [x for x in v if x.get("severity") == "硬伤"]
         adopt = audit.get("adoptions") or []
-        if v or adopt:
+        if r.get("failed"):
+            ctx.log("warn", f"第 {num} 章 设定清算执行失败（{r.get('error', '')[:60]}）——"
+                            f"本章未对账，勿当作已通过；可用「世界观对账」重跑")
+        elif v or adopt:
             ctx.log("warn", f"第 {num} 章 设定清算：违反 {len(v)}（硬伤 {len(hard)}）· "
                             f"可收编自创 {len(adopt)}——详见 追踪/设定清算_第{num:03d}.json")
         else:
