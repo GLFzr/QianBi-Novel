@@ -166,6 +166,10 @@ BUILTIN_PHASE_PARAMS = {
     "enrich":          {"thinking": "disabled", "max_tokens": 16384},
     "canon_audit":     {"thinking": "enabled", "reasoning_effort": "high",
                         "max_tokens": 8192},
+    # 审校=六维对照检查表任务（埋雷实测 disabled 召回 4/4 vs high 3/4、引文全真、
+    # 假阳性 0；单票 5.2k→0.6k tok、82s→5.4s）。跨章对账由清算（pro 严格档）把守。
+    # 需要更强审校时预设显式覆盖：{"review": {"thinking": "enabled", "reasoning_effort": "high"}}
+    "review":          {"thinking": "disabled"},
 }
 
 
