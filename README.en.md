@@ -40,6 +40,15 @@ where you can intervene at every step.
 - 🎨 **10 genre presets** — xianxia underdog / urban second chance / Cthulhu / rule-based
   horror / infinite flow / post-apocalypse / historical intrigue …, each with 6 stage-specific
   prompt sets.
+- 💰 **Cost architecture (v0.19)** — two-tier stable prefixes (73%+ cache hit) + per-chapter
+  session stacks + cascaded canon audit (-82%) + per-phase thinking budgets + review fast path
+  + off-peak scheduling. Default settings now cost ~60-70% less per chapter than early builds.
+- 🧭 **Agent control layer (v0.19)** — say "roll back to before the de-AI pass" or "rewrite
+  chapter 2, more setup" in the co-writing chat and the agent actually operates the app
+  (checkpoint rollback / outline regeneration / chapter rewrite / settings), destructive
+  actions archived first.
+- ✍️ **Human review mode (v0.19)** — you act as the reviewer at the finalize gate: type the
+  blocking issues, the AI only fixes them. Zero review-model spend.
 - 🔑 **BYOK, fully local** — bring your own model key. Manuscripts, config and version history
   live on your machine (MIT, no cloud).
 - 🖥️ **Windows desktop app** — PySide6 + QML, one installer, no Python required.
@@ -338,7 +347,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 
 ```bash
 # Offline unit tests (no API key, ~3 seconds)
-.venv/Scripts/python -m pytest tests/unit -q        # 494 tests
+.venv/Scripts/python -m pytest tests/unit -q        # 594 tests
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
 .venv/Scripts/python tests/probe_agent_relay.py
@@ -496,6 +505,28 @@ Listed honestly so you don't trip over them:
 
 ---
 
+## Campaign history: what each iteration did
+
+Iterations here are organized as campaigns — one theme each, one evaluation each, one public
+report each (all archived under `docs/`, including failures and negative results):
+
+- **Capability rounds** (v0.15–0.18.4): professional-review score 72 → 86 across 8
+  write→review→fix iterations; 6-dim review with quote verification and 3-vote denoising;
+  repair loop with root-cause attribution; memory layer (continuity ledger / beat check /
+  canon audit / calendar drift); 15 de-AI structural fingerprints; 10 genre presets.
+- **UX / cost round** (v0.18.4–0.18.5): two-tier stable prefixes + chapter session stacks
+  (cache hit 16% → 73.2%); per-phase thinking budgets; token/reasoning observability;
+  anonymous beta data packs.
+- **Cost experiment campaign** (v0.18.6–0.19.0): 10 experiments (E1-E10) on same-seed books
+  with planted-defect ground truth. Kept: cascaded canon audit (-82%), review thinking
+  disabled (recall 4/4 vs 3/4), fast path, outline low. Rejected and published as negative
+  results: prose=low (+5%), prose=medium (+64%), audit medium/disabled (recall collapse or
+  fabricated quotes). **Task nature decides the tier** — checklist tasks don't need reasoning,
+  cross-chapter reconciliation does.
+- **Agent-ization** (v0.19): tool layer + rule parser (L1) + LLM intent fallback (L2,
+  holdout accuracy 44% → 89%, ~255 tokens/call), false-trigger red line 0%. L3 waits for
+  real usage data; L4 (fully autonomous pipeline) is explicitly not on the roadmap.
+
 ## Versions
 
 The single source of truth for the version number is `__version__` in `app/__init__.py`.
@@ -503,6 +534,9 @@ Full history in [CHANGELOG.md](CHANGELOG.md).
 
 | Version | Theme |
 |---|---|
+| **v0.19.0** | **Cost architecture + agent control**: cascaded canon audit (flash prescan → clean chapters skip the pro pass entirely / only flagged items go to pro re-review, **-82%**), review thinking tier reset (planted-defect test: disabled recall 4/4 vs high 3/4, **-88%** cost, 82s→5s), **human review mode**, **agent control layer** (rule parser + LLM intent fallback; false-trigger rate 0%), review fast path on by default, outline thinking downgraded |
+| **v0.18.5** | Proxy-free mirror-accelerated updates (5 measured mirrors, SHA-256 still gates) + cache fixes that made the chapter-tier shared context actually land — blended hit rate 57.8% → 73.2%, review vote latency 170s → 43s |
+| **v0.18.4** | Public-beta starting point: two-tier stable prefix architecture (16% → 57.8%) + memory layer (continuity ledger / beat check / canon audit / calendar-drift proposals) + source-novel worldbook import + **anonymous beta data packs** |
 | **v0.18.1** | The update chain matures: automatic startup check (on by default, 24h throttle) + persistent left-rail icon + four-channel manifest fetch with per-channel failure reasons + **Ed25519 signature required before anything downloads or runs** + offline manifest import and local-package hash verification + one-click upgrade for installed builds (download → verify → quit → relaunch); connection presets grow from 3 measured platforms to 12 |
 | **v0.17.0** | UI maturation: design system 2.0 (luminance steps/self-drawn controls/desaturated semantics) + modal overlays & five text-overlap fixes + reader heading hierarchy & CJK quotes + root-cause fix for zero panel padding (ScrollView ignores Layout.margins) |
 | **v0.16.0** | External document import (fan-fiction path: decompose only what exists · preview mapping · batch revert) + per-book contract panel + both update paths stop eating data + interruptible streaming with visible reasoning + panel outlining and outline-batch navigation |
