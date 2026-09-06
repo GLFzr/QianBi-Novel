@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/GLFzr/QianBi-Novel?sort=semver&label=release&color=FF6B35)](https://github.com/GLFzr/QianBi-Novel/releases/latest)
 [![License](https://img.shields.io/github/license/GLFzr/QianBi-Novel?color=3BA7E6)](LICENSE)
 [![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#下载)
+[![Tests](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml)
 
 **人 AI 共写的长篇网文创作台** —— AI 全程透明写作，人永远是作者。
 
@@ -365,14 +366,14 @@ python -m venv .venv
 ## 测试
 
 ```bash
-# 离线单测（无需 API Key，约 3 秒）
+# 离线单测（无需 API Key，约 20 秒）
 .venv/Scripts/python -m pytest tests/unit -q        # 594 项
 
 # 离线探针：真实 Bridge + QML 无头驱动，覆盖闸门/锁定/反哺/接力/导入/导出/更新等链路
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_update_ui.py
-# …… 共 44 个 probe_*.py：离线探针 + 单测构成发布闸门；probe_models / probe_flash_reasoning
+# …… 共 45 个 probe_*.py：离线探针 + 单测构成发布闸门；probe_models / probe_flash_reasoning
 # 等少数几个是真实 LLM 实验，需要 QIANBI_TEST_KEY；probe_packaged 由发布流水线带 --exe 调用，
 # probe_ui_gallery 产出全量 UI 截图
 ```

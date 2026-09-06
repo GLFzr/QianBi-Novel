@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/GLFzr/QianBi-Novel?sort=semver&label=release&color=FF6B35)](https://github.com/GLFzr/QianBi-Novel/releases/latest)
 [![License](https://img.shields.io/github/license/GLFzr/QianBi-Novel?color=3BA7E6)](LICENSE)
 [![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#download)
+[![Tests](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml)
 
 **A long-form fiction workbench where a human and an AI co-write** — the AI writes in full
 view, and the human stays the author.
@@ -373,7 +374,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 ## Tests
 
 ```bash
-# Offline unit tests (no API key, ~3 seconds)
+# Offline unit tests (no API key, ~20 seconds)
 .venv/Scripts/python -m pytest tests/unit -q        # 594 tests
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
@@ -448,8 +449,8 @@ scripts/
                           smoke test → digest diff)
   dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
-  unit/                 36 files / 494 offline tests
-  probe_*.py            42 headless chain probes
+  unit/                 50 files / 594 offline tests
+  probe_*.py            45 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice
 ```
