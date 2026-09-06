@@ -1449,7 +1449,23 @@ class Bridge(QObject):
 
     @Slot(str, str)
     def resolveStepGate(self, action: str, idea: str):
-        """决策条调用：action = next / return；idea 为可选的用户想法"""
+        """决策条调用：action = next / return；idea 为可选的用户想法。
+        idea 以 / 开头 = Agent 操作指令（只放 readonly 与回退映射——微循环在内存中
+        等门返回，运行中做状态手术会被内存变量覆盖；其余写操作请停止后在共写对话执行）"""
+        if (idea or "").startswith("/"):
+            from ..core import agent_tools
+            instr = agent_tools.parse_instruction(idea, default_chapter=int(self._cur_num or 0))
+            if not instr:
+                self.toast.emit("warn", "没听懂这条指令，可用：" + agent_tools.help_text().split(chr(10))[1].strip())
+                return
+            name, args, _conf = instr
+            if name == "rollback_step" or name == "rewrite_chapter":
+                # 映射到既有门回退语义（微循环内部处理：保留原稿/重新组装）
+                self.resolveStepGate("return", idea[1:].strip())
+                return
+            res = agent_tools.execute(name, args, self.proj, self.cfg, pipeline_running=True)
+            self.toast.emit("ok" if res.get("ok") else "warn", str(res.get("message", ""))[:120])
+            return
         if self.orch and self._running and not self.orch.resolve_gate(action or "next", idea or ""):
             self.toast.emit("warn", "当前没有等待中的决策门")
             return
@@ -3339,6 +3355,23 @@ class Bridge(QObject):
         if not text:
             self.toast.emit("warn", "输入不能为空")
             return
+        # Agent 操作指令（v0.18.6）：/ 前缀强制；讨论模式下含明确指令动词的自然语言也解析——
+        # 命中即执行真实应用操作并回显，不进讨论 LLM（这就是「跟 Agent 说，它去操作应用」）
+        from ..core import agent_tools
+        instr = agent_tools.parse_instruction(
+            text, default_chapter=int(self._cur_num or 0))
+        if instr and (text.startswith("/") or instr[2] == "guess"):
+            res = agent_tools.execute(instr[0], instr[1], self.proj, self.cfg,
+                                      pipeline_running=self._running)
+            self._console_log("user", text)
+            self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
+            self._cw_tool_reply(text, res)
+            return
+        if text.startswith("/"):
+            from ..core import agent_tools as _at
+            self._cw_tool_reply(text, {"ok": False, "level": "warn",
+                                       "message": "没听懂这条指令。" + chr(10) + chr(10) + _at.help_text()})
+            return
         stage = self._get_cw_stage_key()
         if self._cw_view != stage:
             self.toast.emit("warn", "正在回看历史阶段，点当前阶段卡片回到讨论")
@@ -3371,6 +3404,20 @@ class Bridge(QObject):
         co_dialogue.transcript_append(state, stage, "user", "（生成草案）" + request)
         self._cw_save_state(state)
         self._spawn_cw_dialogue(request, stage, focus, mode="compose")
+
+    def _cw_tool_reply(self, instr_text: str, res: dict):
+        """Agent 工具执行结果回显到共写转写（user 指令 + agent 结果），并刷新 UI"""
+        try:
+            stage = self._get_cw_stage_key()
+            state = self._cw.load()
+            co_dialogue.transcript_append(state, stage, "user", instr_text)
+            mark = "✅ " if res.get("ok") else "⚠ "
+            co_dialogue.transcript_append(state, stage, "agent", mark + str(res.get("message", "")))
+            self._cw_save_state(state)
+        except Exception:
+            pass
+        self._cw_sync_messages()
+        self.generalChanged.emit()
 
     def _spawn_cw_dialogue(self, text: str, stage: str, focus_chapter: int = 0,
                            mode: str = "discuss"):

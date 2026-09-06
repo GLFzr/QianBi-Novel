@@ -100,6 +100,9 @@ EXPECTED_DIFFS = {
     # ---- v0.19（2026-09-05，GUI 先行）：离峰挂机闸门——v4 分时价 peak 等待，
     #      依赖 GUI orchestrator.checkpoint 接线与 writing.offpeak_run 配置键；TUI 待排期
     "app/core/offpeak.py": "离峰挂机纯逻辑 GUI 先行：TUI 主循环未接闸门，待排期",
+    # ---- v0.18.6（2026-09-06，GUI 先行）：Agent 应用操作工具层——指令解析+断点回退/
+    #      细纲重生成/章节重写/设置白名单；依赖 GUI 共写对话 dock 与决策门拦截；TUI 待排期
+    "app/core/agent_tools.py": "Agent 应用操作工具层 GUI 先行：依赖 GUI 共写对话与门提交通道，TUI 待排期",
 }
 
 # ---- 符号级门禁：绕开上面的文件级豁免，逐个函数盯同源 ----------------------

@@ -657,7 +657,7 @@ Rectangle {
                     wrapMode: TextArea.Wrap
                     placeholderText: cwDock.composeMode
                         ? "描述要写什么，直接产出草案…（撰写模式）"
-                        : "和 " + bridge.cwAgent + " 讨论（会先复述确认你的意思）…（回车发送）"
+                        : "和 " + bridge.cwAgent + " 讨论，或直接下指令：「回退到去味之前」「重写第2章，铺垫足一点」「现在进度怎么样」…（回车发送）"
                     placeholderTextColor: Theme.textTertiary
                     color: Theme.textPrimary
                     font.family: Theme.uiFont
