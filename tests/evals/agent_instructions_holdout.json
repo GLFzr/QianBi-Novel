@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "desc": "对抗集：黄金集之外的新表达，专测规则层泛化边界与 L2 兜底增益。评测器对 holdout 不参与 L1 优化（防数据泄漏），只做 L1 vs L1+L2 对比",
+    "default_chapter": 5,
+    "version": 1
+  },
+  "cases": [
+    {"cat": "D", "text": "把第三章推了重新弄", "tool": null},
+    {"cat": "B", "text": "这章的开头太温了，直接从冲突切入重写一遍", "tool": "rewrite_chapter", "args": {"chapter": 5, "guidance_has": "冲突"}},
+    {"cat": "B", "text": "审校那步好像没跑，再来一次", "tool": "rollback_step", "args": {"to_step": "review", "chapter": 5}},
+    {"cat": "B", "text": "现在写的啥了给我瞅瞅", "tool": "read_chapter", "args": {"chapter": 5}},
+    {"cat": "B", "text": "流水线跑到哪儿了", "tool": "status", "args": {}},
+    {"cat": "B", "text": "正文有点短，回到扩写那步再来", "tool": "rollback_step", "args": {"to_step": "enrich", "chapter": 5}},
+    {"cat": "B", "text": "人工审校开起来", "tool": "set_setting", "args": {"key": "人工审校", "on": true}},
+    {"cat": "B", "text": "第五章不行，重写，结尾钩子要狠", "tool": "rewrite_chapter", "args": {"chapter": 5, "guidance_has": "钩子"}},
+    {"cat": "B", "text": "细纲又和正文拧了，重来细纲", "tool": "regen_outline", "args": {"chapter": 5}},
+    {"cat": "B", "text": "看看第三章写的啥", "tool": "read_chapter", "args": {"chapter": 3}},
+    {"cat": "D", "text": "这段的心理描写太直白了，得藏在外部动作里", "tool": null},
+    {"cat": "D", "text": "反派的动机要提前铺，不能凭空冒出来", "tool": null},
+    {"cat": "D", "text": "把这一段的比喻换掉，跟前面的喻体重了", "tool": null},
+    {"cat": "D", "text": "审校报告里那个引证我看是误报，这个词前文出现过", "tool": null},
+    {"cat": "D", "text": "明天先把第三章的追踪文件检查一遍再写", "tool": null}
+  ]
+}

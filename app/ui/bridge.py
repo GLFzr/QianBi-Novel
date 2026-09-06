@@ -3372,6 +3372,17 @@ class Bridge(QObject):
             self._cw_tool_reply(text, {"ok": False, "level": "warn",
                                        "message": "没听懂这条指令。" + chr(10) + chr(10) + _at.help_text()})
             return
+        # L2 意图兜底（v0.18.6）：规则未命中但带指令动词线索 → helper 槽小调用解析
+        # （实测对抗集 44%→89%，均 255 tok/次；D 类误触发由 LLM 的 null 裁决把关）
+        if self._looks_like_instruction(text):
+            llm_instr = self._parse_instruction_llm_safe(text)
+            if llm_instr:
+                res = agent_tools.execute(llm_instr[0], llm_instr[1], self.proj, self.cfg,
+                                          pipeline_running=self._running)
+                self._console_log("user", text)
+                self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
+                self._cw_tool_reply(text, res)
+                return
         stage = self._get_cw_stage_key()
         if self._cw_view != stage:
             self.toast.emit("warn", "正在回看历史阶段，点当前阶段卡片回到讨论")
@@ -3404,6 +3415,22 @@ class Bridge(QObject):
         co_dialogue.transcript_append(state, stage, "user", "（生成草案）" + request)
         self._cw_save_state(state)
         self._spawn_cw_dialogue(request, stage, focus, mode="compose")
+
+    @staticmethod
+    def _looks_like_instruction(text: str) -> bool:
+        """本地预过滤：只给带指令动词线索的消息跑 L2（讨论消息不多花一次调用与延迟）"""
+        import re as _re
+        return bool(_re.search(r"回退|退回|重跑|重来|重新|重写|推倒|细纲|审校那|进度|写到哪|看看|瞅瞅|读一遍|开启|打开|关掉|关闭", text or ""))
+
+    def _parse_instruction_llm_safe(self, text: str):
+        try:
+            from ..core import agent_tools as _at
+            client = self.router.client(cfg_mod.SLOT_HELPER) if getattr(self, "router", None) else None
+            if client is None:
+                return None
+            return _at.parse_instruction_llm(text, client, default_chapter=int(self._cur_num or 0))
+        except Exception:
+            return None
 
     def _cw_tool_reply(self, instr_text: str, res: dict):
         """Agent 工具执行结果回显到共写转写（user 指令 + agent 结果），并刷新 UI"""

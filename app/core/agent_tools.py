@@ -195,7 +195,26 @@ TOOLS = {
 
 # ---------- 指令解析（中文规则层，零成本确定性） ----------
 
-_CH_NUM = r"(?:第\s*(\d+)\s*章)?"
+_CN_DIGITS = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5,
+              "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+_CH_NUM = r"(?:第\s*([0-9一二两三四五六七八九十]+)\s*章)?"
+
+
+def _to_int(s):
+    """'3'→3；'三'/'十三'→3/13（中文用户说「第三章」远多于「第3章」）"""
+    if not s:
+        return 0
+    s = str(s)
+    if s.isdigit():
+        return int(s)
+    if s in _CN_DIGITS:
+        return _CN_DIGITS[s]
+    if s.startswith("十"):
+        return 10 + _CN_DIGITS.get(s[1:], 0)
+    if "十" in s:
+        a, _, b = s.partition("十")
+        return _CN_DIGITS.get(a, 0) * 10 + (_CN_DIGITS.get(b, 0) if b else 0)
+    return 0
 
 
 def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
@@ -211,49 +230,88 @@ def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
         return None
 
     def _num(m, fallback=0):
-        return int(m.group(1)) if (m and m.group(1)) else fallback
+        return _to_int(m.group(1)) if (m and m.group(1)) else fallback
+
+    # 章级指示（无章号时 rewrite/read 的必要条件——「这一段」「这一章的钩子」这类
+    # 讨论性文本不是章级操作指令，缺此条件会产生 D 类误触发）
+    m_ch = re.search(r"第\s*([0-9一二两三四五六七八九十]+)\s*章", t)
+    chapter_ref = (_to_int(m_ch.group(1)) if m_ch else None,
+                   bool(re.search(r"本章|这章|那章|现在的这章|最新(?:一)?章|刚才那章|上一章", t)))
+    has_chapter_ref = chapter_ref[0] is not None or chapter_ref[1]
 
     # 回退到某步重跑（优先于重写：「重写草稿」= 回退草稿重跑，不是 rewrite_chapter）
-    _rollback_verb = re.search(r"回退|退回|重跑|重来|从.*重新", t) or         re.search(r"重写\s*(?:草稿|正文|初稿|去味|审校|扩写)", t)
+    _rollback_verb = re.search(r"回退|退回|回到|重跑|重来|从.*重新|推倒", t) or \
+        re.search(r"重写\s*(?:草稿|正文|初稿|去味|审校|扩写)", t)
     if _rollback_verb and (forced or not re.search(r"细纲", t)):
+        # 「回到扩写那步再来」：回退目标优先取「回到/退回/重来」之后的步骤词
+        _ctx_text = re.sub(r"^.*?(?:回到|退回|重跑|重来|推倒)", "", t) if \
+            re.search(r"回到|退回|重跑|重来|推倒", t) else t
         for word, step in _STEP_WORDS.items():
-            if word in t:
-                m = re.search(r"第\s*(\d+)\s*章", t)
+            if word in _ctx_text or (word in t and word not in ("正文", "字数")):
                 return ("rollback_step",
-                        {"chapter": _num(m, default_chapter), "to_step": step},
+                        {"chapter": chapter_ref[0] or default_chapter, "to_step": step},
                         "exact" if forced else "guess")
 
-    # 重写某章（可带指导：「重写第2章，铺垫再足一点」）
+    # 重写某章（可带指导：「重写第2章，铺垫再足一点」「刚才那章的结尾太仓促了，重来一遍」）
+    # guess 级必须带章级指示（「重写这一段的时候…」是写作讨论，不是指令）
     m = re.search(r"重写(?:一下)?%s[，,：:、\s]*(.*)" % _CH_NUM, t)
     if m and (forced or "重写" in t):
         guidance = (m.group(2) or "").strip()
-        if guidance not in _STEP_WORDS:   # 「重写草稿」已在上面按回退处理
+        # 残留态（「重写一遍」）：真正的修改方向写在动词前——取动词前的描述
+        if guidance in ("", "一遍", "一次", "一下") or guidance in _STEP_WORDS:
+            pre = re.search(r"^(.{2,24}?)(?:重写|重来|重新来)", t)
+            guidance = re.sub(r"(?:刚才那章|这章|本章|最新(?:一)?章|现在的这章|上一章|第\s*[0-9一二两三四五六七八九十]+\s*章)[的]?",
+                              "", pre.group(1) if pre else guidance).strip(" ，,。：:、")
+        if guidance and guidance not in _STEP_WORDS and (forced or has_chapter_ref):
             return ("rewrite_chapter",
-                    {"chapter": _num(m, default_chapter), "guidance": guidance},
+                    {"chapter": chapter_ref[0] or default_chapter, "guidance": guidance},
                     "exact" if forced else "guess")
+    m = re.search(r"^(.{0,24}?)(?:重来|重新来|重写)(?:一遍|一次)?", t)
+    if m and has_chapter_ref and (forced or "重写" not in t or True):
+        # guidance 取「动词前的描述」（作者把修改方向写在前面：这章的开头太温了，直接从冲突切入重写一遍）
+        guidance = re.sub(r"(?:刚才那章|这章|本章|最新(?:一)?章|现在的这章|上一章|第\s*[0-9一二两三四五六七八九十]+\s*章)[的]?",
+                          "", m.group(1) or "").strip(" ，,。：:、")
+        if guidance:
+            return ("rewrite_chapter",
+                {"chapter": chapter_ref[0] or default_chapter, "guidance": guidance},
+                "exact" if forced else "guess")
 
-    # 重新生成细纲
-    m = re.search(r"(?:重新生成|重生成|重出?|再来一份?)\s*%s\s*的?\s*细纲" % _CH_NUM, t) or \
-        re.search(r"%s\s*的?\s*细纲\s*(?:重新生成|重出)" % _CH_NUM, t)
+    # 重新生成细纲（含口语：「推倒细纲重新排」「第三章细纲不行，重新出」）
+    m = re.search(r"(?:重新生成|重生成|重出?|再来一份?|推倒)\s*%s\s*的?\s*细纲" % _CH_NUM, t) or \
+        re.search(r"%s\s*的?\s*细纲\s*(?:重新生成|重新?出|重排|推倒)" % _CH_NUM, t) or \
+        re.search(r"细纲[^\n]{0,12}(?:重新生成|重新?出|重排|推倒)", t)
     if m and (forced or "细纲" in t):
-        return ("regen_outline", {"chapter": _num(m, default_chapter)},
+        return ("regen_outline", {"chapter": chapter_ref[0] or default_chapter},
                 "exact" if forced else "guess")
 
-    # 看某章正文
-    m = re.search(r"(?:看看?|读(?:一下)?|给我看)%s(?:的)?(?:正文|内容)?" % _CH_NUM, t)
-    if m and (forced or re.search(r"看看?|读|给我看", t)) and ("正文" in t or "内容" in t or forced):
-        return ("read_chapter", {"chapter": _num(m, default_chapter)},
+    # 看某章正文（含口语：「看下第2章写成什么样了」「看看最新这章」）。
+    # 负向条件：带「注意…写法/改」等修改意图后缀的是写作讨论（「重新读一遍第二章，
+    # 注意时间线的写法」），不是查看指令——否则 D 类误触发。
+    m = re.search(r"(?:看看?下?|读(?:一下)?|给我看)\s*%s\s*的?\s*(?:正文|内容|写成什么样)?" % _CH_NUM, t)
+    _talk_about_writing = re.search(r"注意|写法|要改|应该改|改得|改一下", t)
+    if m and not (guess_talk := _talk_about_writing and not forced) and \
+            (forced or re.search(r"看看?下?|读|给我看", t)) and \
+            ("正文" in t or "内容" in t or "什么样" in t or forced
+             or chapter_ref[0] is not None or chapter_ref[1]):
+        return ("read_chapter", {"chapter": chapter_ref[0] or default_chapter},
                 "exact" if forced else "guess")
 
-    # 设置开关（「关闭人工审校」「开启连写模式」）
+    # 设置开关（「关闭人工审校」「开启连写模式」；「把 AI 审校关掉，我自己来」=切人工）
+    m = re.search(r"(?:把\s*)?AI\s*审校[^。\n]{0,8}(?:关掉|关闭|停用)", t)
+    if m and re.search(r"我自己来|我来审|人工", t):
+        return ("set_setting", {"key": "人工审校", "on": True},
+                "exact" if forced else "guess")
     for word, (_sec, _name, _on, _off) in _SETTING_WORDS.items():
         if word in t and re.search(r"开启|打开|关闭|关掉|停用|切回|切换", t):
             on = bool(re.search(r"开启|打开", t))
             return ("set_setting", {"key": word, "on": on},
                     "exact" if forced else "guess")
 
-    # 查状态
-    if re.search(r"状态|进度|写到哪|到哪一步|现在怎么样", t) and (forced or len(t) <= 24):
+    # 查状态（guess 级必须是询问语气——「状态写得不错」这类评价不是查询；/状态 强制放行）
+    if (forced and re.search(r"状态|进度", t)) or \
+            re.search(r"进度|写到哪|到哪一步|第几章", t) or \
+            (re.search(r"状态", t) and re.search(r"怎么样|如何|吗|？|\?", t)) or \
+            (re.search(r"现在怎么样", t)):
         return ("status", {}, "exact" if forced else "guess")
 
     return None
@@ -282,3 +340,58 @@ def help_text() -> str:
             "· 重新生成细纲：「重新生成第3章的细纲」\n"
             "· 重写本章（可带指导）：「重写第2章，铺垫再足一点」\n"
             "· 设置：「关闭人工审校」「开启离峰挂机」")
+
+
+# ---------- L2：LLM 意图兜底（规则未命中时的口语化泛化） ----------
+
+_LLM_SYSTEM = """你是写作应用的指令解析器。把作者的一句话解析为应用操作。
+
+可用工具与参数（只能输出这些工具名，不能编造）：
+- status {}  查看流水线状态/进度
+- read_chapter {"chapter": int}  读某章正文
+- rollback_step {"chapter": int, "to_step": "draft|enrich|scan|deslop|review|finalize"}  回退到某步重跑
+- regen_outline {"chapter": int}  重新生成细纲
+- rewrite_chapter {"chapter": int, "guidance": str}  重写某章（guidance=作者给的修改方向）
+- set_setting {"key": "人工审校|连写|章会话|离峰|审校", "on": bool}  开关设置
+
+裁决规则：
+1. 作者想「看/了解」→ read_chapter 或 status；想「重跑某一步」→ rollback_step；
+   想整章推倒重来并给了方向 → rewrite_chapter；提到细纲重来 → regen_outline。
+2. 信息不完整（没说哪章/哪一步/开什么）或这不是操作指令（是写作讨论、问题清单、闲聊）
+   → 输出 {"tool": null}。宁可 null 不可猜。
+3. 只输出一行 JSON：{"tool": "...", "args": {...}, "confidence": 0到1}；没有 tool 字段则 args 略。"""
+
+
+def parse_instruction_llm(text: str, client, default_chapter: int = 0) -> tuple | None:
+    """L2 意图兜底：规则层未命中时调用（调用方负责判断时机与计费）。
+
+    信任链：工具名白名单 + args 键校验 + confidence≥0.6，任一不过返回 None。
+    """
+    if not text or not text.strip():
+        return None
+    try:
+        raw = client.chat(
+            "作者说：%s（当前章：%d）只输出一行 JSON。" % (text.strip(), default_chapter),
+            system=_LLM_SYSTEM, temperature=0.1, phase="agent_intent")
+        import json as _json
+        import re as _re
+        m = _re.search(r"\{.*\}", raw or "", _re.S)
+        if not m:
+            return None
+        d = _json.loads(m.group(0))
+        tool = str(d.get("tool") or "")
+        if tool not in TOOLS:
+            return None
+        conf = float(d.get("confidence") or 0)
+        if conf < 0.6:
+            return None
+        args = d.get("args") or {}
+        if tool == "rollback_step" and args.get("to_step") not in _STEP_ROLLBACK:
+            return None
+        if tool == "read_chapter" or tool == "regen_outline" or tool == "rewrite_chapter":
+            args["chapter"] = int(args.get("chapter") or default_chapter)
+        if tool == "set_setting" and str(args.get("key") or "") not in _SETTING_WORDS:
+            return None
+        return (tool, args, "llm")
+    except Exception:  # noqa: BLE001
+        return None
