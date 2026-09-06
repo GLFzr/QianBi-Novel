@@ -2,6 +2,10 @@
 
 [中文](README.md) · **English**
 
+[![Release](https://img.shields.io/github/v/release/GLFzr/QianBi-Novel?sort=semver&label=release&color=FF6B35)](https://github.com/GLFzr/QianBi-Novel/releases/latest)
+[![License](https://img.shields.io/github/license/GLFzr/QianBi-Novel?color=3BA7E6)](LICENSE)
+[![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#download)
+
 **A long-form fiction workbench where a human and an AI co-write** — the AI writes in full
 view, and the human stays the author.
 
@@ -9,6 +13,15 @@ The hard part of writing a novel with AI is never "generate one chapter". It's t
 chapter 300 **the setting still holds, the costs still get paid, and the foreshadowing still
 gets resolved**. QianBi Novel turns that into a gated pipeline — plus a co-writing interface
 where you can intervene at every step.
+
+> 🚀 **Public beta is live** — download the installer → paste your key under
+> *Settings → Connections & Models* → start writing. Bugs and requests go to
+> [Issues](https://github.com/GLFzr/QianBi-Novel/issues/new/choose) (templates provided);
+> longer threads and your novels go to
+> [Discussions](https://github.com/GLFzr/QianBi-Novel/discussions).
+
+![30-second tour: a pipeline that lights up as it writes](docs/hero.gif)
+
 
 > **From the author**: I believe the endgame for a writing agent is not "a model that writes
 > better" but **a pipeline that knows how to say no** — which is why this may well be the most
@@ -54,6 +67,20 @@ where you can intervene at every step.
 - 🖥️ **Windows desktop app** — PySide6 + QML, one installer, no Python required.
 
 ![Co-writing mode: six-stage navigation, multi-turn discussion with the writing agent, live prose preview](docs/shot_co_writing.png)
+
+## Where it stands among its peers
+
+| | Auto-generator tools | Online commercial SaaS | **QianBi Novel** |
+|---|---|---|---|
+| The human's role | feed a premise, receive a book | chat-style assistance | **six-stage co-writing — intervene and roll back at every step** |
+| Anti-hallucination | model's good will | model's good will | **quote verification: fabricated citations are voided on the spot, 3-vote ruling** |
+| Hard rules | prompt-level | prompt-level | **`must` contracts injected into every prose prompt + deterministic re-checks block the lock** |
+| Your data | vendor clouds | platform cloud | **fully local — manuscripts in your Documents folder, keys in Windows Credential Manager** |
+| Cost | subscription / credits | subscription | **MIT + BYOK — real e2e: 5 chapters ≈ ¥0.07** |
+| Long-form consistency | stuff the context | chat window | **entry-based worldbook + plot backflow + summary chain** |
+
+> Every cell above maps to runnable code and tests in this repo — see the [Tests](#tests)
+> section and verify it yourself.
 
 ---
 

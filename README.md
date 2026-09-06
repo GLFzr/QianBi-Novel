@@ -2,11 +2,21 @@
 
 **中文** · [English](README.en.md)
 
+[![Release](https://img.shields.io/github/v/release/GLFzr/QianBi-Novel?sort=semver&label=release&color=FF6B35)](https://github.com/GLFzr/QianBi-Novel/releases/latest)
+[![License](https://img.shields.io/github/license/GLFzr/QianBi-Novel?color=3BA7E6)](LICENSE)
+[![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#下载)
+
 **人 AI 共写的长篇网文创作台** —— AI 全程透明写作，人永远是作者。
 
 写一部长篇网文真正的难点不是「让 AI 写出一章」，而是写到第 300 章时
 **设定还没崩、代价还没赖账、伏笔还记得收**。千笔一文把这件事拆成一条有闸门的流水线，
 以及在每个环节都能插手的共写界面。
+
+> 🚀 **公测进行中**：下载安装 → 「设置 → 连接与模型」贴 Key → 开写。
+> 问题与建议提 [Issue](https://github.com/GLFzr/QianBi-Novel/issues/new/choose)（有模板），
+> 长讨论与晒书去 [Discussions](https://github.com/GLFzr/QianBi-Novel/discussions)。
+
+![30 秒看懂：一条会点亮的流水线](docs/hero.gif)
 
 > **作者的话**：我认为写作 Agent 的终局不是「更会写的模型」，而是**会拒绝的流水线** ——
 > 所以它可能是未来最好用的那一个。这不是跑分结论，而是一个工程判断：模型会换代，
@@ -32,6 +42,19 @@
 - 🖥️ **Windows 桌面应用**：PySide6 + QML，安装包开箱即用，无需 Python
 
 ![共写档：六阶段导航 + 与写作 Agent 的多轮讨论 + 正文实时预览](docs/shot_co_writing.png)
+
+## 它在同类里站在哪
+
+| | 自动生成器类 | 在线商业写作 SaaS | **千笔一文** |
+|---|---|---|---|
+| 人的位置 | 给设定、收全书 | 对话式辅助为主 | **共写六阶段，每步可插手、可回滚** |
+| 防幻觉 | 多靠模型自觉 | 多靠模型自觉 | **引证验真：编造的引证当场作废，三票定案** |
+| 硬规则 | prompt 约束 | prompt 约束 | **must 契约注入每张写作 prompt + 确定性复检拦住锁定** |
+| 你的数据 | 各家云端 | 平台云端 | **全本地：书稿在你的文档目录，Key 入 Windows 凭据管理器** |
+| 费用 | 订阅 / 点数 | 订阅 | **MIT 开源 + BYOK，真实 e2e 写 5 章 ≈ ¥0.07** |
+| 长篇一致性 | 上下文塞设定 | 对话窗口 | **条目化世界书 + 剧情反哺 + 摘要链** |
+
+> 表里每一格都对应仓库里可运行的代码与测试——欢迎按 [## 测试](#测试) 一节自己验。
 
 ---
 

@@ -1,0 +1,39 @@
+name: 💡 功能建议
+description: 提一个具体的功能想法——先讲场景和痛点，再讲方案
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: scene
+    attributes:
+      label: 场景与痛点
+      description: 你在写什么书、写到哪一步卡住了、现在是怎么绕的。**先有真实场景，功能才立得住**
+    validations:
+      required: true
+  - type: textarea
+    id: expect
+    attributes:
+      label: 你期望的样子
+      description: 界面上应该在哪、操作是什么、结果怎么算对。如果有别的工具做对了某一点，指出来
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及范围
+      options:
+        - 自动档流水线（大纲/细纲/微循环）
+        - 共写档（六阶段对话）
+        - 世界书 / 契约 / 反哺
+        - 三层审校 / 引证验真
+        - 阅读器 / 导出 / 版本
+        - 安装 / 更新 / 打包
+        - 预设库 / 模型连接
+        - 其他
+    validations:
+      required: true
+  - type: checkboxes
+    id: discuss
+    attributes:
+      label: 愿意继续参与设计讨论吗
+      options:
+        - 愿意——大改动会先在 Discussions 开设计帖

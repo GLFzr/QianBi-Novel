@@ -1,0 +1,68 @@
+name: 🐞 Bug 报告
+description: 报告一个可以复现的问题——写清楚「做了什么、期望什么、实际发生什么」
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 「设置 → 关于」里看；或安装包文件名（如 v0.19.0）
+    validations:
+      required: true
+  - type: dropdown
+    id: flavor
+    attributes:
+      label: 安装形态
+      options:
+        - 安装版（setup.exe）
+        - 便携版（portable.zip）
+        - 源码运行
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Windows 版本
+      options:
+        - Windows 11
+        - Windows 10
+        - 其他（Server / 虚拟机等，请在正文说明）
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: 模型服务商（哪个环节出问题就选写作/审校实际用的）
+      options:
+        - DeepSeek
+        - 阿里云百炼
+        - 智谱
+        - Kimi
+        - 火山方舟 / 腾讯混元 / MiniMax / 硅基流动
+        - OpenRouter / Gemini / Grok / Groq
+        - 自定义（Ollama / LM Studio / 中转）
+        - 不涉及模型调用（纯本地问题）
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 复现步骤 + 期望行为 + 实际行为。能截图/录屏更好
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志（可选但很有用）
+      description: "`%USERPROFILE%\\.qianbi_novel\\logs\\` 里最近一份的末尾几十行。**贴之前确认里面没有你的 Key**（正常情况下日志已脱敏）"
+  - type: dropdown
+    id: data
+    attributes:
+      label: 书稿是否受影响
+      options:
+        - 没有影响
+        - 有影响（已备份）
+        - 有影响（还没备份——先别动，立刻说）
+    validations:
+      required: true

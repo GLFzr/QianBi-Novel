@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 功能设想 / 用法讨论 / 晒书
+    url: https://github.com/GLFzr/QianBi-Novel/discussions
+    about: 不确定是 Bug 还是设计如此？想提个大改动？想晒你写的书？——去 Discussions，别占用 Issue
