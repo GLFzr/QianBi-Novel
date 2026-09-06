@@ -1564,7 +1564,21 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
                         f"{v2['verdict'] or '格式未识别'}（fail={v2['summary']['fail']}）")
     except Exception:
         pass
-    _collect(remaining - 1)
+    # PASS 快速道（实验变量 gates.review_pass_fast，默认关）：首票全维 pass 且零
+    # 阻塞 → 免投副本票（省 2/3 审校输出）。与 P5 合并语义兼容：quorum 只对
+    # fail 收紧（不足票数的 fail 降级），单票 PASS 在合并函数里本就成立。
+    _fast = (bool((ctx.cfg.get("gates") or {}).get("review_pass_fast"))
+             and remaining >= 2
+             and v2.get("verdict") in ("PASS", "PASS_WITH_NOTES")
+             and not (v2.get("summary") or {}).get("fail")
+             and not v2.get("blocking"))
+    if _fast:
+        try:
+            ctx.log("info", f"第 {num} 章 PASS 快速道：首票全维通过零阻塞，免投 {remaining - 1} 张副本票")
+        except Exception:
+            pass
+    else:
+        _collect(remaining - 1)
     if vote_saver:
         try:
             vote_saver(parsed_list)
