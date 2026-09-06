@@ -7,7 +7,8 @@ def test_builtin_table_contents():
     assert stages.BUILTIN_PHASE_PARAMS["tracking"]["thinking"] == "disabled"
     assert stages.BUILTIN_PHASE_PARAMS["deslop"]["thinking"] == "disabled"
     assert stages.BUILTIN_PHASE_PARAMS["canon_audit"]["thinking"] == "enabled"
-    assert stages.BUILTIN_PHASE_PARAMS["canon_audit"]["reasoning_effort"] == "high"
+    # v0.19 级联：预扫 low（干净采信/有硬伤升 pro 复核），pro 终审显式 high 由级联传
+    assert stages.BUILTIN_PHASE_PARAMS["canon_audit"]["reasoning_effort"] == "low"
 
 
 def test_builtin_merges_without_overriding_genre(tmp_path, monkeypatch):

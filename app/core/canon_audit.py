@@ -35,15 +35,15 @@ AUDIT_PROMPT = """{project_header}
    或**数值对账**：金额/斤两/数量/次数在章内前后或与邻章不一致（逐个数字对表）。
    定级纪律：判「硬伤」前必须确认所引邻章/底册原文**真实存在且未被断章**（不得拼接引文）；
    无法确证的只记软伤。数字/次数类矛盾若正文内有解释性语句则降软伤。
-   - quote：正文原句（≤40 字）；why：针对该句的具体说明（每条都不同）；
+   - quote：正文原句（≤40 字）；why：针对该句的具体说明 ≤40 字（每条都不同，禁止复读正文）；
    - canon_ref：底册条目名或约束条款名（给不出写「底册无此条」）；severity：硬伤/软伤。
 2. adoptions：正文新出现、与底册不冲突、值得收编进世界书的自创专名。
-   - name/cat/desc（desc ≤80 字）。
+   - name/cat/desc（desc ≤50 字）。
    **收录下限**：本章全部新出场人物、新物证/关键道具、新地点/机构必须逐条收录，不许遗漏。
 3. ledger_updates：本章为全书连续性台账新增/变更的事实——
    人物（出场者及其本章末状态）、物件（新物证/关键道具及其位置与状态）、
    制度（本章援引或新立的规矩）、时间（本章故事内日期/时段；若正文出现「三日后」「初五」等历法表述，必须原样写进时间字段）。
-没有问题就返回空数组。只输出 JSON：
+没有问题就返回空数组。只输出紧凑 JSON（结论即全部内容，不要输出推理过程——推理放在思考通道）：
 {{"violations": [{{"quote":"","why":"","canon_ref":"","severity":""}}],
   "adoptions": [{{"name":"","cat":"","desc":""}}],
   "ledger_updates": {{"人物": [{{"name":"","state":""}}], "物件": [{{"name":"","state":""}}],
@@ -79,6 +79,129 @@ AUDIT_PROMPT = """{project_header}
 """
 
 EXPECTED_CATEGORIES = ("体系规则", "地理", "势力", "人物", "物品", "异火", "丹药", "斗技", "历史", "经济")
+
+
+AUDIT_REVIEW_PROMPT = """{project_header}
+
+你是网文世界观合规审校的**终审**。flash 预扫为本章标出了以下候选问题，请逐条裁决：
+- confirmed：核实成立（引文真实、对照底册/邻章确实矛盾）
+- rejected：误报（引文断章、底册实际有据、正文内有解释性语句）
+- downgraded：问题存在但够不上硬伤（降软伤）
+
+裁决纪律：判 confirmed 前必须确认引文在片段中真实存在且未被断章；拿不准 → downgraded。
+
+## 预扫候选项
+{flagged_list}
+
+## 本章正文相关片段（按候选引文定位）
+{fragments}
+
+## 上一章结尾（跨章核对基准）
+{prev_ending}
+
+## 本章细纲（拍点契约）
+{outline_brief}
+
+## 核心设定约束条款
+{constraints_block}
+
+复核中若发现**候选清单之外的硬伤**（只有对照上下文才能发现的），写入 new_items（每条 quote ≤40 字、why ≤40 字）；没有就输出空数组。除裁决外不要输出任何推理过程，直接输出 JSON：
+{{"verdicts": [{{"index": 1, "verdict": "confirmed|rejected|downgraded", "note": "≤30字"}}],
+  "new_items": []}}
+"""
+
+
+def _extract_fragments(prose: str, quotes: list, window: int = 400, max_len: int = 6000) -> str:
+    """按候选引文定位原文片段（±window 字，相邻合并），供 pro 复核缩量输入"""
+    spans = []
+    for q in quotes:
+        q = str(q or "").strip()
+        if not q:
+            continue
+        i = prose.find(q[:20])
+        if i < 0:
+            i = prose.find(q[:10])
+        if i >= 0:
+            spans.append((max(0, i - window), min(len(prose), i + len(q) + window)))
+    if not spans:
+        return prose[:max_len]
+    spans.sort()
+    merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    parts, used = [], 0
+    for a, b in merged:
+        seg = prose[a:b]
+        if used + len(seg) > max_len:
+            seg = seg[:max(0, max_len - used)]
+            parts.append(seg)
+            break
+        parts.append(seg)
+        used += len(seg)
+    return ("\n\n……\n\n").join(parts)
+
+
+def _pro_review_flagged(cfg: dict, proj: str, num: int, prose: str, prescan_prompt: str,
+                        prescan: dict, outline_doc: str, prev_ending: str) -> dict | None:
+    """级联第二级：pro 只复核 flagged 项 + 允许补漏。返回合并后的 data；失败返回 None（上层采信预扫）。
+
+    pro 输入从全文缩到「flagged 清单+定位片段」，输出从 16k 全量缩到紧凑裁决——
+    pro 单价是 flash 的 3 倍，缩水是级联收益的主要来源。
+    """
+    flagged = [v for v in (prescan.get("violations") or []) if v.get("severity") == "硬伤"]
+    for c in (prescan.get("cross_issues") or []):
+        flagged.append({"quote": c.get("quote", ""), "why": c.get("why", ""),
+                        "canon_ref": "跨章矛盾", "severity": "硬伤"})
+    if not flagged:
+        return None
+    fl = chr(10).join("%d. [%s] 引文：%s | 疑点：%s | 依据：%s"
+                    % (i + 1, v.get("severity"), str(v.get("quote", ""))[:40],
+                       str(v.get("why", ""))[:60], v.get("canon_ref", ""))
+                    for i, v in enumerate(flagged))
+    conn = _strict_conn(cfg)
+    if not conn:
+        return None
+    client = LLMClient.from_connection(conn, max_retries=1, slot="review",
+                                       stage_params={"thinking": "enabled",
+                                                     "reasoning_effort": "high"})
+    prompt = AUDIT_REVIEW_PROMPT.format(
+        project_header=prescan_prompt.split("【核心设定约束条款】")[0].split("你是网文")[0],
+        flagged_list=fl,
+        fragments=_extract_fragments(prose, [v.get("quote") for v in flagged]),
+        prev_ending=prev_ending,
+        outline_brief=(outline_doc or "")[:1500],
+        constraints_block=constraints_block(proj))
+    parts = []
+    client.chat_stream(prompt, temperature=0.2, phase="canon_audit_review",
+                       on_chunk=parts.append)
+    out = "".join(parts)
+    m = re.search(r"\{.*\}", out, re.S)
+    review = json.loads(m.group(0) if m else out)
+    verdicts = {int(v.get("index", 0) or 0): str(v.get("verdict", "")) for v in (review.get("verdicts") or [])}
+    kept, dropped = [], []
+    for i, v in enumerate(flagged, 1):
+        vd = verdicts.get(i, "")
+        if vd == "rejected":
+            v["note"] = "pro 终审判误报"
+            dropped.append(v)
+        elif vd == "downgraded":
+            v["severity"] = "软伤"
+            v["note"] = "pro 终审降级"
+            kept.append(v)
+        else:   # confirmed / 未明确裁决 → 保守保留
+            v["note"] = (v.get("note") or "") + "pro 终审确认"
+            kept.append(v)
+    new_items = review.get("new_items") or []
+    for nv in new_items:
+        nv.setdefault("severity", "硬伤")
+        nv["note"] = "pro 终审新增"
+        kept.append(nv)
+    prescan["violations"] = [v for v in (prescan.get("violations") or []) if v.get("severity") != "硬伤"] + kept
+    prescan["review_dropped"] = dropped
+    return prescan
 
 
 def _degenerate(violations: list) -> bool:
@@ -224,10 +347,16 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
 
     client = _client_for(cfg, router)
     data, last_err = None, ""
-    for attempt, temp in enumerate((0.2, 0.35)):
+    # 级联（v0.19，E9 实测）：flash+low 全文预扫 → 干净采信（省掉 pro 全量）；有硬伤/
+    # 跨章矛盾才升 pro **只复核 flagged 项**（输入=清单+定位片段，输出=裁决，双缩水）；
+    # 预扫解析失败/退化 → pro 全量兜底（保留 F1 质量上限）。thinking 模式下 temperature
+    # 静默失效（官方文档），重试改用措辞扰动而非换温。
+    for attempt in range(2):
         try:
             parts = []
-            client.chat_stream(prompt, temperature=temp, phase="canon_audit",
+            retry_prompt = prompt if attempt == 0 else prompt + \
+                "\n\n（重试：请逐项重新核对，勿沿用上一次的判断思路，直接输出结论。）"
+            client.chat_stream(retry_prompt, temperature=0.2, phase="canon_audit",
                                on_chunk=parts.append)
             out = "".join(parts)
             m = re.search(r"\{.*\}", out, re.S)
@@ -238,11 +367,31 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
         violations = (data or {}).get("violations") if isinstance(data, dict) else None
         if violations is not None and not _degenerate(violations):
             break
-        # 退化/解析失败 → 升 pro 再试一次（F1：严格判定不许 flash 单飞）
+        # 退化/解析失败 → 升 pro 再试一次（F1：严格判定不许 flash 单飞）；
+        # 显式传思考档（from_connection 不吃 preset 档，模型默认 enabled+high 恰为严格档所需）
         try:
-            client = LLMClient.from_connection(_strict_conn(cfg), max_retries=1, slot="review")
+            client = LLMClient.from_connection(_strict_conn(cfg), max_retries=1, slot="review",
+                                               stage_params={"thinking": "enabled",
+                                                             "reasoning_effort": "high"})
         except Exception:  # noqa: BLE001
             pass
+
+    cascade = {"mode": "prescan", "pro_review": False}
+    if isinstance(data, dict):
+        pre_hard = [v for v in (data.get("violations") or []) if v.get("severity") == "硬伤"]
+        pre_cross = data.get("cross_issues") or []
+        if pre_hard or pre_cross:
+            # 有硬判候选 → pro 终审（只裁 flagged 项 + 允许补漏；输入输出双缩水）
+            try:
+                review_data = _pro_review_flagged(cfg, proj, num, prose, prompt, data,
+                                                  outline_doc, prev_ending)
+                if review_data is not None:
+                    cascade = {"mode": "cascade", "pro_review": True}
+                    data = review_data
+            except Exception as e:  # noqa: BLE001
+                logger.warning("pro 复核失败（采信预扫结果，不阻断）：%s", e)
+                cascade["pro_error"] = str(e)[:120]
+        # 干净预扫（0 硬伤 0 跨章矛盾）→ 直接采信：软伤/收编/台账是回写型产物，无闸门风险
     failed = not isinstance(data, dict)
     if failed:
         # 空结果闸门（Round 4 终审差距①）：审校崩溃不许以 violations=[] 冒充「干净」入库
@@ -310,6 +459,7 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
             pass
 
     report = {"num": num, "chars": len(prose), "failed": failed,
+              "cascade": cascade,
               "beat_check": beat_check,
               "calendar_drift": drift,
               "violations": violations,

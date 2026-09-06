@@ -153,7 +153,7 @@ def test_resume_stopped_mid_review_keeps_votes(tmp_path):
                  "api_key": "sk-test", "model": "test-model"}
     cfg = {"connections": [fake_conn],
            "slots": {"writing": "rv", "helper": "rv", "review": "rv"},
-           "gates": {"review_enabled": True, "review_votes": 3,
+           "gates": {"review_enabled": True, "review_votes": 3, "review_pass_fast": False,
                      "review_votes_recheck": 1, "deslop_max_rounds": 1,
                      "word_enrich_rounds": 1, "review_temperature": 0.2},
            "writing": {"chapter_word_target": 1000},

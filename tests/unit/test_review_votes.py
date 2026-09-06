@@ -196,12 +196,14 @@ def test_pass_fast_path_skips_replicas(tmp_path):
     assert merged["verdict"] in ("PASS", "PASS_WITH_NOTES")
 
 
-def test_pass_fast_path_off_by_default(tmp_path):
+def test_pass_fast_path_off_explicitly(tmp_path):
+    """review_pass_fast=False 显式关闭：三票照投（v0.19 起默认开，关闭需显式配置）"""
     proj = str(tmp_path)
     project.write_file(os.path.join(proj, "大纲", "细纲_第002章.md"), "核心事件：反击")
     prose = "他忍了忍，决定改日再说。" * 50
     ok = _report("===D_PLOT=== pass 合标")
     client = _FakeClient([ok, ok, ok])
     ctx = _FakeCtx(proj, client, votes=3)
+    ctx.cfg["gates"]["review_pass_fast"] = False
     stages.review_with_votes(ctx, 2, prose, votes=3)
-    assert client.calls == 3                      # 默认关：三票照投
+    assert client.calls == 3                      # 显式关：三票照投

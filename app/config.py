@@ -81,7 +81,8 @@ DEFAULT_CONFIG = {
               "review_temperature": 0.2,   # 审校判定低温（单次覆盖，不改连接档案）
               "review_mode": "auto",       # auto=AI 六维审校 | manual=作者人工审校（门里填阻断问题）
               "review_votes": 3,           # 首扫多轮投票数（平票从严，阻塞需 ≥2 票）
-              "review_votes_recheck": 1},  # 修复环复扫投票数（控成本）
+              "review_votes_recheck": 1,
+              "review_pass_fast": True},  # 修复环复扫投票数（控成本）
     "llm": {"max_retries": 2, "backoff_base": 2.0},
     "writing": {"chapter_word_target": 3000, "default_genre": "", "default_platform": "番茄",
                 "run_mode": "auto",             # auto=全自动 / step=逐步确认 / border=边界确认 / cw=共写

@@ -164,7 +164,9 @@ BUILTIN_PHASE_PARAMS = {
     "global_summary":  {"thinking": "disabled", "max_tokens": 2048},
     "deslop":          {"thinking": "disabled", "max_tokens": 16384},
     "enrich":          {"thinking": "disabled", "max_tokens": 16384},
-    "canon_audit":     {"thinking": "enabled", "reasoning_effort": "high",
+    # 清算预扫档（v0.19 级联）：flash+low 全文预扫，干净采信、有硬伤才升 pro 复核
+    # flagged 项（E5a 实测：low 检出引文真实性 88%，单次过；pro 单价 ×3 只花在刀刃上）
+    "canon_audit":     {"thinking": "enabled", "reasoning_effort": "low",
                         "max_tokens": 8192},
     # 审校=六维对照检查表任务（埋雷实测 disabled 召回 4/4 vs high 3/4、引文全真、
     # 假阳性 0；单票 5.2k→0.6k tok、82s→5.4s）。跨章对账由清算（pro 严格档）把守。
@@ -1582,10 +1584,10 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
                         f"{v2['verdict'] or '格式未识别'}（fail={v2['summary']['fail']}）")
     except Exception:
         pass
-    # PASS 快速道（实验变量 gates.review_pass_fast，默认关）：首票全维 pass 且零
+    # PASS 快速道（gates.review_pass_fast，v0.19 默认开）：首票全维 pass 且零
     # 阻塞 → 免投副本票（省 2/3 审校输出）。与 P5 合并语义兼容：quorum 只对
     # fail 收紧（不足票数的 fail 降级），单票 PASS 在合并函数里本就成立。
-    _fast = (bool((ctx.cfg.get("gates") or {}).get("review_pass_fast"))
+    _fast = (bool((ctx.cfg.get("gates") or {}).get("review_pass_fast", True))
              and remaining >= 2
              and v2.get("verdict") in ("PASS", "PASS_WITH_NOTES")
              and not (v2.get("summary") or {}).get("fail")
