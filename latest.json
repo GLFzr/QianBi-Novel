@@ -1,29 +1,28 @@
 {
-  "version": "0.18.5",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.18.5",
-  "notes": "0.18.5 公测版（无代理用户的「下得动」专项 + 写作缓存深修）：\n· 镜像加速：检测到没挂代理时，更新包自动改从实测镜像站下载（支持断点续传），不再被 GitHub 下载断在半路；有代理则照旧直连。字节仍由 SHA-256 验签把关，镜像只影响速度，不影响安全\n· 写作缓存深修：章级上下文共享正式生效（0.18.4 因模板缺占位符未生效），实测缓存命中率 57.8% → 73.2%；细纲接缓存头 0% → 47.9%、延迟 431s → 77s；审校投票重排，票延迟 170s → 43s\n· 章会话（可关）：正文在章内只计费一次，追踪/摘要/审校命中历史前缀\n· 细纲思考降档：单笔输出 35-41k → 5-7k tok，5 章真机对照质量无回退\n· 新增「离峰挂机」：高价时段自动等待、半价时段自动续跑（设置面板开启）\n· 公测继续：「关于」对话框可导出匿名数据包（不含书稿正文、提示词、API Key）",
-  "sha256": "d39401f2d0f7c65afc9bce5729d50f51a2b7a307045a332c4e069729de8c7293",
-  "published": "2026-09-06",
-  "assets": {
-    "setup": {
-      "name": "QianBi-Novel-v0.18.5-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-setup.exe",
-      "sha256": "d39401f2d0f7c65afc9bce5729d50f51a2b7a307045a332c4e069729de8c7293",
-      "size": 53597843,
-      "mirrors": [
-        "https://gh-proxy.com/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-setup.exe",
-        "https://ghfast.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-setup.exe",
-        "https://ghproxy.net/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-setup.exe",
-        "https://gh.zwy.one/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-setup.exe",
-        "https://ghproxy.cxkpro.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-setup.exe"
-      ]
-    },
-    "portable": {
-      "name": "QianBi-Novel-v0.18.5-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.18.5/QianBi-Novel-v0.18.5-portable.zip",
-      "sha256": "6b5bc4985289a0e52bf387e9e730cb6f179394c4af327e8f469961c10a5f1231",
-      "size": 78992575
-    }
+ "version": "0.19.0",
+ "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.0",
+ "notes": "0.19.0 公测版（成本架构升级 + Agent 操作层）：\n· 清算级联：flash 预扫→干净直接采信、有硬伤才升 pro 只复核疑点——清算成本 -82%，质量终审仍在环\n· 审校思考档重置：埋雷测试证明关思考召回更高、成本 -88%、延迟 -93%（默认已切换）\n· 人工审校模式：作者在门里填阻断问题、AI 只负责修复——审校模型调用归零\n· Agent 操作层：共写对话里说「回退到去味之前」「重写第2章」等指令，Agent 真的去操作应用\n· 审校 PASS 快速道默认开：干净章 3 票→1 票；细纲思考降档：单笔输出 -85%\n· 离峰挂机：高价时段自动等待、半价时段自动续跑（设置面板开启）\n· 公测继续：「关于」对话框可导出匿名数据包（不含书稿正文、提示词、API Key）",
+ "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+ "published": "2026-09-06",
+ "assets": {
+  "setup": {
+   "name": "QianBi-Novel-v0.19.0-setup.exe",
+   "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
+   "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+   "size": 0,
+   "mirrors": [
+    "https://gh-proxy.com/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
+    "https://ghfast.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
+    "https://ghproxy.net/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
+    "https://gh.zwy.one/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
+    "https://ghproxy.cxkpro.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe"
+   ]
   },
-  "sig": "5QXcGlUJqNMHXDgaVNYOQCvLH0X3KC6AQhztPpxdml20iUFtXIdUTp3VFrlSr2M07zZTMZ4fBDJ6t+t8foq5BQ=="
+  "portable": {
+   "name": "QianBi-Novel-v0.19.0-portable.zip",
+   "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-portable.zip",
+   "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+   "size": 0
+  }
+ }
 }
