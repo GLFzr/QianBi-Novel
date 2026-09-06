@@ -21,6 +21,6 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: 安装依赖
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
       - name: 离线单测（无需 API Key）
         run: python -m pytest tests/unit -q --tb=short
