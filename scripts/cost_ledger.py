@@ -125,6 +125,16 @@ def main():
             label, note = BENCH_LABELS[name]
             ledger.append(("实验台", label + "（%s）" % name, note, _cost(rows)))
 
+    # 1.5) Temp 残留 fake home（历史 run 被清理脚本误删前的幸存数据）
+    temp_root = os.environ.get("TEMP", os.path.expanduser("~/AppData/Local/Temp"))
+    for d in sorted(glob.glob(os.path.join(temp_root, "qbn_*"))):
+        rows = _rows(os.path.join(d, ".qianbi_novel", "usage", "usage.jsonl"))
+        if rows:
+            tag = os.path.basename(d)
+            span = "%s ~ %s" % (rows[0].get("ts", "?")[11:16], rows[-1].get("ts", "?")[11:16])
+            ledger.append(("真机全流程", "e2e 残留（%s）" % tag[:28],
+                           "被杀前幸存的 %s 数据（Temp 残留）" % span, _cost(rows)))
+
     # 2) 5ch e2e 留存
     rows = _rows(os.path.join(ROOT, "tests_output", "5ch_e2e", "usage_run.jsonl"))
     if rows:
@@ -187,6 +197,21 @@ def main():
     lines.append("  0.19 五章端到端 ¥0.33/章（2500 字目标 + 级联前架构）；0.19 级联后清算环节 -68%，")
     lines.append("  全流程预计 ~¥0.25/章（待正式对照跑）。")
     lines.append("- 全部调用走 off-peak 时段（除 09-05 验收部分白天），若含 peak 价成本更高。")
+    lines.append("")
+    lines.append("## 数据完整性说明（已知缺口，诚实列账）")
+    lines.append("")
+    lines.append("1. **0.18.4 期间约 544 行丢失**（2026-09-01 ~ 09-05 白天）：一次实验台冒烟测试")
+    lines.append("   误截断了真实目录的 usage.jsonl，当时已披露并从日志恢复出 08-31 的 151 行；")
+    lines.append("   丢失段含能力轮后续迭代与部分手动测试，**无法恢复**——故 0.18.4 的单章成本")
+    lines.append("   口径只有 09-05 晚间验收跑（57 笔）这一个样本。")
+    lines.append("2. **5 章 e2e 的一次完整跑丢失**（0.18.5 架构，61 笔请求、5/5 章 verdict 全过）：")
+    lines.append("   当时 e2e 收尾脚本直接 rmtree 了 fake home，用量与章节产物一起被清；")
+    lines.append("   之后 e2e 已改为「先留存 artifact+usage 再清理」，现台账收录的是留存版")
+    lines.append("   （46 笔）与被杀前幸存的残留（31 笔）。")
+    lines.append("3. **非真机调用不在账内**：单测/mock/离线探针零 API 消耗；mock 客户端跑的")
+    lines.append("   端到端（test_5ch_mock 等）不计成本。")
+    lines.append("4. 价格若按 peak 档（北京时间工作日 09:00-12:00 / 14:00-18:00 全价）则翻倍，")
+    lines.append("   本账全部按实际发生时段的 off-peak 口径。")
     out = os.path.join(ROOT, "docs", "成本台账.md")
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
