@@ -5025,6 +5025,19 @@ class Bridge(QObject):
     @Slot(result=bool)
     def reviewEnabled(self) -> bool:
         return bool(self.cfg.get("gates", {}).get("review_enabled", True))
+
+    @Property(bool, notify=generalChanged)
+    def reviewManual(self) -> bool:
+        """人工审校模式：作者本人当审校，门里填阻断问题 → agent 修复 → 作者复验"""
+        return str(self.cfg.get("gates", {}).get("review_mode") or "auto").strip().lower() == "manual"
+
+    @Slot(bool)
+    def setReviewManual(self, on: bool):
+        self.cfg.setdefault("gates", {})["review_mode"] = "manual" if on else "auto"
+        cfg_mod.save_config(self.cfg)
+        self.generalChanged.emit()
+        self.toast.emit("ok", "人工审校模式已" + ("开启：审校由你在门里完成（填阻断问题，AI 只负责修复）"
+                                              if on else "关闭：恢复 AI 六维审校"))
     @Slot(bool)
     def setReviewEnabled(self, on: bool):
         self.cfg.setdefault("gates", {})["review_enabled"] = bool(on)

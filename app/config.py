@@ -79,6 +79,7 @@ DEFAULT_CONFIG = {
               "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
               "review_enabled": True, "review_max_rounds": 1,
               "review_temperature": 0.2,   # 审校判定低温（单次覆盖，不改连接档案）
+              "review_mode": "auto",       # auto=AI 六维审校 | manual=作者人工审校（门里填阻断问题）
               "review_votes": 3,           # 首扫多轮投票数（平票从严，阻塞需 ≥2 票）
               "review_votes_recheck": 1},  # 修复环复扫投票数（控成本）
     "llm": {"max_retries": 2, "backoff_base": 2.0},

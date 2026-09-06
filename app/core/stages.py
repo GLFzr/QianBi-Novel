@@ -1037,7 +1037,20 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     pre_review_prose = prose   # G8 回退还原点
     review_enabled = gates_cfg.get("review_enabled", True)
     post_review_turns = session.turn_count() if _session_usable(session) else 0
-    if review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
+    review_mode = str(gates_cfg.get("review_mode") or "auto").strip().lower()
+    manual_review = review_enabled and review_mode == "manual"
+    if manual_review:
+        review_ran = not skip_review
+        if skip_review:
+            ctx.log("info", f"第 {num} 章 断点续跑：审校已完成，跳过（进入定稿）")
+        else:
+            ctx.stream_stage(f"人工审校 第{num}章")
+            blocking_review, advisory_review, verdict_review, prose = _author_review_entry(
+                ctx, num, prose,
+                pre_review_prose=pre_review_prose, session=session,
+                post_review_turns=post_review_turns, gr=gr, gates_cfg=gates_cfg)
+            post_review_turns = session.turn_count() if _session_usable(session) else 0
+    elif review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
         # resume="review" = 审校与 G8 都已走完 → 一并跳过，不二次问门
         review_ran = not skip_review
         if skip_review:
@@ -1178,7 +1191,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.log("info", "审校已跳过（未启用或审校槽未绑定连接）")
 
     # ---- ④.9 决策门 G8：审校完成后（T4.1 内侧门；回退=保留原稿=还原审校前文本）----
-    if review_ran:
+    # 人工审校模式下 G8 门已由人工审校循环承担，不再二次弹门
+    if review_ran and not manual_review:
         g8_idea = ctx.gate("G8", f"审校完成：verdict {verdict_review or 'PASS'} · 阻塞 {len(blocking_review)} 处"
                                  f"（下一步定稿落库，G9 仍会把关）", chapter=num)
         if g8_idea is None:
@@ -1595,6 +1609,96 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     except Exception:
         pass
     return merged
+
+
+def _author_review_entry(ctx, num: int, prose: str, *,
+                         pre_review_prose: str = None, session=None,
+                         post_review_turns: int = 0, gr=None,
+                         gates_cfg: dict = None) -> tuple:
+    """人工审校循环（gates.review_mode=manual）：作者在 G8 门里当审校。
+
+    - 留空 = 放行（verdict AUTHOR_PASS，零审校 LLM 调用）
+    - 填阻断问题（每行一条）→ agent 按 REVIEW_FIX 修复 → 作者复验，循环至放行/回退
+    - 回退（gate 返回 None）= 保留人工审校开始前的原稿（与自动 G8 同语义）
+    返回 (blocking, advisory, verdict, prose)——prose 可能在修复后更新。
+    """
+    proj = ctx.proj
+    gates_cfg = gates_cfg or {}
+    gr = gr if gr is not None else gates.GateResult()
+    pre = prose if pre_review_prose is None else pre_review_prose
+    _wc_items, _wc_blocking, _wc_verdict = gates.word_count_precheck(proj, num, prose, ctx.cfg)
+    wc_note = f"（字数提示：{_wc_blocking[0]}）" if _wc_verdict else ""
+    manual_rounds = 0
+    blocking_review: list = []
+    advisory_review: list = []
+    verdict_review = "AUTHOR_PASS"
+    while True:
+        issues = ctx.gate("G8", f"人工审校 第{num}章{wc_note}：输入**阻断级**问题，每行一条；留空 = 通过",
+                          chapter=num)
+        if issues is None:
+            # 作者选择回退：与自动 G8 同语义——保留人工审校开始前的原稿
+            if prose != pre:
+                _archive_inner_rollback(ctx, proj, num, "G8", prose)
+                prose = pre
+            if _session_usable(session):
+                session.rollback_to(post_review_turns)
+            blocking_review, gr.review_blocking = [], []
+            ctx.log("warn", f"第 {num} 章 人工审校回退：保留原稿继续")
+            break
+        lines = [ln.strip(" -·") for ln in str(issues).splitlines() if ln.strip(" -·")]
+        if not lines:
+            blocking_review, advisory_review, verdict_review = [], [], "AUTHOR_PASS"
+            gr.review_blocking = []
+            try:
+                st.save_review_findings(proj, st.load_state(proj), num, "AUTHOR_PASS", [], [], [])
+            except Exception:
+                pass
+            ctx.log("ok", f"第 {num} 章 人工审校通过（作者放行）")
+            break
+        if not cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
+            ctx.log("warn", f"第 {num} 章 人工审校填了 {len(lines)} 条问题，但审校槽未绑定连接，无法自动修复")
+            blocking_review, gr.review_blocking = lines, lines
+            gates.resolve_failed(ctx, f"第 {num} 章人工审校问题无法修复（审校槽未绑定连接）", gr)
+            break
+        blocking_review = lines
+        gr.review_blocking = blocking_review
+        manual_rounds += 1
+        try:
+            st.save_review_findings(
+                proj, st.load_state(proj), num, "AUTHOR_ISSUES",
+                [{"dim": "D_PLOT", "level": "fail", "text": t, "quote": "",
+                  "root_layer": "ROOT_AUTHOR", "line": ""} for t in lines],
+                lines, [])
+        except Exception:
+            pass
+        ctx.log("warn", f"第 {num} 章 人工审校 {len(lines)} 条阻断 → AI 修复（第 {manual_rounds} 轮）")
+        t_fix = session.turn_count() if _session_usable(session) else 0
+        fix_kwargs = dict(chapter_num=num, findings=chr(10).join(lines), prose=prose,
+                          project_header=project_header(proj),
+                          chapter_header=chapter_header(proj, num))
+        if _session_usable(session):
+            _session_seed(session, prose)
+            turn_text = prompts.session_turn_text(prompts.REVIEW_FIX_PROMPT).format(**fix_kwargs)
+            ctx.last_prompt = turn_text
+            rewritten = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, turn_text,
+                                     label=f"人工审校修复 第{manual_rounds}轮",
+                                     phase=PHASE_REVIEW_FIX)
+        else:
+            fix_prompt = prompts.REVIEW_FIX_PROMPT.format(**fix_kwargs)
+            ctx.last_prompt = fix_prompt
+            rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt,
+                                label=f"人工审校修复 第{manual_rounds}轮",
+                                phase=PHASE_REVIEW_FIX)
+        # 修复稿健全性守卫（与自动修复环同款）
+        looks_like_plan = rewritten.lstrip().startswith("===")
+        too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))
+        if rewritten.strip() and not looks_like_plan and not too_short:
+            prose = rewritten
+        else:
+            ctx.log("warn", f"第 {num} 章 人工审校修复返回非正文，保留原稿（问题清单仍生效，可回退或继续填）")
+        if manual_rounds >= max(gates_cfg.get("review_max_rounds", 1), 3):
+            ctx.log("warn", f"第 {num} 章 人工审校修复已达 {manual_rounds} 轮上限，请最终裁决")
+    return blocking_review, advisory_review, verdict_review, prose
 
 
 def _chapter_review(ctx, num: int, prose: str, votes: int = None,

@@ -27,6 +27,7 @@ Item {
         ep = bridge.editorPrefs()
         wordTargetSpin.value = bridge.chapterWordTarget()
         reviewSwitch.checked = bridge.reviewEnabled()
+        reviewManualSwitch.checked = bridge.reviewManual
         autoBackupSwitch.checked = bridge.autoBackupEnabled()
         regexSem = bridge.regexSemantics()
     }
@@ -655,6 +656,21 @@ Item {
                                     palette.text: Theme.textPrimary
                                     onCheckedChanged: if (activeFocus) bridge.setReviewEnabled(checked)
                                 }
+                                AppCheck {
+                                    id: reviewManualSwitch
+                                    text: checked ? "人工审校" : "AI 审校"
+                                    font.pixelSize: Theme.fsSmall
+                                    palette.text: Theme.textPrimary
+                                    onCheckedChanged: if (activeFocus) bridge.setReviewManual(checked)
+                                }
+                            }
+                            Text {
+                                text: "人工审校：作者在定稿前的门里填阻断问题（每行一条），AI 只按问题修改后交回复验——不花审校模型的钱"
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
                             }
                         }
                     }
