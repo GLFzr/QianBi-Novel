@@ -1,0 +1,172 @@
+{
+ "variant": "t2_smoke2",
+ "calls": 15,
+ "input_tok": 4125474,
+ "hit_tok": 3751936,
+ "miss_tok": 373538,
+ "hit_pct": 90.9,
+ "out_tok": 34894,
+ "reasoning_tok": 5256,
+ "cost_usd": 0.1315,
+ "cost_cny": 0.947,
+ "llm_seconds": 419.7,
+ "wall_seconds": 509.9,
+ "per_tier": {
+  "flash": {
+   "calls": 15,
+   "hit": 3751936,
+   "miss": 373538,
+   "out": 34894,
+   "cost_usd": 0.1315
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 2,
+   "hit": 14336,
+   "miss": 305350,
+   "out": 3313,
+   "reasoning": 1735,
+   "lat": 68.79,
+   "tier_tok": {
+    "flash": {
+     "hit": 14336,
+     "miss": 305350,
+     "out": 3313
+    }
+   },
+   "cost_usd": 0.0695,
+   "hit_pct": 4.5,
+   "avg_lat": 34.4
+  },
+  "enrich": {
+   "calls": 4,
+   "hit": 914432,
+   "miss": 16828,
+   "out": 4787,
+   "reasoning": 0,
+   "lat": 75.0,
+   "tier_tok": {
+    "flash": {
+     "hit": 914432,
+     "miss": 16828,
+     "out": 4787
+    }
+   },
+   "cost_usd": 0.0133,
+   "hit_pct": 98.2,
+   "avg_lat": 18.8
+  },
+  "tracking": {
+   "calls": 2,
+   "hit": 608256,
+   "miss": 11059,
+   "out": 16384,
+   "reasoning": 0,
+   "lat": 121.53,
+   "tier_tok": {
+    "flash": {
+     "hit": 608256,
+     "miss": 11059,
+     "out": 16384
+    }
+   },
+   "cost_usd": 0.0175,
+   "hit_pct": 98.2,
+   "avg_lat": 60.8
+  },
+  "chapter_summary": {
+   "calls": 2,
+   "hit": 618496,
+   "miss": 17471,
+   "out": 238,
+   "reasoning": 0,
+   "lat": 20.28,
+   "tier_tok": {
+    "flash": {
+     "hit": 618496,
+     "miss": 17471,
+     "out": 238
+    }
+   },
+   "cost_usd": 0.0083,
+   "hit_pct": 97.3,
+   "avg_lat": 10.1
+  },
+  "global_summary": {
+   "calls": 2,
+   "hit": 635392,
+   "miss": 4170,
+   "out": 3459,
+   "reasoning": 0,
+   "lat": 36.92,
+   "tier_tok": {
+    "flash": {
+     "hit": 635392,
+     "miss": 4170,
+     "out": 3459
+    }
+   },
+   "cost_usd": 0.0076,
+   "hit_pct": 99.3,
+   "avg_lat": 18.5
+  },
+  "canon_audit": {
+   "calls": 2,
+   "hit": 638976,
+   "miss": 15969,
+   "out": 5456,
+   "reasoning": 3521,
+   "lat": 75.96,
+   "tier_tok": {
+    "flash": {
+     "hit": 638976,
+     "miss": 15969,
+     "out": 5456
+    }
+   },
+   "cost_usd": 0.0116,
+   "hit_pct": 97.6,
+   "avg_lat": 38.0
+  },
+  "deslop": {
+   "calls": 1,
+   "hit": 322048,
+   "miss": 2691,
+   "out": 1257,
+   "reasoning": 0,
+   "lat": 21.25,
+   "tier_tok": {
+    "flash": {
+     "hit": 322048,
+     "miss": 2691,
+     "out": 1257
+    }
+   },
+   "cost_usd": 0.0037,
+   "hit_pct": 99.2,
+   "avg_lat": 21.2
+  }
+ },
+ "chapters": [
+  {
+   "num": 21,
+   "title": "空柜",
+   "words": 1793,
+   "review_blocking": 1
+  },
+  {
+   "num": 22,
+   "title": "他进去了",
+   "words": 1764,
+   "review_blocking": 1
+  }
+ ]
+}

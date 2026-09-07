@@ -1,0 +1,32 @@
+{
+ "home": "t2_smoke2",
+ "stack": "卷2_messages.jsonl",
+ "slice": 136,
+ "model": "deepseek-v4-flash",
+ "rows": [
+  {
+   "rep": 1,
+   "shape": "原样(不带 thinking)",
+   "in": 319686,
+   "hit": 319488,
+   "miss": 198,
+   "lat": 12.2
+  },
+  {
+   "rep": 1,
+   "shape": "thinking=enabled+effort:high",
+   "in": 319686,
+   "hit": 319488,
+   "miss": 198,
+   "lat": 14.6
+  },
+  {
+   "rep": 1,
+   "shape": "thinking=disabled",
+   "in": 319607,
+   "hit": 319488,
+   "miss": 119,
+   "lat": 11.1
+  }
+ ]
+}
