@@ -1,23 +1,23 @@
 {
  "variant": "t2_smoke1",
- "calls": 13,
- "input_tok": 298002,
- "hit_tok": 267776,
- "miss_tok": 30226,
- "hit_pct": 89.9,
- "out_tok": 19067,
- "reasoning_tok": 1698,
- "cost_usd": 0.0211,
- "cost_cny": 0.152,
- "llm_seconds": 200.8,
- "wall_seconds": 230.7,
+ "calls": 11,
+ "input_tok": 3280997,
+ "hit_tok": 2914560,
+ "miss_tok": 366437,
+ "hit_pct": 88.8,
+ "out_tok": 19949,
+ "reasoning_tok": 1220,
+ "cost_usd": 0.1142,
+ "cost_cny": 0.822,
+ "llm_seconds": 259.4,
+ "wall_seconds": 282.8,
  "per_tier": {
   "flash": {
-   "calls": 13,
-   "hit": 267776,
-   "miss": 30226,
-   "out": 19067,
-   "cost_usd": 0.0211
+   "calls": 11,
+   "hit": 2914560,
+   "miss": 366437,
+   "out": 19949,
+   "cost_usd": 0.1142
   },
   "pro": {
    "calls": 0,
@@ -30,154 +30,154 @@
  "per_phase": {
   "prose": {
    "calls": 1,
-   "hit": 0,
-   "miss": 0,
-   "out": 1513,
-   "reasoning": 656,
-   "lat": 25.58,
+   "hit": 248320,
+   "miss": 37363,
+   "out": 1886,
+   "reasoning": 939,
+   "lat": 21.3,
    "tier_tok": {
     "flash": {
-     "hit": 0,
-     "miss": 0,
-     "out": 1513
+     "hit": 248320,
+     "miss": 37363,
+     "out": 1886
     }
    },
-   "cost_usd": 0.001,
-   "hit_pct": 0.0,
-   "avg_lat": 25.6
+   "cost_usd": 0.0112,
+   "hit_pct": 86.9,
+   "avg_lat": 21.3
   },
   "enrich": {
    "calls": 2,
-   "hit": 15360,
-   "miss": 1777,
-   "out": 2925,
+   "hit": 562432,
+   "miss": 13068,
+   "out": 2827,
    "reasoning": 0,
-   "lat": 29.77,
+   "lat": 29.840000000000003,
    "tier_tok": {
     "flash": {
-     "hit": 15360,
-     "miss": 1777,
-     "out": 2925
+     "hit": 562432,
+     "miss": 13068,
+     "out": 2827
     }
    },
-   "cost_usd": 0.0024,
-   "hit_pct": 89.6,
+   "cost_usd": 0.0087,
+   "hit_pct": 97.7,
    "avg_lat": 14.9
   },
   "deslop": {
-   "calls": 2,
-   "hit": 36864,
-   "miss": 5731,
-   "out": 3178,
+   "calls": 1,
+   "hit": 4096,
+   "miss": 286921,
+   "out": 1528,
    "reasoning": 0,
-   "lat": 24.810000000000002,
+   "lat": 32.94,
    "tier_tok": {
     "flash": {
-     "hit": 36864,
-     "miss": 5731,
-     "out": 3178
+     "hit": 4096,
+     "miss": 286921,
+     "out": 1528
     }
    },
-   "cost_usd": 0.0036,
-   "hit_pct": 86.5,
-   "avg_lat": 12.4
+   "cost_usd": 0.0642,
+   "hit_pct": 1.4,
+   "avg_lat": 32.9
   },
   "review": {
    "calls": 3,
-   "hit": 80384,
-   "miss": 6742,
-   "out": 3286,
+   "hit": 885248,
+   "miss": 6952,
+   "out": 2881,
    "reasoning": 0,
-   "lat": 43.67,
+   "lat": 68.27000000000001,
    "tier_tok": {
     "flash": {
-     "hit": 80384,
-     "miss": 6742,
-     "out": 3286
+     "hit": 885248,
+     "miss": 6952,
+     "out": 2881
     }
    },
-   "cost_usd": 0.0042,
-   "hit_pct": 92.3,
-   "avg_lat": 14.6
+   "cost_usd": 0.0096,
+   "hit_pct": 99.2,
+   "avg_lat": 22.8
   },
   "tracking": {
    "calls": 1,
-   "hit": 28928,
-   "miss": 2575,
-   "out": 5033,
+   "hit": 297216,
+   "miss": 2965,
+   "out": 8192,
    "reasoning": 0,
-   "lat": 39.72,
+   "lat": 63.39,
    "tier_tok": {
     "flash": {
-     "hit": 28928,
-     "miss": 2575,
-     "out": 5033
+     "hit": 297216,
+     "miss": 2965,
+     "out": 8192
     }
    },
-   "cost_usd": 0.0041,
-   "hit_pct": 91.8,
-   "avg_lat": 39.7
+   "cost_usd": 0.0081,
+   "hit_pct": 99.0,
+   "avg_lat": 63.4
   },
   "chapter_summary": {
    "calls": 1,
-   "hit": 31488,
-   "miss": 5180,
-   "out": 66,
+   "hit": 299008,
+   "miss": 9499,
+   "out": 101,
    "reasoning": 0,
-   "lat": 3.67,
+   "lat": 8.11,
    "tier_tok": {
     "flash": {
-     "hit": 31488,
-     "miss": 5180,
-     "out": 66
+     "hit": 299008,
+     "miss": 9499,
+     "out": 101
     }
    },
-   "cost_usd": 0.0014,
-   "hit_pct": 85.9,
-   "avg_lat": 3.7
+   "cost_usd": 0.0042,
+   "hit_pct": 96.9,
+   "avg_lat": 8.1
   },
   "global_summary": {
    "calls": 1,
-   "hit": 36608,
-   "miss": 1649,
-   "out": 456,
+   "hit": 308224,
+   "miss": 1943,
+   "out": 1573,
    "reasoning": 0,
-   "lat": 5.74,
+   "lat": 17.88,
    "tier_tok": {
     "flash": {
-     "hit": 36608,
-     "miss": 1649,
-     "out": 456
+     "hit": 308224,
+     "miss": 1943,
+     "out": 1573
     }
    },
-   "cost_usd": 0.0009,
-   "hit_pct": 95.7,
-   "avg_lat": 5.7
+   "cost_usd": 0.0036,
+   "hit_pct": 99.4,
+   "avg_lat": 17.9
   },
   "canon_audit": {
-   "calls": 2,
-   "hit": 38144,
-   "miss": 6572,
-   "out": 2610,
-   "reasoning": 1042,
-   "lat": 27.86,
+   "calls": 1,
+   "hit": 310016,
+   "miss": 7726,
+   "out": 961,
+   "reasoning": 281,
+   "lat": 17.68,
    "tier_tok": {
     "flash": {
-     "hit": 38144,
-     "miss": 6572,
-     "out": 2610
+     "hit": 310016,
+     "miss": 7726,
+     "out": 961
     }
    },
-   "cost_usd": 0.0034,
-   "hit_pct": 85.3,
-   "avg_lat": 13.9
+   "cost_usd": 0.0045,
+   "hit_pct": 97.6,
+   "avg_lat": 17.7
   }
  },
  "chapters": [
   {
    "num": 21,
    "title": "空柜",
-   "words": 2068,
+   "words": 2113,
    "review_blocking": 0
   }
  ]
