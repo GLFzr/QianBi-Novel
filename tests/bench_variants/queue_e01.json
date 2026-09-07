@@ -1,0 +1,8 @@
+{
+ "_note": "E0.1 首发队列：0.19 全流程 6 章基线（成本测试方案_v2 §1）。跑完回填 queue_r1 的预算与 seed_drafts 占位。",
+ "id": "e01_baseline_20260907",
+ "budget_cny_max": 6.0,
+ "variants": [
+  {"name": "baseline_e01", "args": {"chapters": 6}}
+ ]
+}

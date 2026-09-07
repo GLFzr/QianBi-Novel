@@ -1,0 +1,5 @@
+{
+ "_note": "S5 节拍 + S2 会话清算：S1 卷会话 + enrich/trim 前 45s 注册窗口 + 清算入会话/条目早停。配合 --no-pro 即完整无 Pro 组合。",
+ "writing": {"volume_session": true, "session_pace_seconds": 45},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}}
+}

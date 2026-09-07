@@ -1,0 +1,8 @@
+{
+ "id": "s1_volume_20260907",
+ "budget_cny_max": 4.0,
+ "_note": "S1 首个真机 A/B：6 章全流程 + volume_session。对照 baseline_e01（80.4% hit / ¥2.315）。预期 89-91%（v3 §7 修正模型），单章第 4 章起 ≥90%。",
+ "variants": [
+  {"name": "s1_volume", "args": {"preset": "tests/bench_variants/s1_volume.json", "chapters": 6}}
+ ]
+}

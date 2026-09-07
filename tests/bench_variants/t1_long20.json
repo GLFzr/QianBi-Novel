@@ -1,0 +1,6 @@
+{
+ "_note": "T1 二十章长卷主测量（S 全栈）：S1 卷会话 + S2 会话清算/条目早停 + S3 节拍窗口 + S4 静态冻结。对照 s1_volume（93.3% hit）与 baseline_e01（80.4%）。判据见《测试接手指南_v1.md》§5.1。配合缺省无 Pro 即完整无 Pro 组合。",
+ "writing": {"volume_session": true, "s4_static_freeze": true, "session_pace_seconds": 45},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}},
+ "gates": {"review_confidence_vote": true}
+}

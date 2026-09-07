@@ -1,0 +1,7 @@
+{
+ "_note": "T2 压缩臂 = T1 全栈（S1+S2+S3+S4）再开 writing.compaction（装配式卷终交接块，零 LLM 费用）。compaction_token_threshold 是**测试侧调参**：缺省 800k 是 §6.2 的产品阈值，本跑要在第 21 章边界点火，本跑定标 160k 的依据（2026-09-07 实测，非拍脑袋）：cost_bench 的 --seed-home **刻意不继承**种子 home 的 usage.jsonl（继承了会把 T1 的 197 笔成本与命中算进本臂、预算闸门当场失真），于是触发器②拿不到「最近一笔实测输入」，退回**字符口径**估算——离线在种子栈上实测该读数 162,488 tok（同一条链的真实 prompt 是 268,612 tok，字符口径低约四成）。阈值若留 250k 则**永不点火**，压缩臂会静默测成「两组一样」；160k 卡在刚越过处，只在第 21 章点火一次（折叠后新栈远小于此，6 章内不再越阈）。对照臂 t2a_keep 用 t1_long20.json（旗标关），两臂唯一差异就是这一次会话重置。",
+ "writing": {"volume_session": true, "s4_static_freeze": true, "session_pace_seconds": 45,
+             "compaction": true, "compaction_token_threshold": 160000},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}},
+ "gates": {"review_confidence_vote": true}
+}

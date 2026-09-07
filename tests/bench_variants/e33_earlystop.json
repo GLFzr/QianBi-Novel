@@ -1,0 +1,12 @@
+{
+ "id": "e33_earlystop",
+ "name": "E3.3 清算条目级早停",
+ "version": 2,
+ "description": "成本实验台预设：canon_audit.early_stop=true——先逐条一行结论（violation/clean/unsure），只对非 clean 展开（测试方案 v2 E3.3 / O6）",
+ "_note": "kill criteria：unsure 占比>40% 或漏检真硬伤即否决；对照基座 E9b 级联预扫",
+ "stage_params": {
+  "canon_audit": {
+   "early_stop": true
+  }
+ }
+}

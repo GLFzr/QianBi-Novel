@@ -1,0 +1,19 @@
+{
+ "id": "t2_compact_ab_20260907",
+ "budget_cny_max": 9.0,
+ "_note": "T2 压缩 A/B @20 章边界（《测试接手指南_v1.md》§5.2）。\n【预算为什么从指南的 ¥3.0 提到 ¥9.0】指南按 T1 的 ¥0.273/章 外推，但那是 10-13k 栈龄的平均；续写章从 285k 栈起跑、每章 11 笔逐笔深读，实测单章 ¥0.822（t2_smoke1）——12 章要 ¥5.9~9.1。预算写太低会让队列在**第一臂中途**撞 1.5× 全停线，两臂不可比、等于白跑，所以按实测放大而不是硬挤。\n前置两步已于 19:00-19:07 跑完并复核（`t2_outline`：6 份细纲齐备，¥0.183）：\n  1) 补细纲：.venv/Scripts/python.exe scripts/cost_bench.py --variant t2_outline --seed-home t1_long20 --start 21 --chapters 26 --outlines-only --flash-conn tr-dsv4f\n  2) 复核：ls tests_output/bench/t2_outline/bench/种子书/大纲/细纲_第02[1-6]章.md\n⚠️ 还有一条 2026-09-07 实测踩到的地基：--seed-home 续写会因变体换名重铸 system 里的题材预设名，令旧卷栈被拒、**静默退回空栈**（修前两臂都是零起跑的假结论）——已由 `_seed_preset_name` 修正，回归见 tests/unit/test_cost_bench_seed_home.py。\n本队列两臂均从 t2_outline 卷终态续写 21-26 共 6 章、同 preset、同渠道（tr-dsv4f 缓存域，整卷边界才许切）：\n  对照臂 t2a_keep  = writing.compaction 缺省关（会话栈不重置，历史继续滚）\n  压缩臂 t2b_compact = t2b_compact.json（T1 全栈 + compaction，阈值 160k：种子 home 不继承 usage，触发器只走字符口径 162,488 tok，250k 永不点火）\n判据：压缩臂续写首章 hit% ≥85%（允许一次性压缩 miss）、第 2 章起 ≥对照臂 -5pp 内、两臂盲评差 ≤0.5、压缩臂 6 章总成本低于对照臂。**hit% 按整臂均值读，单章 hit% 不可作裁决**——网关在章界那笔上的记账已实测抖动（同一串字节实跑记 4.5%、重放记 99.9%，看板 §5 20:40）。",
+ "variants": [
+  {"name": "t2a_keep",
+   "args": {"preset": "tests/bench_variants/t1_long20.json",
+            "chapters": 26,
+            "user_id": "qianbi-bench-t2a",
+            "extra": ["--seed-home", "t2_outline", "--start", "21",
+                      "--flash-conn", "tr-dsv4f"]}},
+  {"name": "t2b_compact",
+   "args": {"preset": "tests/bench_variants/t2b_compact.json",
+            "chapters": 26,
+            "user_id": "qianbi-bench-t2b",
+            "extra": ["--seed-home", "t2_outline", "--start", "21",
+                      "--flash-conn", "tr-dsv4f"]}}
+ ]
+}

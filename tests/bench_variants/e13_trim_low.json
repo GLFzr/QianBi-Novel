@@ -1,0 +1,6 @@
+{
+ "_note": "E1.3（成本测试方案_v2 §2）：trim 相位档位复核——v1 从没单独测过 trim（16k 输出/笔）的档位。对照 baseline_e01 同 3 章固定草稿。",
+ "stage_params": {
+  "trim": {"reasoning_effort": "low", "max_tokens": 16384}
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "id": "e12_prose_thinkbudget",
+ "name": "E1.2 prose-thinkbudget（正文思考软预算）",
+ "version": 2,
+ "description": "成本实验台预设：prose.think_budget=N tok 软预算（直接给成稿），不动采样档位（测试方案 v2 E1.2 / O2）",
+ "_note": "think_budget 为占位值，待 E0.1 基线的 prose reasoning 均值出来后按 60% 回填",
+ "stage_params": {
+  "prose": {
+   "think_budget": 40000
+  }
+ }
+}

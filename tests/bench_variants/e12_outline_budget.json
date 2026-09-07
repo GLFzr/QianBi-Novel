@@ -1,0 +1,12 @@
+{
+ "id": "e12_outline_budget",
+ "name": "E1.2 outline-budget（细纲显式长度预算）",
+ "version": 2,
+ "description": "成本实验台预设：outline.length_budget=N 字，测 DeepSeek 对 prompt 内长度指令的服从度（测试方案 v2 E1.2 / O2）",
+ "_note": "length_budget 为占位值，待 E0.1 基线的细纲输出均值出来后回填（卡片口径：当前均值参考）",
+ "stage_params": {
+  "outline": {
+   "length_budget": 1500
+  }
+ }
+}

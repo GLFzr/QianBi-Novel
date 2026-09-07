@@ -1,0 +1,8 @@
+{
+ "id": "s2_volume_20260907",
+ "budget_cny_max": 4.0,
+ "_note": "S2：清算入会话。对照 s1_volume（93.3%/¥0.291每章）。预期 +0.4pp → ~93.7%。",
+ "variants": [
+  {"name": "s2_volume", "args": {"preset": "tests/bench_variants/s2_volume.json", "chapters": 6}}
+ ]
+}

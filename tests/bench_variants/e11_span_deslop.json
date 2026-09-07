@@ -1,0 +1,12 @@
+{
+ "id": "e11_span_deslop",
+ "name": "E1.1 span-deslop（deslop 相位 span 级输出）",
+ "version": 2,
+ "description": "成本实验台预设：deslop.output_mode=span，其余相位 full（单变量隔离，测试方案 v2 E1.1）",
+ "_note": "消费方式：cost_bench --preset-params @tests/bench_variants/e11_span_deslop.json；变量隔离纪律——与基线只差目标相位一个键",
+ "stage_params": {
+  "deslop": {
+   "output_mode": "span"
+  }
+ }
+}

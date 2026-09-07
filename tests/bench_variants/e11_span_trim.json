@@ -1,0 +1,12 @@
+{
+ "id": "e11_span_trim",
+ "name": "E1.1 span-trim（trim 相位 span 级输出）",
+ "version": 2,
+ "description": "成本实验台预设：trim.output_mode=span，其余相位 full（单变量隔离，测试方案 v2 E1.1）",
+ "_note": "预期 trim 相位输出 16k→4-6k；kill criteria：合并失败率>5% 或下游修复链调用数上升",
+ "stage_params": {
+  "trim": {
+   "output_mode": "span"
+  }
+ }
+}
