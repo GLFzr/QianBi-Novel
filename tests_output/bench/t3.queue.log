@@ -1,0 +1,5 @@
+[23:37:32] 警告：git 工作区不干净（§5.1 检查单项）——继续执行，但今晚产物与代码改动将混在一起
+[23:37:32] [1/1] 变体 t3_long60 开始…
+[00:24:39] usage 已备份切片 → tests_output\bench\t3_long60.usage.jsonl
+[00:24:39] 变体 t3_long60 失败（跳过继续）（成本 ¥无 metrics）
+[00:24:39] 队列结束：队列全部变体跑完｜累计 ¥0.000｜晨报 → tests_output\bench\night_report_t3_pressure_60_20260907.md
