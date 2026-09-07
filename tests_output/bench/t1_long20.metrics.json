@@ -1,0 +1,316 @@
+{
+ "variant": "t1_long20",
+ "calls": 197,
+ "input_tok": 30176047,
+ "hit_tok": 28947200,
+ "miss_tok": 1228847,
+ "hit_pct": 95.9,
+ "out_tok": 431086,
+ "reasoning_tok": 117685,
+ "cost_usd": 0.7575,
+ "cost_cny": 5.454,
+ "llm_seconds": 5257.6,
+ "wall_seconds": 6050.3,
+ "per_tier": {
+  "flash": {
+   "calls": 197,
+   "hit": 28947200,
+   "miss": 1228847,
+   "out": 431086,
+   "cost_usd": 0.7575
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 20,
+   "hit": 2451200,
+   "miss": 494365,
+   "out": 62718,
+   "reasoning": 44367,
+   "lat": 799.27,
+   "tier_tok": {
+    "flash": {
+     "hit": 2451200,
+     "miss": 494365,
+     "out": 62718
+    }
+   },
+   "cost_usd": 0.1673,
+   "hit_pct": 83.2,
+   "avg_lat": 40.0
+  },
+  "enrich": {
+   "calls": 37,
+   "hit": 6236672,
+   "miss": 221394,
+   "out": 43188,
+   "reasoning": 0,
+   "lat": 637.7099999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 6236672,
+     "miss": 221394,
+     "out": 43188
+    }
+   },
+   "cost_usd": 0.1209,
+   "hit_pct": 96.6,
+   "avg_lat": 17.2
+  },
+  "deslop": {
+   "calls": 17,
+   "hit": 2531840,
+   "miss": 41108,
+   "out": 21573,
+   "reasoning": 0,
+   "lat": 256.0,
+   "tier_tok": {
+    "flash": {
+     "hit": 2531840,
+     "miss": 41108,
+     "out": 21573
+    }
+   },
+   "cost_usd": 0.041,
+   "hit_pct": 98.4,
+   "avg_lat": 15.1
+  },
+  "review": {
+   "calls": 27,
+   "hit": 3936000,
+   "miss": 58392,
+   "out": 26724,
+   "reasoning": 0,
+   "lat": 364.7699999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 3936000,
+     "miss": 58392,
+     "out": 26724
+    }
+   },
+   "cost_usd": 0.058,
+   "hit_pct": 98.5,
+   "avg_lat": 13.5
+  },
+  "tracking": {
+   "calls": 20,
+   "hit": 3387136,
+   "miss": 60604,
+   "out": 110738,
+   "reasoning": 0,
+   "lat": 929.56,
+   "tier_tok": {
+    "flash": {
+     "hit": 3387136,
+     "miss": 60604,
+     "out": 110738
+    }
+   },
+   "cost_usd": 0.1101,
+   "hit_pct": 98.2,
+   "avg_lat": 46.5
+  },
+  "chapter_summary": {
+   "calls": 20,
+   "hit": 3441920,
+   "miss": 119236,
+   "out": 2409,
+   "reasoning": 0,
+   "lat": 212.67999999999998,
+   "tier_tok": {
+    "flash": {
+     "hit": 3441920,
+     "miss": 119236,
+     "out": 2409
+    }
+   },
+   "cost_usd": 0.0519,
+   "hit_pct": 96.7,
+   "avg_lat": 10.6
+  },
+  "global_summary": {
+   "calls": 20,
+   "hit": 3557888,
+   "miss": 32474,
+   "out": 22836,
+   "reasoning": 0,
+   "lat": 324.54999999999995,
+   "tier_tok": {
+    "flash": {
+     "hit": 3557888,
+     "miss": 32474,
+     "out": 22836
+    }
+   },
+   "cost_usd": 0.0471,
+   "hit_pct": 99.1,
+   "avg_lat": 16.2
+  },
+  "canon_audit": {
+   "calls": 22,
+   "hit": 3361024,
+   "miss": 145740,
+   "out": 58533,
+   "reasoning": 41156,
+   "lat": 782.01,
+   "tier_tok": {
+    "flash": {
+     "hit": 3361024,
+     "miss": 145740,
+     "out": 58533
+    }
+   },
+   "cost_usd": 0.0942,
+   "hit_pct": 95.8,
+   "avg_lat": 35.5
+  },
+  "outline": {
+   "calls": 14,
+   "hit": 43520,
+   "miss": 55534,
+   "out": 82367,
+   "reasoning": 32162,
+   "lat": 951.0699999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 43520,
+     "miss": 55534,
+     "out": 82367
+    }
+   },
+   "cost_usd": 0.0669,
+   "hit_pct": 43.9,
+   "avg_lat": 67.9
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 2121,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "单号",
+   "words": 1331,
+   "review_blocking": 1
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 1725,
+   "review_blocking": 1
+  },
+  {
+   "num": 4,
+   "title": "空档期",
+   "words": 1466,
+   "review_blocking": 1
+  },
+  {
+   "num": 5,
+   "title": "138秒",
+   "words": 1788,
+   "review_blocking": 1
+  },
+  {
+   "num": 6,
+   "title": "07:12",
+   "words": 1690,
+   "review_blocking": 1
+  },
+  {
+   "num": 7,
+   "title": "听",
+   "words": 1977,
+   "review_blocking": 0
+  },
+  {
+   "num": 8,
+   "title": "锉刀",
+   "words": 1826,
+   "review_blocking": 0
+  },
+  {
+   "num": 9,
+   "title": "蓝黑",
+   "words": 1411,
+   "review_blocking": 1
+  },
+  {
+   "num": 10,
+   "title": "周记",
+   "words": 1186,
+   "review_blocking": 1
+  },
+  {
+   "num": 11,
+   "title": "同源",
+   "words": 1497,
+   "review_blocking": 1
+  },
+  {
+   "num": 12,
+   "title": "装线",
+   "words": 950,
+   "review_blocking": 1
+  },
+  {
+   "num": 13,
+   "title": "收账日",
+   "words": 1233,
+   "review_blocking": 1
+  },
+  {
+   "num": 14,
+   "title": "叠刻",
+   "words": 2165,
+   "review_blocking": 0
+  },
+  {
+   "num": 15,
+   "title": "等线人",
+   "words": 1790,
+   "review_blocking": 1
+  },
+  {
+   "num": 16,
+   "title": "指痕",
+   "words": 2041,
+   "review_blocking": 0
+  },
+  {
+   "num": 17,
+   "title": "灯再亮一次",
+   "words": 1955,
+   "review_blocking": 0
+  },
+  {
+   "num": 18,
+   "title": "阿莲",
+   "words": 1960,
+   "review_blocking": 0
+  },
+  {
+   "num": 19,
+   "title": "信筒",
+   "words": 1883,
+   "review_blocking": 0
+  },
+  {
+   "num": 20,
+   "title": "五根线",
+   "words": 1856,
+   "review_blocking": 0
+  }
+ ]
+}

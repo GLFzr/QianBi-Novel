@@ -1,0 +1,19 @@
+[06:56:20] 第1章 微循环…
+第 1 章 字数不足（1684 / 目标 2000），自动扩写（第 1 轮）…
+第 1 章 字数不足（1722 / 目标 2000），自动扩写（第 2 轮）…
+流式返回空内容，降级重发（关闭 thinking）
+第 1 章 设定清算：违反 5（硬伤 1）· 可收编自创 13——详见 追踪/设定清算_第001.json
+[07:09:09] 第1章完成：种子书 1834 字
+[07:09:09] 完成：smoke2（768s）→ G:\ai\酒馆\qianbi-novel\tests_output\bench\smoke2.metrics.json
+
+== smoke2 ==
+调用 10 | 输入 166,757 tok（命中 77.1%）| 输出 32,594 tok（推理 22,815）
+费用 $0.0308 ≈ ¥0.222 | LLM 440.1s / 墙钟 768.5s
+  review           笔3   hit  83.9% out  13,141 tok lat 62.2s
+  enrich           笔2   hit  51.5% out   2,731 tok lat 12.9s
+  global_summary   笔1   hit  98.7% out     299 tok lat 6.0s
+  chapter_summary  笔1   hit  99.1% out     102 tok lat 2.4s
+  tracking         笔1   hit  69.5% out   1,768 tok lat 21.2s
+  prose            笔1   hit   0.0% out   2,084 tok lat 38.1s
+  canon_audit      笔1   hit  99.7% out  12,469 tok lat 160.0s
+  第1章 种子书 1834字 阻塞0

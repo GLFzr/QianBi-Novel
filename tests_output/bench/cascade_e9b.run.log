@@ -1,0 +1,61 @@
+[15:36:40] 种子草稿模式：每章微循环前注入 finalize 断点（直奔清算）
+[15:36:40] 第1章 微循环…
+2026-09-06 15:36:40,397 INFO qianbi.core 第 1 章 章会话已启用（同章阶段共享前缀与正文历史）
+2026-09-06 15:36:40,397 INFO qianbi.core 第 1 章 断点续跑：已完成至 finalize（审校票 0 张保留），从断点继续
+2026-09-06 15:36:40,399 INFO qianbi.core 第 1 章 已从断点恢复草稿（1420 字）
+2026-09-06 15:36:40,400 INFO qianbi.core 第 1 章 本地扫描：阻断 0 处 / 建议 0 处（断点续跑：跳过扫描与去味）
+2026-09-06 15:36:40,401 INFO qianbi.core 第 1 章 断点续跑：审校已完成，跳过（进入定稿）
+2026-09-06 15:36:40,401 INFO qianbi.core 第 1 章 审校通过（verdict=PASS）
+2026-09-06 15:36:40,726 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:36:55,508 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-06 15:36:55,726 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:36:57,351 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:36:59,963 INFO qianbi.core 摘要链已更新（全局摘要 376 字）
+2026-09-06 15:37:00,201 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:37:44,623 WARNING qianbi.core 第 1 章 设定清算：违反 1（硬伤 0）· 可收编自创 6——详见 追踪/设定清算_第001.json
+[15:37:44] 第1章完成：0317 1420 字
+[15:37:44] 第2章 微循环…
+2026-09-06 15:37:44,628 INFO qianbi.core 第 2 章 章会话已启用（同章阶段共享前缀与正文历史）
+2026-09-06 15:37:44,629 INFO qianbi.core 第 2 章 断点续跑：已完成至 finalize（审校票 0 张保留），从断点继续
+2026-09-06 15:37:44,630 INFO qianbi.core 第 2 章 已从断点恢复草稿（1275 字）
+2026-09-06 15:37:44,631 INFO qianbi.core 第 2 章 本地扫描：阻断 0 处 / 建议 0 处（断点续跑：跳过扫描与去味）
+2026-09-06 15:37:44,631 INFO qianbi.core 第 2 章 断点续跑：审校已完成，跳过（进入定稿）
+2026-09-06 15:37:44,632 INFO qianbi.core 第 2 章 审校通过（verdict=PASS）
+2026-09-06 15:37:44,945 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:38:04,919 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-06 15:38:05,177 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:38:06,751 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:38:10,490 INFO qianbi.core 摘要链已更新（全局摘要 727 字）
+2026-09-06 15:38:11,234 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:39:08,199 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:39:34,798 WARNING qianbi.core 第 2 章 设定清算：违反 4（硬伤 2）· 可收编自创 3——详见 追踪/设定清算_第002.json
+[15:39:34] 第2章完成：半句话 1275 字
+[15:39:34] 第3章 微循环…
+2026-09-06 15:39:34,803 INFO qianbi.core 第 3 章 章会话已启用（同章阶段共享前缀与正文历史）
+2026-09-06 15:39:34,804 INFO qianbi.core 第 3 章 断点续跑：已完成至 finalize（审校票 0 张保留），从断点继续
+2026-09-06 15:39:34,805 INFO qianbi.core 第 3 章 已从断点恢复草稿（2148 字）
+2026-09-06 15:39:34,807 INFO qianbi.core 第 3 章 本地扫描：阻断 0 处 / 建议 0 处（断点续跑：跳过扫描与去味）
+2026-09-06 15:39:34,807 INFO qianbi.core 第 3 章 断点续跑：审校已完成，跳过（进入定稿）
+2026-09-06 15:39:34,807 INFO qianbi.core 第 3 章 审校通过（verdict=PASS）
+2026-09-06 15:39:35,111 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:40:16,292 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-06 15:40:16,554 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:40:18,173 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:40:22,173 INFO qianbi.core 摘要链已更新（全局摘要 700 字）
+2026-09-06 15:40:22,926 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:41:02,884 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 15:41:38,860 WARNING qianbi.core 第 3 章 设定清算：违反 4（硬伤 2）· 可收编自创 4——详见 追踪/设定清算_第003.json
+[15:41:38] 第3章完成：一笔 2148 字
+[15:41:38] 完成：cascade_e9b（298s）→ G:\ai\酒馆\qianbi-novel\tests_output\bench\cascade_e9b.metrics.json
+
+== cascade_e9b ==
+调用 14 | 输入 179,842 tok（命中 75.9%）| 输出 31,682 tok（推理 15,127）
+费用 $0.0314 ≈ ¥0.226 | LLM 298.4s / 墙钟 298.5s
+  global_summary   笔3   hit  96.7% out   1,338 tok lat 3.8s
+  chapter_summary  笔3   hit  86.2% out     308 tok lat 1.5s
+  tracking         笔3   hit  52.0% out  12,120 tok lat 25.6s
+  canon_audit      笔3   hit  56.4% out  14,156 tok lat 47.5s
+  canon_audit_review 笔2   hit  50.1% out   3,760 tok lat 31.5s
+  第1章 0317 1420字 阻塞0
+  第2章 半句话 1275字 阻塞0
+  第3章 一笔 2148字 阻塞0

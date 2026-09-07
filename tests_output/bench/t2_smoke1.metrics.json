@@ -1,0 +1,184 @@
+{
+ "variant": "t2_smoke1",
+ "calls": 13,
+ "input_tok": 298002,
+ "hit_tok": 267776,
+ "miss_tok": 30226,
+ "hit_pct": 89.9,
+ "out_tok": 19067,
+ "reasoning_tok": 1698,
+ "cost_usd": 0.0211,
+ "cost_cny": 0.152,
+ "llm_seconds": 200.8,
+ "wall_seconds": 230.7,
+ "per_tier": {
+  "flash": {
+   "calls": 13,
+   "hit": 267776,
+   "miss": 30226,
+   "out": 19067,
+   "cost_usd": 0.0211
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 0,
+   "out": 1513,
+   "reasoning": 656,
+   "lat": 25.58,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 0,
+     "out": 1513
+    }
+   },
+   "cost_usd": 0.001,
+   "hit_pct": 0.0,
+   "avg_lat": 25.6
+  },
+  "enrich": {
+   "calls": 2,
+   "hit": 15360,
+   "miss": 1777,
+   "out": 2925,
+   "reasoning": 0,
+   "lat": 29.77,
+   "tier_tok": {
+    "flash": {
+     "hit": 15360,
+     "miss": 1777,
+     "out": 2925
+    }
+   },
+   "cost_usd": 0.0024,
+   "hit_pct": 89.6,
+   "avg_lat": 14.9
+  },
+  "deslop": {
+   "calls": 2,
+   "hit": 36864,
+   "miss": 5731,
+   "out": 3178,
+   "reasoning": 0,
+   "lat": 24.810000000000002,
+   "tier_tok": {
+    "flash": {
+     "hit": 36864,
+     "miss": 5731,
+     "out": 3178
+    }
+   },
+   "cost_usd": 0.0036,
+   "hit_pct": 86.5,
+   "avg_lat": 12.4
+  },
+  "review": {
+   "calls": 3,
+   "hit": 80384,
+   "miss": 6742,
+   "out": 3286,
+   "reasoning": 0,
+   "lat": 43.67,
+   "tier_tok": {
+    "flash": {
+     "hit": 80384,
+     "miss": 6742,
+     "out": 3286
+    }
+   },
+   "cost_usd": 0.0042,
+   "hit_pct": 92.3,
+   "avg_lat": 14.6
+  },
+  "tracking": {
+   "calls": 1,
+   "hit": 28928,
+   "miss": 2575,
+   "out": 5033,
+   "reasoning": 0,
+   "lat": 39.72,
+   "tier_tok": {
+    "flash": {
+     "hit": 28928,
+     "miss": 2575,
+     "out": 5033
+    }
+   },
+   "cost_usd": 0.0041,
+   "hit_pct": 91.8,
+   "avg_lat": 39.7
+  },
+  "chapter_summary": {
+   "calls": 1,
+   "hit": 31488,
+   "miss": 5180,
+   "out": 66,
+   "reasoning": 0,
+   "lat": 3.67,
+   "tier_tok": {
+    "flash": {
+     "hit": 31488,
+     "miss": 5180,
+     "out": 66
+    }
+   },
+   "cost_usd": 0.0014,
+   "hit_pct": 85.9,
+   "avg_lat": 3.7
+  },
+  "global_summary": {
+   "calls": 1,
+   "hit": 36608,
+   "miss": 1649,
+   "out": 456,
+   "reasoning": 0,
+   "lat": 5.74,
+   "tier_tok": {
+    "flash": {
+     "hit": 36608,
+     "miss": 1649,
+     "out": 456
+    }
+   },
+   "cost_usd": 0.0009,
+   "hit_pct": 95.7,
+   "avg_lat": 5.7
+  },
+  "canon_audit": {
+   "calls": 2,
+   "hit": 38144,
+   "miss": 6572,
+   "out": 2610,
+   "reasoning": 1042,
+   "lat": 27.86,
+   "tier_tok": {
+    "flash": {
+     "hit": 38144,
+     "miss": 6572,
+     "out": 2610
+    }
+   },
+   "cost_usd": 0.0034,
+   "hit_pct": 85.3,
+   "avg_lat": 13.9
+  }
+ },
+ "chapters": [
+  {
+   "num": 21,
+   "title": "空柜",
+   "words": 2068,
+   "review_blocking": 0
+  }
+ ]
+}

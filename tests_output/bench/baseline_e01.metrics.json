@@ -1,0 +1,273 @@
+{
+ "variant": "baseline_e01",
+ "calls": 67,
+ "input_tok": 1526996,
+ "hit_tok": 1227392,
+ "miss_tok": 299604,
+ "hit_pct": 80.4,
+ "out_tok": 266868,
+ "reasoning_tok": 184478,
+ "cost_usd": 0.3215,
+ "cost_cny": 2.315,
+ "llm_seconds": 2749.8,
+ "wall_seconds": 2940.9,
+ "per_tier": {
+  "flash": {
+   "calls": 61,
+   "hit": 1209216,
+   "miss": 279556,
+   "out": 220073,
+   "cost_usd": 0.2152
+  },
+  "pro": {
+   "calls": 6,
+   "hit": 18176,
+   "miss": 20048,
+   "out": 46795,
+   "cost_usd": 0.1063
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 6,
+   "hit": 22528,
+   "miss": 61191,
+   "out": 69735,
+   "reasoning": 60693,
+   "lat": 785.4000000000001,
+   "tier_tok": {
+    "flash": {
+     "hit": 22528,
+     "miss": 61191,
+     "out": 69735
+    }
+   },
+   "cost_usd": 0.0596,
+   "hit_pct": 26.9,
+   "avg_lat": 130.9
+  },
+  "trim": {
+   "calls": 3,
+   "hit": 38912,
+   "miss": 7247,
+   "out": 49249,
+   "reasoning": 45194,
+   "lat": 390.25,
+   "tier_tok": {
+    "flash": {
+     "hit": 38912,
+     "miss": 7247,
+     "out": 49249
+    }
+   },
+   "cost_usd": 0.0344,
+   "hit_pct": 84.3,
+   "avg_lat": 130.1
+  },
+  "tracking": {
+   "calls": 6,
+   "hit": 154240,
+   "miss": 32906,
+   "out": 28696,
+   "reasoning": 0,
+   "lat": 169.76999999999998,
+   "tier_tok": {
+    "flash": {
+     "hit": 154240,
+     "miss": 32906,
+     "out": 28696
+    }
+   },
+   "cost_usd": 0.0273,
+   "hit_pct": 82.4,
+   "avg_lat": 28.3
+  },
+  "chapter_summary": {
+   "calls": 6,
+   "hit": 197504,
+   "miss": 19144,
+   "out": 619,
+   "reasoning": 0,
+   "lat": 9.75,
+   "tier_tok": {
+    "flash": {
+     "hit": 197504,
+     "miss": 19144,
+     "out": 619
+    }
+   },
+   "cost_usd": 0.006,
+   "hit_pct": 91.2,
+   "avg_lat": 1.6
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 216960,
+   "miss": 4321,
+   "out": 2904,
+   "reasoning": 0,
+   "lat": 22.89,
+   "tier_tok": {
+    "flash": {
+     "hit": 216960,
+     "miss": 4321,
+     "out": 2904
+    }
+   },
+   "cost_usd": 0.0044,
+   "hit_pct": 98.0,
+   "avg_lat": 3.8
+  },
+  "canon_audit": {
+   "calls": 7,
+   "hit": 20992,
+   "miss": 32941,
+   "out": 53983,
+   "reasoning": 47112,
+   "lat": 699.8399999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 15104,
+     "miss": 23313,
+     "out": 26090
+    },
+    "pro": {
+     "hit": 5888,
+     "miss": 9628,
+     "out": 27893
+    }
+   },
+   "cost_usd": 0.0842,
+   "hit_pct": 38.9,
+   "avg_lat": 100.0
+  },
+  "enrich": {
+   "calls": 2,
+   "hit": 8320,
+   "miss": 22720,
+   "out": 3180,
+   "reasoning": 0,
+   "lat": 24.32,
+   "tier_tok": {
+    "flash": {
+     "hit": 8320,
+     "miss": 22720,
+     "out": 3180
+    }
+   },
+   "cost_usd": 0.0072,
+   "hit_pct": 26.8,
+   "avg_lat": 12.2
+  },
+  "deslop": {
+   "calls": 8,
+   "hit": 106240,
+   "miss": 49402,
+   "out": 12023,
+   "reasoning": 0,
+   "lat": 66.28999999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 106240,
+     "miss": 49402,
+     "out": 12023
+    }
+   },
+   "cost_usd": 0.0195,
+   "hit_pct": 68.3,
+   "avg_lat": 8.3
+  },
+  "review": {
+   "calls": 17,
+   "hit": 417664,
+   "miss": 33760,
+   "out": 11391,
+   "reasoning": 0,
+   "lat": 101.48,
+   "tier_tok": {
+    "flash": {
+     "hit": 417664,
+     "miss": 33760,
+     "out": 11391
+    }
+   },
+   "cost_usd": 0.0179,
+   "hit_pct": 92.5,
+   "avg_lat": 6.0
+  },
+  "canon_audit_review": {
+   "calls": 4,
+   "hit": 12288,
+   "miss": 10420,
+   "out": 18902,
+   "reasoning": 18596,
+   "lat": 312.75,
+   "tier_tok": {
+    "pro": {
+     "hit": 12288,
+     "miss": 10420,
+     "out": 18902
+    }
+   },
+   "cost_usd": 0.0446,
+   "hit_pct": 54.1,
+   "avg_lat": 78.2
+  },
+  "review_fix": {
+   "calls": 2,
+   "hit": 31744,
+   "miss": 25552,
+   "out": 16186,
+   "reasoning": 12883,
+   "lat": 167.11,
+   "tier_tok": {
+    "flash": {
+     "hit": 31744,
+     "miss": 25552,
+     "out": 16186
+    }
+   },
+   "cost_usd": 0.0165,
+   "hit_pct": 55.4,
+   "avg_lat": 83.6
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "旧物",
+   "words": 1668,
+   "review_blocking": 1
+  },
+  {
+   "num": 2,
+   "title": "留下的话",
+   "words": 2252,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "页痕",
+   "words": 1833,
+   "review_blocking": 0
+  },
+  {
+   "num": 4,
+   "title": "三个叉",
+   "words": 1894,
+   "review_blocking": 0
+  },
+  {
+   "num": 5,
+   "title": "替人挡",
+   "words": 2127,
+   "review_blocking": 0
+  },
+  {
+   "num": 6,
+   "title": "系鞋带",
+   "words": 2360,
+   "review_blocking": 0
+  }
+ ]
+}

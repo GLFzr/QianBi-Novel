@@ -1,0 +1,19 @@
+[06:42:09] 第1章 微循环…
+第 1 章 字数超标（2273 > 目标 2000×110%），自动压缩…
+第 1 章 阻断 2 处 → 去味改写（第 1 轮）…
+流式返回空内容，降级重发（关闭 thinking）
+第 1 章 设定清算执行失败（清算解析失败：这条连接还没选模型——到 设置 · 连接与模型 里为它选一个（下拉候选或「拉取」）（原始输出需人工查看））——本章未对账，勿当作已通过；可用「世界观对账」重跑
+[06:52:16] 第1章完成：种子书 2073 字
+[06:52:16] 完成：smoke1（607s）→ G:\ai\酒馆\qianbi-novel\tests_output\bench\smoke1.metrics.json
+
+== smoke1 ==
+调用 9 | 输入 166,596 tok（命中 74.8%）| 输出 51,202 tok（推理 42,171）
+费用 $0.0439 ≈ ¥0.316 | LLM 443.6s / 墙钟 606.9s
+  review           笔3   hit  87.1% out  15,431 tok lat 45.4s
+  global_summary   笔1   hit  98.7% out     259 tok lat 2.6s
+  chapter_summary  笔1   hit  91.7% out     104 tok lat 1.5s
+  tracking         笔1   hit  72.2% out   1,866 tok lat 12.1s
+  deslop           笔1   hit   6.2% out   1,561 tok lat 8.5s
+  trim             笔1   hit  80.9% out  16,634 tok lat 121.1s
+  prose            笔1   hit   0.0% out  15,347 tok lat 161.6s
+  第1章 种子书 2073字 阻塞0

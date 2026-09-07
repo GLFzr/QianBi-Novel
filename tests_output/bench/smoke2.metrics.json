@@ -1,0 +1,94 @@
+{
+ "variant": "smoke2",
+ "calls": 10,
+ "input_tok": 166757,
+ "hit_tok": 128512,
+ "miss_tok": 38245,
+ "hit_pct": 77.1,
+ "out_tok": 32594,
+ "reasoning_tok": 22815,
+ "cost_usd": 0.0308,
+ "cost_cny": 0.222,
+ "llm_seconds": 440.1,
+ "wall_seconds": 768.5,
+ "per_phase": {
+  "prose": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 9920,
+   "out": 2084,
+   "reasoning": 789,
+   "lat": 38.11,
+   "hit_pct": 0.0,
+   "avg_lat": 38.1
+  },
+  "enrich": {
+   "calls": 2,
+   "hit": 12928,
+   "miss": 12198,
+   "out": 2731,
+   "reasoning": 0,
+   "lat": 25.77,
+   "hit_pct": 51.5,
+   "avg_lat": 12.9
+  },
+  "review": {
+   "calls": 3,
+   "hit": 47488,
+   "miss": 9080,
+   "out": 13141,
+   "reasoning": 11136,
+   "lat": 186.64,
+   "hit_pct": 83.9,
+   "avg_lat": 62.2
+  },
+  "tracking": {
+   "calls": 1,
+   "hit": 14848,
+   "miss": 6504,
+   "out": 1768,
+   "reasoning": 0,
+   "lat": 21.19,
+   "hit_pct": 69.5,
+   "avg_lat": 21.2
+  },
+  "chapter_summary": {
+   "calls": 1,
+   "hit": 23040,
+   "miss": 214,
+   "out": 102,
+   "reasoning": 0,
+   "lat": 2.44,
+   "hit_pct": 99.1,
+   "avg_lat": 2.4
+  },
+  "global_summary": {
+   "calls": 1,
+   "hit": 23296,
+   "miss": 311,
+   "out": 299,
+   "reasoning": 0,
+   "lat": 6.0,
+   "hit_pct": 98.7,
+   "avg_lat": 6.0
+  },
+  "canon_audit": {
+   "calls": 1,
+   "hit": 6912,
+   "miss": 18,
+   "out": 12469,
+   "reasoning": 10890,
+   "lat": 159.97,
+   "hit_pct": 99.7,
+   "avg_lat": 160.0
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 1834,
+   "review_blocking": 0
+  }
+ ]
+}

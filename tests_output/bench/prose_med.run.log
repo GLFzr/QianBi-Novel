@@ -1,0 +1,108 @@
+[10:01:15] 变量预设 bench_prose_med 生效档：{"prose": {"reasoning_effort": "medium"}}
+[10:01:15] 第1章 微循环…
+2026-09-06 10:01:15,850 INFO qianbi.core 第 1 章 章会话已启用（同章阶段共享前缀与正文历史）
+2026-09-06 10:01:15,851 INFO qianbi.core 第 1 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-06 10:01:16,712 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:01:44,325 INFO qianbi.core 第 1 章 草稿完成：2292 字（目标 2000）
+2026-09-06 10:01:44,325 WARNING qianbi.core 第 1 章 字数超标（2292 > 目标 2000×110%），自动压缩…
+2026-09-06 10:01:44,611 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:02:55,309 INFO qianbi.core 压缩后 1924 字，达标
+2026-09-06 10:02:55,313 INFO qianbi.core 第 1 章 本地扫描：阻断 0 处 / 建议 10 处
+2026-09-06 10:02:55,599 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:03:47,962 INFO qianbi.core 第 1 章 审校第 1/3 票：PASS（fail=0）
+2026-09-06 10:03:48,258 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:03:48,265 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:05:54,509 INFO qianbi.core 第 1 章 审校第 2/3 票：PASS_WITH_NOTES（fail=0）
+2026-09-06 10:05:54,510 INFO qianbi.core 第 1 章 审校第 3/3 票：PASS（fail=0）
+2026-09-06 10:05:54,513 INFO qianbi.core 第 1 章 审校通过（verdict=PASS）
+2026-09-06 10:05:54,874 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:06:09,303 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-06 10:06:09,688 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:06:11,043 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:06:12,965 INFO qianbi.core 摘要链已更新（全局摘要 281 字）
+2026-09-06 10:06:13,229 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:07:23,079 WARNING qianbi.llm 流式返回空内容，降级重发（关闭 thinking）
+2026-09-06 10:07:23,380 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:08:37,074 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:09:47,872 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:13:33,190 WARNING qianbi.core 第 1 章 设定清算：违反 8（硬伤 5）· 可收编自创 10——详见 追踪/设定清算_第001.json
+[10:13:33] 第1章完成：旧账 1924 字
+[10:13:33] 第2章 微循环…
+2026-09-06 10:13:33,195 INFO qianbi.core 第 2 章 章会话已启用（同章阶段共享前缀与正文历史）
+2026-09-06 10:13:33,196 INFO qianbi.core 第 2 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-06 10:13:33,454 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:17:52,793 INFO qianbi.core 第 2 章 草稿完成：1537 字（目标 2000）
+2026-09-06 10:17:52,793 WARNING qianbi.core 第 2 章 字数不足（1537 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-06 10:17:53,130 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:18:02,668 INFO qianbi.core 扩写后 1819 字，达标
+2026-09-06 10:18:02,671 INFO qianbi.core 第 2 章 本地扫描：阻断 1 处 / 建议 2 处
+2026-09-06 10:18:02,671 WARNING qianbi.core 第 2 章 阻断 1 处 → 去味改写（第 1 轮）…
+2026-09-06 10:18:02,985 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:18:09,864 INFO qianbi.core 第 2 章 去味完成，复扫通过
+2026-09-06 10:18:10,173 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:19:12,826 INFO qianbi.core 第 2 章 审校第 1/3 票：PASS_WITH_NOTES（fail=0）
+2026-09-06 10:19:13,155 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:19:13,160 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:19:52,471 INFO qianbi.core 第 2 章 审校第 2/3 票：PASS_WITH_NOTES（fail=0）
+2026-09-06 10:20:02,217 INFO qianbi.core 第 2 章 审校第 3/3 票：PASS_WITH_NOTES（fail=0）
+2026-09-06 10:20:02,220 INFO qianbi.core 第 2 章 审校通过（verdict=PASS_WITH_NOTES）
+2026-09-06 10:20:02,552 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:20:21,047 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-06 10:20:21,421 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:20:22,783 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:20:25,490 INFO qianbi.core 摘要链已更新（全局摘要 557 字）
+2026-09-06 10:20:25,681 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:21:35,333 WARNING qianbi.llm 流式返回空内容，降级重发（关闭 thinking）
+2026-09-06 10:21:35,578 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:22:43,264 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:24:10,153 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:28:32,942 WARNING qianbi.core 第 2 章 设定清算：违反 5（硬伤 4）· 可收编自创 8——详见 追踪/设定清算_第002.json
+[10:28:32] 第2章完成：断线的录音 1816 字
+[10:28:32] 第3章 微循环…
+2026-09-06 10:28:32,946 INFO qianbi.core 第 3 章 章会话已启用（同章阶段共享前缀与正文历史）
+2026-09-06 10:28:32,947 INFO qianbi.core 第 3 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-06 10:28:33,283 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:29:16,810 INFO qianbi.core 第 3 章 草稿完成：2285 字（目标 2000）
+2026-09-06 10:29:16,810 WARNING qianbi.core 第 3 章 字数超标（2285 > 目标 2000×110%），自动压缩…
+2026-09-06 10:29:17,129 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:29:35,378 INFO qianbi.core 压缩后 2002 字，达标
+2026-09-06 10:29:35,381 INFO qianbi.core 第 3 章 本地扫描：阻断 3 处 / 建议 0 处
+2026-09-06 10:29:35,381 WARNING qianbi.core 第 3 章 阻断 3 处 → 去味改写（第 1 轮）…
+2026-09-06 10:29:35,721 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:29:43,706 INFO qianbi.core 第 3 章 去味完成，复扫通过
+2026-09-06 10:29:44,021 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:29:58,183 INFO qianbi.core 第 3 章 审校第 1/3 票：PASS（fail=0）
+2026-09-06 10:29:58,495 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:29:58,496 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:31:46,290 INFO qianbi.core 第 3 章 审校第 2/3 票：PASS_WITH_NOTES（fail=0）
+2026-09-06 10:31:46,292 INFO qianbi.core 第 3 章 审校第 3/3 票：REJECT-HARD（fail=2）
+2026-09-06 10:31:46,295 INFO qianbi.core 第 3 章 审校通过（verdict=PASS）
+2026-09-06 10:31:46,634 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:32:20,568 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-06 10:32:20,926 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:32:22,366 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:32:25,893 INFO qianbi.core 摘要链已更新（全局摘要 645 字）
+2026-09-06 10:32:26,111 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:33:34,390 WARNING qianbi.llm 流式返回空内容，降级重发（关闭 thinking）
+2026-09-06 10:33:34,609 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:34:46,349 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:35:57,159 INFO httpx HTTP Request: POST https://api.deepseek.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-06 10:42:03,868 WARNING qianbi.core 第 3 章 设定清算：违反 6（硬伤 3）· 可收编自创 6——详见 追踪/设定清算_第003.json
+[10:42:03] 第3章完成：水渍延伸 1988 字
+[10:42:03] 完成：prose_med（2448s）→ G:\ai\酒馆\qianbi-novel\tests_output\bench\prose_med.metrics.json
+
+== prose_med ==
+调用 29 | 输入 551,060 tok（命中 71.7%）| 输出 167,376 tok（推理 130,538）
+费用 $0.1475 ≈ ¥1.062 | LLM 1932.2s / 墙钟 2447.9s
+  review           笔9   hit  88.2% out  54,381 tok lat 61.0s
+  global_summary   笔3   hit  98.2% out   1,093 tok lat 3.1s
+  chapter_summary  笔3   hit  86.7% out     305 tok lat 1.4s
+  tracking         笔3   hit  50.6% out  10,657 tok lat 22.6s
+  prose            笔3   hit   5.8% out  31,079 tok lat 110.6s
+  deslop           笔2   hit  48.1% out   2,775 tok lat 7.8s
+  trim             笔2   hit  84.0% out  12,411 tok lat 44.8s
+  canon_audit      笔3   hit  10.4% out  53,370 tok lat 285.2s
+  enrich           笔1   hit   0.0% out   1,305 tok lat 9.9s
+  第1章 旧账 1924字 阻塞0
+  第2章 断线的录音 1816字 阻塞0
+  第3章 水渍延伸 1988字 阻塞0

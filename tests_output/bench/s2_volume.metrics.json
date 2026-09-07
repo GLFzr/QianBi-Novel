@@ -1,0 +1,255 @@
+{
+ "variant": "s2_volume",
+ "calls": 63,
+ "input_tok": 6559893,
+ "hit_tok": 6134784,
+ "miss_tok": 425109,
+ "hit_pct": 93.5,
+ "out_tok": 157368,
+ "reasoning_tok": 81871,
+ "cost_usd": 0.2792,
+ "cost_cny": 2.01,
+ "llm_seconds": 1428.1,
+ "wall_seconds": 1396.5,
+ "per_tier": {
+  "flash": {
+   "calls": 61,
+   "hit": 6134784,
+   "miss": 412987,
+   "out": 131991,
+   "cost_usd": 0.2209
+  },
+  "pro": {
+   "calls": 2,
+   "hit": 0,
+   "miss": 12122,
+   "out": 25377,
+   "cost_usd": 0.0582
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 6,
+   "hit": 379648,
+   "miss": 198631,
+   "out": 45628,
+   "reasoning": 37677,
+   "lat": 466.55,
+   "tier_tok": {
+    "flash": {
+     "hit": 379648,
+     "miss": 198631,
+     "out": 45628
+    }
+   },
+   "cost_usd": 0.0765,
+   "hit_pct": 65.7,
+   "avg_lat": 77.8
+  },
+  "review": {
+   "calls": 18,
+   "hit": 1853824,
+   "miss": 31943,
+   "out": 12128,
+   "reasoning": 0,
+   "lat": 99.07,
+   "tier_tok": {
+    "flash": {
+     "hit": 1853824,
+     "miss": 31943,
+     "out": 12128
+    }
+   },
+   "cost_usd": 0.028,
+   "hit_pct": 98.3,
+   "avg_lat": 5.5
+  },
+  "tracking": {
+   "calls": 6,
+   "hit": 630912,
+   "miss": 29348,
+   "out": 26417,
+   "reasoning": 0,
+   "lat": 148.29,
+   "tier_tok": {
+    "flash": {
+     "hit": 630912,
+     "miss": 29348,
+     "out": 26417
+    }
+   },
+   "cost_usd": 0.0283,
+   "hit_pct": 95.6,
+   "avg_lat": 24.7
+  },
+  "chapter_summary": {
+   "calls": 6,
+   "hit": 675200,
+   "miss": 12285,
+   "out": 540,
+   "reasoning": 0,
+   "lat": 9.71,
+   "tier_tok": {
+    "flash": {
+     "hit": 675200,
+     "miss": 12285,
+     "out": 540
+    }
+   },
+   "cost_usd": 0.0078,
+   "hit_pct": 98.2,
+   "avg_lat": 1.6
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 687616,
+   "miss": 5492,
+   "out": 5000,
+   "reasoning": 0,
+   "lat": 34.2,
+   "tier_tok": {
+    "flash": {
+     "hit": 687616,
+     "miss": 5492,
+     "out": 5000
+    }
+   },
+   "cost_usd": 0.0093,
+   "hit_pct": 99.2,
+   "avg_lat": 5.7
+  },
+  "canon_audit": {
+   "calls": 9,
+   "hit": 697728,
+   "miss": 62974,
+   "out": 43238,
+   "reasoning": 35616,
+   "lat": 496.37,
+   "tier_tok": {
+    "flash": {
+     "hit": 697728,
+     "miss": 56164,
+     "out": 20296
+    },
+    "pro": {
+     "hit": 0,
+     "miss": 6810,
+     "out": 22942
+    }
+   },
+   "cost_usd": 0.0806,
+   "hit_pct": 91.7,
+   "avg_lat": 55.2
+  },
+  "trim": {
+   "calls": 1,
+   "hit": 35200,
+   "miss": 2036,
+   "out": 7530,
+   "reasoning": 6216,
+   "lat": 45.38,
+   "tier_tok": {
+    "flash": {
+     "hit": 35200,
+     "miss": 2036,
+     "out": 7530
+    }
+   },
+   "cost_usd": 0.0057,
+   "hit_pct": 94.5,
+   "avg_lat": 45.4
+  },
+  "deslop": {
+   "calls": 7,
+   "hit": 752768,
+   "miss": 32960,
+   "out": 10017,
+   "reasoning": 0,
+   "lat": 56.8,
+   "tier_tok": {
+    "flash": {
+     "hit": 752768,
+     "miss": 32960,
+     "out": 10017
+    }
+   },
+   "cost_usd": 0.0191,
+   "hit_pct": 95.8,
+   "avg_lat": 8.1
+  },
+  "canon_audit_review": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 5312,
+   "out": 2435,
+   "reasoning": 2362,
+   "lat": 36.12,
+   "tier_tok": {
+    "pro": {
+     "hit": 0,
+     "miss": 5312,
+     "out": 2435
+    }
+   },
+   "cost_usd": 0.0083,
+   "hit_pct": 0.0,
+   "avg_lat": 36.1
+  },
+  "enrich": {
+   "calls": 3,
+   "hit": 421888,
+   "miss": 44128,
+   "out": 4435,
+   "reasoning": 0,
+   "lat": 35.61,
+   "tier_tok": {
+    "flash": {
+     "hit": 421888,
+     "miss": 44128,
+     "out": 4435
+    }
+   },
+   "cost_usd": 0.0156,
+   "hit_pct": 90.5,
+   "avg_lat": 11.9
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 1915,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "通话录音",
+   "words": 1833,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 2017,
+   "review_blocking": 0
+  },
+  {
+   "num": 4,
+   "title": "空档期",
+   "words": 1927,
+   "review_blocking": 0
+  },
+  {
+   "num": 5,
+   "title": "138秒",
+   "words": 2086,
+   "review_blocking": 0
+  },
+  {
+   "num": 6,
+   "title": "07:12",
+   "words": 2163,
+   "review_blocking": 0
+  }
+ ]
+}

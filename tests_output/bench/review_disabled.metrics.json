@@ -1,0 +1,126 @@
+{
+ "variant": "review_disabled",
+ "calls": 28,
+ "input_tok": 537678,
+ "hit_tok": 408192,
+ "miss_tok": 129486,
+ "hit_pct": 75.9,
+ "out_tok": 142142,
+ "reasoning_tok": 110080,
+ "cost_usd": 0.1252,
+ "cost_cny": 0.901,
+ "llm_seconds": 1650.7,
+ "wall_seconds": 2250.8,
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 34015,
+   "out": 59825,
+   "reasoning": 55486,
+   "lat": 650.7900000000001,
+   "hit_pct": 5.7,
+   "avg_lat": 216.9
+  },
+  "review": {
+   "calls": 9,
+   "hit": 155008,
+   "miss": 21677,
+   "out": 5509,
+   "reasoning": 0,
+   "lat": 48.62000000000001,
+   "hit_pct": 87.7,
+   "avg_lat": 5.4
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 60160,
+   "miss": 12030,
+   "out": 10095,
+   "reasoning": 0,
+   "lat": 60.28,
+   "hit_pct": 83.3,
+   "avg_lat": 20.1
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 74240,
+   "miss": 8450,
+   "out": 292,
+   "reasoning": 0,
+   "lat": 5.12,
+   "hit_pct": 89.8,
+   "avg_lat": 1.7
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 82816,
+   "miss": 1634,
+   "out": 1451,
+   "reasoning": 0,
+   "lat": 11.59,
+   "hit_pct": 98.1,
+   "avg_lat": 3.9
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 18260,
+   "out": 56064,
+   "reasoning": 51703,
+   "lat": 819.5899999999999,
+   "hit_pct": 10.1,
+   "avg_lat": 273.2
+  },
+  "enrich": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 13658,
+   "out": 1519,
+   "reasoning": 0,
+   "lat": 11.44,
+   "hit_pct": 0.0,
+   "avg_lat": 11.4
+  },
+  "deslop": {
+   "calls": 2,
+   "hit": 17024,
+   "miss": 17602,
+   "out": 3010,
+   "reasoning": 0,
+   "lat": 16.15,
+   "hit_pct": 49.2,
+   "avg_lat": 8.1
+  },
+  "trim": {
+   "calls": 1,
+   "hit": 14848,
+   "miss": 2160,
+   "out": 4377,
+   "reasoning": 2891,
+   "lat": 27.14,
+   "hit_pct": 87.3,
+   "avg_lat": 27.1
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 2048,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "留给陈默",
+   "words": 2118,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 1999,
+   "review_blocking": 0
+  }
+ ]
+}
