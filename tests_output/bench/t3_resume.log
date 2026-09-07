@@ -1,0 +1,4 @@
+[00:28:40] 测试渠道：tr-dsv4f（deepseek-v4-flash @ https://tokenrhythm.studio/v1）——钉定 --flash-conn
+09-08 00:28:40 T3 续跑驱动启动：目标 60 章｜上限成本预算 ¥24.0｜渠道 deepseek-v4-flash
+2026-09-08 00:29:08,326 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 503 Service Unavailable"
+09-08 00:29:08 渠道仍 5xx/异常，180s 后重探（1/40）
