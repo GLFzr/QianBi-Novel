@@ -1,0 +1,106 @@
+{
+ "样本-001.md": {
+  "variant": "anchor_baseline",
+  "chapter": 5
+ },
+ "样本-002.md": {
+  "variant": "t1_long20",
+  "chapter": 14
+ },
+ "样本-003.md": {
+  "variant": "t1_long20",
+  "chapter": 4
+ },
+ "样本-004.md": {
+  "variant": "anchor_baseline",
+  "chapter": 6
+ },
+ "样本-005.md": {
+  "variant": "t1_long20",
+  "chapter": 20
+ },
+ "样本-006.md": {
+  "variant": "t1_long20",
+  "chapter": 3
+ },
+ "样本-007.md": {
+  "variant": "t1_long20",
+  "chapter": 1
+ },
+ "样本-008.md": {
+  "variant": "t1_long20",
+  "chapter": 5
+ },
+ "样本-009.md": {
+  "variant": "t1_long20",
+  "chapter": 8
+ },
+ "样本-010.md": {
+  "variant": "t1_long20",
+  "chapter": 16
+ },
+ "样本-011.md": {
+  "variant": "t1_long20",
+  "chapter": 7
+ },
+ "样本-012.md": {
+  "variant": "t1_long20",
+  "chapter": 11
+ },
+ "样本-013.md": {
+  "variant": "anchor_baseline",
+  "chapter": 1
+ },
+ "样本-014.md": {
+  "variant": "t1_long20",
+  "chapter": 19
+ },
+ "样本-015.md": {
+  "variant": "anchor_baseline",
+  "chapter": 3
+ },
+ "样本-016.md": {
+  "variant": "t1_long20",
+  "chapter": 18
+ },
+ "样本-017.md": {
+  "variant": "t1_long20",
+  "chapter": 9
+ },
+ "样本-018.md": {
+  "variant": "anchor_baseline",
+  "chapter": 4
+ },
+ "样本-019.md": {
+  "variant": "t1_long20",
+  "chapter": 12
+ },
+ "样本-020.md": {
+  "variant": "t1_long20",
+  "chapter": 13
+ },
+ "样本-021.md": {
+  "variant": "anchor_baseline",
+  "chapter": 2
+ },
+ "样本-022.md": {
+  "variant": "t1_long20",
+  "chapter": 6
+ },
+ "样本-023.md": {
+  "variant": "t1_long20",
+  "chapter": 10
+ },
+ "样本-024.md": {
+  "variant": "t1_long20",
+  "chapter": 15
+ },
+ "样本-025.md": {
+  "variant": "t1_long20",
+  "chapter": 17
+ },
+ "样本-026.md": {
+  "variant": "t1_long20",
+  "chapter": 2
+ }
+}
