@@ -1,0 +1,160 @@
+{
+ "variant": "t4a_recall",
+ "calls": 19,
+ "input_tok": 248020,
+ "hit_tok": 211712,
+ "miss_tok": 36308,
+ "hit_pct": 85.4,
+ "out_tok": 30166,
+ "reasoning_tok": 5278,
+ "cost_usd": 0.0294,
+ "cost_cny": 0.212,
+ "llm_seconds": 426.7,
+ "wall_seconds": 401.9,
+ "per_tier": {
+  "flash": {
+   "calls": 19,
+   "hit": 211712,
+   "miss": 36308,
+   "out": 30166,
+   "cost_usd": 0.0294
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "tracking": {
+   "calls": 3,
+   "hit": 34048,
+   "miss": 13045,
+   "out": 14008,
+   "reasoning": 0,
+   "lat": 128.74,
+   "tier_tok": {
+    "flash": {
+     "hit": 34048,
+     "miss": 13045,
+     "out": 14008
+    }
+   },
+   "cost_usd": 0.0124,
+   "hit_pct": 72.3,
+   "avg_lat": 42.9
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 55296,
+   "miss": 14864,
+   "out": 333,
+   "reasoning": 0,
+   "lat": 8.879999999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 55296,
+     "miss": 14864,
+     "out": 333
+    }
+   },
+   "cost_usd": 0.0039,
+   "hit_pct": 78.8,
+   "avg_lat": 3.0
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 69888,
+   "miss": 1964,
+   "out": 1049,
+   "reasoning": 0,
+   "lat": 15.780000000000001,
+   "tier_tok": {
+    "flash": {
+     "hit": 69888,
+     "miss": 1964,
+     "out": 1049
+    }
+   },
+   "cost_usd": 0.0016,
+   "hit_pct": 97.3,
+   "avg_lat": 5.3
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 7680,
+   "miss": 10,
+   "out": 7653,
+   "reasoning": 5278,
+   "lat": 177.7,
+   "tier_tok": {
+    "flash": {
+     "hit": 7680,
+     "miss": 10,
+     "out": 7653
+    }
+   },
+   "cost_usd": 0.0051,
+   "hit_pct": 99.9,
+   "avg_lat": 59.2
+  },
+  "deslop": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 0,
+   "out": 1646,
+   "reasoning": 0,
+   "lat": 16.24,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 0,
+     "out": 1646
+    }
+   },
+   "cost_usd": 0.0011,
+   "hit_pct": 0.0,
+   "avg_lat": 16.2
+  },
+  "review": {
+   "calls": 6,
+   "hit": 44800,
+   "miss": 6425,
+   "out": 5477,
+   "reasoning": 0,
+   "lat": 79.38,
+   "tier_tok": {
+    "flash": {
+     "hit": 44800,
+     "miss": 6425,
+     "out": 5477
+    }
+   },
+   "cost_usd": 0.0053,
+   "hit_pct": 87.5,
+   "avg_lat": 13.2
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "旧物",
+   "words": 1668,
+   "review_blocking": 1
+  },
+  {
+   "num": 2,
+   "title": "留下的话",
+   "words": 2304,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "页痕",
+   "words": 1894,
+   "review_blocking": 0
+  }
+ ]
+}

@@ -1,0 +1,538 @@
+[
+  {
+    "sample": "样本-001",
+    "judge_id": "J-B-seed4173",
+    "randomized_dim_order": ["D3", "D8", "D1", "D9", "D2", "D10", "D5", "D7", "D4", "D6"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 8,
+        "evidence_quote": "房租差一千六，他还没想好去哪凑。",
+        "one_line_why": "7分四特征全中：物件+人走/两段内数字/表停22:47/章名兑现"
+      },
+      {
+        "dim": "D2",
+        "score": 5,
+        "evidence_quote": "他本该把表放回原处，或留在站台，当它从没出现过。",
+        "one_line_why": "压抑+反转有，围观结算0处、代价账0处，情绪单一"
+      },
+      {
+        "dim": "D3",
+        "score": 9,
+        "evidence_quote": "四楼那扇半开的窗，玻璃忽然反了一下光。",
+        "one_line_why": "事件钩+窗半开线索两处前置勾连，另叠折返双钩"
+      },
+      {
+        "dim": "D4",
+        "score": 7,
+        "evidence_quote": "放进背包侧袋，和那本笔记挨在一处",
+        "one_line_why": "笔记本夹层/侧袋章内切换2处；纸角已自洽解释"
+      },
+      {
+        "dim": "D5",
+        "score": 6,
+        "evidence_quote": "他爸一把长刨的刨底烫着同一句话，说用工具的手不能贪快",
+        "one_line_why": "禁忌有双处实体出处，但落笔0次、代价无量纲"
+      },
+      {
+        "dim": "D6",
+        "score": 8,
+        "evidence_quote": "等你空了，我再跟你说",
+        "one_line_why": "盖名可辨声口3人；主角从不多翻到留下表，位移1次"
+      },
+      {
+        "dim": "D7",
+        "score": 8,
+        "evidence_quote": "手指探到最里侧，碰到一个薄薄的硬物",
+        "one_line_why": "8个单元、新信息点间隔均<250字；清理段无冲突"
+      },
+      {
+        "dim": "D8",
+        "score": 9,
+        "evidence_quote": "锁门。锁芯涩，他转了三次才锁严。",
+        "one_line_why": "视线词族0处，行业具象4处，长短句交替；短段2/31"
+      },
+      {
+        "dim": "D9",
+        "score": 8,
+        "evidence_quote": "大哥，3门317是哪一户",
+        "one_line_why": "关键码由最不该说的骑手递出；陈默应答2处皆<8字"
+      },
+      {
+        "dim": "D10",
+        "score": 8,
+        "evidence_quote": "靠书脊处留着细窄的撕痕",
+        "one_line_why": "三层悬念并行，0317章内复现3次，开线5条有指向"
+      }
+    ]
+  },
+  {
+    "sample": "样本-002",
+    "judge_id": "J-B-seed8821",
+    "randomized_dim_order": ["D3", "D2", "D9", "D8", "D1", "D5", "D10", "D4", "D7", "D6"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 6,
+        "evidence_quote": "红点压在月底两个字上",
+        "one_line_why": "冲突在第3段约500字后；数字压力无、仅有月底二字"
+      },
+      {
+        "dim": "D2",
+        "score": 7,
+        "evidence_quote": "通话沉默地持续到二十四秒，忙音响了",
+        "one_line_why": "拨号→延迟→忙音三拍齐，代价认知1处，围观结算0处"
+      },
+      {
+        "dim": "D3",
+        "score": 7,
+        "evidence_quote": "3月16日。离那个时间，还有一天。",
+        "one_line_why": "倒计时钩+信息缺口明确，勾连表停22:47；无新异象动作"
+      },
+      {
+        "dim": "D4",
+        "score": 6,
+        "evidence_quote": "表盘上的指针仍停在十和十一中间",
+        "one_line_why": "定指那只表章内无来处；其余数字4处可查、无幻影人物"
+      },
+      {
+        "dim": "D5",
+        "score": 5,
+        "evidence_quote": "他不知道该写什么，也没想好要让这串数字变成什么样",
+        "one_line_why": "使用前置疑1处达标；落笔格式、上限、代价梯度皆未记账"
+      },
+      {
+        "dim": "D6",
+        "score": 5,
+        "evidence_quote": "刨刃得还老王，欠他一块板",
+        "one_line_why": "在场活人1名，主角开口0次；父声3句各不重复"
+      },
+      {
+        "dim": "D7",
+        "score": 7,
+        "evidence_quote": "凌晨两点十七分，他翻身碰到枕头下的硬角",
+        "one_line_why": "转场自带时间信息；末段连推3提示，原地踏步2段"
+      },
+      {
+        "dim": "D8",
+        "score": 7,
+        "evidence_quote": "那句话被门缝夹住，有什么东西本来要递到门外",
+        "one_line_why": "比喻自语境生成；否定刹车12处/2245字偏密"
+      },
+      {
+        "dim": "D9",
+        "score": 6,
+        "evidence_quote": "这套新做的，边角没磨净，别给了",
+        "one_line_why": "台词一句三事达标，但全章0组活人交锋、无应答对照"
+      },
+      {
+        "dim": "D10",
+        "score": 8,
+        "evidence_quote": "页角、取件码、录音底噪，已经第三次",
+        "one_line_why": "三层悬念齐，复现节拍自带计数；埋设即有明日指向"
+      }
+    ]
+  },
+  {
+    "sample": "样本-003",
+    "judge_id": "J-B-seed3064",
+    "randomized_dim_order": ["D8", "D7", "D2", "D9", "D3", "D4", "D5", "D6", "D10", "D1"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 7,
+        "evidence_quote": "床头柜上摊着一张外卖单底联，单号区印着0317",
+        "one_line_why": "首段异象+记忆缺口达标；两段内数字压力0处"
+      },
+      {
+        "dim": "D2",
+        "score": 8,
+        "evidence_quote": "十五秒后，楼道口传来一声闷响",
+        "one_line_why": "延迟兑现双钩+代价认知+后果可指认，三拍齐"
+      },
+      {
+        "dim": "D3",
+        "score": 8,
+        "evidence_quote": "楼道尽头，老屋的门没关严",
+        "one_line_why": "末段双钩：新压痕浮出+总阀已关仍滴水，勾连2处旧线"
+      },
+      {
+        "dim": "D4",
+        "score": 6,
+        "evidence_quote": "是昨天落在他爸老屋里的那一串",
+        "one_line_why": "同一串钥匙来路章内两种说法（旁白/台词），1处断裂"
+      },
+      {
+        "dim": "D5",
+        "score": 7,
+        "evidence_quote": "不知道这一笔落下去，账要从哪里开始算",
+        "one_line_why": "置疑/格式/延迟留账3条达标，越界拒绝未测"
+      },
+      {
+        "dim": "D6",
+        "score": 8,
+        "evidence_quote": "叔，昨天那单尾号0317的，我送的",
+        "one_line_why": "在场活人4名盖名可辨；主角由看一眼到主动落笔"
+      },
+      {
+        "dim": "D7",
+        "score": 7,
+        "evidence_quote": "午后回到出租屋。灶台上三只空泡面碗摞着",
+        "one_line_why": "5单元各<400字；午后/傍晚时间硬切2处，前者带信息"
+      },
+      {
+        "dim": "D8",
+        "score": 6,
+        "evidence_quote": "他借手机屏幕的微光看掌心里的种子书",
+        "one_line_why": "视线族词0处，但否定刹车13处/1829字，约140字一处"
+      },
+      {
+        "dim": "D9",
+        "score": 9,
+        "evidence_quote": "明天一早七点，果果要去东门街那边上科创营",
+        "one_line_why": "一句办三事+关键信息由林兰无意说出，应答长短对照成"
+      },
+      {
+        "dim": "D10",
+        "score": 8,
+        "evidence_quote": "页角是下午两点七分，果果是早晨七点",
+        "one_line_why": "0317复现3次；14:07埋设即挂次日七点回收指向"
+      }
+    ]
+  },
+  {
+    "sample": "样本-004",
+    "judge_id": "J-B-seed9517",
+    "randomized_dim_order": ["D4", "D2", "D3", "D1", "D8", "D9", "D6", "D7", "D5", "D10"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 7,
+        "evidence_quote": "一头系在钥匙圈上，一头磨出细密的毛刺",
+        "one_line_why": "物件+死亡底色、章名兑现、异象齐；前两段无数字压力"
+      },
+      {
+        "dim": "D2",
+        "score": 4,
+        "evidence_quote": "他把种子书放进随身的背包夹层，拉链拉到头",
+        "one_line_why": "反转动作仅收存，结算镜头0、围观0、代价0处"
+      },
+      {
+        "dim": "D3",
+        "score": 6,
+        "evidence_quote": "他摸到背包里种子书的位置，隔着帆布按了按",
+        "one_line_why": "异象证据距末句约180字，末3段无新事件仅动作定格"
+      },
+      {
+        "dim": "D4",
+        "score": 4,
+        "evidence_quote": "纸角从种子书里露出来，风吹着它翻卷",
+        "one_line_why": "命中幻影引用：拉链拉到头后手持纸角又按回本中"
+      },
+      {
+        "dim": "D5",
+        "score": 5,
+        "evidence_quote": "陈默清楚账本长什么样",
+        "one_line_why": "题字2条声明边界；落笔0次、副作用无机制、上限未交代"
+      },
+      {
+        "dim": "D6",
+        "score": 8,
+        "evidence_quote": "叔叔，你爸是不是不会回来了",
+        "one_line_why": "盖名可辨4人含童声；主角位移1次（本子收进夹层）"
+      },
+      {
+        "dim": "D7",
+        "score": 7,
+        "evidence_quote": "外卖员低头看单，把单票举起来对着光",
+        "one_line_why": "8单元齐；外卖段约450字仅释放1个信息点"
+      },
+      {
+        "dim": "D8",
+        "score": 8,
+        "evidence_quote": "那串数字是拿硬物一道一道划出来的，槽口里留着金属屑",
+        "one_line_why": "视线词族1处、具象密度高；短段13/45偏多未过阈"
+      },
+      {
+        "dim": "D9",
+        "score": 9,
+        "evidence_quote": "东西你进去自己找。话我没带到，对不住",
+        "one_line_why": "半句两次咽回控信息，童声即冲突；应答皆<7字"
+      },
+      {
+        "dim": "D10",
+        "score": 8,
+        "evidence_quote": "有人撕掉了什么，撕得急，留下一截锯齿状的边",
+        "one_line_why": "开线5条各有指向，0317三次递进；粉笔拆字未复现"
+      }
+    ]
+  },
+  {
+    "sample": "样本-005",
+    "judge_id": "J-B-seed2288",
+    "randomized_dim_order": ["D6", "D9", "D1", "D2", "D3", "D7", "D8", "D4", "D5", "D10"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 7,
+        "evidence_quote": "嗒。嗒。水声均匀，从门缝底下透出来",
+        "one_line_why": "首段异象+已埋水线兑现；数字压力迟至约1100字处"
+      },
+      {
+        "dim": "D2",
+        "score": 7,
+        "evidence_quote": "他没写字，纸面自己多了一行",
+        "one_line_why": "延迟兑现+后果（修路推送）可见；代价认知0处"
+      },
+      {
+        "dim": "D3",
+        "score": 8,
+        "evidence_quote": "桌角刻着一串数字，笔画歪斜",
+        "one_line_why": "末段双钩：物证照片+六字质问；信息缺口指向新人物"
+      },
+      {
+        "dim": "D4",
+        "score": 6,
+        "evidence_quote": "他想起页痕上那行字，想起138这个数字",
+        "one_line_why": "138先作旧账回指后又新写一遍，同章重复计账1处"
+      },
+      {
+        "dim": "D5",
+        "score": 5,
+        "evidence_quote": "纸上没有名字，地名也空缺",
+        "one_line_why": "边界以不出名为证；主角落笔0次，代价与上限未记账"
+      },
+      {
+        "dim": "D6",
+        "score": 8,
+        "evidence_quote": "别老往这路口凑。那口子邪性，说不准什么时候又咬一口",
+        "one_line_why": "摊主/调度/邻家/主角4声口盖名可辨；位移为承认踩点"
+      },
+      {
+        "dim": "D7",
+        "score": 7,
+        "evidence_quote": "他沿着水线走回去，在断口处蹲下",
+        "one_line_why": "6单元时间戳转场带信息；开篇水线约350字结论为零"
+      },
+      {
+        "dim": "D8",
+        "score": 7,
+        "evidence_quote": "老调度顺着他的视线看过去",
+        "one_line_why": "情绪外化3处；视线族词3处+看类3处，约5.4/2千字"
+      },
+      {
+        "dim": "D9",
+        "score": 8,
+        "evidence_quote": "你这两天怎么老问果果的事",
+        "one_line_why": "两组立场交锋，问答含遮掩；老调度段偏情报交付"
+      },
+      {
+        "dim": "D10",
+        "score": 8,
+        "evidence_quote": "东门街出口的位置被人用红笔标了三个叉",
+        "one_line_why": "三层悬念并行；12/138/126差值开新线，三叉未入账"
+      }
+    ]
+  },
+  {
+    "sample": "样本-006",
+    "judge_id": "J-B-seed7745",
+    "randomized_dim_order": ["D1", "D4", "D7", "D8", "D2", "D3", "D5", "D6", "D9", "D10"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 7,
+        "evidence_quote": "里面浮着一截蓝色尼龙绳的碎头",
+        "one_line_why": "首段物件勾连、两段内九千八数字压力，异象约500字后"
+      },
+      {
+        "dim": "D2",
+        "score": 3,
+        "evidence_quote": "他没有落墨。笔尖在纸面压出一个极浅的点",
+        "one_line_why": "0317对齐兑现但代价0处、结算镜头0，落笔仍推迟"
+      },
+      {
+        "dim": "D3",
+        "score": 7,
+        "evidence_quote": "楼下那辆外卖电动车启动的声音传上来，一直没有驶离",
+        "one_line_why": "新录音推送+楼下车未离，缺口2处；主角未点为减法"
+      },
+      {
+        "dim": "D4",
+        "score": 4,
+        "evidence_quote": "他没用手指去碰，绿灯亮起，车把一拧，过了路口",
+        "one_line_why": "命中幻影引用：明写未碰，后文底联却在裤袋且称那张"
+      },
+      {
+        "dim": "D5",
+        "score": 3,
+        "evidence_quote": "手机屏幕自动亮起来，显示时间：2点17分",
+        "one_line_why": "异象由系统单方发起，规则声明0条、代价0处"
+      },
+      {
+        "dim": "D6",
+        "score": 4,
+        "evidence_quote": "他拇指悬在删除键上，没按",
+        "one_line_why": "在场活人1名；主角主动决策0次，不做动作3次"
+      },
+      {
+        "dim": "D7",
+        "score": 5,
+        "evidence_quote": "这一夜睡得很浅。半梦半醒间他翻了个身",
+        "one_line_why": "全文1269字7单元；有目标无挫折，前筐小票线被丢弃"
+      },
+      {
+        "dim": "D8",
+        "score": 6,
+        "evidence_quote": "像有人把一叠纸从左手归到右手，再放到桌上",
+        "one_line_why": "开篇具象好；正文靠概括，视线族词0、否定刹车8处"
+      },
+      {
+        "dim": "D9",
+        "score": 4,
+        "evidence_quote": "告诉他，账不是命运收的，是",
+        "one_line_why": "可数对白仅1段录音独白+1段彩铃，交锋0组"
+      },
+      {
+        "dim": "D10",
+        "score": 7,
+        "evidence_quote": "号码下方有一行创建于三年前的备注",
+        "one_line_why": "绳头/半截取件码新开2线，0317复现4次；小票线无指向"
+      }
+    ]
+  },
+  {
+    "sample": "样本-007",
+    "judge_id": "J-B-seed6130",
+    "randomized_dim_order": ["D1", "D2", "D5", "D6", "D7", "D8", "D9", "D10", "D4", "D3"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 3,
+        "evidence_quote": "晾衣绳上的水滴了七天，墙皮鼓起三块白斑",
+        "one_line_why": "开场4句纯天气零冲突，异象推迟到约500字后"
+      },
+      {
+        "dim": "D2",
+        "score": 3,
+        "evidence_quote": "他停住，从裤袋里抽出那张外卖单底联",
+        "one_line_why": "对齐兑现但无风险无代价，结算镜头0，半句仍悬空"
+      },
+      {
+        "dim": "D3",
+        "score": 7,
+        "evidence_quote": "枕边手机屏幕又弹出一条推送",
+        "one_line_why": "推送事件钩+2:18定格，勾连0317；强度低于新异象"
+      },
+      {
+        "dim": "D4",
+        "score": 6,
+        "evidence_quote": "陈默把外卖单摊在桌上，从抽屉里取出种子书",
+        "one_line_why": "抽屉→合同下→复取回指成链；案：0317页章内无来处"
+      },
+      {
+        "dim": "D5",
+        "score": 3,
+        "evidence_quote": "听筒里不再是关机提示音，而是一段彩铃",
+        "one_line_why": "副作用含糊：自动亮屏/凭空推送无边界声明，代价0处"
+      },
+      {
+        "dim": "D6",
+        "score": 4,
+        "evidence_quote": "他坐起来，拿过手机。屏幕还停在通话记录页面",
+        "one_line_why": "活人声口仅1，父声被压成1句；主角不做的动作3次"
+      },
+      {
+        "dim": "D7",
+        "score": 4,
+        "evidence_quote": "中段那句话每个字都清晰，末尾的半句每次都断在同一个位置",
+        "one_line_why": "全文1191字，首段天气占10%；单元有目标无挫折"
+      },
+      {
+        "dim": "D8",
+        "score": 5,
+        "evidence_quote": "全是废纸。他把纸箱踩扁，靠在门后",
+        "one_line_why": "概括替代场面3处，模板句不再是A而是B 1处，视线词0"
+      },
+      {
+        "dim": "D9",
+        "score": 4,
+        "evidence_quote": "他点开备忘录。父亲留存的唯一一条记事",
+        "one_line_why": "活人对白0句，信息改由提示音直给，无潜台词交锋"
+      },
+      {
+        "dim": "D10",
+        "score": 6,
+        "evidence_quote": "电子女声在很远的地方报了一句",
+        "one_line_why": "0317复现4次节拍在，种子书线本章仅提1次且冻结"
+      }
+    ]
+  },
+  {
+    "sample": "样本-008",
+    "judge_id": "J-B-seed4409",
+    "randomized_dim_order": ["D2", "D1", "D5", "D6", "D7", "D8", "D9", "D10", "D4", "D3"],
+    "dims": [
+      {
+        "dim": "D1",
+        "score": 6,
+        "evidence_quote": "泡面碗立在桌上，水没喝完，插头连着空手机",
+        "one_line_why": "前两段归置物品零冲突，异象落在约600字后"
+      },
+      {
+        "dim": "D2",
+        "score": 2,
+        "evidence_quote": "算了吧，他对自己说，这笔账改日再算也不迟",
+        "one_line_why": "命中红线：承诺爽点当章明写推迟；结算镜头0处"
+      },
+      {
+        "dim": "D3",
+        "score": 7,
+        "evidence_quote": "3月16日。离那个时间，还有一天。",
+        "one_line_why": "倒计时钩与22:47缺口在，但被前一段主动收束削力"
+      },
+      {
+        "dim": "D4",
+        "score": 4,
+        "evidence_quote": "他盯着对方的背影消失在楼道拐角",
+        "one_line_why": "命中幻影引用：全程独处，对方背影与楼道无入场交代"
+      },
+      {
+        "dim": "D5",
+        "score": 5,
+        "evidence_quote": "纸面被压出一个凹痕。他没落墨",
+        "one_line_why": "置疑1处达标；规则声明0条，代价与上限均未落账"
+      },
+      {
+        "dim": "D6",
+        "score": 5,
+        "evidence_quote": "告诉他，账不是命运收的",
+        "one_line_why": "父声3句可辨；主角由点开备忘到松手，位移当场撤回"
+      },
+      {
+        "dim": "D7",
+        "score": 7,
+        "evidence_quote": "他倒回去重听。第二遍，第三遍，第五遍",
+        "one_line_why": "新信息点间隔<250字；重听段2段仅1处增益"
+      },
+      {
+        "dim": "D8",
+        "score": 7,
+        "evidence_quote": "声音从听筒里出来，隔了一层水，近，又够不着",
+        "one_line_why": "情绪外化4处、视线族词2处；否定刹车12处/2295字"
+      },
+      {
+        "dim": "D9",
+        "score": 6,
+        "evidence_quote": "随即他爸的声音响起来，低低的，不像说话",
+        "one_line_why": "台词一句三事2处；活人交锋0组，应答对照缺失"
+      },
+      {
+        "dim": "D10",
+        "score": 8,
+        "evidence_quote": "他爸在备忘录里记下的时间，和这块表停住的时间，是同一个",
+        "one_line_why": "三层悬念并行、0317三次递进，埋设即挂次日22:47"
+      }
+    ]
+  }
+]

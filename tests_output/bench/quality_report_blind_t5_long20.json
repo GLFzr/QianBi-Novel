@@ -1,0 +1,586 @@
+{
+ "samples": [
+  {
+   "sample": "样本-001.md",
+   "variant": "anchor_baseline",
+   "chapter": 5,
+   "total": 7.16,
+   "votes": 2,
+   "divergent": true,
+   "per_dim": {
+    "D1": 7.0,
+    "D2": 6.5,
+    "D3": 6.5,
+    "D4": 7.5,
+    "D5": 7.0,
+    "D6": 7.0,
+    "D7": 7.0,
+    "D8": 7.5,
+    "D9": 7.5,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-002.md",
+   "variant": "t1_long20",
+   "chapter": 14,
+   "total": 7.88,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 7.5,
+    "D3": 6.5,
+    "D4": 8.0,
+    "D5": 6.5,
+    "D6": 9.0,
+    "D7": 7.5,
+    "D8": 8.0,
+    "D9": 9.0,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-003.md",
+   "variant": "t1_long20",
+   "chapter": 4,
+   "total": 7.16,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 5.5,
+    "D3": 8.5,
+    "D4": 5.0,
+    "D5": 6.5,
+    "D6": 8.5,
+    "D7": 7.0,
+    "D8": 7.0,
+    "D9": 8.0,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-004.md",
+   "variant": "anchor_baseline",
+   "chapter": 6,
+   "total": 7.88,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 5.5,
+    "D3": 8.5,
+    "D4": 8.0,
+    "D5": 7.0,
+    "D6": 8.5,
+    "D7": 8.5,
+    "D8": 8.5,
+    "D9": 8.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-005.md",
+   "variant": "t1_long20",
+   "chapter": 20,
+   "total": 7.36,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 7.5,
+    "D3": 7.5,
+    "D4": 7.0,
+    "D5": 7.0,
+    "D6": 7.0,
+    "D7": 8.5,
+    "D8": 7.0,
+    "D9": 5.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-006.md",
+   "variant": "t1_long20",
+   "chapter": 3,
+   "total": 7.16,
+   "votes": 2,
+   "divergent": true,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 7.5,
+    "D3": 7.0,
+    "D4": 6.0,
+    "D5": 6.5,
+    "D6": 7.5,
+    "D7": 6.5,
+    "D8": 7.0,
+    "D9": 8.0,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-007.md",
+   "variant": "t1_long20",
+   "chapter": 1,
+   "total": 7.1,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 4.5,
+    "D3": 5.5,
+    "D4": 6.0,
+    "D5": 7.5,
+    "D6": 8.5,
+    "D7": 8.0,
+    "D8": 8.0,
+    "D9": 8.0,
+    "D10": 8.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-008.md",
+   "variant": "t1_long20",
+   "chapter": 5,
+   "total": 7.48,
+   "votes": 2,
+   "divergent": true,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 6.5,
+    "D3": 8.5,
+    "D4": 7.5,
+    "D5": 8.5,
+    "D6": 6.5,
+    "D7": 8.0,
+    "D8": 8.0,
+    "D9": 5.0,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-009.md",
+   "variant": "t1_long20",
+   "chapter": 8,
+   "total": 7.85,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 7.0,
+    "D3": 6.0,
+    "D4": 7.5,
+    "D5": 9.0,
+    "D6": 9.0,
+    "D7": 7.5,
+    "D8": 8.0,
+    "D9": 9.0,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-010.md",
+   "variant": "t1_long20",
+   "chapter": 16,
+   "total": 7.34,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 6.5,
+    "D3": 8.0,
+    "D4": 6.5,
+    "D5": 6.5,
+    "D6": 8.0,
+    "D7": 6.5,
+    "D8": 6.5,
+    "D9": 9.0,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-011.md",
+   "variant": "t1_long20",
+   "chapter": 7,
+   "total": 7.67,
+   "votes": 2,
+   "divergent": true,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 6.5,
+    "D3": 7.5,
+    "D4": 7.5,
+    "D5": 8.5,
+    "D6": 7.5,
+    "D7": 7.0,
+    "D8": 7.5,
+    "D9": 8.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-012.md",
+   "variant": "t1_long20",
+   "chapter": 11,
+   "total": 6.29,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.0,
+    "D2": 6.0,
+    "D3": 6.5,
+    "D4": 6.5,
+    "D5": 5.0,
+    "D6": 5.5,
+    "D7": 6.5,
+    "D8": 7.0,
+    "D9": 3.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-013.md",
+   "variant": "anchor_baseline",
+   "chapter": 1,
+   "total": 7.54,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.0,
+    "D2": 7.0,
+    "D3": 9.0,
+    "D4": 7.5,
+    "D5": 7.0,
+    "D6": 7.0,
+    "D7": 8.0,
+    "D8": 8.0,
+    "D9": 6.0,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-014.md",
+   "variant": "t1_long20",
+   "chapter": 19,
+   "total": 7.65,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 6.5,
+    "D3": 7.0,
+    "D4": 7.5,
+    "D5": 6.5,
+    "D6": 8.5,
+    "D7": 8.0,
+    "D8": 7.0,
+    "D9": 9.0,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-015.md",
+   "variant": "anchor_baseline",
+   "chapter": 3,
+   "total": 8.01,
+   "votes": 2,
+   "divergent": true,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 7.5,
+    "D3": 8.5,
+    "D4": 9.0,
+    "D5": 9.5,
+    "D6": 7.5,
+    "D7": 7.5,
+    "D8": 8.0,
+    "D9": 5.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-016.md",
+   "variant": "t1_long20",
+   "chapter": 18,
+   "total": 7.74,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 8.0,
+    "D2": 6.5,
+    "D3": 8.0,
+    "D4": 7.0,
+    "D5": 6.5,
+    "D6": 9.0,
+    "D7": 7.5,
+    "D8": 7.5,
+    "D9": 9.0,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-017.md",
+   "variant": "t1_long20",
+   "chapter": 9,
+   "total": 6.6,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 6.5,
+    "D2": 6.5,
+    "D3": 5.5,
+    "D4": 6.5,
+    "D5": 3.5,
+    "D6": 8.0,
+    "D7": 6.5,
+    "D8": 7.0,
+    "D9": 8.0,
+    "D10": 8.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-018.md",
+   "variant": "anchor_baseline",
+   "chapter": 4,
+   "total": 7.92,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 8.0,
+    "D3": 9.0,
+    "D4": 8.0,
+    "D5": 8.0,
+    "D6": 7.5,
+    "D7": 8.0,
+    "D8": 8.5,
+    "D9": 5.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-019.md",
+   "variant": "t1_long20",
+   "chapter": 12,
+   "total": 5.16,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 6.0,
+    "D2": 3.5,
+    "D3": 5.0,
+    "D4": 6.0,
+    "D5": 3.0,
+    "D6": 6.0,
+    "D7": 3.5,
+    "D8": 6.5,
+    "D9": 6.0,
+    "D10": 6.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-020.md",
+   "variant": "t1_long20",
+   "chapter": 13,
+   "total": 7.2,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 6.0,
+    "D2": 5.0,
+    "D3": 8.5,
+    "D4": 7.5,
+    "D5": 7.5,
+    "D6": 7.5,
+    "D7": 7.5,
+    "D8": 7.5,
+    "D9": 8.0,
+    "D10": 8.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-021.md",
+   "variant": "anchor_baseline",
+   "chapter": 2,
+   "total": 7.64,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 4.5,
+    "D3": 8.0,
+    "D4": 8.5,
+    "D5": 7.0,
+    "D6": 8.5,
+    "D7": 8.0,
+    "D8": 8.5,
+    "D9": 8.0,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-022.md",
+   "variant": "t1_long20",
+   "chapter": 6,
+   "total": 7.11,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 7.5,
+    "D3": 8.0,
+    "D4": 6.0,
+    "D5": 8.0,
+    "D6": 7.0,
+    "D7": 7.5,
+    "D8": 7.0,
+    "D9": 4.0,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-023.md",
+   "variant": "t1_long20",
+   "chapter": 10,
+   "total": 6.12,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 6.0,
+    "D2": 6.0,
+    "D3": 5.5,
+    "D4": 6.0,
+    "D5": 4.5,
+    "D6": 7.0,
+    "D7": 5.5,
+    "D8": 6.0,
+    "D9": 7.5,
+    "D10": 7.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-024.md",
+   "variant": "t1_long20",
+   "chapter": 15,
+   "total": 7.28,
+   "votes": 2,
+   "divergent": true,
+   "per_dim": {
+    "D1": 7.0,
+    "D2": 6.5,
+    "D3": 8.5,
+    "D4": 6.5,
+    "D5": 6.5,
+    "D6": 8.0,
+    "D7": 6.5,
+    "D8": 7.0,
+    "D9": 8.5,
+    "D10": 8.5
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-025.md",
+   "variant": "t1_long20",
+   "chapter": 17,
+   "total": 6.95,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.5,
+    "D2": 6.0,
+    "D3": 8.0,
+    "D4": 7.5,
+    "D5": 6.0,
+    "D6": 6.0,
+    "D7": 8.0,
+    "D8": 7.5,
+    "D9": 3.5,
+    "D10": 9.0
+   },
+   "violations": ""
+  },
+  {
+   "sample": "样本-026.md",
+   "variant": "t1_long20",
+   "chapter": 2,
+   "total": 6.81,
+   "votes": 2,
+   "divergent": false,
+   "per_dim": {
+    "D1": 7.0,
+    "D2": 6.0,
+    "D3": 7.5,
+    "D4": 6.5,
+    "D5": 8.0,
+    "D6": 6.0,
+    "D7": 6.5,
+    "D8": 7.5,
+    "D9": 5.0,
+    "D10": 8.5
+   },
+   "violations": ""
+  }
+ ],
+ "variants": {
+  "anchor_baseline": {
+   "samples": 6,
+   "variant_total": 7.69,
+   "floor": 7.16,
+   "per_dim_avg": {
+    "D1": 7.42,
+    "D2": 6.5,
+    "D3": 8.25,
+    "D4": 8.08,
+    "D5": 7.58,
+    "D6": 7.67,
+    "D7": 7.83,
+    "D8": 8.17,
+    "D9": 6.83,
+    "D10": 8.83
+   }
+  },
+  "t1_long20": {
+   "samples": 20,
+   "variant_total": 7.1,
+   "floor": 5.16,
+   "per_dim_avg": {
+    "D1": 7.33,
+    "D2": 6.25,
+    "D3": 7.15,
+    "D4": 6.72,
+    "D5": 6.58,
+    "D6": 7.5,
+    "D7": 7.0,
+    "D8": 7.22,
+    "D9": 7.1,
+    "D10": 8.47
+   }
+  }
+ }
+}

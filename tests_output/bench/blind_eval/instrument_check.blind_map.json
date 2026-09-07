@@ -1,0 +1,34 @@
+{
+ "样本-001.md": {
+  "variant": "baseline_e01",
+  "chapter": 1
+ },
+ "样本-002.md": {
+  "variant": "baseline_e01",
+  "chapter": 2
+ },
+ "样本-003.md": {
+  "variant": "baseline_e01",
+  "chapter": 3
+ },
+ "样本-004.md": {
+  "variant": "s1_volume",
+  "chapter": 1
+ },
+ "样本-005.md": {
+  "variant": "s1_volume",
+  "chapter": 4
+ },
+ "样本-006.md": {
+  "variant": "clean_audit02",
+  "chapter": 2
+ },
+ "样本-007.md": {
+  "variant": "planted_A01",
+  "chapter": 2
+ },
+ "样本-008.md": {
+  "variant": "planted_B01",
+  "chapter": 2
+ }
+}
