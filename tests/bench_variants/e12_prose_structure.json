@@ -1,0 +1,12 @@
+{
+ "id": "e12_prose_structure",
+ "name": "E1.2 prose-structure（正文结构化对照）",
+ "version": 2,
+ "description": "成本实验台预设：prose.output_structure=scene_card（先场景卡后成文），不动思考——测结构化是否替代思考长度（测试方案 v2 E1.2 / O2 对照组）",
+ "_note": "生成类改动：采纳前需盲评（W4.3），盲评总分 ≥ 基线",
+ "stage_params": {
+  "prose": {
+   "output_structure": "scene_card"
+  }
+ }
+}

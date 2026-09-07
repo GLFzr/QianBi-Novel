@@ -1,0 +1,5 @@
+{
+ "_note": "S2 A/B：S1 卷会话 + canon_audit.in_session（清算预扫入会话追加轮）。对照 s1_volume（93.3%）。",
+ "writing": {"volume_session": true},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}}
+}

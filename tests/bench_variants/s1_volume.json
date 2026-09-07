@@ -1,0 +1,4 @@
+{
+ "_note": "S1 卷级会话栈 A/B（v3 方案 §2）：对照 baseline_e01 同 6 章。volume_session 开启后 system 只含 project_header、章头进开幕轮、历史跨章累积。",
+ "writing": {"volume_session": true}
+}

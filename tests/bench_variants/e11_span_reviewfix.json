@@ -1,0 +1,12 @@
+{
+ "id": "e11_span_reviewfix",
+ "name": "E1.1 span-reviewfix（review_fix 相位 span 级输出）",
+ "version": 2,
+ "description": "成本实验台预设：review_fix.output_mode=span，其余相位 full（单变量隔离，测试方案 v2 E1.1）",
+ "_note": "预期 review_fix 相位输出 30k→8-12k；质量断言：合并后正文过审校六维",
+ "stage_params": {
+  "review_fix": {
+   "output_mode": "span"
+  }
+ }
+}

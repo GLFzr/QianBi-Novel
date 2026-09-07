@@ -1,0 +1,12 @@
+{
+ "id": "t1_long20_20260907",
+ "budget_cny_max": 7.0,
+ "_note": "T1 二十章长卷：S 全栈（t1_long20 preset）单变体夜跑。渠道自动走优先级链 tr-dsv4f（TokenRhythm）。预算按 S1 画像 ¥0.21-0.29/章 × 20 = ¥4.2-5.8，上限 7.0；队列在成本超 1.5×预算或连败 3 次时全停（§5.2）。判据：hit% 曲线第 10 章起 ≥95%、卷末 ≥97-99%；单章 miss ≤15k；D4 情节一致性不低于 s3 盲评基线 7.22 的 -0.5。",
+ "variants": [
+  {"name": "t1_long20",
+   "args": {"preset": "tests/bench_variants/t1_long20.json",
+            "chapters": 20,
+            "user_id": "qianbi-bench-t1",
+            "extra": ["--flash-conn", "tr-dsv4f"]}}
+ ]
+}

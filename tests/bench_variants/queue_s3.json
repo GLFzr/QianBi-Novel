@@ -1,0 +1,8 @@
+{
+ "id": "s3_nopro_20260907",
+ "budget_cny_max": 3.0,
+ "_note": "S5 节拍 + S2 会话清算 + 无 Pro 组合（用户裁决：全线去 Pro，E5a 口径 flash+low 直采）。对照 s1_volume（93.3%/¥0.291每章/含3笔pro）。预期 hit 持平或更高（无 pro 复核 miss）、成本再降。",
+ "variants": [
+  {"name": "s3_nopro", "args": {"preset": "tests/bench_variants/s3_pace.json", "chapters": 6, "extra": ["--no-pro"]}}
+ ]
+}

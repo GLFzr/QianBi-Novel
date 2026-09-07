@@ -1,0 +1,10 @@
+{
+ "id": "e32_cisc",
+ "name": "E3.2 CISC 置信加权投票",
+ "version": 2,
+ "description": "成本实验台预设：gates.review_confidence_vote=true——审校票带 confidence 字段，置信加权重裁免第四票（测试方案 v2 E3.2 / O5）",
+ "_note": "依赖 W3.1 票 schema 实现（当前应用侧未接线，预设先行落盘；未实现前该 gates 键为无害空操作）",
+ "gates": {
+  "review_confidence_vote": true
+ }
+}

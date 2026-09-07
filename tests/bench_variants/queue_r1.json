@@ -1,0 +1,11 @@
+{
+ "id": "r1_output_20260907",
+ "budget_cny_max": 6.0,
+ "_note": "R1 批次（E0.1 基线已交付：80.4% hit / ¥0.386每章）。关键修正：span 实验必须全流程 3 章——固定草稿模式直奔清算，不触发 deslop/trim/review_fix，测不到目标相位。对照 = baseline_e01 同 3 章相位级裁剪。预算按 4×¥1.2 估。",
+ "variants": [
+  {"name": "e11_span_trim", "args": {"preset": "tests/bench_variants/e11_span_trim.json", "chapters": 3}},
+  {"name": "e11_span_deslop", "args": {"preset": "tests/bench_variants/e11_span_deslop.json", "chapters": 3}},
+  {"name": "e13_trim_low", "args": {"preset": "tests/bench_variants/e13_trim_low.json", "chapters": 3}},
+  {"name": "e11_span_reviewfix", "args": {"preset": "tests/bench_variants/e11_span_reviewfix.json", "chapters": 3}}
+ ]
+}
