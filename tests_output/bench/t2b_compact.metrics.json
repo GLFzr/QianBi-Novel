@@ -1,0 +1,250 @@
+{
+ "variant": "t2b_compact",
+ "calls": 63,
+ "input_tok": 5046897,
+ "hit_tok": 4628992,
+ "miss_tok": 417905,
+ "hit_pct": 91.7,
+ "out_tok": 217735,
+ "reasoning_tok": 106210,
+ "cost_usd": 0.268,
+ "cost_cny": 1.93,
+ "llm_seconds": 2442.3,
+ "wall_seconds": 2629.7,
+ "per_tier": {
+  "flash": {
+   "calls": 63,
+   "hit": 4628992,
+   "miss": 417905,
+   "out": 217735,
+   "cost_usd": 0.268
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 6,
+   "hit": 216832,
+   "miss": 180823,
+   "out": 78684,
+   "reasoning": 70624,
+   "lat": 917.9899999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 216832,
+     "miss": 180823,
+     "out": 78684
+    }
+   },
+   "cost_usd": 0.0932,
+   "hit_pct": 54.5,
+   "avg_lat": 153.0
+  },
+  "review": {
+   "calls": 19,
+   "hit": 1402880,
+   "miss": 55157,
+   "out": 19909,
+   "reasoning": 0,
+   "lat": 302.59999999999997,
+   "tier_tok": {
+    "flash": {
+     "hit": 1402880,
+     "miss": 55157,
+     "out": 19909
+    }
+   },
+   "cost_usd": 0.0351,
+   "hit_pct": 96.2,
+   "avg_lat": 15.9
+  },
+  "review_fix": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 0,
+   "out": 14814,
+   "reasoning": 13156,
+   "lat": 145.52,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 0,
+     "out": 14814
+    }
+   },
+   "cost_usd": 0.0098,
+   "hit_pct": 0.0,
+   "avg_lat": 145.5
+  },
+  "tracking": {
+   "calls": 6,
+   "hit": 491008,
+   "miss": 18018,
+   "out": 45227,
+   "reasoning": 0,
+   "lat": 399.24,
+   "tier_tok": {
+    "flash": {
+     "hit": 491008,
+     "miss": 18018,
+     "out": 45227
+    }
+   },
+   "cost_usd": 0.0373,
+   "hit_pct": 96.5,
+   "avg_lat": 66.5
+  },
+  "chapter_summary": {
+   "calls": 6,
+   "hit": 508160,
+   "miss": 46892,
+   "out": 669,
+   "reasoning": 0,
+   "lat": 36.93,
+   "tier_tok": {
+    "flash": {
+     "hit": 508160,
+     "miss": 46892,
+     "out": 669
+    }
+   },
+   "cost_usd": 0.0143,
+   "hit_pct": 91.6,
+   "avg_lat": 6.2
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 554496,
+   "miss": 12421,
+   "out": 10344,
+   "reasoning": 0,
+   "lat": 102.35,
+   "tier_tok": {
+    "flash": {
+     "hit": 554496,
+     "miss": 12421,
+     "out": 10344
+    }
+   },
+   "cost_usd": 0.0134,
+   "hit_pct": 97.8,
+   "avg_lat": 17.1
+  },
+  "canon_audit": {
+   "calls": 7,
+   "hit": 566016,
+   "miss": 47008,
+   "out": 19463,
+   "reasoning": 13293,
+   "lat": 244.5,
+   "tier_tok": {
+    "flash": {
+     "hit": 566016,
+     "miss": 47008,
+     "out": 19463
+    }
+   },
+   "cost_usd": 0.0271,
+   "hit_pct": 92.3,
+   "avg_lat": 34.9
+  },
+  "enrich": {
+   "calls": 4,
+   "hit": 284416,
+   "miss": 35260,
+   "out": 6646,
+   "reasoning": 0,
+   "lat": 80.28,
+   "tier_tok": {
+    "flash": {
+     "hit": 284416,
+     "miss": 35260,
+     "out": 6646
+    }
+   },
+   "cost_usd": 0.0141,
+   "hit_pct": 89.0,
+   "avg_lat": 20.1
+  },
+  "deslop": {
+   "calls": 7,
+   "hit": 540416,
+   "miss": 20112,
+   "out": 11440,
+   "reasoning": 0,
+   "lat": 109.08,
+   "tier_tok": {
+    "flash": {
+     "hit": 540416,
+     "miss": 20112,
+     "out": 11440
+    }
+   },
+   "cost_usd": 0.0158,
+   "hit_pct": 96.4,
+   "avg_lat": 15.6
+  },
+  "trim": {
+   "calls": 1,
+   "hit": 64768,
+   "miss": 2214,
+   "out": 10539,
+   "reasoning": 9137,
+   "lat": 103.82,
+   "tier_tok": {
+    "flash": {
+     "hit": 64768,
+     "miss": 2214,
+     "out": 10539
+    }
+   },
+   "cost_usd": 0.0079,
+   "hit_pct": 96.7,
+   "avg_lat": 103.8
+  }
+ },
+ "chapters": [
+  {
+   "num": 21,
+   "title": "空柜",
+   "words": 2168,
+   "review_blocking": 0
+  },
+  {
+   "num": 22,
+   "title": "",
+   "words": 2501,
+   "review_blocking": 0
+  },
+  {
+   "num": 23,
+   "title": "",
+   "words": 1992,
+   "review_blocking": 0
+  },
+  {
+   "num": 24,
+   "title": "",
+   "words": 2115,
+   "review_blocking": 0
+  },
+  {
+   "num": 25,
+   "title": "针脚",
+   "words": 2214,
+   "review_blocking": 0
+  },
+  {
+   "num": 26,
+   "title": "他的账",
+   "words": 1900,
+   "review_blocking": 0
+  }
+ ]
+}
