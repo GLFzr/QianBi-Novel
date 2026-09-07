@@ -1,0 +1,196 @@
+{
+ "variant": "t2a_keep",
+ "calls": 46,
+ "input_tok": 17677001,
+ "hit_tok": 17278976,
+ "miss_tok": 398025,
+ "hit_pct": 97.7,
+ "out_tok": 103692,
+ "reasoning_tok": 17541,
+ "cost_usd": 0.277,
+ "cost_cny": 1.994,
+ "llm_seconds": 1369.7,
+ "wall_seconds": 2127.2,
+ "per_tier": {
+  "flash": {
+   "calls": 46,
+   "hit": 17278976,
+   "miss": 398025,
+   "out": 103692,
+   "cost_usd": 0.277
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 6,
+   "hit": 2054144,
+   "miss": 179301,
+   "out": 11315,
+   "reasoning": 7037,
+   "lat": 186.89999999999998,
+   "tier_tok": {
+    "flash": {
+     "hit": 2054144,
+     "miss": 179301,
+     "out": 11315
+    }
+   },
+   "cost_usd": 0.0613,
+   "hit_pct": 92.0,
+   "avg_lat": 31.1
+  },
+  "enrich": {
+   "calls": 12,
+   "hit": 4415744,
+   "miss": 70785,
+   "out": 11553,
+   "reasoning": 0,
+   "lat": 246.40999999999997,
+   "tier_tok": {
+    "flash": {
+     "hit": 4415744,
+     "miss": 70785,
+     "out": 11553
+    }
+   },
+   "cost_usd": 0.0541,
+   "hit_pct": 98.4,
+   "avg_lat": 20.5
+  },
+  "tracking": {
+   "calls": 6,
+   "hit": 2252800,
+   "miss": 19353,
+   "out": 49152,
+   "reasoning": 0,
+   "lat": 385.26,
+   "tier_tok": {
+    "flash": {
+     "hit": 2252800,
+     "miss": 19353,
+     "out": 49152
+    }
+   },
+   "cost_usd": 0.0525,
+   "hit_pct": 99.1,
+   "avg_lat": 64.2
+  },
+  "chapter_summary": {
+   "calls": 6,
+   "hit": 2267136,
+   "miss": 54978,
+   "out": 682,
+   "reasoning": 0,
+   "lat": 113.16,
+   "tier_tok": {
+    "flash": {
+     "hit": 2267136,
+     "miss": 54978,
+     "out": 682
+    }
+   },
+   "cost_usd": 0.0284,
+   "hit_pct": 97.6,
+   "avg_lat": 18.9
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 2319616,
+   "miss": 15904,
+   "out": 11907,
+   "reasoning": 0,
+   "lat": 158.19,
+   "tier_tok": {
+    "flash": {
+     "hit": 2319616,
+     "miss": 15904,
+     "out": 11907
+    }
+   },
+   "cost_usd": 0.0276,
+   "hit_pct": 99.3,
+   "avg_lat": 26.4
+  },
+  "canon_audit": {
+   "calls": 6,
+   "hit": 2333696,
+   "miss": 49381,
+   "out": 15013,
+   "reasoning": 10504,
+   "lat": 206.89,
+   "tier_tok": {
+    "flash": {
+     "hit": 2333696,
+     "miss": 49381,
+     "out": 15013
+    }
+   },
+   "cost_usd": 0.0371,
+   "hit_pct": 97.9,
+   "avg_lat": 34.5
+  },
+  "deslop": {
+   "calls": 4,
+   "hit": 1635840,
+   "miss": 8323,
+   "out": 4070,
+   "reasoning": 0,
+   "lat": 72.92,
+   "tier_tok": {
+    "flash": {
+     "hit": 1635840,
+     "miss": 8323,
+     "out": 4070
+    }
+   },
+   "cost_usd": 0.016,
+   "hit_pct": 99.5,
+   "avg_lat": 18.2
+  }
+ },
+ "chapters": [
+  {
+   "num": 21,
+   "title": "空柜",
+   "words": 1676,
+   "review_blocking": 1
+  },
+  {
+   "num": 22,
+   "title": "他进去了",
+   "words": 1284,
+   "review_blocking": 1
+  },
+  {
+   "num": 23,
+   "title": "他回拨",
+   "words": 1548,
+   "review_blocking": 1
+  },
+  {
+   "num": 24,
+   "title": "门在身后合上",
+   "words": 1067,
+   "review_blocking": 1
+  },
+  {
+   "num": 25,
+   "title": "三号停尸间",
+   "words": 1573,
+   "review_blocking": 1
+  },
+  {
+   "num": 26,
+   "title": "他的账",
+   "words": 1394,
+   "review_blocking": 1
+  }
+ ]
+}

@@ -1,0 +1,171 @@
+[21:00:44] æµ‹è¯•æ¸ é“ï¼štr-dsv4fï¼ˆdeepseek-v4-flash @ https://tokenrhythm.studio/v1ï¼‰â€”â€”é’‰å®š --flash-conn
+[21:00:44] ç§å­æ€=G:\ai\é…’é¦†\qianbi-novel\tests_output\bench\t2_outline\bench\ç§å­ä¹¦ï¼Œä»ç¬¬21ç« ç»­å†™åˆ°ç¬¬26ç« 
+[21:00:44] å˜é‡é¢„è®¾ bench_t2a_keep ç”Ÿæ•ˆæ¡£ï¼š{"canon_audit": {"early_stop": true, "in_session": true}}
+[21:00:44] é¢˜æé¢„è®¾åæ²¿ç”¨ç§å­ã€Œå®éªŒ t1_long20ã€ï¼ˆè¿› system å‰ç¼€ï¼Œæ¢åä¼šé€€å›ç©ºæ ˆï¼‰
+[21:00:44] ç¬¬21ç«  å¾®å¾ªç¯â€¦
+2026-09-07 21:00:44,316 INFO qianbi.core ¾í 2 »á»°ÒÑ´ÓÅÌ»Ö¸´£¨60 ÂÖ£¬ÀúÊ·Ç°×º»º´æ¼ÌĞøÓĞĞ§£©
+2026-09-07 21:00:44,316 INFO qianbi.core µÚ 21 ÕÂ ¾í»á»°ÒÑÆôÓÃ£¨¾í 2£º¿çÕÂ¹²ÏíÀúÊ·£¬ÕÂÍ·Èë¿ªÄ»ÂÖ£©
+2026-09-07 21:00:44,317 INFO qianbi.core µÚ 21 ÕÂ ÉÏÏÂÎÄ×é×°Íê³É£¨ºËĞÄÉè¶¨ + °Ë½ÚÕÂ¼¶¹²Ïí¶Î£¨º¬Ï¸¸Ù/ÕªÒª/×´Ì¬/·ü±Ê/ÉÏÒ»ÕÂÃªµã£©£©
+2026-09-07 21:00:54,106 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:01:22,309 INFO qianbi.core µÚ 21 ÕÂ ²İ¸åÍê³É£º1134 ×Ö£¨Ä¿±ê 2000£©
+2026-09-07 21:02:07,340 WARNING qianbi.core µÚ 21 ÕÂ ×ÖÊı²»×ã£¨1134 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:02:16,638 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:02:25,988 WARNING qianbi.core µÚ 21 ÕÂ ×ÖÊı²»×ã£¨1473 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 2 ÂÖ£©¡­
+2026-09-07 21:02:36,189 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:02:45,265 WARNING qianbi.core À©Ğ´ºó 1676 ×Ö£¬2 ÂÖºóÈÔ²»×ã£¬±ê¼Ç²»×è¶Ï
+2026-09-07 21:02:45,268 INFO qianbi.core µÚ 21 ÕÂ ±¾µØÉ¨Ãè£º×è¶Ï 0 ´¦ / ½¨Òé 2 ´¦
+2026-09-07 21:02:45,269 WARNING qianbi.core µÚ 21 ÕÂ ×ÖÊıÔ¤¼ìÎ´¹ı£º[×ÖÊı] µÚ21ÕÂÕıÎÄ 1676 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£¨Ìø¹ıÉóĞ£ LLM£©
+2026-09-07 21:02:45,270 WARNING qianbi.core µÚ 21 ÕÂ ×ÖÊı²»×ã£¨[×ÖÊı] µÚ21ÕÂÕıÎÄ 1676 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£©£º×ÖÊıÎÊÌâ²»×ßĞŞ¸´»·£¬½µ¼¶Îª½¨Òé£¨ÇëÊÖ¶¯À©Ğ´»òµ÷¸ßÀ©Ğ´ÂÖÊı£©
+2026-09-07 21:02:45,271 INFO qianbi.core µÚ 21 ÕÂ ÉóĞ£Í¨¹ı£¨verdict=PASS_WITH_NOTES£©
+2026-09-07 21:02:56,709 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:03:50,141 INFO qianbi.core ×·×ÙÎÄ¼şÒÑ¸üĞÂ£º½ÇÉ«×´Ì¬, ·ü±Ê, Ê±¼äÏß
+2026-09-07 21:04:01,838 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:04:15,660 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:04:28,352 INFO qianbi.core ÕªÒªÁ´ÒÑ¸üĞÂ£¨È«¾ÖÕªÒª 2193 ×Ö£©
+2026-09-07 21:04:34,463 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:04:45,816 WARNING qianbi.core µÚ 21 ÕÂ Éè¶¨ÇåËã£ºÎ¥·´ 1£¨Ó²ÉË 0£©¡¤ ¿ÉÊÕ±à×Ô´´ 3¡ª¡ªÏê¼û ×·×Ù/Éè¶¨ÇåËã_µÚ021.json
+[21:04:45] ç¬¬21ç« å®Œæˆï¼šç©ºæŸœ 1676 å­—
+[21:04:45] ç¬¬22ç«  å¾®å¾ªç¯â€¦
+2026-09-07 21:04:45,821 INFO qianbi.core µÚ 22 ÕÂ ÉÏÏÂÎÄ×é×°Íê³É£¨ºËĞÄÉè¶¨ + °Ë½ÚÕÂ¼¶¹²Ïí¶Î£¨º¬Ï¸¸Ù/ÕªÒª/×´Ì¬/·ü±Ê/ÉÏÒ»ÕÂÃªµã£©£©
+2026-09-07 21:05:02,543 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:05:23,105 INFO qianbi.core µÚ 22 ÕÂ ²İ¸åÍê³É£º1284 ×Ö£¨Ä¿±ê 2000£©
+2026-09-07 21:06:08,139 WARNING qianbi.core µÚ 22 ÕÂ ×ÖÊı²»×ã£¨1284 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:06:17,101 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:06:23,538 WARNING qianbi.core µÚ 22 ÕÂ ×ÖÊı²»×ã£¨1284 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 2 ÂÖ£©¡­
+2026-09-07 21:06:33,298 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:06:39,536 WARNING qianbi.core À©Ğ´ºó 1284 ×Ö£¬2 ÂÖºóÈÔ²»×ã£¬±ê¼Ç²»×è¶Ï
+2026-09-07 21:06:39,538 INFO qianbi.core µÚ 22 ÕÂ ±¾µØÉ¨Ãè£º×è¶Ï 0 ´¦ / ½¨Òé 4 ´¦
+2026-09-07 21:06:39,539 WARNING qianbi.core µÚ 22 ÕÂ ×ÖÊıÔ¤¼ìÎ´¹ı£º[×ÖÊı] µÚ22ÕÂÕıÎÄ 1284 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£¨Ìø¹ıÉóĞ£ LLM£©
+2026-09-07 21:06:39,540 WARNING qianbi.core µÚ 22 ÕÂ ×ÖÊı²»×ã£¨[×ÖÊı] µÚ22ÕÂÕıÎÄ 1284 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£©£º×ÖÊıÎÊÌâ²»×ßĞŞ¸´»·£¬½µ¼¶Îª½¨Òé£¨ÇëÊÖ¶¯À©Ğ´»òµ÷¸ßÀ©Ğ´ÂÖÊı£©
+2026-09-07 21:06:39,542 INFO qianbi.core µÚ 22 ÕÂ ÉóĞ£Í¨¹ı£¨verdict=PASS_WITH_NOTES£©
+2026-09-07 21:06:50,976 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:07:43,429 INFO qianbi.core ×·×ÙÎÄ¼şÒÑ¸üĞÂ£º½ÇÉ«×´Ì¬, ·ü±Ê, Ê±¼äÏß
+2026-09-07 21:07:50,598 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:08:08,148 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:08:21,321 INFO qianbi.core ÕªÒªÁ´ÒÑ¸üĞÂ£¨È«¾ÖÕªÒª 2708 ×Ö£©
+2026-09-07 21:08:37,938 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:09:34,634 WARNING qianbi.core µÚ 22 ÕÂ Éè¶¨ÇåËã£ºÎ¥·´ 3£¨Ó²ÉË 1£©¡¤ ¿ÉÊÕ±à×Ô´´ 1¡ª¡ªÏê¼û ×·×Ù/Éè¶¨ÇåËã_µÚ022.json
+[21:09:34] ç¬¬22ç« å®Œæˆï¼šä»–è¿›å»äº† 1284 å­—
+[21:09:34] ç¬¬23ç«  å¾®å¾ªç¯â€¦
+2026-09-07 21:09:34,640 INFO qianbi.core µÚ 23 ÕÂ ÉÏÏÂÎÄ×é×°Íê³É£¨ºËĞÄÉè¶¨ + °Ë½ÚÕÂ¼¶¹²Ïí¶Î£¨º¬Ï¸¸Ù/ÕªÒª/×´Ì¬/·ü±Ê/ÉÏÒ»ÕÂÃªµã£©£©
+2026-09-07 21:09:45,560 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:10:01,846 INFO qianbi.core µÚ 23 ÕÂ ²İ¸åÍê³É£º865 ×Ö£¨Ä¿±ê 2000£©
+2026-09-07 21:10:46,880 WARNING qianbi.core µÚ 23 ÕÂ ×ÖÊı²»×ã£¨865 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:10:58,024 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:11:04,870 WARNING qianbi.core µÚ 23 ÕÂ ×ÖÊı²»×ã£¨1244 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 2 ÂÖ£©¡­
+2026-09-07 21:11:19,867 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:11:28,538 WARNING qianbi.core À©Ğ´ºó 1571 ×Ö£¬2 ÂÖºóÈÔ²»×ã£¬±ê¼Ç²»×è¶Ï
+2026-09-07 21:11:28,541 INFO qianbi.core µÚ 23 ÕÂ ±¾µØÉ¨Ãè£º×è¶Ï 3 ´¦ / ½¨Òé 9 ´¦
+2026-09-07 21:11:28,541 WARNING qianbi.core µÚ 23 ÕÂ ×è¶Ï 3 ´¦ ¡ú È¥Î¶¸ÄĞ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:11:35,314 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:11:41,646 INFO qianbi.core µÚ 23 ÕÂ È¥Î¶Íê³É£¬¸´É¨Í¨¹ı
+2026-09-07 21:11:41,646 WARNING qianbi.core µÚ 23 ÕÂ ×ÖÊıÔ¤¼ìÎ´¹ı£º[×ÖÊı] µÚ23ÕÂÕıÎÄ 1548 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£¨Ìø¹ıÉóĞ£ LLM£©
+2026-09-07 21:11:41,648 WARNING qianbi.core µÚ 23 ÕÂ ×ÖÊı²»×ã£¨[×ÖÊı] µÚ23ÕÂÕıÎÄ 1548 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£©£º×ÖÊıÎÊÌâ²»×ßĞŞ¸´»·£¬½µ¼¶Îª½¨Òé£¨ÇëÊÖ¶¯À©Ğ´»òµ÷¸ßÀ©Ğ´ÂÖÊı£©
+2026-09-07 21:11:41,649 INFO qianbi.core µÚ 23 ÕÂ ÉóĞ£Í¨¹ı£¨verdict=PASS_WITH_NOTES£©
+2026-09-07 21:11:52,840 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:12:43,739 INFO qianbi.core ×·×ÙÎÄ¼şÒÑ¸üĞÂ£º½ÇÉ«×´Ì¬, ·ü±Ê, Ê±¼äÏß
+2026-09-07 21:12:54,336 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:13:05,531 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:13:18,515 INFO qianbi.core ÕªÒªÁ´ÒÑ¸üĞÂ£¨È«¾ÖÕªÒª 2708 ×Ö£©
+2026-09-07 21:13:25,853 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:13:41,460 WARNING qianbi.core µÚ 23 ÕÂ Éè¶¨ÇåËã£ºÎ¥·´ 3£¨Ó²ÉË 0£©¡¤ ¿ÉÊÕ±à×Ô´´ 0¡ª¡ªÏê¼û ×·×Ù/Éè¶¨ÇåËã_µÚ023.json
+[21:13:41] ç¬¬23ç« å®Œæˆï¼šä»–å›æ‹¨ 1548 å­—
+[21:13:41] ç¬¬24ç«  å¾®å¾ªç¯â€¦
+2026-09-07 21:13:41,465 INFO qianbi.core µÚ 24 ÕÂ ÉÏÏÂÎÄ×é×°Íê³É£¨ºËĞÄÉè¶¨ + °Ë½ÚÕÂ¼¶¹²Ïí¶Î£¨º¬Ï¸¸Ù/ÕªÒª/×´Ì¬/·ü±Ê/ÉÏÒ»ÕÂÃªµã£©£©
+2026-09-07 21:13:49,921 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:14:11,465 INFO qianbi.core µÚ 24 ÕÂ ²İ¸åÍê³É£º838 ×Ö£¨Ä¿±ê 2000£©
+2026-09-07 21:14:56,494 WARNING qianbi.core µÚ 24 ÕÂ ×ÖÊı²»×ã£¨838 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:15:09,991 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:15:20,292 WARNING qianbi.core µÚ 24 ÕÂ ×ÖÊı²»×ã£¨838 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 2 ÂÖ£©¡­
+2026-09-07 21:15:28,875 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:15:37,245 WARNING qianbi.core À©Ğ´ºó 1073 ×Ö£¬2 ÂÖºóÈÔ²»×ã£¬±ê¼Ç²»×è¶Ï
+2026-09-07 21:15:37,248 INFO qianbi.core µÚ 24 ÕÂ ±¾µØÉ¨Ãè£º×è¶Ï 1 ´¦ / ½¨Òé 0 ´¦
+2026-09-07 21:15:37,248 WARNING qianbi.core µÚ 24 ÕÂ ×è¶Ï 1 ´¦ ¡ú È¥Î¶¸ÄĞ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:15:50,177 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:15:55,457 INFO qianbi.core µÚ 24 ÕÂ È¥Î¶Íê³É£¬¸´É¨Í¨¹ı
+2026-09-07 21:15:55,458 WARNING qianbi.core µÚ 24 ÕÂ ×ÖÊıÔ¤¼ìÎ´¹ı£º[×ÖÊı] µÚ24ÕÂÕıÎÄ 1067 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£¨Ìø¹ıÉóĞ£ LLM£©
+2026-09-07 21:15:55,459 WARNING qianbi.core µÚ 24 ÕÂ ×ÖÊı²»×ã£¨[×ÖÊı] µÚ24ÕÂÕıÎÄ 1067 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£©£º×ÖÊıÎÊÌâ²»×ßĞŞ¸´»·£¬½µ¼¶Îª½¨Òé£¨ÇëÊÖ¶¯À©Ğ´»òµ÷¸ßÀ©Ğ´ÂÖÊı£©
+2026-09-07 21:15:55,461 INFO qianbi.core µÚ 24 ÕÂ ÉóĞ£Í¨¹ı£¨verdict=PASS_WITH_NOTES£©
+2026-09-07 21:16:04,562 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:16:55,317 INFO qianbi.core ×·×ÙÎÄ¼şÒÑ¸üĞÂ£º½ÇÉ«×´Ì¬, ·ü±Ê, Ê±¼äÏß
+2026-09-07 21:17:26,432 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:17:47,191 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:17:59,983 INFO qianbi.core ÕªÒªÁ´ÒÑ¸üĞÂ£¨È«¾ÖÕªÒª 2708 ×Ö£©
+2026-09-07 21:18:15,486 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:18:44,778 WARNING qianbi.core µÚ 24 ÕÂ Éè¶¨ÇåËã£ºÎ¥·´ 2£¨Ó²ÉË 0£©¡¤ ¿ÉÊÕ±à×Ô´´ 3¡ª¡ªÏê¼û ×·×Ù/Éè¶¨ÇåËã_µÚ024.json
+[21:18:44] ç¬¬24ç« å®Œæˆï¼šé—¨åœ¨èº«ååˆä¸Š 1067 å­—
+[21:18:44] ç¬¬25ç«  å¾®å¾ªç¯â€¦
+2026-09-07 21:18:44,784 INFO qianbi.core µÚ 25 ÕÂ ÉÏÏÂÎÄ×é×°Íê³É£¨ºËĞÄÉè¶¨ + °Ë½ÚÕÂ¼¶¹²Ïí¶Î£¨º¬Ï¸¸Ù/ÕªÒª/×´Ì¬/·ü±Ê/ÉÏÒ»ÕÂÃªµã£©£©
+2026-09-07 21:19:02,742 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:19:18,613 INFO qianbi.core µÚ 25 ÕÂ ²İ¸åÍê³É£º946 ×Ö£¨Ä¿±ê 2000£©
+2026-09-07 21:20:03,644 WARNING qianbi.core µÚ 25 ÕÂ ×ÖÊı²»×ã£¨946 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:20:20,437 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:20:28,326 WARNING qianbi.core µÚ 25 ÕÂ ×ÖÊı²»×ã£¨1301 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 2 ÂÖ£©¡­
+2026-09-07 21:20:41,185 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:20:49,878 WARNING qianbi.core À©Ğ´ºó 1586 ×Ö£¬2 ÂÖºóÈÔ²»×ã£¬±ê¼Ç²»×è¶Ï
+2026-09-07 21:20:49,880 INFO qianbi.core µÚ 25 ÕÂ ±¾µØÉ¨Ãè£º×è¶Ï 2 ´¦ / ½¨Òé 5 ´¦
+2026-09-07 21:20:49,880 WARNING qianbi.core µÚ 25 ÕÂ ×è¶Ï 2 ´¦ ¡ú È¥Î¶¸ÄĞ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:21:03,210 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:21:10,280 INFO qianbi.core µÚ 25 ÕÂ È¥Î¶Íê³É£¬¸´É¨Í¨¹ı
+2026-09-07 21:21:10,280 WARNING qianbi.core µÚ 25 ÕÂ ×ÖÊıÔ¤¼ìÎ´¹ı£º[×ÖÊı] µÚ25ÕÂÕıÎÄ 1573 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£¨Ìø¹ıÉóĞ£ LLM£©
+2026-09-07 21:21:10,282 WARNING qianbi.core µÚ 25 ÕÂ ×ÖÊı²»×ã£¨[×ÖÊı] µÚ25ÕÂÕıÎÄ 1573 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£©£º×ÖÊıÎÊÌâ²»×ßĞŞ¸´»·£¬½µ¼¶Îª½¨Òé£¨ÇëÊÖ¶¯À©Ğ´»òµ÷¸ßÀ©Ğ´ÂÖÊı£©
+2026-09-07 21:21:10,283 INFO qianbi.core µÚ 25 ÕÂ ÉóĞ£Í¨¹ı£¨verdict=PASS_WITH_NOTES£©
+2026-09-07 21:21:31,003 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:22:21,298 INFO qianbi.core ×·×ÙÎÄ¼şÒÑ¸üĞÂ£º½ÇÉ«×´Ì¬, ·ü±Ê
+2026-09-07 21:22:35,172 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:22:53,787 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:23:05,272 INFO qianbi.core ÕªÒªÁ´ÒÑ¸üĞÂ£¨È«¾ÖÕªÒª 2708 ×Ö£©
+2026-09-07 21:23:14,030 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:23:28,236 INFO qianbi.core µÚ 25 ÕÂ Éè¶¨ÇåËã£ºÎŞÔ½½ç
+[21:23:28] ç¬¬25ç« å®Œæˆï¼šä¸‰å·åœå°¸é—´ 1573 å­—
+[21:23:28] ç¬¬26ç«  å¾®å¾ªç¯â€¦
+2026-09-07 21:23:28,241 INFO qianbi.core µÚ 26 ÕÂ ÉÏÏÂÎÄ×é×°Íê³É£¨ºËĞÄÉè¶¨ + °Ë½ÚÕÂ¼¶¹²Ïí¶Î£¨º¬Ï¸¸Ù/ÕªÒª/×´Ì¬/·ü±Ê/ÉÏÒ»ÕÂÃªµã£©£©
+2026-09-07 21:23:37,585 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:23:48,881 INFO qianbi.core µÚ 26 ÕÂ ²İ¸åÍê³É£º733 ×Ö£¨Ä¿±ê 2000£©
+2026-09-07 21:24:33,912 WARNING qianbi.core µÚ 26 ÕÂ ×ÖÊı²»×ã£¨733 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:24:49,261 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:24:55,777 WARNING qianbi.core µÚ 26 ÕÂ ×ÖÊı²»×ã£¨1091 / Ä¿±ê 2000£©£¬×Ô¶¯À©Ğ´£¨µÚ 2 ÂÖ£©¡­
+2026-09-07 21:25:14,448 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:25:22,455 WARNING qianbi.core À©Ğ´ºó 1404 ×Ö£¬2 ÂÖºóÈÔ²»×ã£¬±ê¼Ç²»×è¶Ï
+2026-09-07 21:25:22,458 INFO qianbi.core µÚ 26 ÕÂ ±¾µØÉ¨Ãè£º×è¶Ï 2 ´¦ / ½¨Òé 0 ´¦
+2026-09-07 21:25:22,458 WARNING qianbi.core µÚ 26 ÕÂ ×è¶Ï 2 ´¦ ¡ú È¥Î¶¸ÄĞ´£¨µÚ 1 ÂÖ£©¡­
+2026-09-07 21:25:37,375 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:25:43,696 INFO qianbi.core µÚ 26 ÕÂ È¥Î¶Íê³É£¬¸´É¨Í¨¹ı
+2026-09-07 21:25:43,696 WARNING qianbi.core µÚ 26 ÕÂ ×ÖÊıÔ¤¼ìÎ´¹ı£º[×ÖÊı] µÚ26ÕÂÕıÎÄ 1394 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£¨Ìø¹ıÉóĞ£ LLM£©
+2026-09-07 21:25:43,698 WARNING qianbi.core µÚ 26 ÕÂ ×ÖÊı²»×ã£¨[×ÖÊı] µÚ26ÕÂÕıÎÄ 1394 ×Ö£¬µÍÓÚÄ¿±ê 2000£¨Èİ²î 10%£¬ÏÂÏŞ 1800£©£¬ĞèÀ©Ğ´´ï±êºóÔÙ¹ıÉó£©£º×ÖÊıÎÊÌâ²»×ßĞŞ¸´»·£¬½µ¼¶Îª½¨Òé£¨ÇëÊÖ¶¯À©Ğ´»òµ÷¸ßÀ©Ğ´ÂÖÊı£©
+2026-09-07 21:25:43,699 INFO qianbi.core µÚ 26 ÕÂ ÉóĞ£Í¨¹ı£¨verdict=PASS_WITH_NOTES£©
+2026-09-07 21:25:54,176 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:26:47,343 INFO qianbi.core ×·×ÙÎÄ¼şÒÑ¸üĞÂ£º½ÇÉ«×´Ì¬, ·ü±Ê
+2026-09-07 21:27:05,028 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:27:23,785 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:27:39,261 INFO qianbi.core ÕªÒªÁ´ÒÑ¸üĞÂ£¨È«¾ÖÕªÒª 2708 ×Ö£©
+2026-09-07 21:27:50,952 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:28:04,728 WARNING qianbi.canon ÇåËãÈë»á»°Ê§°Ü£¨»ØÍËµ¥·¢£©£ºExpecting ',' delimiter: line 1 column 411 (char 410)
+2026-09-07 21:28:13,269 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:29:35,469 WARNING qianbi.llm Á÷Ê½·µ»Ø¿ÕÄÚÈİ£¬½µ¼¶ÖØ·¢£¨¹Ø±Õ thinking£©
+2026-09-07 21:29:37,571 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:30:48,752 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:32:13,670 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:33:40,886 WARNING qianbi.llm Á÷Ê½·µ»Ø¿ÕÄÚÈİ£¬½µ¼¶ÖØ·¢£¨¹Ø±Õ thinking£©
+2026-09-07 21:33:43,614 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:34:55,386 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-07 21:36:11,559 WARNING qianbi.core µÚ 26 ÕÂ Éè¶¨ÇåËãÖ´ĞĞÊ§°Ü£¨ÇåËã½âÎöÊ§°Ü£ºÄ£ĞÍ·µ»Ø¿ÕÄÚÈİ (stream)£¨Ô­Ê¼Êä³öĞèÈË¹¤²é¿´£©£©¡ª¡ª±¾ÕÂÎ´¶ÔÕË£¬Îğµ±×÷ÒÑÍ¨¹ı£»¿ÉÓÃ¡¸ÊÀ½ç¹Û¶ÔÕË¡¹ÖØÅÜ
+[21:36:11] ç¬¬26ç« å®Œæˆï¼šä»–çš„è´¦ 1394 å­—
+[21:36:11] å®Œæˆï¼št2a_keepï¼ˆ2127sï¼‰â†’ G:\ai\é…’é¦†\qianbi-novel\tests_output\bench\t2a_keep.metrics.json
+
+== t2a_keep ==
+è°ƒç”¨ 46 | è¾“å…¥ 17,677,001 tokï¼ˆå‘½ä¸­ 97.7%ï¼‰| è¾“å‡º 103,692 tokï¼ˆæ¨ç† 17,541ï¼‰
+è´¹ç”¨ $0.277 â‰ˆ Â¥1.994 | LLM 1369.7s / å¢™é’Ÿ 2127.2s
+  enrich           ç¬”12  hit  98.4% out  11,553 tok lat 20.5s
+  canon_audit      ç¬”6   hit  97.9% out  15,013 tok lat 34.5s
+  global_summary   ç¬”6   hit  99.3% out  11,907 tok lat 26.4s
+  chapter_summary  ç¬”6   hit  97.6% out     682 tok lat 18.9s
+  tracking         ç¬”6   hit  99.1% out  49,152 tok lat 64.2s
+  prose            ç¬”6   hit  92.0% out  11,315 tok lat 31.1s
+  deslop           ç¬”4   hit  99.5% out   4,070 tok lat 18.2s
+  ç¬¬21ç«  ç©ºæŸœ 1676å­— é˜»å¡1
+  ç¬¬22ç«  ä»–è¿›å»äº† 1284å­— é˜»å¡1
+  ç¬¬23ç«  ä»–å›æ‹¨ 1548å­— é˜»å¡1
+  ç¬¬24ç«  é—¨åœ¨èº«ååˆä¸Š 1067å­— é˜»å¡1
+  ç¬¬25ç«  ä¸‰å·åœå°¸é—´ 1573å­— é˜»å¡1
+  ç¬¬26ç«  ä»–çš„è´¦ 1394å­— é˜»å¡1
