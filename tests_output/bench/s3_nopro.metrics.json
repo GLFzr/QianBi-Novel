@@ -1,0 +1,196 @@
+{
+ "variant": "s3_nopro",
+ "calls": 47,
+ "input_tok": 4368621,
+ "hit_tok": 4039168,
+ "miss_tok": 329453,
+ "hit_pct": 92.5,
+ "out_tok": 114003,
+ "reasoning_tok": 57989,
+ "cost_usd": 0.176,
+ "cost_cny": 1.267,
+ "llm_seconds": 972.7,
+ "wall_seconds": 1243.2,
+ "per_tier": {
+  "flash": {
+   "calls": 47,
+   "hit": 4039168,
+   "miss": 329453,
+   "out": 114003,
+   "cost_usd": 0.176
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 6,
+   "hit": 332544,
+   "miss": 171142,
+   "out": 51885,
+   "reasoning": 45142,
+   "lat": 537.57,
+   "tier_tok": {
+    "flash": {
+     "hit": 332544,
+     "miss": 171142,
+     "out": 51885
+    }
+   },
+   "cost_usd": 0.0742,
+   "hit_pct": 66.0,
+   "avg_lat": 89.6
+  },
+  "enrich": {
+   "calls": 12,
+   "hit": 952960,
+   "miss": 80721,
+   "out": 14231,
+   "reasoning": 0,
+   "lat": 89.63000000000001,
+   "tier_tok": {
+    "flash": {
+     "hit": 952960,
+     "miss": 80721,
+     "out": 14231
+    }
+   },
+   "cost_usd": 0.0338,
+   "hit_pct": 92.2,
+   "avg_lat": 7.5
+  },
+  "deslop": {
+   "calls": 5,
+   "hit": 452736,
+   "miss": 4414,
+   "out": 5956,
+   "reasoning": 0,
+   "lat": 32.62,
+   "tier_tok": {
+    "flash": {
+     "hit": 452736,
+     "miss": 4414,
+     "out": 5956
+    }
+   },
+   "cost_usd": 0.0081,
+   "hit_pct": 99.0,
+   "avg_lat": 6.5
+  },
+  "tracking": {
+   "calls": 6,
+   "hit": 538240,
+   "miss": 27358,
+   "out": 21943,
+   "reasoning": 0,
+   "lat": 124.33000000000001,
+   "tier_tok": {
+    "flash": {
+     "hit": 538240,
+     "miss": 27358,
+     "out": 21943
+    }
+   },
+   "cost_usd": 0.0243,
+   "hit_pct": 95.2,
+   "avg_lat": 20.7
+  },
+  "chapter_summary": {
+   "calls": 6,
+   "hit": 579840,
+   "miss": 8511,
+   "out": 666,
+   "reasoning": 0,
+   "lat": 9.51,
+   "tier_tok": {
+    "flash": {
+     "hit": 579840,
+     "miss": 8511,
+     "out": 666
+    }
+   },
+   "cost_usd": 0.0064,
+   "hit_pct": 98.6,
+   "avg_lat": 1.6
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 588672,
+   "miss": 3736,
+   "out": 2340,
+   "reasoning": 0,
+   "lat": 23.830000000000002,
+   "tier_tok": {
+    "flash": {
+     "hit": 588672,
+     "miss": 3736,
+     "out": 2340
+    }
+   },
+   "cost_usd": 0.0065,
+   "hit_pct": 99.4,
+   "avg_lat": 4.0
+  },
+  "canon_audit": {
+   "calls": 6,
+   "hit": 594176,
+   "miss": 33571,
+   "out": 16982,
+   "reasoning": 12847,
+   "lat": 155.22,
+   "tier_tok": {
+    "flash": {
+     "hit": 594176,
+     "miss": 33571,
+     "out": 16982
+    }
+   },
+   "cost_usd": 0.0228,
+   "hit_pct": 94.7,
+   "avg_lat": 25.9
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "案：0317",
+   "words": 1470,
+   "review_blocking": 1
+  },
+  {
+   "num": 2,
+   "title": "单号",
+   "words": 1685,
+   "review_blocking": 1
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 1642,
+   "review_blocking": 1
+  },
+  {
+   "num": 4,
+   "title": "空档期",
+   "words": 1501,
+   "review_blocking": 1
+  },
+  {
+   "num": 5,
+   "title": "138秒",
+   "words": 1730,
+   "review_blocking": 1
+  },
+  {
+   "num": 6,
+   "title": "07:12",
+   "words": 1716,
+   "review_blocking": 1
+  }
+ ]
+}

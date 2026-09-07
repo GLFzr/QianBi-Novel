@@ -1,0 +1,219 @@
+{
+ "variant": "e13_trim_low",
+ "calls": 30,
+ "input_tok": 527287,
+ "hit_tok": 394240,
+ "miss_tok": 133047,
+ "hit_pct": 74.8,
+ "out_tok": 72430,
+ "reasoning_tok": 41502,
+ "cost_usd": 0.1256,
+ "cost_cny": 0.904,
+ "llm_seconds": 820.6,
+ "wall_seconds": 1030.8,
+ "per_tier": {
+  "flash": {
+   "calls": 27,
+   "hit": 392192,
+   "miss": 116627,
+   "out": 43247,
+   "cost_usd": 0.0569
+  },
+  "pro": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 16420,
+   "out": 29183,
+   "cost_usd": 0.0687
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 32493,
+   "out": 16067,
+   "reasoning": 10994,
+   "lat": 167.09,
+   "tier_tok": {
+    "flash": {
+     "hit": 2048,
+     "miss": 32493,
+     "out": 16067
+    }
+   },
+   "cost_usd": 0.0178,
+   "hit_pct": 5.9,
+   "avg_lat": 55.7
+  },
+  "trim": {
+   "calls": 2,
+   "hit": 1920,
+   "miss": 25275,
+   "out": 3157,
+   "reasoning": 706,
+   "lat": 22.84,
+   "tier_tok": {
+    "flash": {
+     "hit": 1920,
+     "miss": 25275,
+     "out": 3157
+    }
+   },
+   "cost_usd": 0.0077,
+   "hit_pct": 7.1,
+   "avg_lat": 11.4
+  },
+  "deslop": {
+   "calls": 2,
+   "hit": 27008,
+   "miss": 3849,
+   "out": 3071,
+   "reasoning": 0,
+   "lat": 16.47,
+   "tier_tok": {
+    "flash": {
+     "hit": 27008,
+     "miss": 3849,
+     "out": 3071
+    }
+   },
+   "cost_usd": 0.0031,
+   "hit_pct": 87.5,
+   "avg_lat": 8.2
+  },
+  "review": {
+   "calls": 9,
+   "hit": 148736,
+   "miss": 24475,
+   "out": 6576,
+   "reasoning": 0,
+   "lat": 57.349999999999994,
+   "tier_tok": {
+    "flash": {
+     "hit": 148736,
+     "miss": 24475,
+     "out": 6576
+    }
+   },
+   "cost_usd": 0.0108,
+   "hit_pct": 85.9,
+   "avg_lat": 6.4
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 59904,
+   "miss": 9737,
+   "out": 9290,
+   "reasoning": 0,
+   "lat": 56.8,
+   "tier_tok": {
+    "flash": {
+     "hit": 59904,
+     "miss": 9737,
+     "out": 9290
+    }
+   },
+   "cost_usd": 0.0087,
+   "hit_pct": 86.0,
+   "avg_lat": 18.9
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 71168,
+   "miss": 8170,
+   "out": 283,
+   "reasoning": 0,
+   "lat": 3.67,
+   "tier_tok": {
+    "flash": {
+     "hit": 71168,
+     "miss": 8170,
+     "out": 283
+    }
+   },
+   "cost_usd": 0.0025,
+   "hit_pct": 89.7,
+   "avg_lat": 1.2
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 79360,
+   "miss": 1611,
+   "out": 1144,
+   "reasoning": 0,
+   "lat": 9.629999999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 79360,
+     "miss": 1611,
+     "out": 1144
+    }
+   },
+   "cost_usd": 0.0017,
+   "hit_pct": 98.0,
+   "avg_lat": 3.2
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 17706,
+   "out": 25142,
+   "reasoning": 22325,
+   "lat": 355.53,
+   "tier_tok": {
+    "flash": {
+     "hit": 2048,
+     "miss": 11017,
+     "out": 3659
+    },
+    "pro": {
+     "hit": 0,
+     "miss": 6689,
+     "out": 21483
+    }
+   },
+   "cost_usd": 0.0518,
+   "hit_pct": 10.4,
+   "avg_lat": 118.5
+  },
+  "canon_audit_review": {
+   "calls": 2,
+   "hit": 2048,
+   "miss": 9731,
+   "out": 7700,
+   "reasoning": 7477,
+   "lat": 131.2,
+   "tier_tok": {
+    "pro": {
+     "hit": 2048,
+     "miss": 9731,
+     "out": 7700
+    }
+   },
+   "cost_usd": 0.0217,
+   "hit_pct": 17.4,
+   "avg_lat": 65.6
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "蓝色尼龙绳",
+   "words": 1845,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "留给陈默",
+   "words": 1958,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 2324,
+   "review_blocking": 0
+  }
+ ]
+}

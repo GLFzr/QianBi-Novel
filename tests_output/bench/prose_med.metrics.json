@@ -1,0 +1,126 @@
+{
+ "variant": "prose_med",
+ "calls": 29,
+ "input_tok": 551060,
+ "hit_tok": 395136,
+ "miss_tok": 155924,
+ "hit_pct": 71.7,
+ "out_tok": 167376,
+ "reasoning_tok": 130538,
+ "cost_usd": 0.1475,
+ "cost_cny": 1.062,
+ "llm_seconds": 1932.2,
+ "wall_seconds": 2447.9,
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 33216,
+   "out": 31079,
+   "reasoning": 26610,
+   "lat": 331.9,
+   "hit_pct": 5.8,
+   "avg_lat": 110.6
+  },
+  "trim": {
+   "calls": 2,
+   "hit": 23168,
+   "miss": 4420,
+   "out": 12411,
+   "reasoning": 9499,
+   "lat": 89.53,
+   "hit_pct": 84.0,
+   "avg_lat": 44.8
+  },
+  "review": {
+   "calls": 9,
+   "hit": 158336,
+   "miss": 21130,
+   "out": 54381,
+   "reasoning": 45129,
+   "lat": 548.6,
+   "hit_pct": 88.2,
+   "avg_lat": 61.0
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 36736,
+   "miss": 35923,
+   "out": 10657,
+   "reasoning": 0,
+   "lat": 67.86,
+   "hit_pct": 50.6,
+   "avg_lat": 22.6
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 72576,
+   "miss": 11144,
+   "out": 305,
+   "reasoning": 0,
+   "lat": 4.21,
+   "hit_pct": 86.7,
+   "avg_lat": 1.4
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 83840,
+   "miss": 1550,
+   "out": 1093,
+   "reasoning": 0,
+   "lat": 9.190000000000001,
+   "hit_pct": 98.2,
+   "avg_lat": 3.1
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 17609,
+   "out": 53370,
+   "reasoning": 49300,
+   "lat": 855.5,
+   "hit_pct": 10.4,
+   "avg_lat": 285.2
+  },
+  "enrich": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 13285,
+   "out": 1305,
+   "reasoning": 0,
+   "lat": 9.87,
+   "hit_pct": 0.0,
+   "avg_lat": 9.9
+  },
+  "deslop": {
+   "calls": 2,
+   "hit": 16384,
+   "miss": 17647,
+   "out": 2775,
+   "reasoning": 0,
+   "lat": 15.510000000000002,
+   "hit_pct": 48.1,
+   "avg_lat": 7.8
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "旧账",
+   "words": 1924,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "断线的录音",
+   "words": 1816,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍延伸",
+   "words": 1988,
+   "review_blocking": 0
+  }
+ ]
+}

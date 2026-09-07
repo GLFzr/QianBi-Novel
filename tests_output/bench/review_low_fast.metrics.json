@@ -1,0 +1,126 @@
+{
+ "variant": "review_low_fast",
+ "calls": 25,
+ "input_tok": 465892,
+ "hit_tok": 361984,
+ "miss_tok": 103908,
+ "hit_pct": 77.7,
+ "out_tok": 122613,
+ "reasoning_tok": 90729,
+ "cost_usd": 0.1063,
+ "cost_cny": 0.765,
+ "llm_seconds": 1676.5,
+ "wall_seconds": 2737.6,
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 33552,
+   "out": 24865,
+   "reasoning": 20674,
+   "lat": 341.56,
+   "hit_pct": 5.8,
+   "avg_lat": 113.9
+  },
+  "enrich": {
+   "calls": 2,
+   "hit": 0,
+   "miss": 24111,
+   "out": 2768,
+   "reasoning": 0,
+   "lat": 29.700000000000003,
+   "hit_pct": 0.0,
+   "avg_lat": 14.9
+  },
+  "review": {
+   "calls": 4,
+   "hit": 75392,
+   "miss": 7262,
+   "out": 26218,
+   "reasoning": 22183,
+   "lat": 374.53,
+   "hit_pct": 91.2,
+   "avg_lat": 93.6
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 57600,
+   "miss": 13286,
+   "out": 10191,
+   "reasoning": 0,
+   "lat": 103.25999999999999,
+   "hit_pct": 81.3,
+   "avg_lat": 34.4
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 77824,
+   "miss": 3656,
+   "out": 244,
+   "reasoning": 0,
+   "lat": 7.9399999999999995,
+   "hit_pct": 95.5,
+   "avg_lat": 2.6
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 81408,
+   "miss": 1663,
+   "out": 1142,
+   "reasoning": 0,
+   "lat": 16.93,
+   "hit_pct": 98.0,
+   "avg_lat": 5.6
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 19584,
+   "miss": 180,
+   "out": 51009,
+   "reasoning": 47129,
+   "lat": 743.77,
+   "hit_pct": 99.1,
+   "avg_lat": 247.9
+  },
+  "deslop": {
+   "calls": 3,
+   "hit": 33536,
+   "miss": 18101,
+   "out": 4065,
+   "reasoning": 0,
+   "lat": 35.66,
+   "hit_pct": 64.9,
+   "avg_lat": 11.9
+  },
+  "trim": {
+   "calls": 1,
+   "hit": 14592,
+   "miss": 2097,
+   "out": 2111,
+   "reasoning": 743,
+   "lat": 23.13,
+   "hit_pct": 87.4,
+   "avg_lat": 23.1
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 1868,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "半句话",
+   "words": 1810,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍延伸",
+   "words": 1770,
+   "review_blocking": 1
+  }
+ ]
+}

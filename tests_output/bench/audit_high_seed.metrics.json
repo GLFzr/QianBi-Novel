@@ -1,0 +1,76 @@
+{
+ "variant": "audit_high_seed",
+ "calls": 12,
+ "input_tok": 180363,
+ "hit_tok": 123904,
+ "miss_tok": 56459,
+ "hit_pct": 68.7,
+ "out_tok": 63734,
+ "reasoning_tok": 42146,
+ "cost_usd": 0.0554,
+ "cost_cny": 0.399,
+ "llm_seconds": 830.4,
+ "wall_seconds": 1453.0,
+ "per_phase": {
+  "tracking": {
+   "calls": 3,
+   "hit": 4608,
+   "miss": 37416,
+   "out": 14817,
+   "reasoning": 0,
+   "lat": 92.47999999999999,
+   "hit_pct": 11.0,
+   "avg_lat": 30.8
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 49536,
+   "miss": 7706,
+   "out": 323,
+   "reasoning": 0,
+   "lat": 4.21,
+   "hit_pct": 86.5,
+   "avg_lat": 1.4
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 57344,
+   "miss": 1739,
+   "out": 1366,
+   "reasoning": 0,
+   "lat": 10.82,
+   "hit_pct": 97.1,
+   "avg_lat": 3.6
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 12416,
+   "miss": 9598,
+   "out": 47228,
+   "reasoning": 42146,
+   "lat": 722.9000000000001,
+   "hit_pct": 56.4,
+   "avg_lat": 241.0
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "0317",
+   "words": 1420,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "半句话",
+   "words": 1275,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "一笔",
+   "words": 2148,
+   "review_blocking": 0
+  }
+ ]
+}

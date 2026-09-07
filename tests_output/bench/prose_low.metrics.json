@@ -1,0 +1,116 @@
+{
+ "variant": "prose_low",
+ "calls": 25,
+ "input_tok": 427461,
+ "hit_tok": 332288,
+ "miss_tok": 95173,
+ "hit_pct": 77.7,
+ "out_tok": 107737,
+ "reasoning_tok": 81172,
+ "cost_usd": 0.0944,
+ "cost_cny": 0.679,
+ "llm_seconds": 1489.8,
+ "wall_seconds": 2474.9,
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 1920,
+   "miss": 32380,
+   "out": 5869,
+   "reasoning": 1867,
+   "lat": 104.5,
+   "hit_pct": 5.6,
+   "avg_lat": 34.8
+  },
+  "enrich": {
+   "calls": 2,
+   "hit": 20224,
+   "miss": 3454,
+   "out": 3028,
+   "reasoning": 0,
+   "lat": 33.11,
+   "hit_pct": 85.4,
+   "avg_lat": 16.6
+  },
+  "review": {
+   "calls": 6,
+   "hit": 71680,
+   "miss": 36098,
+   "out": 39283,
+   "reasoning": 34959,
+   "lat": 559.33,
+   "hit_pct": 66.5,
+   "avg_lat": 93.2
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 46208,
+   "miss": 17995,
+   "out": 7753,
+   "reasoning": 0,
+   "lat": 77.88,
+   "hit_pct": 72.0,
+   "avg_lat": 26.0
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 71680,
+   "miss": 682,
+   "out": 216,
+   "reasoning": 0,
+   "lat": 6.65,
+   "hit_pct": 99.1,
+   "avg_lat": 2.2
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 72448,
+   "miss": 1327,
+   "out": 938,
+   "reasoning": 0,
+   "lat": 13.110000000000001,
+   "hit_pct": 98.2,
+   "avg_lat": 4.4
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 19712,
+   "miss": 221,
+   "out": 47906,
+   "reasoning": 44346,
+   "lat": 671.3399999999999,
+   "hit_pct": 98.9,
+   "avg_lat": 223.8
+  },
+  "deslop": {
+   "calls": 2,
+   "hit": 28416,
+   "miss": 3016,
+   "out": 2744,
+   "reasoning": 0,
+   "lat": 23.880000000000003,
+   "hit_pct": 90.4,
+   "avg_lat": 11.9
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "编号0317",
+   "words": 2186,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "二次叠合",
+   "words": 1850,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 1799,
+   "review_blocking": 1
+  }
+ ]
+}

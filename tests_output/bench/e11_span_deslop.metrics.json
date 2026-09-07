@@ -1,0 +1,219 @@
+{
+ "variant": "e11_span_deslop",
+ "calls": 35,
+ "input_tok": 703291,
+ "hit_tok": 540160,
+ "miss_tok": 163131,
+ "hit_pct": 76.8,
+ "out_tok": 94597,
+ "reasoning_tok": 59842,
+ "cost_usd": 0.156,
+ "cost_cny": 1.123,
+ "llm_seconds": 1030.8,
+ "wall_seconds": 1012.6,
+ "per_tier": {
+  "flash": {
+   "calls": 31,
+   "hit": 536064,
+   "miss": 141757,
+   "out": 60971,
+   "cost_usd": 0.0752
+  },
+  "pro": {
+   "calls": 4,
+   "hit": 4096,
+   "miss": 21374,
+   "out": 33626,
+   "cost_usd": 0.0808
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 2048,
+   "miss": 33569,
+   "out": 30265,
+   "reasoning": 26691,
+   "lat": 306.88,
+   "tier_tok": {
+    "flash": {
+     "hit": 2048,
+     "miss": 33569,
+     "out": 30265
+    }
+   },
+   "cost_usd": 0.0274,
+   "hit_pct": 5.8,
+   "avg_lat": 102.3
+  },
+  "enrich": {
+   "calls": 3,
+   "hit": 1920,
+   "miss": 38149,
+   "out": 4689,
+   "reasoning": 0,
+   "lat": 38.64,
+   "tier_tok": {
+    "flash": {
+     "hit": 1920,
+     "miss": 38149,
+     "out": 4689
+    }
+   },
+   "cost_usd": 0.0115,
+   "hit_pct": 4.8,
+   "avg_lat": 12.9
+  },
+  "deslop": {
+   "calls": 4,
+   "hit": 61824,
+   "miss": 15579,
+   "out": 2611,
+   "reasoning": 0,
+   "lat": 15.69,
+   "tier_tok": {
+    "flash": {
+     "hit": 61824,
+     "miss": 15579,
+     "out": 2611
+    }
+   },
+   "cost_usd": 0.0056,
+   "hit_pct": 79.9,
+   "avg_lat": 3.9
+  },
+  "review": {
+   "calls": 9,
+   "hit": 205184,
+   "miss": 15868,
+   "out": 7186,
+   "reasoning": 0,
+   "lat": 59.220000000000006,
+   "tier_tok": {
+    "flash": {
+     "hit": 205184,
+     "miss": 15868,
+     "out": 7186
+    }
+   },
+   "cost_usd": 0.0097,
+   "hit_pct": 92.8,
+   "avg_lat": 6.6
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 75648,
+   "miss": 11125,
+   "out": 10367,
+   "reasoning": 0,
+   "lat": 63.0,
+   "tier_tok": {
+    "flash": {
+     "hit": 75648,
+     "miss": 11125,
+     "out": 10367
+    }
+   },
+   "cost_usd": 0.0098,
+   "hit_pct": 87.2,
+   "avg_lat": 21.0
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 89600,
+   "miss": 7944,
+   "out": 324,
+   "reasoning": 0,
+   "lat": 4.8,
+   "tier_tok": {
+    "flash": {
+     "hit": 89600,
+     "miss": 7944,
+     "out": 324
+    }
+   },
+   "cost_usd": 0.0026,
+   "hit_pct": 91.9,
+   "avg_lat": 1.6
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 97792,
+   "miss": 1624,
+   "out": 1426,
+   "reasoning": 0,
+   "lat": 11.8,
+   "tier_tok": {
+    "flash": {
+     "hit": 97792,
+     "miss": 1624,
+     "out": 1426
+    }
+   },
+   "cost_usd": 0.002,
+   "hit_pct": 98.4,
+   "avg_lat": 3.9
+  },
+  "canon_audit": {
+   "calls": 5,
+   "hit": 4096,
+   "miss": 29852,
+   "out": 28141,
+   "reasoning": 23934,
+   "lat": 383.62,
+   "tier_tok": {
+    "flash": {
+     "hit": 2048,
+     "miss": 17899,
+     "out": 4103
+    },
+    "pro": {
+     "hit": 2048,
+     "miss": 11953,
+     "out": 24038
+    }
+   },
+   "cost_usd": 0.0622,
+   "hit_pct": 12.1,
+   "avg_lat": 76.7
+  },
+  "canon_audit_review": {
+   "calls": 2,
+   "hit": 2048,
+   "miss": 9421,
+   "out": 9588,
+   "reasoning": 9217,
+   "lat": 147.14999999999998,
+   "tier_tok": {
+    "pro": {
+     "hit": 2048,
+     "miss": 9421,
+     "out": 9588
+    }
+   },
+   "cost_usd": 0.0252,
+   "hit_pct": 17.9,
+   "avg_lat": 73.6
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 1995,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "编号重叠",
+   "words": 1969,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "半截压痕",
+   "words": 2282,
+   "review_blocking": 0
+  }
+ ]
+}
