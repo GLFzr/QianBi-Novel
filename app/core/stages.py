@@ -2436,7 +2436,27 @@ def _save_review_findings(proj: str, num: int, findings: list):
         pass
 
 
+TRACKING_DELTA_RECONCILE = 10   # V2：每 10 章一次全量对账（防增量漂移）
+
+
+def _tracking_delta_on(ctx, num: int) -> bool:
+    """V2 增量台账开关：writing.tracking_delta 开且本章不是对账章"""
+    return bool(((ctx.cfg or {}).get("writing", {}) or {}).get("tracking_delta", False))         and num % TRACKING_DELTA_RECONCILE != 0
+
+
 def _update_tracking(ctx, num: int, prose: str, session=None) -> dict:
+    if _tracking_delta_on(ctx, num):
+        try:
+            return _update_tracking_delta(ctx, num, prose, session)
+        except Exception:  # noqa: BLE001
+            # 可靠性红线（深度研究 §4）：delta 解析/合并失败 → 回退全量重述，
+            # 绝不把增量碎片当全文写盘。多花一次调用只发生在失败章。
+            logging.getLogger("qianbi.stages").warning(
+                "第 %s 章 增量台账失败，回退全量模式", num, exc_info=True)
+    return _update_tracking_full(ctx, num, prose, session)
+
+
+def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
     proj = ctx.proj
     prompt = prompts.TRACKING_UPDATE_PROMPT.format(
         chapter_num=num,
@@ -2549,3 +2569,76 @@ def parse_tracking_updates(text: str) -> dict:
             if content and content != "无变化":
                 updates[key] = content
     return updates
+
+
+def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
+    """V2 增量台账（writing.tracking_delta，缺省关）：只让模型输出有变化的条目，
+    本地按锚点合并进既有文件——追踪输出从整本重述（2.2k→7.9k 增长、撞 8192 截顶）
+    降到 ~1k/章。合并失败抛异常由调用方回退全量；解析成功但零变化是合法结论。"""
+    proj = ctx.proj
+    kw = dict(
+        chapter_num=num,
+        roster=_roster(proj), prose=prose,
+        character_state=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000],
+        foreshadow_table=project.read_file(project.get_tracking_path(proj, "伏笔"))[:2000],
+        timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
+        old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
+        or "（尚无写作上下文）",
+        worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+        project_header=project_header(proj),
+        chapter_header=chapter_header(proj, num),
+    )
+    if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
+        _session_seed(session, prose)
+        turn_text = prompts.session_turn_text(prompts.TRACKING_DELTA_PROMPT).format(**kw)
+        ctx.last_prompt = turn_text
+        result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                              phase=PHASE_TRACKING, stream=False)
+    else:
+        prompt = prompts.TRACKING_DELTA_PROMPT.format(**kw)
+        ctx.last_prompt = prompt
+        result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+            prompt, phase=PHASE_TRACKING))
+    updates = parse_tracking_updates(result)
+    # 世界书反哺与全量模式同款（零新增 LLM）
+    try:
+        entities, rules = memory.parse_entity_rules(result)
+        evolutions, reveals = memory.parse_evolution_reveals(result)
+        if entities or rules or evolutions or reveals:
+            memory.upsert_worldbook_entries(proj, num, entities, rules,
+                                            evolutions, reveals)
+    except Exception:  # noqa: BLE001
+        logging.getLogger("qianbi.stages").exception("追踪反哺回写失败（第 %s 章）", num)
+
+    from .memory import merge_named_sections, merge_table_rows
+    applied = {}
+    for name, content in updates.items():
+        path = project.get_tracking_path(proj, name)
+        if name == "上下文":
+            project.write_file(path, f"# 写作上下文\n\n{content}\n")
+            applied[name] = content
+            continue
+        existing = project.read_file(path)
+        if name == "角色状态":
+            merged, changed = merge_named_sections(existing, content)
+            if not changed:
+                ctx.log("info", f"第 {num} 章 角色状态零变更（增量）")
+                continue
+        elif name == "伏笔":
+            merged, changed = merge_table_rows(existing, content, key_col=0)
+            if not changed:
+                ctx.log("info", f"第 {num} 章 伏笔零变更（增量）")
+                continue
+        elif name == "时间线":
+            merged, changed = merge_table_rows(existing, content, key_col=-1)
+            if not changed:
+                ctx.log("info", f"第 {num} 章 时间线零变更（增量）")
+                continue
+        else:
+            continue   # 未知节不落盘（全量模式的 mapping 之外本就忽略）
+        if name == "角色状态":
+            merged = _verify_tracking_numbers(prose, existing, merged)
+        project.write_file(path, merged)
+        applied[name] = merged
+    ctx.log("info", f"第 {num} 章 增量台账：{', '.join(applied) or '零变更'}")
+    return applied

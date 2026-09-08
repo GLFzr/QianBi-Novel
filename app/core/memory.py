@@ -533,3 +533,134 @@ def prev_chapter_pack(proj: str, num: int, tail: int = 800) -> tuple:
     body_start = text.find("\n")   # 文风样本跳过标题行
     sample = text[body_start + 1:body_start + 501] if body_start > 0 else text[:500]
     return ending, sample.strip()
+
+
+# ==================== V2 台账增量合并（writing.tracking_delta） ====================
+# 研究依据：《深度研究_下一代上下文架构_v1.md》§4——Anthropic memory tool 式增量
+# 更新（str_replace 语义）实测省 84% 输入 token；可靠性红线（aider）：diff 必须
+# 结构化解析 + 锚点不匹配即回退，绝不静默写坏文件。
+
+_SECTION_HEAD = "## "
+
+
+def split_named_sections(text: str) -> "dict[str, str]":
+    """把 `## 角色名` 小节结构的 markdown 拆成 OrderedDict[名, 小节全文]（保持顺序）"""
+    import re as _re
+    out: dict = {}
+    cur, buf = None, []
+    for line in (text or "").splitlines():
+        m = _re.match(r"^##\s+(.+?)\s*$", line)
+        if m and not line.startswith("###"):
+            if cur is not None:
+                out[cur] = "\n".join(buf).strip("\n")
+            cur, buf = m.group(1).strip(), [line]
+        elif cur is not None:
+            buf.append(line)
+    if cur is not None:
+        out[cur] = "\n".join(buf).strip("\n")
+    return out
+
+
+def merge_named_sections(existing: str, delta: str) -> tuple:
+    """角色状态合并：delta 里的 `## 角色名` 小节逐字替换既有同名小节，新角色追加尾部。
+
+    返回 (merged, changed_names)；delta 为空/无小节 → (existing, [])。既有文件
+    非小节结构（如缺标题行）时返回 (existing, []) 由调用方回退全量。"""
+    base = split_named_sections(existing)
+    if not base:
+        return existing, []
+    delta_secs = split_named_sections(delta)
+    changed = [n for n in delta_secs if n in base]
+    if not delta_secs:
+        return existing, []
+    lines = (existing or "").splitlines()
+    out, i = [], 0
+    replaced = set()
+    while i < len(lines):
+        m = None
+        import re as _re
+        m = _re.match(r"^##\s+(.+?)\s*$", lines[i])
+        name = m.group(1).strip() if (m and not lines[i].startswith("###")) else None
+        if name is not None and name in delta_secs:
+            out.append(delta_secs[name])
+            replaced.add(name)
+            # 跳过既有小节体
+            i += 1
+            while i < len(lines):
+                m2 = _re.match(r"^##\s+(.+?)\s*$", lines[i])
+                if m2 and not lines[i].startswith("###"):
+                    break
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    appended = [n for n in delta_secs if n not in base]
+    if appended:
+        out.append("\n\n" + "\n\n".join(delta_secs[n] for n in appended))
+    merged = "\n".join(out).strip("\n") + "\n"
+    return merged, sorted(replaced) + appended
+
+
+def _table_rows(text: str) -> tuple:
+    """markdown 表格 → (header_line, rows[list[list[str]]])；无表 → ([], [])"""
+    rows, header = [], None
+    for line in (text or "").splitlines():
+        t = line.strip()
+        if t.startswith("|") and t.endswith("|"):
+            if set(t.replace("|", "").strip()) <= {"-", ":", " "}:
+                continue
+            if header is None:
+                header = t
+                continue
+            rows.append([c.strip() for c in t.strip("|").split("|")])
+    return header or "", rows
+
+
+def merge_table_rows(existing: str, delta: str, key_col: int = 0) -> tuple:
+    """表格合并（伏笔按首列键替换、时间线按整行键去重追加）。
+
+    key_col=-1 表示按整行去重追加（时间线）；否则按 key_col 列值替换同名行。
+    返回 (merged, changed_rows)；delta 无表 → (existing, [])。"""
+    d_header, d_rows = _table_rows(delta)
+    if not d_header or not d_rows:
+        return existing, []
+    e_header, e_rows = _table_rows(existing)
+    if not e_header:
+        # 既有文件无表：用 delta 的表头 + 全部行起表（保住既有表格外内容）
+        pre = existing.rstrip("\n") + "\n\n" if (existing or "").strip() else ""
+        merged = pre + d_header + "\n|" + "---|" * max(1, len(d_rows[0])) + "\n" + \
+            "\n".join("| " + " | ".join(r) + " |" for r in d_rows) + "\n"
+        return merged, d_rows
+    if key_col < 0:
+        seen = {tuple(r) for r in e_rows}
+        fresh = [r for r in d_rows if tuple(r) not in seen]
+        if not fresh:
+            return existing, []
+        body = "\n".join("| " + " | ".join(r) + " |" for r in fresh)
+        return existing.rstrip("\n") + "\n" + body + "\n", fresh
+    dmap = {r[key_col] if key_col < len(r) else "": r for r in d_rows}
+    merged_rows, changed = [], []
+    for r in e_rows:
+        key = r[key_col] if key_col < len(r) else ""
+        if key in dmap:
+            merged_rows.append(dmap.pop(key))
+            changed.append(key)
+        else:
+            merged_rows.append(r)
+    appended = list(dmap.values())
+    merged_rows.extend(appended)
+    body = "\n".join("| " + " | ".join(r) + " |" for r in merged_rows)
+    pre = (existing or "").split("\n")
+    # 保留既有表头与分隔行，替换数据行
+    out, skipped_sep = [], False
+    for ln in pre:
+        t = ln.strip()
+        if t.startswith("|") and t.endswith("|"):
+            if not skipped_sep and set(t.replace("|", "").strip()) <= {"-", ":", " "}:
+                out.append(ln)
+                skipped_sep = True
+                continue
+            continue   # 旧数据行丢弃（已被 merged_rows 替代）
+        out.append(ln)
+    merged = "\n".join(out).rstrip("\n") + "\n" + body + "\n"
+    return merged, changed + [r[key_col] if key_col < len(r) else "" for r in appended]
