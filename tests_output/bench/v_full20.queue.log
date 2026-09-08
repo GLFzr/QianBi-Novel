@@ -1,0 +1,402 @@
+[01:44:49] 测试渠道：bailian-flash（deepseek-v4-flash-0731 @ https://dashscope.aliyuncs.com/compatible-mode/v1）——钉定 --flash-conn
+[01:44:49] 变量预设 bench_v_full20 生效档：{"canon_audit": {"early_stop": true, "in_session": true}}
+[01:44:49] 第1章 微循环…
+2026-09-09 01:44:49,690 INFO qianbi.core 第 1 章 卷会话已启用（卷 1：跨章共享历史，章头入开幕轮）
+2026-09-09 01:44:49,691 INFO qianbi.core 第 1 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 01:44:51,923 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:45:16,453 INFO qianbi.core 第 1 章 草稿完成：2078 字（目标 2000）
+2026-09-09 01:46:01,490 INFO qianbi.core 第 1 章 本地扫描：阻断 1 处 / 建议 8 处
+2026-09-09 01:46:01,490 WARNING qianbi.core 第 1 章 阻断 1 处 → 去味改写（第 1 轮）…
+2026-09-09 01:46:04,501 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:46:15,360 INFO qianbi.core 第 1 章 去味完成，复扫通过
+2026-09-09 01:46:17,843 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:46:28,206 INFO qianbi.core 第 1 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 01:46:32,478 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:46:32,479 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:46:43,742 INFO qianbi.core 第 1 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 01:46:45,222 INFO qianbi.core 第 1 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 01:46:45,225 INFO qianbi.core 第 1 章 审校通过（verdict=PASS）
+2026-09-09 01:46:48,169 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:47:00,715 INFO qianbi.core 第 1 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:47:00,715 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:47:04,855 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:47:09,425 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:47:11,737 INFO qianbi.core 摘要链已更新（全局摘要 326 字）
+2026-09-09 01:47:14,504 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:47:29,605 WARNING qianbi.core 第 1 章 设定清算：违反 0（硬伤 0）· 可收编自创 6——详见 追踪/设定清算_第001.json
+[01:47:29] 第1章完成：撕纸角 2065 字
+[01:47:29] 第2章 微循环…
+2026-09-09 01:47:29,611 INFO qianbi.core 第 2 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 01:47:31,999 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:48:30,893 INFO qianbi.core 第 2 章 草稿完成：1475 字（目标 2000）
+2026-09-09 01:49:15,924 WARNING qianbi.core 第 2 章 字数不足（1475 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 01:49:18,559 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:49:29,464 INFO qianbi.core 扩写后 1880 字，达标
+2026-09-09 01:49:29,467 INFO qianbi.core 第 2 章 本地扫描：阻断 1 处 / 建议 6 处
+2026-09-09 01:49:29,467 WARNING qianbi.core 第 2 章 阻断 1 处 → 去味改写（第 1 轮）…
+2026-09-09 01:49:30,537 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:49:40,134 WARNING qianbi.core 第 2 章 阻断 1 处 → 去味改写（第 2 轮）…
+2026-09-09 01:49:41,380 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:49:50,807 WARNING qianbi.core 第 2 章去味未通过（1 处阻断），已标记「待修」，继续写作（可在章节详情中人工修改）
+2026-09-09 01:49:52,685 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:06,129 INFO qianbi.core 第 2 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 01:50:07,368 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:07,370 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:16,979 INFO qianbi.core 第 2 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 01:50:22,563 INFO qianbi.core 第 2 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 01:50:22,566 INFO qianbi.core 第 2 章 审校通过（verdict=PASS）
+2026-09-09 01:50:23,836 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:36,385 INFO qianbi.core 第 2 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:50:36,385 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:50:37,890 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:40,430 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:44,173 INFO qianbi.core 摘要链已更新（全局摘要 616 字）
+2026-09-09 01:50:45,663 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:50:56,830 WARNING qianbi.core 第 2 章 设定清算：违反 0（硬伤 0）· 可收编自创 5——详见 追踪/设定清算_第002.json
+[01:50:56] 第2章完成：半句话 1866 字
+[01:50:56] 第3章 微循环…
+2026-09-09 01:50:56,835 INFO qianbi.core 第 3 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 01:50:58,098 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:51:44,712 INFO qianbi.core 第 3 章 草稿完成：1598 字（目标 2000）
+2026-09-09 01:52:29,744 WARNING qianbi.core 第 3 章 字数不足（1598 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 01:52:31,251 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:52:43,984 INFO qianbi.core 扩写后 2022 字，达标
+2026-09-09 01:52:43,986 INFO qianbi.core 第 3 章 本地扫描：阻断 2 处 / 建议 8 处
+2026-09-09 01:52:43,986 WARNING qianbi.core 第 3 章 阻断 2 处 → 去味改写（第 1 轮）…
+2026-09-09 01:52:45,334 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:52:55,711 INFO qianbi.core 第 3 章 去味完成，复扫通过
+2026-09-09 01:52:57,044 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:53:11,956 INFO qianbi.core 第 3 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 01:53:13,469 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:53:13,524 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:53:28,133 INFO qianbi.core 第 3 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 01:53:28,134 INFO qianbi.core 第 3 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 01:53:28,137 INFO qianbi.core 第 3 章 审校通过（verdict=PASS）
+2026-09-09 01:53:29,744 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:53:52,987 INFO qianbi.core 第 3 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:53:52,987 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:53:54,382 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:53:56,960 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:54:02,821 INFO qianbi.core 摘要链已更新（全局摘要 1022 字）
+2026-09-09 01:54:04,445 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:55:20,925 WARNING qianbi.llm 流式返回空内容，降级重发（关闭 thinking）
+2026-09-09 01:55:24,448 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:56:01,912 WARNING qianbi.core 第 3 章 设定清算：违反 2（硬伤 2）· 可收编自创 4——详见 追踪/设定清算_第003.json
+[01:56:01] 第3章完成：水渍在延伸 2004 字
+[01:56:01] 第4章 微循环…
+2026-09-09 01:56:01,917 INFO qianbi.core 第 4 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 01:56:04,456 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:56:36,305 INFO qianbi.core 第 4 章 草稿完成：1504 字（目标 2000）
+2026-09-09 01:57:21,337 WARNING qianbi.core 第 4 章 字数不足（1504 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 01:57:22,866 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:57:34,831 INFO qianbi.core 扩写后 1860 字，达标
+2026-09-09 01:57:34,833 INFO qianbi.core 第 4 章 本地扫描：阻断 1 处 / 建议 0 处
+2026-09-09 01:57:34,833 WARNING qianbi.core 第 4 章 阻断 1 处 → 去味改写（第 1 轮）…
+2026-09-09 01:57:36,109 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:57:46,092 INFO qianbi.core 第 4 章 去味完成，复扫通过
+2026-09-09 01:57:49,304 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:58:03,189 INFO qianbi.core 第 4 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 01:58:04,811 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:58:04,822 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:58:18,360 INFO qianbi.core 第 4 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 01:58:18,383 INFO qianbi.core 第 4 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 01:58:18,386 INFO qianbi.core 第 4 章 审校通过（verdict=PASS）
+2026-09-09 01:58:20,319 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:58:44,527 INFO qianbi.core 第 4 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:58:44,527 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 01:58:46,187 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:58:49,009 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:58:56,844 INFO qianbi.core 摘要链已更新（全局摘要 1402 字）
+2026-09-09 01:58:58,262 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:59:12,869 WARNING qianbi.core 第 4 章 设定清算：违反 0（硬伤 0）· 可收编自创 3——详见 追踪/设定清算_第004.json
+[01:59:12] 第4章完成：空档期 1855 字
+[01:59:12] 第5章 微循环…
+2026-09-09 01:59:12,873 INFO qianbi.core 第 5 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 01:59:15,225 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 01:59:40,081 INFO qianbi.core 第 5 章 草稿完成：1211 字（目标 2000）
+2026-09-09 02:00:25,111 WARNING qianbi.core 第 5 章 字数不足（1211 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:00:27,356 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:00:39,447 WARNING qianbi.core 第 5 章 字数不足（1780 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:00:40,943 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:00:53,424 INFO qianbi.core 扩写后 2139 字，达标
+2026-09-09 02:00:53,427 INFO qianbi.core 第 5 章 本地扫描：阻断 8 处 / 建议 18 处
+2026-09-09 02:00:53,427 WARNING qianbi.core 第 5 章 阻断 8 处 → 去味改写（第 1 轮）…
+2026-09-09 02:00:55,250 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:01:05,965 WARNING qianbi.core 第 5 章 阻断 4 处 → 去味改写（第 2 轮）…
+2026-09-09 02:01:07,851 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:01:18,487 WARNING qianbi.core 第 5 章去味未通过（4 处阻断），已标记「待修」，继续写作（可在章节详情中人工修改）
+2026-09-09 02:01:21,508 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:01:36,631 INFO qianbi.core 第 5 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 02:01:38,705 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:01:38,706 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:01:53,889 INFO qianbi.core 第 5 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 02:01:53,891 INFO qianbi.core 第 5 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 02:01:53,894 INFO qianbi.core 第 5 章 审校通过（verdict=PASS）
+2026-09-09 02:01:56,622 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:02:21,141 INFO qianbi.core 第 5 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:02:21,141 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:02:23,106 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:02:26,188 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:02:35,298 INFO qianbi.core 摘要链已更新（全局摘要 1531 字）
+2026-09-09 02:02:37,823 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:02:50,437 WARNING qianbi.core 第 5 章 设定清算：违反 1（硬伤 0）· 可收编自创 2——详见 追踪/设定清算_第005.json
+[02:02:50] 第5章完成：138秒 2098 字
+[02:02:50] 第6章 微循环…
+2026-09-09 02:02:50,442 INFO qianbi.core 第 6 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:02:52,861 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:03:08,336 INFO qianbi.core 第 6 章 草稿完成：1110 字（目标 2000）
+2026-09-09 02:03:53,367 WARNING qianbi.core 第 6 章 字数不足（1110 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:03:55,116 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:04:05,917 WARNING qianbi.core 第 6 章 字数不足（1709 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:04:08,306 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:04:20,769 INFO qianbi.core 扩写后 2057 字，达标
+2026-09-09 02:04:20,772 INFO qianbi.core 第 6 章 本地扫描：阻断 0 处 / 建议 3 处
+2026-09-09 02:04:22,554 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:04:37,620 INFO qianbi.core 第 6 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 02:04:39,673 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:04:40,209 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:04:53,355 INFO qianbi.core 第 6 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 02:04:53,936 INFO qianbi.core 第 6 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 02:04:53,939 INFO qianbi.core 第 6 章 审校通过（verdict=PASS）
+2026-09-09 02:04:55,581 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:05:25,382 INFO qianbi.core 第 6 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:05:25,382 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:05:29,006 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:05:31,719 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:05:42,936 INFO qianbi.core 摘要链已更新（全局摘要 2056 字）
+2026-09-09 02:05:44,879 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:05:58,101 WARNING qianbi.core 第 6 章 设定清算：违反 0（硬伤 0）· 可收编自创 3——详见 追踪/设定清算_第006.json
+[02:05:58] 第6章完成：07:12 2057 字
+[02:05:58] 第7章 细纲缺失，现场生成…
+2026-09-09 02:05:58,106 INFO qianbi.core 阶段③ 生成第 7-7 章细纲…
+2026-09-09 02:06:00,243 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:06:28,759 INFO qianbi.core 细纲已生成 1 章：[7]
+[02:06:28] 第7章 微循环…
+2026-09-09 02:06:28,761 INFO qianbi.core 第 7 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:06:31,239 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:06:42,688 INFO qianbi.core 第 7 章 草稿完成：1309 字（目标 2000）
+2026-09-09 02:07:27,721 WARNING qianbi.core 第 7 章 字数不足（1309 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:07:29,926 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:07:41,366 WARNING qianbi.core 第 7 章 字数不足（1732 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:07:45,089 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:08:34,314 INFO qianbi.core 扩写后 1962 字，达标
+2026-09-09 02:08:34,317 INFO qianbi.core 第 7 章 本地扫描：阻断 4 处 / 建议 3 处
+2026-09-09 02:08:34,317 WARNING qianbi.core 第 7 章 阻断 4 处 → 去味改写（第 1 轮）…
+2026-09-09 02:08:36,944 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:08:46,396 WARNING qianbi.core 第 7 章 阻断 2 处 → 去味改写（第 2 轮）…
+2026-09-09 02:08:49,003 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:08:58,616 INFO qianbi.core 第 7 章 去味完成，复扫通过
+2026-09-09 02:09:01,476 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:09:15,167 INFO qianbi.core 第 7 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 02:09:17,418 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:09:17,796 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:09:30,903 INFO qianbi.core 第 7 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 02:09:31,082 INFO qianbi.core 第 7 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 02:09:31,086 INFO qianbi.core 第 7 章 审校通过（verdict=PASS）
+2026-09-09 02:09:34,369 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:10:04,288 INFO qianbi.core 第 7 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:10:04,288 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:10:06,476 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:10:09,919 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:10:22,589 INFO qianbi.core 摘要链已更新（全局摘要 2207 字）
+2026-09-09 02:10:26,084 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:10:50,088 WARNING qianbi.core 第 7 章 设定清算：违反 0（硬伤 0）· 可收编自创 3——详见 追踪/设定清算_第007.json
+[02:10:50] 第7章完成：第二人 1936 字
+[02:10:50] 第8章 细纲缺失，现场生成…
+2026-09-09 02:10:50,092 INFO qianbi.core 阶段③ 生成第 8-8 章细纲…
+2026-09-09 02:10:53,251 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:12:03,941 INFO qianbi.core 细纲已生成 1 章：[8]
+[02:12:03] 第8章 微循环…
+2026-09-09 02:12:03,944 INFO qianbi.core 第 8 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:12:06,849 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:12:26,873 INFO qianbi.core 第 8 章 草稿完成：1491 字（目标 2000）
+2026-09-09 02:13:11,905 WARNING qianbi.core 第 8 章 字数不足（1491 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:13:15,215 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:13:27,033 INFO qianbi.core 扩写后 1886 字，达标
+2026-09-09 02:13:27,036 INFO qianbi.core 第 8 章 本地扫描：阻断 0 处 / 建议 7 处
+2026-09-09 02:13:29,629 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:13:43,370 INFO qianbi.core 第 8 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 02:13:46,214 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:13:46,226 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:14:00,050 INFO qianbi.core 第 8 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 02:14:00,051 INFO qianbi.core 第 8 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 02:14:00,055 INFO qianbi.core 第 8 章 审校通过（verdict=PASS）
+2026-09-09 02:14:02,378 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:14:44,953 INFO qianbi.core 第 8 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:14:44,953 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:14:47,369 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:14:50,657 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:15:04,855 INFO qianbi.core 摘要链已更新（全局摘要 2692 字）
+2026-09-09 02:15:09,394 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:15:20,992 WARNING qianbi.core 第 8 章 设定清算：违反 1（硬伤 0）· 可收编自创 4——详见 追踪/设定清算_第008.json
+[02:15:20] 第8章完成：同一辆车 1886 字
+[02:15:20] 第9章 细纲缺失，现场生成…
+2026-09-09 02:15:20,996 INFO qianbi.core 阶段③ 生成第 9-9 章细纲…
+2026-09-09 02:15:28,473 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:16:21,947 INFO qianbi.core 细纲已生成 1 章：[9]
+[02:16:21] 第9章 微循环…
+2026-09-09 02:16:21,950 INFO qianbi.core 第 9 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:16:25,115 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:16:39,910 INFO qianbi.core 第 9 章 草稿完成：1373 字（目标 2000）
+2026-09-09 02:17:24,942 WARNING qianbi.core 第 9 章 字数不足（1373 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:17:28,495 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:17:38,129 WARNING qianbi.core 第 9 章 字数不足（1716 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:17:40,272 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:17:49,956 INFO qianbi.core 扩写后 1895 字，达标
+2026-09-09 02:17:49,959 INFO qianbi.core 第 9 章 本地扫描：阻断 1 处 / 建议 13 处
+2026-09-09 02:17:49,959 WARNING qianbi.core 第 9 章 阻断 1 处 → 去味改写（第 1 轮）…
+2026-09-09 02:17:52,107 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:18:00,639 INFO qianbi.core 第 9 章 去味完成，复扫通过
+2026-09-09 02:18:03,218 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:18:15,671 INFO qianbi.core 第 9 章 审校第 1/3 票：PASS（fail=0）
+2026-09-09 02:18:18,404 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:18:21,767 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:18:34,246 INFO qianbi.core 第 9 章 审校第 2/3 票：PASS（fail=0）
+2026-09-09 02:18:34,247 INFO qianbi.core 第 9 章 审校第 3/3 票：PASS（fail=0）
+2026-09-09 02:18:34,250 INFO qianbi.core 第 9 章 审校通过（verdict=PASS）
+2026-09-09 02:18:37,404 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:19:22,407 INFO qianbi.core 第 9 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:19:22,407 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:19:25,882 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:19:29,582 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:19:44,280 INFO qianbi.core 摘要链已更新（全局摘要 2845 字）
+2026-09-09 02:19:46,633 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:19:59,366 WARNING qianbi.core 第 9 章 设定清算：违反 0（硬伤 0）· 可收编自创 3——详见 追踪/设定清算_第009.json
+[02:19:59] 第9章完成：陈建国 1839 字
+[02:19:59] 第10章 细纲缺失，现场生成…
+2026-09-09 02:19:59,370 INFO qianbi.core 阶段③ 生成第 10-10 章细纲…
+2026-09-09 02:20:02,058 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:21:27,302 INFO qianbi.core 细纲已生成 1 章：[10]
+[02:21:27] 第10章 微循环…
+2026-09-09 02:21:27,305 INFO qianbi.core 第 10 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:21:32,745 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:21:46,649 INFO qianbi.core 第 10 章 草稿完成：1102 字（目标 2000）
+2026-09-09 02:22:31,677 WARNING qianbi.core 第 10 章 字数不足（1102 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:22:34,620 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:22:43,588 WARNING qianbi.core 第 10 章 字数不足（1476 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:22:46,363 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:22:55,353 WARNING qianbi.core 扩写后 1663 字，2 轮后仍不足，标记不阻断
+2026-09-09 02:22:55,357 INFO qianbi.core 第 10 章 本地扫描：阻断 0 处 / 建议 3 处
+2026-09-09 02:22:55,357 WARNING qianbi.core 第 10 章 字数预检未过：[字数] 第10章正文 1663 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审（跳过审校 LLM）
+2026-09-09 02:22:55,358 WARNING qianbi.core 第 10 章 字数不足（[字数] 第10章正文 1663 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审）：字数问题不走修复环，降级为建议（请手动扩写或调高扩写轮数）
+2026-09-09 02:22:55,359 INFO qianbi.core 第 10 章 审校通过（verdict=PASS_WITH_NOTES）
+2026-09-09 02:22:58,987 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:24:01,751 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线
+2026-09-09 02:24:04,595 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:24:08,387 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:24:23,945 INFO qianbi.core 摘要链已更新（全局摘要 2850 字）
+2026-09-09 02:24:27,327 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:24:37,860 WARNING qianbi.core 第 10 章 设定清算：违反 1（硬伤 0）· 可收编自创 3——详见 追踪/设定清算_第010.json
+[02:24:37] 第10章完成：第十九张 1663 字
+[02:24:37] 第11章 细纲缺失，现场生成…
+2026-09-09 02:24:37,865 INFO qianbi.core 阶段③ 生成第 11-11 章细纲…
+2026-09-09 02:24:40,277 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:27:56,577 INFO qianbi.core 细纲已生成 1 章：[11]
+[02:27:56] 第11章 微循环…
+2026-09-09 02:27:56,581 INFO qianbi.core 第 11 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:27:59,861 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:28:12,204 INFO qianbi.core 第 11 章 草稿完成：1072 字（目标 2000）
+2026-09-09 02:28:57,236 WARNING qianbi.core 第 11 章 字数不足（1072 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:29:00,560 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:29:09,290 WARNING qianbi.core 第 11 章 字数不足（1463 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:29:12,128 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:29:22,174 WARNING qianbi.core 扩写后 1734 字，2 轮后仍不足，标记不阻断
+2026-09-09 02:29:22,177 INFO qianbi.core 第 11 章 本地扫描：阻断 3 处 / 建议 18 处
+2026-09-09 02:29:22,177 WARNING qianbi.core 第 11 章 阻断 3 处 → 去味改写（第 1 轮）…
+2026-09-09 02:29:25,131 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:29:34,627 INFO qianbi.core 第 11 章 去味完成，复扫通过
+2026-09-09 02:29:34,627 WARNING qianbi.core 第 11 章 字数预检未过：[字数] 第11章正文 1707 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审（跳过审校 LLM）
+2026-09-09 02:29:34,629 WARNING qianbi.core 第 11 章 字数不足（[字数] 第11章正文 1707 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审）：字数问题不走修复环，降级为建议（请手动扩写或调高扩写轮数）
+2026-09-09 02:29:34,630 INFO qianbi.core 第 11 章 审校通过（verdict=PASS_WITH_NOTES）
+2026-09-09 02:29:38,068 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:30:36,623 INFO qianbi.core 第 11 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:30:36,623 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:30:40,521 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:30:44,060 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:30:59,179 INFO qianbi.core 摘要链已更新（全局摘要 2853 字）
+2026-09-09 02:31:02,492 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:31:10,455 WARNING qianbi.core 第 11 章 设定清算：违反 0（硬伤 0）· 可收编自创 6——详见 追踪/设定清算_第011.json
+[02:31:10] 第11章完成：顶层柜 1707 字
+[02:31:10] 第12章 细纲缺失，现场生成…
+2026-09-09 02:31:10,459 INFO qianbi.core 阶段③ 生成第 12-12 章细纲…
+2026-09-09 02:31:14,203 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:32:04,740 INFO qianbi.core 细纲已生成 1 章：[12]
+[02:32:04] 第12章 微循环…
+2026-09-09 02:32:04,743 INFO qianbi.core 第 12 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:32:11,130 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:32:31,852 INFO qianbi.core 第 12 章 草稿完成：1035 字（目标 2000）
+2026-09-09 02:33:16,885 WARNING qianbi.core 第 12 章 字数不足（1035 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:33:19,829 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:33:29,057 WARNING qianbi.core 第 12 章 字数不足（1417 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:33:31,973 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:33:41,859 WARNING qianbi.core 扩写后 1743 字，2 轮后仍不足，标记不阻断
+2026-09-09 02:33:41,862 INFO qianbi.core 第 12 章 本地扫描：阻断 1 处 / 建议 3 处
+2026-09-09 02:33:41,862 WARNING qianbi.core 第 12 章 阻断 1 处 → 去味改写（第 1 轮）…
+2026-09-09 02:33:44,910 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:33:53,470 INFO qianbi.core 第 12 章 去味完成，复扫通过
+2026-09-09 02:33:53,471 WARNING qianbi.core 第 12 章 字数预检未过：[字数] 第12章正文 1723 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审（跳过审校 LLM）
+2026-09-09 02:33:53,473 WARNING qianbi.core 第 12 章 字数不足（[字数] 第12章正文 1723 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审）：字数问题不走修复环，降级为建议（请手动扩写或调高扩写轮数）
+2026-09-09 02:33:53,474 INFO qianbi.core 第 12 章 审校通过（verdict=PASS_WITH_NOTES）
+2026-09-09 02:33:56,755 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:34:57,734 INFO qianbi.core 第 12 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:34:57,734 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:35:00,821 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:35:06,213 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:35:20,870 INFO qianbi.core 摘要链已更新（全局摘要 2853 字）
+2026-09-09 02:35:25,498 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:35:30,940 WARNING qianbi.core 第 12 章 设定清算：违反 0（硬伤 0）· 可收编自创 2——详见 追踪/设定清算_第012.json
+[02:35:30] 第12章完成：白条与修表 1723 字
+[02:35:30] 第13章 细纲缺失，现场生成…
+2026-09-09 02:35:30,944 INFO qianbi.core 阶段③ 生成第 13-13 章细纲…
+2026-09-09 02:35:41,681 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:36:29,104 INFO qianbi.core 细纲已生成 1 章：[13]
+[02:36:29] 第13章 微循环…
+2026-09-09 02:36:29,108 INFO qianbi.core 第 13 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））
+2026-09-09 02:36:32,909 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:36:49,691 INFO qianbi.core 第 13 章 草稿完成：1175 字（目标 2000）
+2026-09-09 02:37:34,724 WARNING qianbi.core 第 13 章 字数不足（1175 / 目标 2000），自动扩写（第 1 轮）…
+2026-09-09 02:37:38,319 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:37:48,003 WARNING qianbi.core 第 13 章 字数不足（1469 / 目标 2000），自动扩写（第 2 轮）…
+2026-09-09 02:37:51,074 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:38:01,968 WARNING qianbi.core 扩写后 1786 字，2 轮后仍不足，标记不阻断
+2026-09-09 02:38:01,971 INFO qianbi.core 第 13 章 本地扫描：阻断 2 处 / 建议 21 处
+2026-09-09 02:38:01,971 WARNING qianbi.core 第 13 章 阻断 2 处 → 去味改写（第 1 轮）…
+2026-09-09 02:38:05,568 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:38:15,232 INFO qianbi.core 第 13 章 去味完成，复扫通过
+2026-09-09 02:38:15,233 WARNING qianbi.core 第 13 章 字数预检未过：[字数] 第13章正文 1748 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审（跳过审校 LLM）
+2026-09-09 02:38:15,234 WARNING qianbi.core 第 13 章 字数不足（[字数] 第13章正文 1748 字，低于目标 2000（容差 10%，下限 1800），需扩写达标后再过审）：字数问题不走修复环，降级为建议（请手动扩写或调高扩写轮数）
+2026-09-09 02:38:15,236 INFO qianbi.core 第 13 章 审校通过（verdict=PASS_WITH_NOTES）
+2026-09-09 02:38:18,771 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:39:19,501 INFO qianbi.core 第 13 章 增量台账：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:39:19,501 INFO qianbi.core 追踪文件已更新：角色状态, 伏笔, 时间线, 上下文
+2026-09-09 02:39:23,880 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:39:27,739 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:39:42,172 INFO qianbi.core 摘要链已更新（全局摘要 2853 字）
+2026-09-09 02:39:45,708 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 200 OK"
+2026-09-09 02:39:56,339 WARNING qianbi.core 第 13 章 设定清算：违反 0（硬伤 0）· 可收编自创 2——详见 追踪/设定清算_第013.json
+[02:39:56] 第13章完成：账期已满 1748 字
+[02:39:56] 第14章 细纲缺失，现场生成…
+2026-09-09 02:39:56,343 INFO qianbi.core 阶段③ 生成第 14-14 章细纲…
+2026-09-09 02:39:56,623 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-09 02:39:56,918 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-09 02:39:57,173 INFO httpx HTTP Request: POST https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-09 02:39:57,174 WARNING qianbi.core 第 14 章细纲生成失败：API 返回 429: （已跳过，下次运行自动补）
+Traceback (most recent call last):
+  File "G:\ai\酒馆\qianbi-novel\scripts\cost_bench.py", line 705, in <module>
+    main()
+    ~~~~^^
+  File "G:\ai\酒馆\qianbi-novel\scripts\cost_bench.py", line 696, in main
+    return cmd_run(args.variant, chapters, preset_params, args.fast_path,
+                   args.seed_drafts, user_id=args.user_id, ext=ext, gates=gates,
+    ...<2 lines>...
+                   seed_home=args.seed_home, start=start,
+                   outlines_only=args.outlines_only, seed_from=args.seed_drafts_from)
+  File "G:\ai\酒馆\qianbi-novel\scripts\cost_bench.py", line 455, in cmd_run
+    _ensure_outline(proj, n, orch)   # S4-d：细纲缺失时现场生成（长卷 N>6 可跑）
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "G:\ai\酒馆\qianbi-novel\scripts\cost_bench.py", line 316, in _ensure_outline
+    st_mod.stage_chapter_outlines(orch, n, n)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "G:\ai\酒馆\qianbi-novel\app\core\stages.py", line 767, in stage_chapter_outlines
+    raise StageError("细纲生成失败：批次全部失败（详见日志）")
+app.core.stages.StageError: 细纲生成失败：批次全部失败（详见日志）
