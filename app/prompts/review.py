@@ -442,3 +442,16 @@ def build_issues_brief(issues):
             lines.append(f"[{i}] {str(issue)[:120]}")
     return "\n".join(lines)
 
+
+
+REVIEW_STATIC_MARKER = "裁决优先级（与下方「世界书对账·双轨裁决」一致，不得反过来）："
+
+
+def review_static_tail() -> str:
+    """审校静态指令尾段（裁决优先级+六维 checklist+输出契约，零占位符）。
+
+    V1-③（writing.review_in_system，缺省关）：卷会话模式下这段在会话创建时
+    一次性进 system——旧路径它随每章审校轮重发、在历史里逐章累积（T 轮实测
+    审校轮指令体 4.6k chars/章）。单轮路径不使用本函数（字节不变）。"""
+    i = FINAL_REVIEW_PROMPT.find(REVIEW_STATIC_MARKER)
+    return FINAL_REVIEW_PROMPT[i:] if i >= 0 else ""

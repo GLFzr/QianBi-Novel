@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>千笔一文 · UI 打磨演示（现有基础 · 微交互层）</title>
+<style>
+/* ============ 基线 token（忠实复刻现有视觉） ============ */
+:root{
+  --bg:#101216; --panel:#191c22; --raise:#262b34; --line:#2a2f39;
+  --txt:#d8dbe1; --sub:#9aa0aa; --acc:#4d9fec; --ok:#3fac7e;
+  --e-out:cubic-bezier(.22,1,.36,1);      /* smooth 档主缓动 */
+  --e-back:cubic-bezier(.34,1.56,.64,1);  /* quick 档回弹 */
+  --e-hover:cubic-bezier(.2,0,.2,1);      /* instant 档 */
+  --sh-raise:0 8px 24px rgba(0,0,0,.35);  /* 唯一一种投影 */
+  --mono:Consolas,"JetBrains Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scrollbar-color:#3a4150 var(--bg)}
+body{background:var(--bg);color:var(--txt);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding-bottom:48px}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+code,b{font-weight:600}
+.num,.tnum{font-variant-numeric:tabular-nums}
+h1{font-size:20px;line-height:1.25}
+h3{font-size:16px;line-height:1.3}
+::selection{background:rgba(77,159,236,.3)}
+
+/* ============ 顶栏 / 页签 ============ */
+#top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:20px 28px 14px;border-bottom:1px solid rgba(255,255,255,.04)}
+#top .brand{display:flex;align-items:center;gap:12px}
+#top .logo{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:linear-gradient(180deg,#5aa9f2,#4d9fec);color:#fff;font-size:18px;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+#top p{color:var(--sub);font-size:13px}
+.rm{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);cursor:pointer;user-select:none}
+.rm input{accent-color:var(--acc);width:15px;height:15px;cursor:pointer}
+#tabs{display:flex;gap:6px;padding:12px 28px 0}
+#tabs .tab{padding:8px 16px;border-radius:6px;color:var(--sub);border:1px solid transparent;transition:color 120ms var(--e-hover),background-color 120ms var(--e-hover)}
+#tabs .tab:hover{color:var(--txt);background:rgba(255,255,255,.04)}
+#tabs .tab.on{color:var(--txt);background:var(--raise);border-color:rgba(255,255,255,.06)}
+main{padding:20px 28px}
+.pane{display:none}
+.pane.on{display:block}
+.lead{color:var(--sub);font-size:13px;margin:6px 0 18px}
+
+/* ============ 现有骨架复刻 ============ */
+.shell{display:grid;grid-template-columns:52px 400px 1fr;grid-template-rows:1fr 30px;grid-template-areas:"rail panel read" "rail stat stat";height:318px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);box-shadow:var(--sh-raise)}
+.rail{grid-area:rail;background:var(--panel);border-right:1px solid rgba(255,255,255,.04);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px}
+.rail .ri{width:36px;height:36px;border-radius:6px;display:grid;place-items:center;color:var(--sub);transition:background-color 120ms var(--e-hover),color 120ms var(--e-hover)}
+.rail .ri:hover{color:var(--txt);background:rgba(255,255,255,.05)}
+.rail .ri.on{color:var(--acc);background:rgba(77,159,236,.12)}
+.spanel{grid-area:panel;background:var(--panel);border-right:1px solid rgba(255,255,255,.04);padding:16px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.shead{display:flex;align-items:center;justify-content:space-between}
+.shead b{font-size:16px}
+.badge{font-size:12px;color:var(--sub);border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:2px 8px}
+.scard{background:var(--raise);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:12px;font-size:13px}
+.scard h4{font-size:13px;color:var(--sub);font-weight:600;margin-bottom:8px}
+.stg{display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--sub)}
+.stg.ok{color:var(--txt)}
+.sdot{width:8px;height:8px;border-radius:50%;flex:none;background:#4a5160}
+.sdot.ok{background:var(--ok)}
+.sdot.run{background:var(--acc)}
+.sdot.run.breath{animation:breath 1.4s ease-in-out infinite}
+@keyframes breath{0%,100%{opacity:.45}50%{opacity:1}}
+.pills{position:relative;display:flex;gap:4px;background:var(--raise);border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:4px}
+.capsule{position:absolute;top:4px;left:0;width:60px;height:calc(100% - 8px);border-radius:4px;background:rgba(77,159,236,.16);border:1px solid rgba(77,159,236,.35);transition:left 250ms var(--e-out),width 250ms var(--e-out)}
+.pill{position:relative;z-index:1;flex:1;padding:5px 10px;border-radius:4px;font-size:13px;color:var(--sub);text-align:center}
+.pill.on{color:var(--txt)}
+.sbtns{display:flex;gap:8px;margin-top:auto}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:6px;padding:8px 16px;font-size:14px;border:1px solid rgba(255,255,255,.06);background:var(--raise);color:var(--txt);transition:background-color 120ms var(--e-hover),transform 150ms var(--e-back),border-color 120ms var(--e-hover)}
+.btn:hover{background:#2d333e}
+.btn:active{transform:scale(.97)}
+.btn.pri{background:linear-gradient(180deg,#5aa9f2,#4d9fec);border-color:transparent;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
+.btn.pri:hover{background:linear-gradient(180deg,#66b1f4,#55a4ee)}
+.btn.gh{background:transparent}
+.btn.gh:hover{background:rgba(255,255,255,.05)}
+.btn.sm{padding:5px 12px;font-size:13px}
+.sread{grid-area:read;padding:20px 24px;overflow:hidden}
+.sread h3{margin-bottom:10px}
+.sread p{color:var(--sub);font-size:14px;max-width:62ch}
+.sstat{grid-area:stat;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-top:1px solid rgba(255,255,255,.04);background:var(--panel);font-size:12px;color:var(--sub)}
+.shelltag{display:flex;align-items:center;gap:10px;margin:26px 0 12px;color:var(--sub);font-size:13px}
+.shelltag::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.04)}
+
+/* ============ Tab① 动效目录卡片 ============ */
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:14px}
+.dcard{background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.dcard>header{display:flex;align-items:center;gap:10px}
+.dnum{flex:none;width:24px;height:24px;border-radius:6px;background:var(--raise);border:1px solid rgba(255,255,255,.06);color:var(--acc);font:600 12px/22px var(--mono);text-align:center}
+.dcard h3{font-size:14px;flex:1}
+.seg{display:flex;border:1px solid rgba(255,255,255,.06);border-radius:6px;overflow:hidden;flex:none}
+.seg button{padding:4px 10px;font-size:12px;color:var(--sub);transition:background-color 120ms var(--e-hover),color 120ms var(--e-hover)}
+.seg button.on{background:rgba(77,159,236,.16);color:var(--acc)}
+.dstage{position:relative;background:var(--bg);border:1px solid rgba(255,255,255,.04);border-radius:6px;padding:16px;min-height:96px;display:flex;flex-direction:column;gap:10px;justify-content:center}
+.dstage .hint{position:absolute;top:6px;right:10px;font-size:11px;color:var(--sub);opacity:.75}
+.dmeta{font-size:12px;color:var(--sub);line-height:1.55}
+.dmeta i{font-style:normal;color:var(--txt);font-weight:600}
+.dmeta code{display:block;margin-top:3px;font:12px/1.5 var(--mono);color:#8fbfe9;background:rgba(77,159,236,.07);border:1px solid rgba(77,159,236,.14);border-radius:4px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* 01 按钮：旧=直切 */
+.dstage.old .demo-btn{transition:none}
+.dstage.old .demo-btn:active{transform:none}
+/* 02 焦点环 */
+.demo-focus{transition:box-shadow 80ms var(--e-hover)}
+.dstage.new .demo-focus:focus-visible,.demo-focus.ring{box-shadow:0 0 0 2px var(--acc),0 0 0 6px rgba(77,159,236,.18);outline:none}
+.dstage.old .demo-focus:focus-visible,.dstage.old .demo-focus.ring{box-shadow:none;outline:none}
+/* 03 pills：旧=胶囊瞬移 */
+.dstw .capsule{position:absolute}
+.dstage.old .capsule{transition:none}
+/* 04 状态点 */
+.sdot.pop{background:var(--ok);animation:pop 200ms var(--e-back) 1}
+.sdot.pop::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font-size:7px;color:#0d1117;font-weight:700}
+@keyframes pop{0%{transform:scale(.4)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+.dstage.old .sdot.run.breath,.dstage.old .sdot.pop{animation:none}
+.sdot{position:relative}
+/* 05 进度 */
+.pbar{height:6px;border-radius:3px;background:var(--raise);overflow:hidden;position:relative}
+.pbar i{display:block;height:100%;width:18%;border-radius:3px;background:linear-gradient(90deg,#4d9fec,#5aa9f2);transition:width 900ms var(--e-out)}
+.pbar.go i::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.09) 50%,transparent 70%);background-size:200% 100%;animation:shine 8s linear infinite}
+@keyframes shine{0%{background-position:120% 0}100%{background-position:-80% 0}}
+.dstage.old .pbar i{transition:none}
+.dstage.old .pbar.go i::after{animation:none;content:none}
+.rowbtns{display:flex;gap:8px}
+/* 06 流式 */
+.stream{min-height:60px;font-size:13px}
+.stream .sline{color:var(--txt);line-height:1.7}
+.dstage.new .stream .sline{animation:fadeup 150ms var(--e-out) 1 both}
+@keyframes fadeup{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+/* 07 数字 */
+.nums{display:flex;gap:28px}
+.nums b{display:block;font-size:26px;line-height:1.2;font-variant-numeric:tabular-nums;font-weight:600}
+.nums span{font-size:12px;color:var(--sub)}
+/* 08 折叠 */
+.fold{border:1px solid rgba(255,255,255,.06);border-radius:6px;background:var(--raise);overflow:hidden}
+.fold-h{display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;font-size:13px;text-align:left;transition:background-color 80ms var(--e-hover)}
+.fold-h:hover{background:rgba(255,255,255,.04)}
+.fold-h span{margin-left:auto;color:var(--sub);font-size:12px}
+.arr{transition:transform 200ms var(--e-out);color:var(--sub)}
+.fold.open .arr{transform:rotate(90deg)}
+.fold-b{display:grid;grid-template-rows:0fr;transition:grid-template-rows 200ms var(--e-out)}
+.fold.open .fold-b{grid-template-rows:1fr}
+.fold-c{overflow:hidden;min-height:0;padding:0 12px}
+.fold.open .fold-c{padding-bottom:10px}
+.fold-c p{font-size:13px;color:var(--sub);padding:3px 0;opacity:0;transform:translateY(-2px)}
+.fold.open .fold-c p{opacity:1;transform:none;transition:opacity 140ms ease,transform 140ms ease}
+.fold.open .fold-c p:nth-child(1){transition-delay:0ms}
+.fold.open .fold-c p:nth-child(2){transition-delay:30ms}
+.fold.open .fold-c p:nth-child(3){transition-delay:60ms}
+.dstage.old .fold-b,.dstage.old .arr{transition:none}
+.dstage.old .fold-c p{transition:none}
+/* 09 Toast */
+.tostage{justify-content:flex-start}
+.toasthost{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;z-index:5}
+.toast{background:var(--raise);border:1px solid rgba(255,255,255,.08);border-left:3px solid var(--ok);border-radius:6px;padding:8px 14px;font-size:13px;box-shadow:var(--sh-raise);opacity:0;transform:translateY(8px);transition:opacity 200ms var(--e-out),transform 200ms var(--e-out)}
+.toast.show{opacity:1;transform:none}
+.toast.hide{opacity:0;transition:opacity 250ms ease}
+.dstage.old .toast{transition:none}
+/* 10 列表行 */
+.chaplist{position:relative;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.06);border-radius:6px;overflow:hidden;background:var(--raise)}
+.selbar{position:absolute;left:0;width:3px;background:var(--acc);border-radius:0 2px 2px 0;transition:top 250ms var(--e-out),height 250ms var(--e-out);z-index:1}
+.crow{position:relative;text-align:left;padding:8px 14px;font-size:13px;color:var(--sub);transition:background-color 80ms var(--e-hover),color 80ms var(--e-hover)}
+.crow:hover{background:rgba(255,255,255,.04);color:var(--txt)}
+.crow.on{color:var(--txt)}
+.dstage.old .crow,.dstage.old .selbar{transition:none}
+/* 11 主题 */
+.themeprev{border:1px solid var(--tp-line,#2a2f39);border-radius:10px;background:var(--tp-bg,#191c22);color:var(--tp-txt,#d8dbe1);padding:12px;display:flex;flex-direction:column;gap:8px}
+.dstage.new .themeprev,.dstage.new .themeprev *{transition:background-color 250ms ease,color 250ms ease,border-color 250ms ease}
+.dstage.old .themeprev,.dstage.old .themeprev *{transition:none}
+.themeprev[data-th="paper"]{--tp-bg:#f2e9d6;--tp-txt:#3a3226;--tp-line:rgba(90,70,40,.22);--tp-sub:#7a6f5c;--tp-btn:#a8683c}
+.tp-head{font-weight:600;font-size:14px}
+.tp-line{height:8px;border-radius:4px;background:var(--tp-sub,#9aa0aa);opacity:.35;width:88%}
+.tp-line.short{width:56%}
+.tp-btn{align-self:flex-start;background:var(--tp-btn,#4d9fec);color:#fff;border-radius:6px;padding:5px 14px;font-size:13px}
+.themeprev[data-th="paper"] .tp-btn{color:#fff8ec}
+/* 12 骨架 */
+.skwrap{min-height:84px}
+.skel{display:none;flex-direction:column;gap:10px}
+.sk{display:block;height:12px;border-radius:6px;background:linear-gradient(100deg,#1d222a 35%,#2a303b 50%,#1d222a 65%);background-size:220% 100%;animation:sweep 1.6s linear infinite}
+.sk.t{width:44%;height:16px}
+.sk.s{width:62%}
+@keyframes sweep{0%{background-position:110% 0}100%{background-position:-110% 0}}
+.spin{display:none;place-items:center;height:84px;color:var(--sub)}
+.spin i{width:22px;height:22px;border-radius:50%;border:3px solid var(--raise);border-top-color:var(--acc);animation:rot 800ms linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+.real{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.real p{color:var(--sub)}
+.skwrap.loading .skel{display:flex}
+.skwrap.loading .real{display:none}
+.skwrap.loading~.rowbtns .btn{opacity:.7}
+.real.in{animation:fadeup 150ms var(--e-out) 1 both}
+.dstage.old .skel,.dstage.old .sk{animation:none}
+.dstage.old .skwrap.loading .skel{display:none}
+.dstage.old .skwrap.loading .spin{display:grid}
+
+/* ============ Tab② 高级感细节 ============ */
+.t2top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.cmpwrap{display:grid;grid-template-columns:minmax(300px,420px) 1fr;gap:20px;align-items:start}
+.cmp{--cp:13px;--cg:15px;--cr1:12px;--cr2:4px;--cfs:15px;--cbg:#191c22;--craise:#232833;--cbd:1.5px solid #343b48;--csub:#9aa0aa;--csh:0 2px 4px rgba(0,0,0,.3),0 10px 18px rgba(0,0,0,.28),inset 0 0 10px rgba(0,0,0,.25);
+  background:var(--cbg);border:var(--cbd);border-radius:var(--cr1);padding:var(--cp);display:flex;flex-direction:column;gap:var(--cg);box-shadow:var(--csh);font-size:var(--cfs)}
+.cmp.rich{--cp:16px;--cg:12px;--cr1:10px;--cr2:6px;--cfs:14px;--craise:#262b34;--cbd:1px solid rgba(255,255,255,.06);--csh:0 8px 24px rgba(0,0,0,.35)}
+.cmp,.cmp *{transition:all 250ms var(--e-out)}
+.c-head{display:flex;align-items:center;justify-content:space-between}
+.c-title{font-size:calc(var(--cfs) + 2px);font-weight:600}
+.cmp.rich .c-title{font-size:16px}
+.c-badge{font-size:12px;color:var(--csub);border:var(--cbd);border-radius:calc(var(--cr2) + 2px);padding:2px 8px}
+.cmp.rich .c-badge{border-color:rgba(255,255,255,.06);border-radius:6px}
+.c-stat{display:flex;justify-content:space-between;font-size:calc(var(--cfs) - 3px);color:var(--csub);font-variant-numeric:normal}
+.cmp.rich .c-stat{font-size:12px;font-variant-numeric:tabular-nums}
+.c-stage{background:var(--craise);border:var(--cbd);border-radius:var(--cr1);padding:var(--cp)}
+.cmp.rich .c-stage{border-color:rgba(255,255,255,.06);border-radius:10px}
+.c-row{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--csub);font-size:calc(var(--cfs) - 1px)}
+.cmp.rich .c-row{font-size:13px}
+.c-row.now{color:var(--txt)}
+.c-dot{width:8px;height:8px;border-radius:50%;flex:none;background:#4a5160;border:var(--cbd)}
+.cmp.rich .c-dot{border:none}
+.c-dot.ok{background:var(--ok)}
+.c-dot.run{background:var(--acc)}
+.c-row svg{flex:none;color:var(--ok)}
+.cmp.poor .c-row svg{stroke-width:2.6}
+.cmp.rich .c-row svg{stroke-width:1.6}
+.c-btns{display:flex;gap:calc(var(--cg) - 3px)}
+.c-pri,.c-sec{flex:1;padding:9px 0;border-radius:var(--cr2);font-size:var(--cfs);text-align:center}
+.cmp.rich .c-pri,.cmp.rich .c-sec{border-radius:6px;font-size:14px}
+.c-pri{background:#4d9fec;color:#fff;border:var(--cbd)}
+.cmp.rich .c-pri{background:linear-gradient(180deg,#5aa9f2,#4d9fec);border:1px solid rgba(255,255,255,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.12)}
+.c-sec{background:var(--craise);border:var(--cbd);color:var(--txt)}
+.cmp.rich .c-sec{border-color:rgba(255,255,255,.06)}
+.c-foot{border-top:var(--cbd);padding-top:calc(var(--cg) - 3px);font-size:calc(var(--cfs) - 2px);color:var(--csub);font-variant-numeric:normal}
+.cmp.rich .c-foot{border-top-color:rgba(255,255,255,.04);padding-top:12px;font-size:12px;font-variant-numeric:tabular-nums}
+.cmpnote{color:var(--sub);font-size:13px}
+.cmpnote b{color:var(--txt)}
+.principles{list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:18px}
+.principles li{background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:12px 16px;display:grid;grid-template-columns:170px 1fr;gap:4px 14px;font-size:13px}
+.principles b{font-size:14px}
+.principles .chg{color:var(--sub)}
+.principles .chg em{font-style:normal;color:#8fbfe9}
+.principles .why{grid-column:2;color:var(--sub)}
+.principles .why::before{content:"为什么显高级：";color:var(--ok);font-weight:600}
+
+/* ============ Tab③ QML 规格 ============ */
+.spec h3{margin:22px 0 8px;padding-left:10px;border-left:3px solid var(--acc)}
+.spec p,.spec li{color:var(--sub);font-size:13.5px;max-width:88ch}
+.spec p b,.spec li b{color:var(--txt)}
+.spec ul{padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.spec code{font:12.5px/1.6 var(--mono);color:#8fbfe9;background:rgba(77,159,236,.07);border:1px solid rgba(77,159,236,.14);border-radius:4px;padding:1px 6px}
+.spec pre{background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px 16px;overflow:auto;max-width:92ch}
+.spec pre code{background:none;border:none;padding:0;color:#c3c9d4;font-size:12.5px;line-height:1.65;white-space:pre}
+.tbl{width:100%;max-width:92ch;border-collapse:collapse;font-size:13px;margin:8px 0}
+.tbl th{color:var(--sub);font-weight:600;text-align:left;font-size:12px;letter-spacing:.04em}
+.tbl th,.tbl td{border:1px solid rgba(255,255,255,.06);padding:7px 10px;vertical-align:top}
+.tbl td:first-child{color:var(--acc);font:600 12.5px var(--mono);white-space:nowrap}
+.tbl td{color:var(--txt)}
+.tbl .cv{color:var(--sub)}
+.map{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:10px;margin-top:8px}
+.map div{background:var(--panel);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--sub)}
+.map b{color:var(--acc);font:600 13px var(--mono);display:block;margin-bottom:3px}
+.danger li::marker{color:#e06c5f}
+
+/* ============ 页脚 / 降级 ============ */
+footer{margin-top:34px;padding:14px 28px;border-top:1px solid rgba(255,255,255,.04);color:var(--sub);font-size:12.5px}
+body.rm *,body.rm *::before,body.rm *::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){body:not(.rmF) *{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@media (max-width:900px){.shell{grid-template-columns:52px 1fr;height:auto}.sread{display:none}.cmpwrap{grid-template-columns:1fr}.dgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header id="top">
+  <div class="brand"><span class="logo">千</span>
+    <div><h1>千笔一文 · UI 打磨层演示</h1><p>不换皮 —— 保持现有暗色骨架（#101216 / #4d9fec / 左图标栏 + 面板），只叠加微交互动效与高级感细节</p></div>
+  </div>
+  <label class="rm"><input type="checkbox" id="rmSwitch"><span>减少动效（prefers-reduced-motion 降级演示）</span></label>
+</header>
+<nav id="tabs">
+  <button class="tab on" data-t="t1">① 微交互目录 · 12 项</button>
+  <button class="tab" data-t="t2">② 高级感细节</button>
+  <button class="tab" data-t="t3">③ QML 落地规格</button>
+</nav>
+<main>
+
+<!-- ================= Tab ① ================= -->
+<section id="t1" class="pane on">
+  <p class="lead">下面是现有应用的 1:1 骨架复刻。12 个动效全部挂在这套骨架的组件语义上，每张卡可切「旧（直切）/ 新（动效）」现场对比。</p>
+  <div class="shell">
+    <div class="rail">
+      <span class="ri on" title="写作"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
+      <span class="ri" title="书架"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13zM4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg></span>
+      <span class="ri" title="流水线"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h7v7M14 17.5H7v-7"/></svg></span>
+      <span class="ri" title="设置" style="margin-top:auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.9 2.9l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.2a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.9-2.9l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.2a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.9-2.9l.1.1a1.7 1.7 0 001.9.3h.1a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.2a1.7 1.7 0 001 1.5h.1a1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.9 2.9l-.1.1a1.7 1.7 0 00-.3 1.9v.1a1.7 1.7 0 001.5 1h.2a2 2 0 110 4h-.2a1.7 1.7 0 00-1.5 1z"/></svg></span>
+    </div>
+    <aside class="spanel">
+      <div class="shead"><b>m1_proj</b><span class="badge">第 1 卷</span></div>
+      <div class="scard"><h4>创作流水线 · 阶段</h4>
+        <div class="stg ok"><span class="sdot ok">✓</span>1 · 设定</div>
+        <div class="stg ok"><span class="sdot run breath"></span>2 · 大纲（运行中）</div>
+        <div class="stg"><span class="sdot"></span>3 · 正文</div>
+      </div>
+      <div class="pillbar pills"><span class="capsule" style="left:4px;width:60px"></span>
+        <button class="pill">大纲</button><button class="pill on">草稿</button><button class="pill">润色</button>
+      </div>
+      <div class="sbtns"><button class="btn pri">继续写作</button><button class="btn gh">重生成</button></div>
+    </aside>
+    <section class="sread"><h3>第 002 章 转折</h3>
+      <p>雨停的时候，程澈终于把那封信压回了抽屉最底层。他知道，从明天起，所有替身身份都会反噬到他自己身上——而他还没有想好，转折之后要站在哪一边。</p>
+    </section>
+    <footer class="sstat"><span class="tnum">今日 0 tokens · ¥0.00</span><span>就绪</span></footer>
+  </div>
+
+  <div class="shelltag">微交互目录 · 每项均可触发</div>
+  <div class="dgrid">
+
+    <article class="dcard"><header><span class="dnum">01</span><h3>按钮 hover / 按压</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·直切</button></div></header>
+      <div class="dstage new"><span class="hint">悬停并按住试试</span>
+        <div class="rowbtns"><button class="btn pri demo-btn">继续写作</button><button class="btn gh demo-btn">重生成</button></div>
+      </div>
+      <p class="dmeta"><i>hover 背景 120ms cubic-bezier(.2,0,.2,1)｜按压 scale(.97)，回弹 150ms cubic-bezier(.34,1.56,.64,1)｜primary 顶部 +4% 光泽渐变</i>
+      <code>Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">02</span><h3>焦点环（键盘可达性）</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·无环</button></div></header>
+      <div class="dstage new"><span class="hint">真实 Tab 键同样生效</span>
+        <div class="rowbtns"><button class="btn gh demo-focus">示例输入框（可聚焦）</button><button class="btn sm" id="focusBtn">触发聚焦（等价 Tab）</button></div>
+      </div>
+      <p class="dmeta"><i>2px accent 环 + 4px 柔光 rgba(77,159,236,.18)，出现 80ms</i>
+      <code>FocusRing { visible: control.activeFocus; Behavior on opacity { NumberAnimation { duration: 80 } } }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">03</span><h3>步骤 pills 滑动切换</h3>
+      <div class="seg"><button class="on" data-m="new">新·滑动</button><button data-m="old">旧·跳变</button></div></header>
+      <div class="dstage new dstw"><span class="hint">点击切换</span>
+        <div class="pills"><span class="capsule"></span>
+          <button class="pill">大纲</button><button class="pill on">草稿</button><button class="pill">润色</button><button class="pill">定稿</button>
+        </div>
+      </div>
+      <p class="dmeta"><i>胶囊位移 250ms cubic-bezier(.22,1,.36,1)，随动不跳变</i>
+      <code>Behavior on x { NumberAnimation { duration: 250; easing.bezierCurve: [0.22,1,0.36,1,1,1] } }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">04</span><h3>阶段状态点：呼吸 / ✓ 弹入</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·静态</button></div></header>
+      <div class="dstage new"><span class="hint">运行中呼吸 1.4s</span>
+        <div class="stg ok"><span class="sdot run breath" id="liveDot"></span>2 · 大纲（运行中）</div>
+        <div class="rowbtns"><button class="btn sm" id="doneBtn">标记「大纲」完成</button></div>
+      </div>
+      <p class="dmeta"><i>呼吸 1.4s opacity .45→1 循环｜完成 ✓ 一次性缩放弹入 200ms cubic-bezier(.34,1.56,.64,1)（禁反复弹）</i>
+      <code>SequentialAnimation { running: once; NumberAnimation { property:"scale"; from:.4; to:1.15; duration:140 } NumberAnimation { to:1; duration:60 } }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">05</span><h3>进度条增长 + 流光</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·直切</button></div></header>
+      <div class="dstage new"><span class="hint">流光 8s 循环，低存在感</span>
+        <div class="pbar" id="pbar"><i id="pfill" style="width:18%"></i></div>
+        <div class="rowbtns"><button class="btn sm" id="pgo">开始生成</button><button class="btn sm gh" id="preset">重置</button></div>
+      </div>
+      <p class="dmeta"><i>宽度 900ms cubic-bezier(.22,1,.36,1)｜流光 linear 8s infinite，alpha ≤.09</i>
+      <code>Behavior on width { NumberAnimation { duration: 900; easing.bezierCurve: [0.22,1,0.36,1,1,1] } }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">06</span><h3>流式输出逐句淡入</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·整块出现</button></div></header>
+      <div class="dstage new"><span class="hint">逐句，不逐 token</span>
+        <div class="stream" id="stream"></div>
+        <div class="rowbtns"><button class="btn sm" id="goStream">播放流式输出</button></div>
+      </div>
+      <p class="dmeta"><i>每句 opacity 0→1 + translateY(3px→0)，150ms cubic-bezier(.22,1,.36,1)，句间自然间隔</i>
+      <code>ConsoleDock delegate: opacity/translateY 的 Behavior { NumberAnimation { duration: 150 } }，按句追加 Item</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">07</span><h3>数字滚动 count-up</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·跳变</button></div></header>
+      <div class="dstage new"><span class="hint">tabular-nums 防抖动</span>
+        <div class="nums">
+          <div><b class="num" id="tok">0</b><span>今日 tokens</span></div>
+          <div><b class="num" id="cny">0.00</b><span>今日费用（¥）</span></div>
+        </div>
+        <div class="rowbtns"><button class="btn sm" id="goNum">模拟一次生成计费</button></div>
+      </div>
+      <p class="dmeta"><i>300ms ease-out（1-(1-t)³），数字位宽固定不抖</i>
+      <code>Behavior on shownValue { NumberAnimation { duration: 300 } } + font-variant-numeric / 等宽数字字体</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">08</span><h3>面板展开 / 折叠</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·直切</button></div></header>
+      <div class="dstage new">
+        <div class="fold open" id="fold">
+          <button class="fold-h" id="foldH"><svg class="arr" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 6l6 6-6 6"/></svg><b>阶段 2 · 大纲</b><span>3 个章节</span></button>
+          <div class="fold-b"><div class="fold-c"><p>第 001 章 引子</p><p>第 002 章 转折</p><p>第 003 章 代价</p></div></div>
+        </div>
+      </div>
+      <p class="dmeta"><i>高度 200ms cubic-bezier(.22,1,.36,1) + 箭头旋转 200ms｜内容 opacity 错峰 30ms</i>
+      <code>Transition { NumberAnimation { property:"height"; duration:200 } ; 逐子项 opacity 延迟 i*30 }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">09</span><h3>Toast 通知（右下堆叠）</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·直切</button></div></header>
+      <div class="dstage new tostage"><span class="hint">4s 后自动淡出，可堆叠</span>
+        <div class="rowbtns"><button class="btn sm" id="toastBtn">保存到 第 002 章 转折</button></div>
+        <div class="toasthost" id="toastHost"></div>
+      </div>
+      <p class="dmeta"><i>滑入 200ms cubic-bezier(.22,1,.36,1)，停留 4s，淡出 250ms；同侧堆叠间距 8px</i>
+      <code>ToastManager: addTransition/popTransition + Timer { interval: 4000 }，Column 管理堆叠</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">10</span><h3>列表行 hover + 选中条跟随</h3>
+      <div class="seg"><button class="on" data-m="new">新·动效</button><button data-m="old">旧·直切</button></div></header>
+      <div class="dstage new"><span class="hint">hover 80ms · 选中条滑动 250ms</span>
+        <div class="chaplist" id="chaplist"><i class="selbar" style="top:37px;height:35px"></i>
+          <button class="crow">第 001 章 引子</button><button class="crow on">第 002 章 转折</button><button class="crow">第 003 章 代价</button><button class="crow">第 004 章 余波</button>
+        </div>
+      </div>
+      <p class="dmeta"><i>hover 背景渐入 80ms｜左侧 3px 选中条 top/height 250ms cubic-bezier(.22,1,.36,1) 跟随</i>
+      <code>QueueRow: Behavior on color { ColorAnimation { duration: 80 } }；Indicator Rectangle Behavior on y { duration: 250 }</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">11</span><h3>主题切换颜色过渡</h3>
+      <div class="seg"><button class="on" data-m="new">新·过渡</button><button data-m="old">旧·瞬切</button></div></header>
+      <div class="dstage new"><span class="hint">颜色 250ms 过渡</span>
+        <div class="themeprev" id="tprev" data-th="night">
+          <div class="tp-head">m1_proj</div><div class="tp-line"></div><div class="tp-line short"></div><button class="tp-btn">继续写作</button>
+        </div>
+        <div class="rowbtns"><button class="btn sm" id="thNight">夜间</button><button class="btn sm gh" id="thPaper">羊皮纸</button></div>
+      </div>
+      <p class="dmeta"><i>全部颜色通道 250ms ease 同步过渡（演示两档：夜间 ↔ 羊皮纸）</i>
+      <code>Behavior on color { ColorAnimation { duration: 250 } }（容器级统一声明，子项继承绑定）</code></p>
+    </article>
+
+    <article class="dcard"><header><span class="dnum">12</span><h3>骨架屏替代转圈</h3>
+      <div class="seg"><button class="on" data-m="new">新·骨架</button><button data-m="old">旧·转圈</button></div></header>
+      <div class="dstage new"><span class="hint">微光扫过 1.6s</span>
+        <div class="skwrap" id="skwrap">
+          <div class="skel"><i class="sk t"></i><i class="sk"></i><i class="sk s"></i></div>
+          <div class="spin"><i></i></div>
+          <div class="real"><b>第 002 章 转折</b><p>雨停的时候，程澈终于把那封信压回了抽屉最底层。</p></div>
+        </div>
+        <div class="rowbtns"><button class="btn sm" id="skBtn">重新加载</button></div>
+      </div>
+      <p class="dmeta"><i>扫光 linear 1.6s infinite（alpha ≤.08）；内容就位后 150ms fade-up</i>
+      <code>Skeleton { gradient x 平移 SequentialAnimation on translateX { loops: Infinite } ; running: visible &amp;&amp; !Theme.reduceMotion }</code></p>
+    </article>
+
+  </div>
+</section>
+
+<!-- ================= Tab ② ================= -->
+<section id="t2" class="pane">
+  <div class="t2top">
+    <div class="seg" id="cmpSeg"><button class="on" data-c="poor">现状</button><button data-c="rich">打磨后</button></div>
+    <p class="lead" style="margin:0">同一块「m1_proj 项目面板」，不改布局与配色骨架，只收敛间距 / 海拔 / 发丝线 / 字阶 / 圆角 / 按钮光泽 / 图标描边。</p>
+  </div>
+  <div class="cmpwrap" style="margin-top:16px">
+    <div class="cmp poor" id="cmp">
+      <div class="c-head"><span class="c-title">m1_proj</span><span class="c-badge">第 1 卷</span></div>
+      <div class="c-stat tnum"><span>阶段 2 / 4 · 第 002 章 转折</span><span>12,840 tokens</span></div>
+      <div class="c-stage">
+        <div class="c-row"><span class="c-dot ok"></span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M4 12l5 5L20 7"/></svg>设定 · 已完成</div>
+        <div class="c-row now"><span class="c-dot run"></span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>大纲 · 第 002 章 转折</div>
+        <div class="c-row"><span class="c-dot"></span>正文 · 等待</div>
+      </div>
+      <div class="c-btns"><button class="c-pri">继续写作</button><button class="c-sec">重生成</button></div>
+      <div class="c-foot">今日 0 tokens · ¥0.00</div>
+    </div>
+    <div class="cmpnote">
+      <b>对比方式：</b>点上方开关在「现状 / 打磨后」之间切换，面板本身 250ms 过渡。<br><br>
+      <b>观察点：</b>① 杂乱间距 → 4/8 网格的呼吸感；② 多层阴影 → 单一投影的干净海拔；③ 粗边框 → 发丝线；④ 字号杂值 → 五档字阶；⑤ 圆角混杂 → 6/10 两档；⑥ primary 平涂 → 微渐变 + 内描边高光；⑦ 图标粗细 → 统一 1.6px 对齐像素网格。
+    </div>
+  </div>
+  <ol class="principles">
+    <li><b>间距节奏 4/8 网格</b><span class="chg">padding 13px、gap 15px 等杂值 → <em>12 / 16</em></span><span class="why">杂值让视线每次都"磕绊"，统一节奏带来呼吸感与下意识的秩序感。</span></li>
+    <li><b>两级海拔制</b><span class="chg">panel(0) / raise(1) 两档背景 + 唯一投影 <em>0 8px 24px rgba(0,0,0,.35)</em>，禁多层阴影</span><span class="why">克制：层级只用一种语言表达，眼睛不必解码多种阴影含义。</span></li>
+    <li><b>发丝线</b><span class="chg">边框统一 <em>1px rgba(255,255,255,.06)</em>，分割线 .04</span><span class="why">边框负责"分区"而不是"描边"，近不可见才显精致。</span></li>
+    <li><b>字阶收敛</b><span class="chg">13 / 14 / 16 / 20 / 26 五档 + 行高配对（1.3 标题 / 1.6 正文），数字全部 <em>tabular-nums</em></span><span class="why">一致性：字号档位少而准，层级靠对比而不是靠"再大一点"。</span></li>
+    <li><b>圆角两档</b><span class="chg">控件 <em>6</em> / 容器 <em>10</em>（现状 4–12 混杂）</span><span class="why">两档半径让"控件"与"容器"身份一目了然，混杂半径则全部失焦。</span></li>
+    <li><b>primary 微渐变</b><span class="chg">顶部亮 4%（#5aa9f2→#4d9fec）+ 内描边高光 <em>inset 0 1px 0 rgba(255,255,255,.16)</em></span><span class="why">1px 高光模拟受光面，是"实体按键感"最廉价也最有效的来源。</span></li>
+    <li><b>图标统一描边</b><span class="chg">stroke-width 统一 <em>1.6px</em>，坐标对齐像素网格（避免半像素模糊）</span><span class="why">图标粗细不一最暴露"拼凑感"，统一后整套 UI 立刻像一个人画的。</span></li>
+  </ol>
+</section>
+
+<!-- ================= Tab ③ ================= -->
+<section id="t3" class="pane spec">
+  <p class="lead">把 Tab① 的 12 项动效映射到 <code>app/ui/qml/components/</code> 现有组件。文字为主，供实施直接取用。</p>
+
+  <h3>1 · 动效时长 token（建议在 Theme.qml 中新增 motion tier）</h3>
+  <table class="tbl">
+    <tr><th>tier</th><th>时长</th><th>缓动</th><th>用途</th><th>映射动效</th></tr>
+    <tr><td>instant</td><td class="cv">80ms</td><td>cubic-bezier(.2,0,.2,1)</td><td>hover 渐入、焦点环、列表行背景</td><td>#01 hover / #02 / #10 hover</td></tr>
+    <tr><td>quick</td><td class="cv">150ms</td><td>Easing.OutBack（等价 .34,1.56,.64,1）</td><td>按压回弹、✓ 弹入、流式句淡入、折叠内容</td><td>#01 按压 / #04 / #06 / #08 内容</td></tr>
+    <tr><td>smooth</td><td class="cv">250ms</td><td>cubic-bezier(.22,1,.36,1)</td><td>胶囊滑动、面板高度、选中条、主题过渡、Toast 滑入</td><td>#03 / #08 / #09 / #10 / #11</td></tr>
+    <tr><td>slow</td><td class="cv">400ms（进度类可到 900ms）</td><td>cubic-bezier(.22,1,.36,1)</td><td>大面板 / 对话框位移、进度增长</td><td>#05 / WizardDialog</td></tr>
+    <tr><td>loop</td><td class="cv">1.4s / 1.6s / 8s</td><td>linear 或 InOut</td><td>呼吸、骨架扫光、流光（循环类不进 tier，必须受 reduceMotion 门控）</td><td>#04 / #12 / #05 流光</td></tr>
+  </table>
+  <pre><code>// Theme.qml 建议新增
+readonly property int mInstant: 80
+readonly property int mQuick:   150
+readonly property int mSmooth:  250
+readonly property int mSlow:    400
+readonly property var  mEaseOut: [0.22, 1, 0.36, 1, 1, 1]   // bezierCurve 六值形式
+readonly property bool reduceMotion: false                   // 设置页可改，后续可接系统信号
+function dur(ms) { return reduceMotion ? 0 : ms }</code></pre>
+
+  <h3>2 · 组件级映射（真实组件名）</h3>
+  <div class="map">
+    <div><b>AppButton</b>#01/#02：pressed 态 scale 0.97，恢复用 <code>Behavior on scale { NumberAnimation { duration: Theme.dur(150); easing.type: Easing.OutBack } }</code>；hover 用 <code>Behavior on color { ColorAnimation { duration: Theme.dur(120) } }</code>；primary 背景改 gradient（top +4% 亮度）+ 内描边高光 Rectangle 1px；焦点环用覆盖的 Rectangle：border 2px accent、外圈 4px rgba 柔光，<code>visible: activeFocus</code> + opacity Behavior 80ms。</div>
+    <div><b>AppCard</b>#海拔：只允许 elev 0/1 两档——elev 0 用 panel 底色无边框阴影，elev 1 用 raise 底色 + 发丝线 1px rgba(255,255,255,.06) + 唯一投影；radius 收敛为 6（内嵌控件）/ 10（容器）。</div>
+    <div><b>StepPills / StageStepper / StageStepperCW</b>#03/#04：胶囊指示器为绝对定位 Rectangle，x/width 绑定 currentIndex 对应 pill 的几何值，加 <code>Behavior on x/width { NumberAnimation { duration: Theme.dur(250); easing.bezierCurve: Theme.mEaseOut } }</code>；状态点运行中用 <code>SequentialAnimation on opacity { loops: Animation.Infinite }（1.4s，paused: !visible）</code>；完成时 SequentialAnimation scale 0.4→1.15→1 共 200ms，<code>running: isDone &amp;&amp; !popPlayed</code>，只播一次。</div>
+    <div><b>ThinProgress</b>#05：bar 宽度 Behavior 900ms bezier(.22,1,.36,1)；流光为上层 Rectangle 线性渐变纹理做 translateX 循环 8s，alpha ≤ .09，<code>running: active &amp;&amp; visible &amp;&amp; !Theme.reduceMotion</code>。</div>
+    <div><b>ConsoleDock / LogView</b>#06：按「句」（而非 token）追加 delegate，新 delegate 初始 opacity 0 / y +3，<code>Behavior on opacity, y { NumberAnimation { duration: Theme.dur(150) } }</code>；ListView 需设 cacheBuffer ≥ 600 并随 StackLayout.visibility 暂停循环动画。</div>
+    <div><b>AppStatTile / 主窗口状态栏</b>#07：显示值用代理属性 <code>shownValue</code>，真实值变化时 <code>Behavior on shownValue { NumberAnimation { duration: Theme.dur(300) } }</code>；文本右对齐 + 等宽数字（Qt 6.7+ 可用 <code>font.features: { "tnum": 1 }</code>，或选等宽数字 fallback 字体），避免 count-up 期间抖动。</div>
+    <div><b>PipelinePanel 折叠组 / ChapterPanel / QueueRow</b>#08/#10：折叠用 wrapper Item + clip，height Behavior 200ms bezier；子项 opacity 逐个 <code>Behavior { delayed: i * 30ms }</code>（用 Timer 或 transition delay）；列表选中条为 ListView 覆盖层 Rectangle，y/height 绑定 currentItem.y，Behavior 250ms；delegate hover <code>Behavior on color { ColorAnimation { duration: 80 } }</code>。</div>
+    <div><b>ToastManager（新组件，挂主窗口右下）</b>#09：Column + add/removed Transition（y +8、opacity 0 → 归位 200ms bezier）；每条 Toast 内 <code>Timer { interval: 4000; onTriggered: dismiss() }</code>；dismiss 走退出 Transition 250ms 纯 opacity；堆叠 spacing 8，同屏 ≤ 3 条。</div>
+    <div><b>主题切换（Theme 单例）</b>#11：所有页面根容器 <code>Behavior on color { ColorAnimation { duration: Theme.dur(250) } }</code>，子项颜色全部绑定 Theme 属性，切主题时整树同步过渡；夜间 ↔ 羊皮纸两套 token 表替换即可，过渡期间禁用大面积 repaint 特效。</div>
+    <div><b>WizardDialog / AppField 骨架态</b>#12：骨架条 = 圆角 Rectangle + 渐变纹理 translateX 循环 1.6s（alpha ≤ .08）；禁止再用旋转圈（旧 spinner 移除或仅作兜底）；骨架出现/内容替换均走 150ms fade-up。</div>
+  </div>
+
+  <h3>3 · 性能红线</h3>
+  <ul class="danger">
+    <li><b>禁大面积 blur</b>：FastBlur / GaussianBlur 不允许全屏或面板级使用；只允许 ≤32px 小控件或预烘焙贴图。</li>
+    <li><b>禁逐帧 JS 动画</b>：不允许 Timer/onXxxChanged 手写插值驱动视觉动画；一律 Behavior / NumberAnimation / Transition（走渲染线程）。</li>
+    <li><b>布局属性动画收敛</b>：x/y/width/height 会触发布局，优先 opacity / transform（scale、rotation、translate）；高度折叠包一层 clip wrapper。</li>
+    <li><b>ListView/GridView</b>：delegate 内任何 Infinite 动画必须 <code>running: visible</code>（或 <code>paused: !visible</code>）；<code>cacheBuffer</code> 设为一屏以上（建议 600）；delegate 保持轻量、避免 Loader 嵌套。</li>
+    <li><b>layer.enabled</b> 仅在旋转/透明合成必要时开启，用完置回 false；禁止整窗 layer。</li>
+    <li><b>循环动效存在感上限</b>：流光 alpha ≤ .09、骨架扫光 ≤ .08、呼吸 opacity 摆幅 ≤ .55——动效是"低语"不是"喊话"。</li>
+  </ul>
+
+  <h3>4 · reduced-motion 降级开关</h3>
+  <ul>
+    <li>设置页新增「减少动效」→ <code>Theme.reduceMotion</code>；本页顶栏开关即该降级态的现场演示。</li>
+    <li>时长统一经 <code>Theme.dur(ms)</code>：降级时归 0，但保留 ≤80ms 的 opacity 淡入作底线（完全无过渡会让状态变化不可感知）。</li>
+    <li>循环类（呼吸 / 流光 / 扫光）降级时直接 <code>running: false</code>，停在静态中间帧。</li>
+    <li>count-up 降级时直接落终值；Toast 降级时瞬时出现、停留延长到 6s 保证可读。</li>
+    <li>焦点环、选中条、✓ 完成态等"位置/状态"信息降级后必须仍然可见——动效可以省，信息不能省。</li>
+  </ul>
+</section>
+</main>
+
+<footer>设计方法：anthropics frontend-design skill + jezweb design-review checklist（已应用）｜ 单文件自包含 · 零外链 · 所有动效现场可触发 · 尊重 prefers-reduced-motion</footer>
+
+<script>
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var rmOn=function(){return document.body.classList.contains("rm")};
+
+/* 页签 */
+$$("#tabs .tab").forEach(function(t){t.addEventListener("click",function(){
+  $$("#tabs .tab").forEach(function(x){x.classList.toggle("on",x===t)});
+  $$(".pane").forEach(function(p){p.classList.toggle("on",p.id===t.dataset.t)});
+})});
+
+/* reduced-motion：初值跟系统，开关演示降级 */
+var rmSwitch=$("#rmSwitch");
+if(matchMedia("(prefers-reduced-motion: reduce)").matches) rmSwitch.checked=true;
+rmSwitch.addEventListener("change",function(){document.body.classList.toggle("rm",rmSwitch.checked)});
+
+/* 通用：每张卡的 旧/新 开关 */
+$$(".dcard .seg").forEach(function(seg){seg.addEventListener("click",function(e){
+  var b=e.target.closest("button"); if(!b) return;
+  $$("button",seg).forEach(function(x){x.classList.toggle("on",x===b)});
+  $(".dstage",seg.closest(".dcard")).classList.toggle("old",b.dataset.m==="old");
+  $(".dstage",seg.closest(".dcard")).classList.toggle("new",b.dataset.m!=="old");
+})});
+
+/* 02 焦点环：程序化聚焦 + ring 类兜底（真实 Tab 亦生效） */
+(function(){
+  var fd=$(".demo-focus");
+  fd.addEventListener("blur",function(){fd.classList.remove("ring")});
+  $("#focusBtn").addEventListener("click",function(){fd.classList.add("ring");fd.focus()});
+})();
+
+/* 03 pills 滑动胶囊 */
+(function(){
+  var row=$(".dstw .pills"),cap=$(".dstw .capsule");
+  function move(){
+    var on=$(".pill.on",row);
+    cap.style.left=on.offsetLeft+"px"; cap.style.width=on.offsetWidth+"px";
+  }
+  $$(".pill",row).forEach(function(p){p.addEventListener("click",function(){
+    $$(".pill",row).forEach(function(x){x.classList.toggle("on",x===p)}); move();
+  })});
+  addEventListener("resize",move); requestAnimationFrame(move);
+})();
+
+/* 04 状态点完成弹入（一次性） */
+$("#doneBtn").addEventListener("click",function(){
+  var d=$("#liveDot");
+  if(d.classList.contains("pop")) return;
+  d.classList.remove("run","breath"); d.classList.add("pop");
+});
+
+/* 05 进度条 */
+(function(){
+  var bar=$("#pbar"),fill=$("#pfill");
+  $("#pgo").addEventListener("click",function(){bar.classList.add("go");fill.style.width="82%"});
+  $("#preset").addEventListener("click",function(){bar.classList.remove("go");fill.style.width="18%"});
+})();
+
+/* 06 流式输出（逐句；降级时整块出现） */
+(function(){
+  var box=$("#stream"),sentences=[
+    "雨停的时候，程澈终于把那封信压回了抽屉最底层。",
+    "他知道，从明天起，所有替身身份都会反噬到他自己身上。",
+    "楼下的路灯闪了两下，像是有人在替这个夜晚犹豫。",
+    "而他还欠自己一个答案：转折之后，是否还来得及回头。"];
+  var busy=false;
+  $("#goStream").addEventListener("click",function(){
+    if(busy) return; busy=true; box.innerHTML="";
+    if(rmOn()){ sentences.forEach(function(s){var p=document.createElement("p");p.className="sline";p.textContent=s;box.appendChild(p)}); busy=false; return; }
+    var i=0;
+    (function next(){
+      if(i>=sentences.length){busy=false;return}
+      var p=document.createElement("p"); p.className="sline"; p.textContent=sentences[i++]; box.appendChild(p);
+      setTimeout(next,420);
+    })();
+  });
+})();
+
+/* 07 数字滚动 count-up 300ms */
+(function(){
+  var tok=$("#tok"),cny=$("#cny"),from={t:0,c:0};
+  function tween(el,key,target,fmt){
+    if(rmOn()){ from[key]=target; el.textContent=fmt(target); return; }
+    var v0=from[key],t0=performance.now();
+    (function step(now){
+      var t=Math.min((now-t0)/300,1),e=1-Math.pow(1-t,3);
+      el.textContent=fmt(v0+(target-v0)*e);
+      if(t<1) requestAnimationFrame(step); else from[key]=target;
+    })(t0);
+  }
+  $("#goNum").addEventListener("click",function(){
+    tween(tok,"t",12840,function(v){return Math.round(v).toLocaleString("en-US")});
+    tween(cny,"c",0.21,function(v){return v.toFixed(2)});
+  });
+})();
+
+/* 08 折叠 */
+$("#foldH").addEventListener("click",function(){$("#fold").classList.toggle("open")});
+
+/* 09 Toast 堆叠 + 4s 自动淡出 */
+(function(){
+  var host=$("#toastHost");
+  $("#toastBtn").addEventListener("click",function(){
+    if(host.children.length>=3) host.firstElementChild.remove();
+    var t=document.createElement("div"); t.className="toast";
+    t.textContent="已保存到 第 002 章 转折"; host.appendChild(t);
+    requestAnimationFrame(function(){requestAnimationFrame(function(){t.classList.add("show")})});
+    setTimeout(function(){
+      if(rmOn()){ t.remove(); return; }
+      t.classList.add("hide"); setTimeout(function(){t.remove()},300);
+    },4000);
+  });
+})();
+
+/* 10 列表选中条滑动跟随 */
+(function(){
+  var list=$("#chaplist"),bar=$(".selbar",list);
+  function move(){
+    var on=$(".crow.on",list);
+    bar.style.top=on.offsetTop+"px"; bar.style.height=on.offsetHeight+"px";
+  }
+  $$(".crow",list).forEach(function(r){r.addEventListener("click",function(){
+    $$(".crow",list).forEach(function(x){x.classList.toggle("on",x===r)}); move();
+  })});
+  addEventListener("resize",move); requestAnimationFrame(move);
+})();
+
+/* 11 主题两档切换 */
+$("#thNight").addEventListener("click",function(){$("#tprev").dataset.th="night"});
+$("#thPaper").addEventListener("click",function(){$("#tprev").dataset.th="paper"});
+
+/* 12 骨架屏 / 转圈 */
+(function(){
+  var wrap=$("#skwrap");
+  $("#skBtn").addEventListener("click",function(){
+    if(wrap.classList.contains("loading")) return;
+    $(".real",wrap).classList.remove("in");
+    wrap.classList.add("loading");
+    setTimeout(function(){
+      wrap.classList.remove("loading");
+      if(!rmOn()) $(".real",wrap).classList.add("in");
+    },1600);
+  });
+})();
+
+/* Tab② 现状 / 打磨后 */
+$$("#cmpSeg button").forEach(function(b){b.addEventListener("click",function(){
+  $$("#cmpSeg button").forEach(function(x){x.classList.toggle("on",x===b)});
+  $("#cmp").classList.toggle("poor",b.dataset.c==="poor");
+  $("#cmp").classList.toggle("rich",b.dataset.c==="rich");
+})});
+</script>
+</body>
+</html>

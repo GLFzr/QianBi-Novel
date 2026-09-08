@@ -1,0 +1,102 @@
+# =====================================================================
+# E4.2 promptfoo 矩阵台（O11，可选工具链）——「配置 × 变量」实验模板
+# 对齐：docs/成本测试方案_v2.md §E4.2 ／ docs/成本优化深度调研报告_v2.md §2.6
+# 用法、价格口径与扩展方法：见同目录 README.md
+#
+# 两条硬纪律（源自两份 docs）：
+#   1) promptfoo 内置 DeepSeek 价目是促销旧价（$0.0028/$0.14/$0.28），
+#      本配置已在 provider 级 config 覆盖为成本台账口径（off-peak，2026-09-06 核对）；
+#   2) 测真实成本必须 `npx promptfoo eval --no-cache`——eval 默认缓存会吃掉重复调用。
+# =====================================================================
+
+description: E4.2 细纲输出预算变体矩阵（outline_budget_v1/v2 × deepseek v4-flash/pro × chapter_words×genre×length_budget）
+
+# 两个 prompt 变体只差「输出预算与结构」一段，其余逐字节相同（变量隔离纪律，
+# 来自调研报告 §2.6 的 effort 扫描方法论：各档除目标变量外 byte-identical）
+prompts:
+  - file://prompts/outline_budget_v1.txt
+  - file://prompts/outline_budget_v2.txt
+
+providers:
+  # 台账口径（off-peak，每百万 token，¥=$×7.2 只在 README 注明）：
+  #   flash 输入 hit $0.007 ／ miss $0.22 ／ 输出 $0.66
+  #   pro   输入 hit $0.022 ／ miss $0.66 ／ 输出 $1.98
+  # promptfoo 的 cost 字段是「prompt token 单价（$/token）」，加 costOutputToken 共两个槽，
+  # 无法同时表达 hit/miss 两个输入价——近似处理与保守上限改法见 README「价格覆盖」。
+  - id: deepseek:deepseek-v4-flash
+    config:
+      cost: 0.000000007            # $0.007/M —— 台账 cache-hit 输入价（近似填入单一 prompt 单价槽）
+      costOutputToken: 0.00000066  # $0.66/M —— 输出价
+  - id: deepseek:deepseek-v4-pro
+    config:
+      cost: 0.00000066             # $0.66/M —— 台账 miss 输入价（pro 的 hit 价 $0.022 无槽可填）
+      costOutputToken: 0.00000198  # $1.98/M —— 输出价
+
+# 兜底：所有模型类断言（llm-rubric 等）默认用最便宜的 flash 做评分器，压评分成本
+defaultTest:
+  options:
+    provider: deepseek:deepseek-v4-flash
+  # 全矩阵通用的兜底上限断言（单次调用口径；「每章成本」这类全流程口径请用 scripts/cost_bench.py）
+  assert:
+    - type: cost
+      value: 0.2      # USD/次上限——模板演示值，正式实验前按当日核价与相位基线收紧
+    - type: latency
+      value: 600000   # ms（10 分钟）——off-peak 历史数据中细纲相位有 431s 量级（docs/成本优化深度调研报告_v2.md 的 v1 验收还原数据）
+
+tests:
+  # ── 变量矩阵：chapter_words(2000/3000) × genre(都市异能/玄幻仙侠)，共 2×2 ──
+  # length_budget 与其余变量同组下发：v2 变体用它渲染预算硬约束段，
+  # v1 变体不引用该变量（两变体请求面差异只剩目标段本身——变量隔离）。
+  - description: 小字数·都市异能
+    vars:
+      chapter_words: 2000
+      genre: 都市异能
+      length_budget: 900
+    assert:
+      - type: is-json   # 输出必须可解析为 JSON（输出格式瘦身路线的最简断言形式）
+      - type: llm-rubric
+        value: "细纲结构合格：情节点因果链完整（原因→行动→结果→新问题），有明确章尾钩子，至少一条新伏笔带回收章号；只评结构与逻辑，不评文笔。"
+
+  - description: 小字数·玄幻仙侠
+    vars:
+      chapter_words: 2000
+      genre: 玄幻仙侠
+      length_budget: 900
+    assert:
+      - type: is-json
+
+  - description: 大字数·都市异能
+    vars:
+      chapter_words: 3000
+      genre: 都市异能
+      length_budget: 1400
+    assert:
+      - type: is-json
+
+  - description: 大字数·玄幻仙侠（全断言演示行）
+    vars:
+      chapter_words: 3000
+      genre: 玄幻仙侠
+      length_budget: 1400
+    assert:
+      - type: cost
+        value: 0.1      # 比兜底更紧的上限——演示按行收紧
+      - type: latency
+        value: 300000   # 5 分钟——演示按行收紧
+      - type: is-json
+      - type: llm-rubric
+        threshold: 0.7  # 评分器给出 0-1 分时低于阈值即 FAIL
+        value: "细纲结构合格：情节点因果链完整，情节点字数预算之和落在目标字数 ±10%，章尾钩子具体可写；只评结构与逻辑，不评文笔。"
+        rubricPrompt: >-
+          你是网文细纲评审。按评分标准评估待评输出，先逐条核对，最后一行只输出 JSON：
+          {"pass": true 或 false, "score": 0 到 1 的数, "reason": "一句话理由"}。
+          <评分标准>
+          {{rubric}}
+          </评分标准>
+          <待评输出>
+          {{output}}
+          </待评输出>
+        provider: deepseek:deepseek-v4-flash   # 行级显式指定评分模型（覆盖 defaultTest 兜底；此处同值，仅演示写法）
+
+# 不共享到 promptfoo 云端（私有项目配置，也避免 view 时的分享提示）
+sharing: false

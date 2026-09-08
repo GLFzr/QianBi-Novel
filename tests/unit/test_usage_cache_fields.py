@@ -76,6 +76,33 @@ def test_record_usage_missing_cache_fields_default_zero(tmp_path, monkeypatch):
     assert len(_rows(tmp_path / "usage.jsonl")) == 1
 
 
+def test_record_usage_falls_back_to_openai_cached_tokens(tmp_path, monkeypatch):
+    """中转网关只报 prompt_tokens_details.cached_tokens（无 DS 字段）→
+    命中回退该字段，miss = prompt_tokens − 命中（口径与 DS 对齐，
+    TokenRhythm 探针实证：713 prompt / cached 512 → hit 512 / miss 201）"""
+    um = _fresh_usage(tmp_path, monkeypatch)
+    import app.llm.client as lc
+    c = lc.LLMClient("http://fake.invalid/v1", "sk", "m")
+    c._record_usage({"prompt_tokens": 713, "completion_tokens": 45,
+                     "prompt_tokens_details": {"cached_tokens": 512}}, 0.8,
+                    phase="draft")
+    (row,) = _rows(tmp_path / "usage.jsonl")
+    assert row["hit"] == 512 and row["miss"] == 201
+    assert row["in"] == 713 and row["out"] == 45
+
+
+def test_record_usage_ds_fields_take_precedence(tmp_path, monkeypatch):
+    """DS 字段在时优先用 DS 字段，不做 OpenAI 回退（两个渠道并存不串口径）"""
+    um = _fresh_usage(tmp_path, monkeypatch)
+    import app.llm.client as lc
+    c = lc.LLMClient("http://fake.invalid/v1", "sk", "m")
+    c._record_usage({"prompt_tokens": 100, "completion_tokens": 10,
+                     "prompt_cache_hit_tokens": 64, "prompt_cache_miss_tokens": 36,
+                     "prompt_tokens_details": {"cached_tokens": 128}}, 0.5)
+    (row,) = _rows(tmp_path / "usage.jsonl")
+    assert row["hit"] == 64 and row["miss"] == 36
+
+
 def test_summary_aggregates_hit_miss_and_tolerates_legacy_rows(tmp_path, monkeypatch):
     """聚合带 hit/miss；旧格式行（缺新列）按 0 兜底可读"""
     um = _fresh_usage(tmp_path, monkeypatch)
@@ -89,3 +116,28 @@ def test_summary_aggregates_hit_miss_and_tolerates_legacy_rows(tmp_path, monkeyp
     assert s["all"]["hit"] == 80 and s["all"]["miss"] == 20
     assert s["all"]["by_model"]["m2"]["hit"] == 80
     assert s["all"]["by_model"]["old-m"]["hit"] == 0   # 旧行兜底为 0
+
+
+def test_opencode_base_sends_session_id():
+    """omen-alpha 走 Console Go，缺 x-session-id 直接 400 MissingSessionID（2026-09-08 实测）"""
+    from app.llm import client as lc
+    h = lc.LLMClient("https://opencode.ai/zen/go/v1", "sk", "omen-alpha",
+                     user_id="qianbi-bench-t3")._headers()
+    assert h.get("x-session-id") == "qianbi-bench-t3"
+
+
+def test_session_id_stable_and_user_scoped():
+    """会话域要稳定且按跑次分开：按进程随机会把长测缓存域打散，命中直接失真"""
+    from app.llm import client as lc
+    a = lc.LLMClient("https://opencode.ai/zen/go/v1", "sk", "omen-alpha", user_id="run-x")
+    b = lc.LLMClient("https://opencode.ai/zen/go/v1", "sk", "omen-alpha", user_id="run-y")
+    assert (a.session_id, b.session_id) == ("run-x", "run-y")
+    assert lc.LLMClient("https://opencode.ai/zen/go/v1", "sk", "m").session_id == "qianbi-novel"
+
+
+def test_other_channels_get_no_extra_header():
+    """DS / TokenRhythm 不看这个头——多发一个可能改变它们的路由，故一个字节都不加"""
+    from app.llm import client as lc
+    for base in ("https://api.deepseek.com/v1", "https://tokenrhythm.studio/v1"):
+        h = lc.LLMClient(base, "sk", "deepseek-v4-flash", user_id="qianbi-bench-t1")._headers()
+        assert set(h) == {"Content-Type", "Authorization"}, base

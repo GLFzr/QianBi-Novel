@@ -56,7 +56,7 @@ def project_header(proj: str) -> str:
     return _header_cached(proj, _fingerprint(proj))
 
 
-def chapter_header(proj: str, num: int) -> str:
+def chapter_header(proj: str, num: int, volume_mode: bool = False) -> str:
     """章级共享段（v0.19 八节终态）：同章所有调用间逐字节一致的内容。
 
     组成：本章细纲（含冻结表）+ 全局摘要 + 近章摘要 + 角色状态 + 时间线
@@ -64,6 +64,11 @@ def chapter_header(proj: str, num: int) -> str:
     全部章级上下文，统一收敛到紧跟 project_header 的第二层前缀。
     截断取各消费方上限的最大值（角色状态 2000/时间线 1500/伏笔 2000），
     保证替换散装段后信息只增不减。章循环开头组装一次、章内不变。
+
+    volume_mode（S4-b，成本优化方案 v3；仅卷会话开幕轮使用）：跳过「最近章节
+    摘要」「上一章结尾」「上一章开头」三节——正文与摘要本身就在卷会话历史里，
+    逐字重发与历史逐字重复，纯烧 miss；其余五节保留（角色状态重述是
+    recitation，防注意力衰减）。默认 False：单轮/章会话路径字节不变。
     """
     from . import memory
     parts = [f"【第 {num} 章共享上下文（同章所有步骤使用同一份，前后引用以此为准）】"]
@@ -73,9 +78,10 @@ def chapter_header(proj: str, num: int) -> str:
     gsum = memory.read_global_summary(proj)
     if gsum.strip():
         parts.append("## 全局摘要" + chr(10) + gsum.strip())
-    recent = memory.sanitize_chapter_refs(memory.read_recent_summaries(proj, num, n=2))
-    if recent.strip():
-        parts.append("## 最近章节摘要" + chr(10) + recent.strip())
+    if not volume_mode:
+        recent = memory.sanitize_chapter_refs(memory.read_recent_summaries(proj, num, n=2))
+        if recent.strip():
+            parts.append("## 最近章节摘要" + chr(10) + recent.strip())
     body = project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000]
     if body.strip():
         parts.append("## 角色状态" + chr(10) + body.strip())
@@ -85,12 +91,13 @@ def chapter_header(proj: str, num: int) -> str:
     body = memory.unfished_foreshadows(proj)
     if body.strip():
         parts.append("## 待回收/推进伏笔" + chr(10) + body.strip())
-    prev_text, prev_style = memory.prev_chapter_pack(proj, num, tail=800)
-    if prev_text:
-        parts.append("## 上一章结尾（直接衔接用）" + chr(10) + prev_text)
-    if prev_style:
-        parts.append("## 上一章开头（文风锚定样本：延续它的语感、句长密度与叙述温度，不要模仿其内容）"
-                     + chr(10) + prev_style)
+    if not volume_mode:
+        prev_text, prev_style = memory.prev_chapter_pack(proj, num, tail=800)
+        if prev_text:
+            parts.append("## 上一章结尾（直接衔接用）" + chr(10) + prev_text)
+        if prev_style:
+            parts.append("## 上一章开头（文风锚定样本：延续它的语感、句长密度与叙述温度，不要模仿其内容）"
+                         + chr(10) + prev_style)
     return "\n\n".join(parts) + "\n"
 
 

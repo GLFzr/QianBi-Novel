@@ -20,8 +20,9 @@ os.environ["USERPROFILE"] = _FH
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# 实例守卫：同进程已有 Qt 实例（如 pytest 全量收集）时复用，避免 shiboken 冲突
 from PySide6.QtGui import QGuiApplication
-app = QGuiApplication(sys.argv)
+app = QGuiApplication.instance() or QGuiApplication(sys.argv)
 
 # ---- LLM 模拟（按调用类型返回固定输出）----
 

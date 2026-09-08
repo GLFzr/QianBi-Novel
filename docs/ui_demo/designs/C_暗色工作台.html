@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>千笔一文 · 设计方向 C — 暗色工作台</title>
+<style>
+/* ============ 设计令牌（design tokens，全站不写原始色） ============ */
+:root{
+  --bg0:#14161a; --bg1:#1a1d23; --bg2:#20242c; --bg3:#262b34;
+  --line:#2a2f39; --line-soft:#232833;
+  --ink:#d7dce4; --dim:#8b93a3; --faint:#6e7683;
+  --ok:#3fb950; --warn:#d29922; --run:#4493f8; --err:#f85149;
+  --mono:"JetBrains Mono",Consolas,monospace;
+  --sans:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+  --r-s:3px; --r-m:6px;
+  --t:150ms ease;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:var(--sans);font-size:14px;color:var(--ink);background:var(--bg0);overflow:hidden}
+body.dragging{cursor:row-resize;user-select:none}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:5px;border:2px solid var(--bg2)}
+::-webkit-scrollbar-track{background:transparent}
+button{font-family:inherit;font-size:13px;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:1px solid var(--run);outline-offset:1px;border-radius:var(--r-s)}
+.mono{font-family:var(--mono)}
+
+/* ============ 骨架：标题栏 / 活动条 / 侧栏 / 工作区 / 底部面板 / 状态栏 ============ */
+#app{display:flex;flex-direction:column;height:100vh}
+.titlebar{height:40px;flex:none;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--bg0);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
+.brand .dot{width:9px;height:9px;border-radius:2px;background:var(--run);flex:none}
+.brand em{font-style:normal;color:var(--dim);font-weight:400}
+.pal-btn{flex:1;max-width:420px;height:26px;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r-s);color:var(--faint);font-size:12px;transition:border-color var(--t),color var(--t)}
+.pal-btn:hover{border-color:var(--dim);color:var(--dim)}
+.pal-btn .k{margin-left:auto;font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:3px;padding:0 5px;color:var(--faint)}
+.run-badge{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.run-badge b{color:var(--run);font-weight:600}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--run);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+
+.main{flex:1;display:flex;min-height:0}
+.activitybar{width:48px;flex:none;background:var(--bg0);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px}
+.act-btn{width:36px;height:36px;border-radius:var(--r-m);color:var(--faint);display:flex;align-items:center;justify-content:center;transition:color var(--t),background var(--t);position:relative}
+.act-btn:hover{color:var(--ink);background:var(--bg3)}
+.act-btn.on{color:var(--ink)}
+.act-btn.on::before{content:"";position:absolute;left:-6px;top:8px;bottom:8px;width:2px;background:var(--run);border-radius:1px}
+.act-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.act-gap{flex:1}
+.act-btn .tip{position:absolute;left:46px;top:50%;transform:translateY(-50%);background:var(--bg3);border:1px solid var(--line);padding:3px 8px;border-radius:var(--r-s);font-size:12px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity var(--t);z-index:30}
+.act-btn:hover .tip{opacity:1}
+
+.sidebar{width:250px;flex:none;background:var(--bg1);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.sidebar.hidden{display:none}
+.sb-head{height:32px;flex:none;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:11px;letter-spacing:.08em;color:var(--dim)}
+.sb-head .mini-ico{margin-left:auto;border:1px solid var(--line);border-radius:3px;color:var(--faint);width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px}
+.sb-head .mini-ico:hover{color:var(--ink);border-color:var(--dim)}
+#tree{flex:1;overflow:auto;padding:4px 6px 12px}
+.vol{margin-top:2px}
+.vol-head{display:flex;align-items:center;gap:6px;width:100%;padding:5px 8px;border-radius:var(--r-s);color:var(--ink);font-size:13px;font-weight:600;text-align:left;transition:background var(--t)}
+.vol-head:hover{background:var(--bg3)}
+.vol-head .chev{color:var(--faint);font-family:var(--mono);font-size:10px;transition:transform var(--t)}
+.vol.closed .chev{transform:rotate(-90deg)}
+.vol-head .cnt{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.vol-body{padding-left:10px}
+.vol.closed .vol-body{display:none}
+.ch{display:flex;align-items:center;gap:8px;width:100%;padding:4px 8px;border-radius:var(--r-s);font-size:12.5px;color:var(--dim);text-align:left;transition:background var(--t),color var(--t)}
+.ch:hover{background:var(--bg3);color:var(--ink)}
+.ch.on{background:var(--bg3);color:var(--ink);box-shadow:inset 2px 0 0 var(--run)}
+.ch .nm{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ch .wc{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint);flex:none}
+.sdot{width:7px;height:7px;border-radius:50%;flex:none}
+.sdot.ok{background:var(--ok)}
+.sdot.warn{background:var(--warn)}
+.sdot.run{background:var(--run);animation:pulse 1.2s ease-in-out infinite}
+.sdot.todo{background:transparent;border:1px solid var(--faint)}
+.sb-legend{flex:none;border-top:1px solid var(--line);padding:8px 14px;font-size:11px;color:var(--faint);display:flex;gap:10px;flex-wrap:wrap}
+.sb-legend span{display:flex;align-items:center;gap:4px}
+
+.workspace{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg2);position:relative}
+.views{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;overflow:auto;display:none}
+.view.on{display:block}
+
+/* ============ 视图 ① 流水线控制台（编辑区部分） ============ */
+.console-wrap{max-width:880px;margin:0 auto;padding:24px 28px 16px}
+.run-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.run-head h2{font-size:18px;font-weight:600}
+.st-chip{font-family:var(--mono);font-size:11px;color:var(--run);display:inline-flex;align-items:center;gap:6px}
+.st-chip .pulse{width:6px;height:6px}
+.run-sub{margin-top:4px;font-size:12px;color:var(--dim)}
+.meter{margin-top:14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r-m);padding:14px 16px}
+.meter .row{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.meter .row b{color:var(--ink);font-weight:600}
+.bar{margin-top:10px;height:4px;border-radius:2px;background:var(--bg3);overflow:hidden}
+.bar i{display:block;height:100%;width:67%;background:var(--run);border-radius:2px}
+.bar-cap{margin-top:6px;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.cost-row{margin-top:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 16px;background:var(--bg1);border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:var(--r-m);font-family:var(--mono);font-size:12px;color:var(--dim)}
+.cost-row b{color:var(--ink);font-weight:600}
+.cost-row .pos{color:var(--ok)}
+.cost-row .cap{margin-left:auto;font-size:11px;color:var(--faint)}
+.btn-row{margin-top:14px;display:flex;gap:10px;align-items:center}
+.btn{height:32px;padding:0 16px;border-radius:var(--r-s);display:inline-flex;align-items:center;gap:7px;transition:background var(--t),border-color var(--t),color var(--t)}
+.btn-primary{background:var(--run);color:#fff;font-weight:600}
+.btn-primary:hover{background:#5aa4f9}
+.btn-ghost{border:1px solid var(--line);color:var(--dim)}
+.btn-ghost:hover{border-color:var(--dim);color:var(--ink)}
+.btn .k{font-family:var(--mono);font-size:10px;opacity:.75}
+.con-hint{margin:10px 0 0;font-size:11px;color:var(--faint)}
+
+/* ============ 底部面板：流水线控制台终端表（主角） ============ */
+.grip{height:7px;flex:none;cursor:row-resize;background:repeating-linear-gradient(45deg,transparent 0 5px,var(--line-soft) 5px 6px);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;transition:background var(--t)}
+.grip:hover{background:repeating-linear-gradient(45deg,transparent 0 5px,var(--line) 5px 6px)}
+.grip::after{content:"";width:34px;height:3px;border-radius:2px;background:var(--dim);opacity:.6}
+.panel{height:316px;flex:none;background:var(--bg1);border-top:1px solid var(--line);display:flex;flex-direction:column;min-height:30px}
+.panel-head{height:30px;flex:none;display:flex;align-items:center;gap:4px;padding:0 10px;border-bottom:1px solid var(--line-soft)}
+.p-tab{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;font-size:12px;color:var(--ink);border-bottom:2px solid var(--run)}
+.p-tab .pulse{width:6px;height:6px}
+.p-sum{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.p-sum b{color:var(--ink)}
+.p-key{flex:none;margin-left:12px;font-family:var(--mono);font-size:10px;color:var(--faint);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+.p-body{flex:1;overflow:auto;min-height:0}
+.term{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.term th{position:sticky;top:0;background:var(--bg1);text-align:left;font-weight:400;font-size:10px;letter-spacing:.1em;color:var(--faint);padding:7px 14px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.term td{padding:8px 14px;border-bottom:1px solid var(--line-soft);color:var(--dim);white-space:nowrap;vertical-align:top}
+.term th.num,.term td.num{text-align:right}
+.term td:first-child{color:var(--ink)}
+.term tr.r-ok td:first-child{box-shadow:inset 2px 0 0 var(--ok)}
+.term tr.r-run td{color:var(--ink)}
+.term tr.r-run td:first-child{box-shadow:inset 2px 0 0 var(--run)}
+.term tr.r-run .st{color:var(--run)}
+.term tr.r-wait .st{color:var(--faint)}
+.term tr.r-sum td{border-top:1px solid var(--line);border-bottom:none;background:var(--bg0);color:var(--ink);font-weight:600}
+.term .hit{color:var(--ok)}
+.term .cost{color:var(--warn)}
+.term .sub{display:block;margin-top:3px;font-size:11px;color:var(--run)}
+.term .err-note{display:block;margin-top:2px;font-size:10px;color:var(--err)}
+.cursor{display:inline-block;width:7px;height:12px;background:var(--run);vertical-align:-2px;margin-left:4px;animation:blink 1s steps(2,start) infinite}
+@keyframes blink{to{visibility:hidden}}
+
+/* ============ 视图 ② 阅读器 ============ */
+.reader{max-width:680px;margin:0 auto;padding:40px 24px 80px}
+.ch-kicker{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em}
+.reader h1{margin-top:6px;font-size:24px;font-weight:600;letter-spacing:.02em}
+.ch-meta{margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+.ch-meta .run-tag{font-family:var(--mono);font-size:11px;color:var(--run);border:1px solid var(--run);border-radius:10px;padding:1px 9px;display:inline-flex;align-items:center;gap:5px}
+.hr{margin:22px 0 26px;height:1px;background:var(--line)}
+.prose p{font-size:16px;line-height:1.85;text-align:justify;text-indent:2em;color:var(--ink);margin-bottom:1em;cursor:pointer;transition:opacity var(--t)}
+.prose.focus p{opacity:.32}
+.prose.focus p.focused{opacity:1}
+.prose .live{font-family:var(--mono);font-size:12px;color:var(--run);text-indent:0;text-align:left;border-top:1px dashed var(--line);padding-top:14px;margin-top:20px;cursor:default}
+.focus-hint{margin-top:26px;font-size:11px;color:var(--faint)}
+.empty{border:1px dashed var(--line);border-radius:var(--r-m);padding:36px 28px;text-align:center;color:var(--dim)}
+.empty h3{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:8px}
+.empty p{font-size:12.5px;line-height:1.8;margin-bottom:16px}
+
+/* ============ 视图 ③ 章节 EXPLORER（总览） ============ */
+.x-wrap{max-width:860px;margin:0 auto;padding:28px 28px 40px}
+.x-wrap h2{font-size:17px;font-weight:600}
+.x-sub{margin-top:4px;font-size:12px;color:var(--dim)}
+.legend{margin-top:18px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+.legend span{display:flex;align-items:center;gap:6px}
+.x-stats{margin-top:14px;padding:12px 16px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r-m);font-family:var(--mono);font-size:12px;color:var(--dim);display:flex;gap:20px;flex-wrap:wrap}
+.x-stats b{color:var(--ink)}
+.ch-card{margin-top:18px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r-m);padding:18px 20px}
+.ch-card h3{font-size:15px;font-weight:600;display:flex;align-items:center;gap:9px}
+.ch-card .desc{margin-top:6px;font-size:12.5px;color:var(--dim);line-height:1.7}
+.psteps{margin-top:14px;display:flex;align-items:center;gap:0;flex-wrap:wrap}
+.pstep{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--dim);padding:4px 10px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--bg2)}
+.pstep.done{color:var(--ok);border-color:transparent;background:transparent}
+.pstep.run{color:var(--run);border-color:var(--run)}
+.pstep.wait{color:var(--faint)}
+.pstep .pulse{width:5px;height:5px}
+.parrow{color:var(--faint);padding:0 6px;font-family:var(--mono);font-size:11px}
+.ch-card .ops{margin-top:16px;display:flex;gap:10px}
+
+/* ============ 视图 ④ 设计说明 ============ */
+.notes{max-width:760px;margin:0 auto;padding:34px 30px 60px}
+.notes h2{font-size:19px;font-weight:600}
+.notes .lead{margin-top:8px;font-size:13px;color:var(--dim);line-height:1.8}
+.notes details{margin-top:14px;border:1px solid var(--line);border-radius:var(--r-m);background:var(--bg1)}
+.notes summary{cursor:pointer;padding:12px 16px;font-size:13.5px;font-weight:600;color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
+.notes summary::before{content:"+";font-family:var(--mono);color:var(--faint)}
+.notes details[open] summary::before{content:"–"}
+.notes .d-body{padding:2px 16px 16px;font-size:12.5px;color:var(--dim);line-height:1.85}
+.tok-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.tok-table th{text-align:left;font-weight:400;font-size:10px;letter-spacing:.08em;color:var(--faint);padding:6px 10px;border-bottom:1px solid var(--line)}
+.tok-table td{padding:6px 10px;border-bottom:1px solid var(--line-soft);color:var(--dim)}
+.tok-table td.v{font-family:var(--mono);color:var(--ink)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:8px;border:1px solid var(--line)}
+.notes ol{padding-left:20px}
+.notes ol li{margin:8px 0}
+.notes .cred{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);font-size:11px;color:var(--faint)}
+
+/* ============ Minimap 章节卷轴 ============ */
+.minimap{position:absolute;right:10px;top:16px;bottom:16px;width:11px;display:flex;flex-direction:column;gap:2px;border-radius:5px}
+.mm-seg{border-radius:2px;cursor:pointer;transition:filter var(--t),transform var(--t)}
+.mm-seg:hover{filter:brightness(1.5);transform:scaleX(1.5)}
+.mm-seg.ok{background:var(--ok);opacity:.55}
+.mm-seg.warn{background:var(--warn);opacity:.6}
+.mm-seg.run{background:var(--run);animation:pulse 1.3s ease-in-out infinite}
+.mm-seg.todo{background:transparent;border:1px solid var(--line)}
+.mm-seg.on{outline:1px solid var(--ink);outline-offset:1px}
+.mm-gap{height:5px;flex:none}
+
+/* ============ 状态栏 ============ */
+.statusbar{height:26px;flex:none;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--bg0);border-top:1px solid var(--line);font-size:11.5px;color:var(--dim)}
+.statusbar .sb-item{display:flex;align-items:center;gap:5px}
+.statusbar .mono{font-size:11px}
+.statusbar .run-dot{width:6px;height:6px;border-radius:50%;background:var(--run);animation:pulse 1.4s ease-in-out infinite}
+.statusbar .right{margin-left:auto;display:flex;gap:14px}
+.statusbar .sb-item:not(.plain):hover{color:var(--ink);cursor:default}
+
+/* ============ 命令面板 ============ */
+.pal-overlay{position:fixed;inset:0;background:rgba(10,11,14,.6);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:100}
+.pal-overlay.on{display:flex}
+.pal{width:560px;max-width:92vw;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r-m);box-shadow:0 18px 50px rgba(0,0,0,.5);overflow:hidden}
+.pal input{width:100%;height:44px;padding:0 16px;background:transparent;border:none;outline:none;color:var(--ink);font-size:14px;font-family:var(--sans);border-bottom:1px solid var(--line)}
+.pal input::placeholder{color:var(--faint)}
+.pal-list{max-height:320px;overflow:auto;padding:6px}
+.pal-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:var(--r-s);font-size:13px;color:var(--dim);text-align:left;transition:background var(--t)}
+.pal-item .tag{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--faint);border:1px solid var(--line);border-radius:3px;padding:1px 6px;flex:none}
+.pal-item.sel,.pal-item:hover{background:var(--bg3);color:var(--ink)}
+.pal-item.none{color:var(--faint);cursor:default}
+.pal-foot{border-top:1px solid var(--line);padding:7px 14px;font-size:10.5px;color:var(--faint);display:flex;gap:14px}
+.pal-foot .mono{font-size:10px}
+
+/* ============ Toast ============ */
+#toast{position:fixed;right:18px;bottom:40px;background:var(--bg3);border:1px solid var(--line);border-left:3px solid var(--run);border-radius:var(--r-s);padding:10px 16px;font-size:12.5px;color:var(--ink);opacity:0;transform:translateY(6px);transition:opacity 200ms ease,transform 200ms ease;pointer-events:none;z-index:120;max-width:340px}
+#toast.show{opacity:1;transform:none}
+
+@media (max-width:920px){.minimap{display:none}.sidebar{width:210px}}
+@media (prefers-reduced-motion:reduce){
+  .pulse,.sdot.run,.mm-seg.run,.cursor,.statusbar .run-dot{animation:none}
+  *{transition:none!important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 标题栏 -->
+  <header class="titlebar">
+    <div class="brand"><span class="dot"></span>千笔一文 <em>· 《执剑问长生》 · 设计方向 C 暗色工作台</em></div>
+    <button class="pal-btn" id="palOpen">搜索或输入命令…<span class="k">Ctrl+K</span></button>
+    <div class="run-badge"><span class="pulse"></span>流水线运行中 · <b>46 笔/章</b> · 预估 77 分钟</div>
+  </header>
+
+  <div class="main">
+    <!-- 活动条 -->
+    <nav class="activitybar" aria-label="视图切换">
+      <button class="act-btn on" data-view="console" aria-label="流水线控制台">
+        <svg viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8"/></svg><span class="tip">流水线控制台</span>
+      </button>
+      <button class="act-btn" data-view="reader" aria-label="阅读器">
+        <svg viewBox="0 0 24 24"><path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2zm0 0v14"/></svg><span class="tip">阅读器</span>
+      </button>
+      <button class="act-btn" data-view="explorer" aria-label="章节总览">
+        <svg viewBox="0 0 24 24"><path d="M3 6h6l2 2h10M3 6v12h18M9 13h4M9 16h7"/></svg><span class="tip">章节 EXPLORER</span>
+      </button>
+      <button class="act-btn" data-view="notes" aria-label="设计说明">
+        <svg viewBox="0 0 24 24"><path d="M4 4h16v12l-4 4H4zM16 20v-4h4M8 9h8M8 13h5"/></svg><span class="tip">设计说明</span>
+      </button>
+      <span class="act-gap"></span>
+      <button class="act-btn" id="sbToggle" aria-label="显示/隐藏侧栏">
+        <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM9 5v14"/></svg><span class="tip">显示 / 隐藏侧栏</span>
+      </button>
+    </nav>
+
+    <!-- 侧栏：章节 EXPLORER（卷-章两级树） -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sb-head">章节 EXPLORER<button class="mini-ico" title="新建卷" onclick="toast('演示稿：新建卷入口占位')">＋</button></div>
+      <div id="tree"></div>
+      <div class="sb-legend">
+        <span><i class="sdot ok"></i>定稿</span><span><i class="sdot warn"></i>审校带注</span><span><i class="sdot run"></i>写作中</span><span><i class="sdot todo"></i>未生成</span>
+      </div>
+    </aside>
+
+    <!-- 工作区 -->
+    <div class="workspace">
+      <div class="views">
+
+        <!-- ① 流水线控制台 -->
+        <section class="view on" id="view-console" aria-label="流水线控制台">
+          <div class="console-wrap">
+            <div class="run-head">
+              <h2>第002章 转折</h2>
+              <span class="st-chip"><span class="pulse"></span>初稿 · 运行中</span>
+            </div>
+            <div class="run-sub">流水线任务 #7 · 2026-09-06 09:41 启动 · 模型 qianbi-72b · 温度 0.8</div>
+            <div class="meter">
+              <div class="row">
+                <span>当前笔 <b>第 3 笔</b> / 46 笔</span>
+                <span>已 <b id="mSec">77</b> s</span>
+                <span>已 <b id="mTok">4,210</b> tok</span>
+                <span>本笔 HIT <b>92.1%</b></span>
+              </div>
+              <div class="bar"><i></i></div>
+              <div class="bar-cap">31 / 46 笔完成 · 已落盘 12 个场景块</div>
+            </div>
+            <div class="cost-row">
+              <span>本章累计 <b>43 笔</b></span><span><b>92,972</b> tok</span><span>HIT <b>93.4%</b></span><span><b class="cost">¥0.240</b></span>
+              <span class="cap">预估全章 46 笔 · 约 77 分钟 · 预算 ¥0.240 / ¥0.40 <span class="pos">✓</span></span>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="autoBtn">▶ 运行至定稿（自动接第003章）</button>
+              <button class="btn btn-ghost" onclick="openPalette()">⌘ 命令面板 <span class="k">Ctrl+K</span></button>
+              <button class="btn btn-ghost" onclick="toast('第002章仍在写作中，定稿后可导出 TXT / EPUB')">导出本章</button>
+            </div>
+            <p class="con-hint">所有其他动作（重跑审校、跳章、暂停、改设定）都收进命令面板 —— 同屏只保留一个主按钮。</p>
+          </div>
+        </section>
+
+        <!-- ② 阅读器 -->
+        <section class="view" id="view-reader" aria-label="阅读器">
+          <article class="reader">
+            <div class="ch-kicker" id="rKicker">第一卷 · 出山</div>
+            <h1 id="rTitle">第002章 转折</h1>
+            <div class="ch-meta" id="rMeta">
+              <span class="run-tag"><span class="pulse"></span>初稿 v3 生成中</span>
+              <span>已落盘约 3,100 字</span><span>· 审校注 0 条</span><span class="mono">· 2026-09-06</span>
+            </div>
+            <div class="hr"></div>
+            <div class="prose" id="prose"></div>
+            <p class="focus-hint">点击段落可聚焦（R1），Esc 或再次点击退出。</p>
+          </article>
+        </section>
+
+        <!-- ③ 章节 EXPLORER 总览 -->
+        <section class="view" id="view-explorer" aria-label="章节总览">
+          <div class="x-wrap">
+            <h2>章节总览</h2>
+            <p class="x-sub">卷-章两级树在左侧边栏；这里看全书盘面。状态沿用 git 式色标。</p>
+            <div class="legend">
+              <span><i class="sdot ok"></i>定稿</span>
+              <span><i class="sdot warn"></i>审校带注（可一键回写）</span>
+              <span><i class="sdot run"></i>写作中</span>
+              <span><i class="sdot todo"></i>未生成</span>
+            </div>
+            <div class="x-stats">
+              <span>全书 <b>12</b> 章 · <b>2</b> 卷</span>
+              <span>定稿 <b>5</b></span><span>带注 <b>2</b></span>
+              <span>累计 <b>19.8 万</b>字</span><span>累计成本 <b>¥4.72</b></span><span>平均 HIT <b>93.4%</b></span>
+            </div>
+            <div class="ch-card">
+              <h3>第002章 转折 <i class="sdot run" style="animation:none"></i><span style="font-size:11px;color:var(--run);font-family:var(--mono)">写作中 · 初稿</span></h3>
+              <p class="desc">沈观澜在断剑崖得知拜师帖的真相，首次与云洱正面冲突。本章是第一卷的转折点：师徒线裂开，江湖线开启。</p>
+              <div class="psteps">
+                <span class="pstep done">✓ 大纲</span><span class="parrow">—</span>
+                <span class="pstep done">✓ 设定</span><span class="parrow">—</span>
+                <span class="pstep done">✓ 细纲</span><span class="parrow">—</span>
+                <span class="pstep run"><span class="pulse"></span>初稿 · 第3/46笔</span><span class="parrow">—</span>
+                <span class="pstep wait">○ 审校</span><span class="parrow">—</span>
+                <span class="pstep wait">○ 定稿</span>
+              </div>
+              <div class="ops">
+                <button class="btn btn-ghost" onclick="openChapter(2)">打开正文</button>
+                <button class="btn btn-ghost" onclick="rerunReview()">重跑审校</button>
+                <button class="btn btn-ghost" onclick="show('console')">查看流水线</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ④ 设计说明 -->
+        <section class="view" id="view-notes" aria-label="设计说明">
+          <div class="notes">
+            <h2>设计说明 · 方向 C「暗色工作台」</h2>
+            <p class="lead">IDE 式高密度信息工作台：深灰底非纯黑，等宽字体只承担数据，底部面板是主角。为「长挂机盯流水线」的作者把 46 笔调用、77 分钟、¥0.24/章 摊在一屏里。</p>
+
+            <details open>
+              <summary>设计令牌（Token）</summary>
+              <div class="d-body">
+                <table class="tok-table">
+                  <tr><th>色</th><th>值</th><th>用途</th></tr>
+                  <tr><td><span class="sw" style="background:#14161a"></span>bg0</td><td class="v">#14161a</td><td>活动条 / 状态栏（深灰，非纯黑）</td></tr>
+                  <tr><td><span class="sw" style="background:#1a1d23"></span>bg1</td><td class="v">#1a1d23</td><td>侧栏 / 底部面板</td></tr>
+                  <tr><td><span class="sw" style="background:#20242c"></span>bg2</td><td class="v">#20242c</td><td>编辑区</td></tr>
+                  <tr><td><span class="sw" style="background:#2a2f39"></span>line</td><td class="v">#2a2f39</td><td>分隔与描边</td></tr>
+                  <tr><td><span class="sw" style="background:#d7dce4"></span>ink</td><td class="v">#d7dce4</td><td>主文本（深底对比 ≥ 12:1）</td></tr>
+                  <tr><td><span class="sw" style="background:#3fb950"></span>ok</td><td class="v">#3fb950</td><td>定稿 / 完成</td></tr>
+                  <tr><td><span class="sw" style="background:#d29922"></span>warn</td><td class="v">#d29922</td><td>审校带注 / 成本</td></tr>
+                  <tr><td><span class="sw" style="background:#4493f8"></span>run</td><td class="v">#4493f8</td><td>运行中 / 唯一 primary</td></tr>
+                  <tr><td><span class="sw" style="background:#f85149"></span>err</td><td class="v">#f85149</td><td>失败 / 超时重试</td></tr>
+                </table>
+                <p style="margin-top:10px">字体：UI 为 Segoe UI / 微软雅黑；<span class="mono">"JetBrains Mono", Consolas</span> 只用于笔数、token、成本、延迟等数字列。间距 8px 栅格；圆角 3px 控件 / 6px 卡片；动效统一 150–200ms；运行态闪烁光标 1s steps。</p>
+              </div>
+            </details>
+
+            <details>
+              <summary>与现状的 3 条差异</summary>
+              <div class="d-body">
+                <ol>
+                  <li><b>落盘数据直接上屏：</b>现版长任务只有 hit / miss / phase 几枚小药丸；这里把已落盘的阶段数据摊成终端表 —— 每阶段 CALLS / TOK(out) / HIT% / COST / LAT 逐行可见，46 笔、77 分钟、¥0.24/章 一屏可读。</li>
+                  <li><b>按钮墙收进命令面板：</b>现版同屏 8+ 等权按钮互相竞争；本方向同屏只保留 1 个 primary，其余动作全部收进 Ctrl+K 命令面板，键盘流优先（squint test 只剩一个蓝块）。</li>
+                  <li><b>结构补齐：</b>章节按「卷-章」两级分组（M4），git 式状态点一眼分清定稿 / 带注 / 写作中；阅读器给 680px 版心 + 1.85 行距 + 段落聚焦（R1），长文不再顶满屏宽。</li>
+                </ol>
+              </div>
+            </details>
+
+            <details>
+              <summary>适用人群</summary>
+              <div class="d-body">
+                <p><b>长挂机盯流水线的作者：</b>一章 77 分钟、46 笔调用，需要随时知道「跑到第几笔、还剩多少 token、花了多少钱」——底部控制台常驻，状态栏永不撤走。</p>
+                <p><b>技术向 / 效率向用户：</b>习惯 IDE、终端与快捷键的人；命令面板 + Ctrl+` 折叠面板 + minimap 卷轴都是他们的母语。</p>
+                <p style="margin-top:8px;color:var(--faint)">不适合：想要沉浸抒情氛围、希望弱化「机器感」的作者 —— 那是 A / B 方向的命题。</p>
+              </div>
+            </details>
+
+            <p class="cred">设计方法：anthropics frontend-design skill + jezweb design-review checklist（已应用）</p>
+          </div>
+        </section>
+
+        <!-- Minimap 章节卷轴 -->
+        <div class="minimap" id="minimap" title="全书进度密度"></div>
+      </div>
+
+      <!-- 可拖拽分隔条（面板可拖拽感） -->
+      <div class="grip" id="grip" title="拖拽调整底部面板高度 · Ctrl+` 折叠"></div>
+
+      <!-- 底部面板：流水线控制台终端表（主角） -->
+      <section class="panel" id="panel" aria-label="流水线控制台面板">
+        <div class="panel-head">
+          <div class="p-tab"><span class="pulse"></span>流水线控制台</div>
+          <span class="p-sum">第002章 · 初稿 <b>第3/46笔</b> · 已 <b id="pSec">77</b>s · 已 <b id="pTok">4,210</b> tok</span>
+          <span class="p-key">Ctrl+`</span>
+        </div>
+        <div class="p-body">
+          <table class="term">
+            <thead>
+              <tr><th>PHASE</th><th>STATUS</th><th class="num">CALLS</th><th class="num">TOK(OUT)</th><th class="num">HIT%</th><th class="num">COST</th><th class="num">LAT</th></tr>
+            </thead>
+            <tbody>
+              <tr class="r-ok"><td>设定检索</td><td class="st" style="color:var(--ok)">✓ 完成</td><td class="num">4</td><td class="num">1,204</td><td class="num hit">96.2%</td><td class="num">¥0.024</td><td class="num">3.1s</td></tr>
+              <tr class="r-ok"><td>大纲对齐</td><td class="st" style="color:var(--ok)">✓ 完成</td><td class="num">2</td><td class="num">486</td><td class="num hit">95.1%</td><td class="num">¥0.011</td><td class="num">2.4s</td></tr>
+              <tr class="r-ok"><td>细纲分笔</td><td class="st" style="color:var(--ok)">✓ 完成</td><td class="num">6</td><td class="num">3,872</td><td class="num hit">93.8%</td><td class="num">¥0.045</td><td class="num">5.6s</td></tr>
+              <tr class="r-run" id="runRow">
+                <td>初稿写作
+                  <span class="sub">第 3 笔 · 已 <span id="tSec">77</span>s · 已 <span id="tTok">4,210</span> tok</span>
+                  <span class="err-note">第2笔 超时重试 ✓ 已恢复</span>
+                </td>
+                <td class="st">▶ 运行中<span class="cursor"></span></td>
+                <td class="num">31</td><td class="num" id="phaseTok">87,410</td>
+                <td class="num hit">92.1%</td><td class="num">¥0.160</td><td class="num">41.2s</td>
+              </tr>
+              <tr class="r-wait" id="reviewRow"><td>审校修订</td><td class="st">◷ 等待<span style="font-size:10px;color:var(--faint)">（上次带注 3 处）</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+              <tr class="r-wait"><td>定稿落盘</td><td class="st">◷ 等待</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+              <tr class="r-sum"><td>合计</td><td class="st">—</td><td class="num">43</td><td class="num">92,972</td><td class="num hit">93.4%</td><td class="num cost">¥0.240</td><td class="num">p50 12.8s</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <footer class="statusbar">
+    <span class="sb-item plain">⌥ 第二卷 / <span id="sbCh">第002章 转折</span></span>
+    <span class="sb-item plain"><span class="run-dot"></span><span id="sbPhase">初稿 · 第3/46笔</span></span>
+    <div class="right mono">
+      <span class="sb-item">HIT <b>93.4%</b></span>
+      <span class="sb-item">TOK <b id="sbTok">87,410</b></span>
+      <span class="sb-item">COST <b>¥0.240</b>/章</span>
+      <span class="sb-item">LAT p50 <b>12.8s</b></span>
+      <span class="sb-item">预估 77m</span>
+    </div>
+  </footer>
+</div>
+
+<!-- 命令面板 -->
+<div class="pal-overlay" id="palOverlay">
+  <div class="pal" role="dialog" aria-label="命令面板">
+    <input id="palInput" type="text" placeholder="输入命令：跳到第3章、重跑审校、生成下一章…" autocomplete="off">
+    <div class="pal-list" id="palList"></div>
+    <div class="pal-foot"><span><span class="mono">↑↓</span> 选择</span><span><span class="mono">Enter</span> 执行</span><span><span class="mono">Esc</span> 关闭</span></div>
+  </div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script>
+/* ================= 数据 ================= */
+const VOL_NAMES = ['第一卷 · 出山', '第二卷 · 入世'];
+const CH = [
+  {v:0,n:1, t:'山雨欲来', s:'ok',  w:4206},
+  {v:0,n:2, t:'转折',    s:'run', w:3100},
+  {v:0,n:3, t:'夜行',    s:'todo',w:0},
+  {v:0,n:4, t:'旧约',    s:'ok',  w:4388},
+  {v:0,n:5, t:'断桥',    s:'warn',w:4015},
+  {v:0,n:6, t:'雪落',    s:'ok',  w:4421},
+  {v:1,n:7, t:'江湖夜雨',s:'ok',  w:4107},
+  {v:1,n:8, t:'故人来',  s:'warn',w:3964},
+  {v:1,n:9, t:'灯市',    s:'todo',w:0},
+  {v:1,n:10,t:'问剑',    s:'todo',w:0},
+  {v:1,n:11,t:'长风渡',  s:'ok',  w:4289},
+  {v:1,n:12,t:'潮生',    s:'todo',w:0}
+];
+const PARAS_002 = [
+  '雪停在断剑崖的第三天，沈观澜终于看清了那纸拜师帖的来历——落款处的朱印，缺了半角。',
+  '半角朱印，是云洱的手笔。三年前在山下小镇，替他挡下追杀的那个人，用的就是这枚印。他记得清楚，因为那晚的血溅在印上，云洱用袖子擦了很久。',
+  '「你早知道帖子里写了什么。」沈观澜把帖按在石桌上，声音不高。崖风卷着雪沫子，从两人之间穿过去。',
+  '云洱没有否认。他只是往崖下看了一眼，那里是三百丈的云海，也是青梧宗的禁地。「帖子上写着你的生辰，观澜。写帖子的人，比我更早认识你。」',
+  '沈观澜的手指在剑柄上收紧了一瞬，又松开。这是他此生第一次觉得，师父递给他的剑，柄上或许刻着别人的名字。',
+  '转折来得没有声音。云洱转身走向崖边，背影平静得像要去取一件寄存的行李：「今晚子时，禁地开门。你可以不来。」',
+  '「我会来。」沈观澜听见自己说。话出口的一刻他就明白了——这不是选择，是转折本身：从这一夜起，他不再是等人领进门的那一个。',
+  '雪又开始下了。断剑崖上两行脚印，一行向北，一行向着云海深处，很快被落雪盖平。'
+];
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const fmt = n => n.toLocaleString('en-US');
+
+/* ================= Toast ================= */
+let toastTimer;
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* ================= 视图切换（活动条） ================= */
+const PANEL_H = { console:316, explorer:200, reader:30, notes:30 };
+let curView = 'console';
+function show(view){
+  curView = view;
+  $$('.act-btn[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+  $$('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + view));
+  $('#panel').style.height = PANEL_H[view] + 'px';
+  $('#minimap').style.display = (view === 'console' || view === 'reader') ? 'flex' : 'none';
+  if (view === 'explorer') $('#sidebar').classList.remove('hidden');
+}
+$$('.act-btn[data-view]').forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
+$('#sbToggle').addEventListener('click', () => $('#sidebar').classList.toggle('hidden'));
+
+/* ================= 章节 EXPLORER 树 ================= */
+function buildTree(){
+  const tree = $('#tree');
+  VOL_NAMES.forEach((vn, vi) => {
+    const vol = document.createElement('div');
+    vol.className = 'vol';
+    const kids = CH.filter(c => c.v === vi);
+    vol.innerHTML = `<button class="vol-head"><span class="chev">▾</span>${vn}<span class="cnt">${kids.length}章</span></button><div class="vol-body"></div>`;
+    const body = vol.querySelector('.vol-body');
+    kids.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'ch'; b.dataset.n = c.n;
+      b.title = `${STATUS_LABEL[c.s]} · ${c.t}`;
+      b.innerHTML = `<i class="sdot ${c.s}"></i><span class="nm">第${String(c.n).padStart(3,'0')}章 ${c.t}</span><span class="wc">${c.w ? fmt(c.w) : '—'}</span>`;
+      b.addEventListener('click', () => openChapter(c.n));
+      body.appendChild(b);
+    });
+    vol.querySelector('.vol-head').addEventListener('click', () => vol.classList.toggle('closed'));
+    tree.appendChild(vol);
+  });
+  const gap = document.createElement('div');
+  tree.appendChild(gap);
+}
+const STATUS_LABEL = { ok:'定稿', warn:'审校带注', run:'写作中', todo:'未生成' };
+
+/* ================= Minimap 卷轴 ================= */
+function buildMinimap(){
+  const mm = $('#minimap');
+  CH.forEach((c, i) => {
+    if (i > 0 && CH[i-1].v !== c.v) {
+      const g = document.createElement('div'); g.className = 'mm-gap'; mm.appendChild(g);
+    }
+    const seg = document.createElement('div');
+    seg.className = 'mm-seg ' + c.s; seg.dataset.n = c.n;
+    seg.style.flexGrow = Math.max(c.w / 420, .7);
+    seg.style.flexBasis = 0;
+    seg.title = `第${String(c.n).padStart(3,'0')}章 ${c.t} · ${STATUS_LABEL[c.s]}${c.w ? ' · ' + fmt(c.w) + ' 字' : ''}`;
+    seg.addEventListener('click', () => openChapter(c.n));
+    mm.appendChild(seg);
+  });
+}
+
+/* ================= 阅读器 ================= */
+function openChapter(n){
+  const c = CH.find(x => x.n === n);
+  show('reader');
+  $$('#tree .ch').forEach(b => b.classList.toggle('on', +b.dataset.n === n));
+  $$('#minimap .mm-seg').forEach(b => b.classList.toggle('on', +b.dataset.n === n));
+  $('#rKicker').textContent = VOL_NAMES[c.v];
+  $('#rTitle').textContent = `第${String(n).padStart(3,'0')}章 ${c.t}`;
+  $('#sbCh').textContent = `第${String(n).padStart(3,'0')}章 ${c.t}`;
+  const prose = $('#prose');
+  prose.classList.remove('focus');
+  if (n === 2) {
+    $('#rMeta').innerHTML = `<span class="run-tag"><span class="pulse"></span>初稿 v3 生成中</span><span>已落盘约 3,100 字</span><span>· 审校注 0 条</span><span class="mono">· 2026-09-06</span>`;
+    prose.innerHTML = PARAS_002.map(p => `<p>${p}</p>`).join('') +
+      `<p class="live">—— 初稿生成中，以上为已落盘内容 · 第 3 笔正在写作 <span class="cursor"></span></p>`;
+  } else if (c.s === 'ok' || c.s === 'warn') {
+    $('#rMeta').innerHTML = `<span style="color:var(${c.s === 'ok' ? '--ok' : '--warn'})">● ${STATUS_LABEL[c.s]}</span><span class="mono">${fmt(c.w)} 字</span><span>· 2026-09 定稿</span>`;
+    prose.innerHTML = `<div class="empty"><h3>演示稿未包含本章正文</h3><p>第${String(n).padStart(3,'0')}章《${c.t}》已${STATUS_LABEL[c.s]}，设计稿只内置第002章的真实版式示例。</p><button class="btn btn-primary" onclick="openChapter(2)">去读第002章 转折</button></div>`;
+  } else {
+    $('#rMeta').innerHTML = `<span style="color:var(--faint)">○ 未生成</span>`;
+    prose.innerHTML = `<div class="empty"><h3>第${String(n).padStart(3,'0')}章《${c.t}》还未生成</h3><p>把它加入流水线后，这里会先出现细纲，再逐笔落盘初稿——进度见底部控制台。</p><button class="btn btn-primary" onclick="startNext()">生成第003章 夜行</button></div>`;
+  }
+  $('#view-reader').scrollTop = 0;
+}
+
+/* 段落聚焦（R1） */
+$('#prose').addEventListener('click', e => {
+  const p = e.target.closest('p');
+  if (!p || p.classList.contains('live') || e.target.closest('.empty')) return;
+  const prose = $('#prose');
+  const was = p.classList.contains('focused');
+  prose.querySelectorAll('p').forEach(x => x.classList.remove('focused'));
+  if (was) { prose.classList.remove('focus'); return; }
+  prose.classList.add('focus');
+  p.classList.add('focused');
+});
+
+/* ================= 命令面板 ================= */
+const CMDS = [
+  { l:'跳到第3章 · 夜行', tag:'阅读器', f:() => { openChapter(3); toast('第003章《夜行》尚未生成 —— 已定位到该章，可一键加入流水线'); } },
+  { l:'打开第002章 · 转折', tag:'阅读器', f:() => openChapter(2) },
+  { l:'重跑审校（修订模式）', tag:'流水线', f:rerunReview },
+  { l:'生成第003章 · 夜行', tag:'流水线', f:startNext },
+  { l:'暂停流水线', tag:'流水线', f:() => toast('流水线将在第 3 笔落盘后暂停 —— 恢复请再按 Ctrl+K') },
+  { l:'导出本章 TXT（定稿后可用）', tag:'文件', f:() => toast('第002章仍在写作中，定稿后即可导出 TXT / EPUB') },
+  { l:'打开设计说明', tag:'帮助', f:() => show('notes') },
+  { l:'显示 / 隐藏侧栏', tag:'视图', f:() => $('#sidebar').classList.toggle('hidden') }
+];
+let palSel = 0, palItems = [];
+function renderPal(q){
+  palItems = CMDS.filter(c => !q || c.l.includes(q));
+  palSel = 0;
+  $('#palList').innerHTML = palItems.length
+    ? palItems.map((c, i) => `<button class="pal-item${i === 0 ? ' sel' : ''}" data-i="${i}">${c.l}<span class="tag">${c.tag}</span></button>`).join('')
+    : `<div class="pal-item none">没有匹配的命令</div>`;
+}
+function openPalette(){
+  $('#palOverlay').classList.add('on');
+  $('#palInput').value = '';
+  renderPal('');
+  $('#palInput').focus();
+}
+function closePalette(){ $('#palOverlay').classList.remove('on'); }
+function runPal(i){ const c = palItems[i]; closePalette(); if (c) c.f(); }
+$('#palOpen').addEventListener('click', openPalette);
+$('#palInput').addEventListener('input', e => renderPal(e.target.value.trim()));
+$('#palList').addEventListener('click', e => {
+  const b = e.target.closest('.pal-item[data-i]');
+  if (b) runPal(+b.dataset.i);
+});
+$('#palOverlay').addEventListener('click', e => { if (e.target === e.currentTarget) closePalette(); });
+
+/* ================= 流水线动作 ================= */
+function rerunReview(){
+  show('console');
+  $('#panel').style.height = PANEL_H.console + 'px';
+  const row = $('#reviewRow');
+  row.className = 'r-run';
+  row.querySelector('.st').innerHTML = '▶ 重跑中<span class="cursor"></span>';
+  toast('已重跑审校 · 修订模式 · 预计 6 笔 / 8 分钟');
+}
+function startNext(){
+  show('console');
+  $('#autoBtn').textContent = '▶ 继续运行至定稿（自动接第003章）';
+  toast('第003章《夜行》已加入队列 · 46 笔 · 预估 77 分钟');
+}
+$('#autoBtn').addEventListener('click', () => toast('已开启自动接续：第002章定稿后自动运行第003章'));
+
+/* ================= 面板拖拽 / 折叠 ================= */
+const panel = $('#panel'), grip = $('#grip');
+let dragging = false, collapsed = false;
+grip.addEventListener('mousedown', () => { dragging = true; document.body.classList.add('dragging'); });
+document.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const h = window.innerHeight - e.clientY - 26;
+  collapsed = false;
+  panel.style.height = Math.min(Math.max(h, 30), window.innerHeight * 0.72) + 'px';
+});
+document.addEventListener('mouseup', () => { dragging = false; document.body.classList.remove('dragging'); });
+function togglePanel(){
+  collapsed = !collapsed;
+  panel.style.height = collapsed ? '30px' : PANEL_H[curView] + 'px';
+}
+$('.p-tab').addEventListener('click', togglePanel);
+
+/* ================= 实时跳动（运行中的笔） ================= */
+let sec = 77, tok = 4210, phaseTok = 87410;
+setInterval(() => {
+  sec += 1;
+  const d = Math.floor(38 + Math.random() * 54);
+  tok += d; phaseTok += d;
+  ['mSec','pSec','tSec'].forEach(id => $('#' + id).textContent = fmt(sec));
+  ['mTok','pTok','tTok'].forEach(id => $('#' + id).textContent = fmt(tok));
+  $('#phaseTok').textContent = fmt(phaseTok);
+  $('#sbTok').textContent = fmt(phaseTok);
+}, 1000);
+
+/* ================= 键盘 ================= */
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#palOverlay').classList.contains('on') ? closePalette() : openPalette(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === '`') { e.preventDefault(); togglePanel(); return; }
+  const palOn = $('#palOverlay').classList.contains('on');
+  if (e.key === 'Escape') {
+    if (palOn) closePalette();
+    else { $('#prose').classList.remove('focus'); $('#prose').querySelectorAll('p').forEach(x => x.classList.remove('focused')); }
+    return;
+  }
+  if (palOn) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!palItems.length) return;
+      palSel = (palSel + (e.key === 'ArrowDown' ? 1 : -1) + palItems.length) % palItems.length;
+      $$('#palList .pal-item').forEach((el, i) => el.classList.toggle('sel', i === palSel));
+      $$('#palList .pal-item')[palSel].scrollIntoView({ block:'nearest' });
+    } else if (e.key === 'Enter') { e.preventDefault(); runPal(palSel); }
+  }
+});
+
+/* ================= 初始化 ================= */
+buildTree();
+buildMinimap();
+openChapter(2);
+show('console');
+</script>
+</body>
+</html>

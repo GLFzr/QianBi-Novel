@@ -204,28 +204,39 @@ def test_no_prose_template_lacks_must_contract():
 
 
 def _dict_literal_keys(tree):
-    """收集模块内 `name = {...字符串键 dict 字面量}` 的键集合（v0.19 章会话
-    分支把 kwargs 抽成 dict 后 **var 解包传入，扫描器需解析才看得见字段）"""
+    """收集模块内 `name = {…}` 字面量或 `name = dict(k=…)` 构造的键集合
+
+    v0.19 章会话分支把 kwargs 抽成 dict 后 **var 解包传入；S 轮 _rewrite_phase
+    统一入口的调用点用 `dict(chapter_num=…, …)` 构造——两种形态都要解析才看得见
+    字段。"""
     out = {}
     for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-                and isinstance(node.value, ast.Dict)):
-            keys = set()
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)):
+            continue
+        keys = set()
+        if isinstance(node.value, ast.Dict):
             for k in node.value.keys:
                 if isinstance(k, ast.Constant) and isinstance(k.value, str):
                     keys.add(k.value)
+        elif (isinstance(node.value, ast.Call)
+              and isinstance(node.value.func, ast.Name)
+              and node.value.func.id == "dict"):
+            keys = {kw.arg for kw in node.value.keywords if kw.arg}
+        if keys:
             out[node.targets[0].id] = keys
     return out
 
 
 def _format_callsites(template_name):
-    """扫遍 app/，抓 `X.<template_name>.format(...)` 的关键字实参集合
+    """扫遍 app/，抓模板的两类调用点及其关键字实参集合
 
     刻意不写死调用点清单：将来谁再加一处调用，这里自动纳入断言。
     test_barrier_removal._smoke_format 是从模板反推字段名再 format，
     看不见「调用方漏传 kwarg」——那正是 KeyError 崩在运行期的成因。
-    支持 `format(**kwargs_var)`：var 为同文件中的 dict 字面量时展开其键。
+    形态一：`X.<template_name>.format(...)`（直调，含 **kwargs_var 展开）；
+    形态二（S 轮）：`_rewrite_phase(ctx, session, slot, phase,
+    X.<template_name>, kw_var, …)`——模板作参数传进统一入口，字段在 kw 字典里。
     """
     hits = []
     for dp, dns, fns in os.walk(_APP_ROOT):
@@ -237,17 +248,27 @@ def _format_callsites(template_name):
             tree = ast.parse(project.read_file(path), filename=path)
             dicts = _dict_literal_keys(tree)
             for node in ast.walk(tree):
-                if not (isinstance(node, ast.Call)
-                        and isinstance(node.func, ast.Attribute)
-                        and node.func.attr == "format"):
+                if not isinstance(node, ast.Call):
                     continue
-                recv = node.func.value
-                if (isinstance(recv, ast.Attribute)
-                        and recv.attr == template_name):
+                if (isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "format"):
+                    recv = node.func.value
+                    if (isinstance(recv, ast.Attribute)
+                            and recv.attr == template_name):
+                        kwargs = {kw.arg for kw in node.keywords if kw.arg}
+                        for kw in node.keywords:
+                            if kw.arg is None and isinstance(kw.value, ast.Name) \
+                                    and kw.value.id in dicts:
+                                kwargs |= dicts[kw.value.id]
+                        hits.append((os.path.relpath(path, _APP_ROOT), kwargs))
+                elif (isinstance(node.func, ast.Name) and node.func.id == "_rewrite_phase"
+                      and len(node.args) >= 5
+                      and isinstance(node.args[4], ast.Attribute)
+                      and node.args[4].attr == template_name):
                     kwargs = {kw.arg for kw in node.keywords if kw.arg}
-                    for kw in node.keywords:
-                        if kw.arg is None and isinstance(kw.value, ast.Name)                                 and kw.value.id in dicts:
-                            kwargs |= dicts[kw.value.id]
+                    if (len(node.args) >= 6 and isinstance(node.args[5], ast.Name)
+                            and node.args[5].id in dicts):
+                        kwargs |= dicts[node.args[5].id]
                     hits.append((os.path.relpath(path, _APP_ROOT), kwargs))
     return hits
 

@@ -67,6 +67,11 @@ class Orchestrator(QThread):
         self._cur_stage = ""
         self._cur_num = 0
         self._cur_step = ""
+        # S1 卷级会话栈（writing.volume_session，默认关）：按卷号缓存 VolumeSession，
+        # 生命周期挂本次 run（每次连跑一个实例集；run() 启动时清空，断点恢复由
+        # stages 首次取用时从 项目/会话/卷N_messages.jsonl 装载）。flag 关闭时
+        # 这张表永不被触达，章会话路径行为逐字节不变。
+        self.volume_sessions = {}
 
     # ---------- 外部控制 ----------
 
@@ -265,6 +270,7 @@ class Orchestrator(QThread):
 
     def run(self):
         try:
+            self.volume_sessions = {}   # S1：卷会话实例随本次连跑重建（每卷一个）
             project.ensure_tracking_files(self.proj)
             state = st.load_state(self.proj)
             # 恢复上次回退时持久化的用户想法（G2 回退后重启仍携带）

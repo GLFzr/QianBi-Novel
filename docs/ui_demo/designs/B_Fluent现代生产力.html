@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>千笔一文 · 设计方向 B「现代生产力风」</title>
+<style>
+/* ============ token 表（现代生产力风 · 原创实现，非任何官方组件库）============ */
+:root{
+  --bg-page:#edf1f8; --bg-mica2:#e6ebf5;
+  --bg-card:#fbfcfe; --bg-card-2:#f4f6fb;
+  --acrylic:rgba(251,252,254,.66); --acrylic-strong:rgba(251,252,254,.86);
+  --text-1:#1b2233; --text-2:#5a6274; --text-3:#8a91a2;
+  --accent:#5d7bf0; --accent-hover:#4c6ae4; --accent-soft:rgba(93,123,240,.10); --accent-line:rgba(93,123,240,.35);
+  --ok:#2e9e6b; --ok-soft:rgba(46,158,107,.12);
+  --warn:#c7862a; --warn-soft:rgba(199,134,42,.13);
+  --danger:#d4553f; --danger-soft:rgba(212,85,63,.11);
+  --line:rgba(96,108,140,.20); --line-soft:rgba(96,108,140,.12);
+  --r-ctrl:4px; --r-card:8px; --r-flyout:12px;
+  --shadow-flyout:0 8px 24px rgba(30,40,80,.16), 0 2px 6px rgba(30,40,80,.08);
+  --font:"Segoe UI Variable","Segoe UI","Microsoft YaHei UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  font-family:var(--font); font-size:14px; line-height:1.6; color:var(--text-1);
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2"/><feColorMatrix type="saturate" values="0"/></filter><rect width="180" height="180" filter="url(%23n)" opacity="0.045"/></svg>'),
+    radial-gradient(1100px 520px at 12% -8%, #f3f6fc 0%, transparent 60%),
+    radial-gradient(900px 480px at 96% 4%, #e9edf9 0%, transparent 55%),
+    linear-gradient(160deg, var(--bg-page) 0%, var(--bg-mica2) 100%);
+  background-attachment:fixed; min-height:100vh; padding:20px clamp(12px,3vw,36px) 40px;
+}
+button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:none;cursor:pointer;}
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-ctrl);}
+.num{font-variant-numeric:tabular-nums;}
+.stage{max-width:1180px;margin:0 auto;}
+.intro{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:2px 4px 12px;}
+.intro h1{font-size:18px;font-weight:600;letter-spacing:.2px;}
+.intro .tag{font-size:12px;color:var(--text-2);background:var(--acrylic);border:1px solid var(--line-soft);padding:2px 10px;border-radius:10px;}
+.intro .note{font-size:12px;color:var(--text-3);}
+
+/* ============ 应用窗体 ============ */
+.app{background:linear-gradient(175deg,#f7f9fd 0%,#eef2fa 100%);border:1px solid var(--line);border-radius:var(--r-flyout);box-shadow:0 16px 48px rgba(30,40,80,.14),0 2px 8px rgba(30,40,80,.06);overflow:hidden;display:flex;flex-direction:column;height:min(780px,calc(100vh - 140px));min-height:560px;}
+.caption{height:36px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 6px 0 14px;border-bottom:1px solid var(--line-soft);background:var(--acrylic);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);}
+.caption .t{font-size:12px;color:var(--text-2);}
+.caption .t b{color:var(--text-1);font-weight:600;}
+.caps{display:flex;}
+.caps span{width:44px;height:30px;display:grid;place-items:center;color:var(--text-2);font-size:11px;}
+.caps span:hover{background:rgba(96,108,140,.10);}
+.app-body{flex:1;display:flex;min-height:0;}
+
+/* ---- NavigationView ---- */
+.nav{width:216px;flex:none;border-right:1px solid var(--line-soft);padding:10px 8px;display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.35);transition:width .18s ease;position:relative;}
+.app.collapsed .nav{width:56px;}
+.navitem{position:relative;display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:6px;color:var(--text-2);font-size:13.5px;width:100%;text-align:left;transition:background .15s ease;}
+.navitem svg{flex:none;}
+.navitem:hover{background:rgba(96,108,140,.09);}
+.navitem[aria-selected="true"]{background:rgba(255,255,255,.85);color:var(--text-1);font-weight:600;box-shadow:inset 0 0 0 1px var(--line-soft);}
+.navitem[aria-selected="true"]::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;border-radius:2px;background:var(--accent);}
+.navitem .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);margin-left:auto;flex:none;}
+.app.collapsed .navitem{justify-content:center;padding:9px 0;}
+.app.collapsed .navitem .lbl,.app.collapsed .navitem .dot,.app.collapsed .navsep .lbl{display:none;}
+.navsep{margin:8px 12px 4px;font-size:11px;color:var(--text-3);letter-spacing:.5px;}
+.nav .grow{flex:1;}
+
+/* ---- CommandBar（亚克力）---- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;}
+.cmdbar{flex:none;display:flex;align-items:center;gap:2px;padding:5px 10px;border-bottom:1px solid var(--line-soft);background:var(--acrylic);backdrop-filter:blur(22px) saturate(1.5);-webkit-backdrop-filter:blur(22px) saturate(1.5);position:relative;z-index:5;}
+.cmdbtn{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:var(--r-ctrl);font-size:12.5px;color:var(--text-2);transition:background .15s ease;}
+.cmdbtn:hover{background:rgba(96,108,140,.10);color:var(--text-1);}
+.cmdbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:6px 14px;box-shadow:0 1px 3px rgba(93,123,240,.4);}
+.cmdbtn.primary:hover{background:var(--accent-hover);}
+.cmdbtn.toggled{background:var(--accent-soft);color:var(--accent);font-weight:600;}
+.cmdbar .sep{width:1px;height:20px;background:var(--line);margin:0 6px;}
+.cmdbar .grow{flex:1;}
+.cmdbar .crumb{font-size:12px;color:var(--text-3);margin-right:8px;}
+.grp{display:none;align-items:center;gap:2px;}
+body[data-view="pipeline"] .grp-pipeline{display:flex;}
+body[data-view="reader"] .grp-reader{display:flex;}
+body[data-view="chapters"] .grp-chapters{display:flex;}
+@media (max-width:640px){.cmdbtn .lbl{display:none;}}
+
+/* ---- 溢出菜单（亚克力浮层）---- */
+.flyout{position:absolute;top:calc(100% + 4px);right:10px;min-width:216px;background:var(--acrylic-strong);backdrop-filter:blur(28px) saturate(1.6);-webkit-backdrop-filter:blur(28px) saturate(1.6);border:1px solid rgba(255,255,255,.6);outline:1px solid var(--line-soft);border-radius:var(--r-flyout);box-shadow:var(--shadow-flyout);padding:5px;display:none;z-index:30;}
+.flyout.open{display:block;}
+.flyout .cap{font-size:11px;color:var(--text-3);padding:6px 10px 3px;}
+.flyout button{display:flex;width:100%;text-align:left;gap:10px;align-items:center;padding:8px 10px;border-radius:6px;font-size:13px;color:var(--text-1);}
+.flyout button:hover{background:var(--accent-soft);}
+
+/* ---- 视图容器 ---- */
+.views{flex:1;overflow-y:auto;padding:18px 22px 26px;scroll-behavior:smooth;}
+.view{display:none;animation:viewin .18s ease;}
+.view.active{display:block;}
+@keyframes viewin{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+/* ---- 通用卡片 / 徽章 / 提示条 ---- */
+.card{background:var(--bg-card);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:14px 16px;}
+.card h3{font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:10px;letter-spacing:.3px;}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:10px;line-height:1.5;white-space:nowrap;}
+.badge.ok{background:var(--ok-soft);color:var(--ok);}
+.badge.run{background:var(--accent-soft);color:var(--accent);}
+.badge.wait{background:rgba(96,108,140,.10);color:var(--text-3);}
+.badge.warn{background:var(--warn-soft);color:var(--warn);}
+.badge.danger{background:var(--danger-soft);color:var(--danger);}
+.badge .bdot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.badge.run .bdot{animation:pulse 1.6s ease infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+.infobar{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r-card);border:1px solid rgba(46,158,107,.28);background:linear-gradient(90deg,var(--ok-soft),rgba(46,158,107,.04));margin-bottom:16px;}
+.infobar.warn{border-color:rgba(199,134,42,.3);background:linear-gradient(90deg,var(--warn-soft),rgba(199,134,42,.03));}
+.infobar .txt{flex:1;font-size:13px;color:var(--text-1);}
+.infobar .txt b{font-weight:600;}
+.infobar .txt .sub{color:var(--text-2);font-size:12px;}
+.infobar .x{color:var(--text-3);padding:4px 6px;border-radius:4px;font-size:14px;line-height:1;}
+.infobar .x:hover{background:rgba(96,108,140,.12);color:var(--text-1);}
+.iconbtn-ic{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:6px;background:rgba(46,158,107,.14);color:var(--ok);}
+.linkish{color:var(--accent);font-size:12.5px;font-weight:600;}
+.linkish:hover{text-decoration:underline;}
+
+/* ============ ① 流水线 ============ */
+.pipe-grid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(240px,1fr);gap:14px;align-items:start;}
+@media (max-width:900px){.pipe-grid{grid-template-columns:1fr;}}
+.legend{display:flex;gap:14px;font-size:11.5px;color:var(--text-3);margin:0 0 12px;flex-wrap:wrap;align-items:center;}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:-1px;}
+.legend .chip-ok{background:var(--ok-soft);color:var(--ok);padding:1px 8px;border-radius:9px;font-weight:600;}
+.timeline{list-style:none;position:relative;}
+.timeline li{position:relative;display:grid;grid-template-columns:26px 1fr;gap:0 10px;padding-bottom:18px;}
+.timeline li::before{content:"";position:absolute;left:8px;top:22px;bottom:-2px;width:2px;background:var(--line-soft);}
+.timeline li:last-child::before{display:none;}
+.timeline li.done::before{background:var(--accent-line);}
+.tdot{width:18px;height:18px;border-radius:50%;margin-top:2px;display:grid;place-items:center;background:var(--bg-card-2);border:2px solid var(--line);color:transparent;z-index:1;}
+li.done .tdot{background:var(--accent);border-color:var(--accent);color:#fff;}
+li.run .tdot{border-color:var(--accent);background:var(--accent-soft);}
+li.run .tdot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.6s ease infinite;}
+.stagecard{background:var(--bg-card);border:1px solid var(--line-soft);border-radius:var(--r-card);padding:11px 14px;transition:border-color .15s ease;}
+li.run .stagecard{border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-soft);}
+.schead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.schead .nm{font-weight:600;font-size:13.5px;}
+.schead .idx{font-size:11px;color:var(--text-3);font-weight:600;}
+.schead .badge{margin-left:auto;}
+.scmetrics{display:flex;align-items:center;gap:14px;margin-top:8px;font-size:12px;color:var(--text-2);flex-wrap:wrap;}
+.hitdot{display:inline-flex;align-items:center;gap:5px;}
+.hitdot i{width:8px;height:8px;border-radius:50%;}
+.hitdot.g i{background:var(--ok);} .hitdot.a i{background:var(--warn);} .hitdot.r i{background:var(--danger);}
+.tokbar{display:inline-flex;align-items:center;gap:7px;}
+.tokbar .track{width:88px;height:4px;border-radius:2px;background:rgba(96,108,140,.15);overflow:hidden;}
+.tokbar .fill{height:100%;border-radius:2px;background:var(--accent);}
+li.run .tokbar .fill{background-image:linear-gradient(90deg,var(--accent),#8ba1f5);background-size:200% 100%;animation:slide 2.2s linear infinite;}
+@keyframes slide{to{background-position:-200% 0;}}
+.runline{margin-top:7px;font-size:12.5px;color:var(--accent);font-weight:600;}
+.side .card{margin-bottom:14px;}
+.kv{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;font-size:12.5px;color:var(--text-2);border-bottom:1px dashed var(--line-soft);}
+.kv:last-child{border-bottom:none;}
+.kv b{font-size:13px;color:var(--text-1);font-weight:600;}
+.bignum{font-size:26px;font-weight:700;letter-spacing:-.3px;}
+.distrow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2);padding:3px 0;}
+.distrow .bar{flex:1;height:6px;border-radius:3px;background:rgba(96,108,140,.13);overflow:hidden;}
+.distrow .bar i{display:block;height:100%;border-radius:3px;}
+
+/* ============ ② 阅读器（K1 版心 + R1 聚焦）============ */
+.reader-wrap{position:relative;}
+.reader{max-width:680px;margin:0 auto;}
+.reader .ch-title{font-size:22px;font-weight:700;letter-spacing:.3px;margin-bottom:6px;}
+.reader .ch-meta{font-size:12px;color:var(--text-3);margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid var(--line-soft);}
+.rbody{font-size:var(--rfs,16px);line-height:1.85;color:#262c3d;}
+.rbody p{margin-bottom:1.35em;padding:3px 10px;margin-left:-10px;margin-right:-10px;border-left:3px solid transparent;border-radius:4px;cursor:pointer;transition:opacity .18s ease,background .18s ease;}
+.rbody p:hover{background:rgba(93,123,240,.05);}
+.rbody.focus-on p{opacity:.30;}
+.rbody p.focused{opacity:1;background:rgba(93,123,240,.06);border-left-color:var(--accent);}
+.focus-hint{position:sticky;bottom:10px;margin:14px auto 0;width:max-content;display:none;align-items:center;gap:8px;padding:7px 14px;font-size:12px;color:var(--text-1);background:var(--acrylic-strong);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);border:1px solid rgba(255,255,255,.6);outline:1px solid var(--line-soft);border-radius:20px;box-shadow:var(--shadow-flyout);}
+.focus-hint.show{display:flex;}
+.rtools{display:flex;justify-content:flex-end;gap:6px;max-width:680px;margin:0 auto 14px;}
+
+/* ============ ③ 章节面板（M4 卷-章两级）============ */
+.tree{max-width:720px;}
+.vol{background:var(--bg-card);border:1px solid var(--line-soft);border-radius:var(--r-card);margin-bottom:10px;overflow:hidden;}
+.vol-head{display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;text-align:left;transition:background .15s ease;}
+.vol-head:hover{background:var(--bg-card-2);}
+.vol-head .chev{transition:transform .18s ease;color:var(--text-3);}
+.vol.open .vol-head .chev{transform:rotate(90deg);}
+.vol-head .nm{font-weight:600;font-size:13.5px;}
+.vol-head .cnt{font-size:12px;color:var(--text-3);}
+.vol-head .badge{margin-left:auto;}
+.vol-body{display:none;padding:2px 10px 10px 22px;border-top:1px solid var(--line-soft);}
+.vol.open .vol-body{display:block;}
+.chrow{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:6px;text-align:left;transition:background .15s ease;position:relative;}
+.chrow:hover{background:rgba(96,108,140,.08);}
+.chrow[aria-current="true"]{background:var(--accent-soft);}
+.chrow[aria-current="true"]::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:16px;border-radius:2px;background:var(--accent);}
+.chrow .nm{font-size:13px;font-weight:600;}
+.chrow .meta{font-size:11.5px;color:var(--text-3);}
+.chrow .badge{margin-left:auto;}
+.chrow .retry{font-size:11.5px;color:var(--danger);font-weight:600;padding:2px 8px;border-radius:4px;}
+.chrow .retry:hover{background:var(--danger-soft);}
+.chrow.muted{color:var(--text-3);font-size:12px;cursor:default;}
+.chrow.muted:hover{background:none;}
+
+/* ============ 设计说明（折叠面板）============ */
+.notes{margin-top:18px;}
+.notes>.head{display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;background:var(--acrylic);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--line-soft);border-radius:var(--r-card);text-align:left;font-size:14px;font-weight:600;}
+.notes>.head .chev{margin-left:auto;transition:transform .18s ease;color:var(--text-3);}
+.notes.open>.head .chev{transform:rotate(180deg);}
+.notes>.body{display:none;padding:16px 18px;border:1px solid var(--line-soft);border-top:none;border-radius:0 0 var(--r-card) var(--r-card);background:rgba(255,255,255,.5);}
+.notes.open>.body{display:block;}
+.notes-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:20px;}
+@media (max-width:860px){.notes-grid{grid-template-columns:1fr;}}
+.notes h4{font-size:12.5px;font-weight:600;color:var(--text-2);margin-bottom:8px;}
+.toktable{width:100%;border-collapse:collapse;font-size:12px;}
+.toktable th{text-align:left;color:var(--text-3);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--line);}
+.toktable td{padding:4px 8px;border-bottom:1px dashed var(--line-soft);color:var(--text-2);}
+.toktable td:first-child{color:var(--text-1);font-weight:600;}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(0,0,0,.08);}
+.notes ul{list-style:none;}
+.notes li{font-size:12.5px;color:var(--text-2);padding:5px 0 5px 20px;position:relative;line-height:1.65;}
+.notes li::before{content:"";position:absolute;left:2px;top:12px;width:6px;height:6px;border-radius:2px;background:var(--accent);}
+.notes li b{color:var(--text-1);}
+.who{font-size:12.5px;color:var(--text-2);line-height:1.8;}
+footer{margin-top:16px;text-align:center;font-size:11.5px;color:var(--text-3);}
+
+/* ---- toast ---- */
+.toast{position:fixed;right:22px;bottom:22px;padding:9px 16px;font-size:12.5px;background:var(--acrylic-strong);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.6);outline:1px solid var(--line-soft);border-radius:var(--r-card);box-shadow:var(--shadow-flyout);opacity:0;transform:translateY(6px);transition:opacity .2s ease,transform .2s ease;pointer-events:none;z-index:99;}
+.toast.show{opacity:1;transform:none;}
+
+/* ---- 状态栏 ---- */
+.statusbar{flex:none;display:flex;align-items:center;gap:16px;padding:5px 16px;font-size:11.5px;color:var(--text-3);border-top:1px solid var(--line-soft);background:rgba(255,255,255,.4);}
+.statusbar b{color:var(--text-2);font-weight:600;}
+.statusbar .sdot{width:7px;height:7px;border-radius:50%;background:var(--ok);}
+@media (max-width:720px){.nav{width:56px;}.navitem .lbl,.navitem .dot,.navsep .lbl{display:none;}.navitem{justify-content:center;padding:9px 0;}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body data-view="pipeline">
+<div class="stage">
+  <div class="intro">
+    <h1>千笔一文 · 设计方向 B</h1>
+    <span class="tag">现代生产力风（Mica 质感 + 亚克力浮层，原创实现）</span>
+    <span class="note">演示页 · 数据为真实项目样例，非官方组件、未引用任何库</span>
+  </div>
+
+  <div class="app" id="app">
+    <!-- 标题栏 -->
+    <div class="caption">
+      <span class="t"><b>千笔一文</b> · 《雨夜长灯》 — 第002章 转折</span>
+      <span class="caps"><span title="最小化">—</span><span title="最大化">▢</span><span title="关闭">✕</span></span>
+    </div>
+    <div class="app-body">
+      <!-- NavigationView -->
+      <nav class="nav" aria-label="主导航">
+        <button class="navitem" id="navCollapse" title="折叠导航栏" aria-label="折叠导航栏">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 3L2.5 8 6 13M13 3v10"/></svg>
+          <span class="lbl">折叠</span>
+        </button>
+        <div class="navsep"><span class="lbl">创作</span></div>
+        <button class="navitem" role="tab" aria-selected="true" data-view="pipeline">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+          <span class="lbl">流水线</span><span class="dot" title="运行中"></span>
+        </button>
+        <button class="navitem" role="tab" aria-selected="false" data-view="reader">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3.5C3.5 2.5 5.5 2.5 8 4c2.5-1.5 4.5-1.5 6-.5v9c-1.5-1-3.5-1-6 .5-2.5-1.5-4.5-1.5-6-.5v-9z"/><path d="M8 4v9"/></svg>
+          <span class="lbl">阅读器</span>
+        </button>
+        <button class="navitem" role="tab" aria-selected="false" data-view="chapters">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></svg>
+          <span class="lbl">章节面板</span>
+        </button>
+        <span class="grow"></span>
+        <div class="navsep"><span class="lbl">系统</span></div>
+        <button class="navitem" title="设置页不在本设计演示范围" aria-disabled="true" style="opacity:.55;cursor:default;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/></svg>
+          <span class="lbl">设置</span>
+        </button>
+      </nav>
+
+      <div class="main">
+        <!-- CommandBar -->
+        <div class="cmdbar">
+          <span class="crumb" id="crumb">流水线 · 第002章</span>
+          <div class="grp grp-pipeline">
+            <button class="cmdbtn primary" id="btnGen">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.2c0-.8.9-1.3 1.6-.9l7 4.3c.7.4.7 1.4 0 1.8l-7 4.3c-.7.4-1.6-.1-1.6-.9V3.2z"/></svg>
+              <span class="lbl" id="genLbl">生成第 47 笔</span>
+            </button>
+            <button class="cmdbtn" id="btnPause">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="3" width="3.2" height="10" rx="1"/><rect x="9.3" y="3" width="3.2" height="10" rx="1"/></svg>
+              <span class="lbl">暂停</span>
+            </button>
+            <button class="cmdbtn" data-act="重试失败笔">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.8v2.4h-2.4"/></svg>
+              <span class="lbl">重试失败笔</span>
+            </button>
+          </div>
+          <div class="grp grp-reader">
+            <button class="cmdbtn" id="btnFontDown" title="减小字号"><span class="lbl">A−</span></button>
+            <button class="cmdbtn" id="btnFontUp" title="增大字号"><span class="lbl">A+</span></button>
+            <button class="cmdbtn" id="btnFocusMode">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/></svg>
+              <span class="lbl">聚焦模式</span>
+            </button>
+          </div>
+          <div class="grp grp-chapters">
+            <button class="cmdbtn" id="btnExpandAll"><span class="lbl">全部展开</span></button>
+            <button class="cmdbtn" data-act="新建卷">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg>
+              <span class="lbl">新建卷</span>
+            </button>
+          </div>
+          <span class="grow"></span>
+          <button class="cmdbtn" id="btnMore" aria-haspopup="true" aria-expanded="false">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>
+          </button>
+          <!-- 溢出浮层 -->
+          <div class="flyout" id="flyout" role="menu">
+            <div class="cap">流水线</div>
+            <button role="menuitem" data-act="导出本章草稿">导出本章草稿（TXT）</button>
+            <button role="menuitem" data-act="打开成本台账">打开成本台账</button>
+            <button role="menuitem" id="btnRestoreBar">恢复成本提示条</button>
+            <div class="cap">通用</div>
+            <button role="menuitem" id="btnReset">重置演示数据</button>
+          </div>
+        </div>
+
+        <div class="views">
+          <!-- ① 流水线 -->
+          <section class="view active" id="view-pipeline" role="tabpanel" aria-label="流水线">
+            <div class="infobar" id="costBar">
+              <span class="iconbtn-ic"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M5.2 8.3l1.9 1.9 3.7-4.2"/></svg></span>
+              <span class="txt">本章成本 <b class="num" id="ibCost">¥0.24</b> · 已生成 <b class="num" id="ibPen">46</b> 笔 / 预计 52 笔 · 命中率 <b class="num" id="ibHit">93.4%</b>
+                <span class="sub">目标 ≥93% 已达成 · 预计剩余约 <span class="num" id="ibLeft">9</span> 分钟 · <span class="linkish" data-act="查看成本台账">查看成本台账</span></span>
+              </span>
+              <button class="x" id="ibClose" title="关闭提示条" aria-label="关闭成本提示条">✕</button>
+            </div>
+            <div class="pipe-grid">
+              <div class="card">
+                <h3>阶段时间线 · 第002章 转折</h3>
+                <div class="legend">
+                  <span>命中率色点：</span>
+                  <span><i style="background:var(--ok)"></i>≥93% 达标</span>
+                  <span><i style="background:var(--warn)"></i>88–92% 偏低</span>
+                  <span><i style="background:var(--danger)"></i>&lt;88% 需重试</span>
+                  <span class="chip-ok">目标 ≥93%</span>
+                </div>
+                <ol class="timeline">
+                  <li class="done">
+                    <span class="tdot"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+                    <div class="stagecard"><div class="schead"><span class="idx">01</span><span class="nm">大纲对齐</span><span class="badge ok">完成</span></div>
+                      <div class="scmetrics"><span class="num">耗时 3.2 分</span><span class="tokbar"><span class="track"><span class="fill" style="width:14%"></span></span><span class="num">1,240 tok</span></span><span class="hitdot g"><i></i><span class="num">命中 96%</span></span></div>
+                    </div>
+                  </li>
+                  <li class="done">
+                    <span class="tdot"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+                    <div class="stagecard"><div class="schead"><span class="idx">02</span><span class="nm">梗概检索</span><span class="badge ok">完成</span></div>
+                      <div class="scmetrics"><span class="num">耗时 5.8 分</span><span class="tokbar"><span class="track"><span class="fill" style="width:38%"></span></span><span class="num">3,410 tok</span></span><span class="hitdot g"><i></i><span class="num">命中 94%</span></span></div>
+                    </div>
+                  </li>
+                  <li class="done">
+                    <span class="tdot"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+                    <div class="stagecard"><div class="schead"><span class="idx">03</span><span class="nm">细纲笔划</span><span class="badge warn">偏低</span></div>
+                      <div class="scmetrics"><span class="num">耗时 12.4 分</span><span class="tokbar"><span class="track"><span class="fill" style="width:100%"></span></span><span class="num">8,920 tok</span></span><span class="hitdot a"><i></i><span class="num">命中 92%</span></span></div>
+                    </div>
+                  </li>
+                  <li class="run">
+                    <span class="tdot"></span>
+                    <div class="stagecard"><div class="schead"><span class="idx">04</span><span class="nm">正文成稿</span><span class="badge run"><span class="bdot"></span>运行中</span></div>
+                      <div class="scmetrics"><span class="num">阶段累计 <span id="runMin">64.1</span> 分</span><span class="tokbar"><span class="track"><span class="fill" id="runTokBar" style="width:62%"></span></span><span class="num"><span id="runTok">21,360</span> tok</span></span><span class="hitdot g"><i></i><span class="num">命中 <span id="runHit">93.4</span>%</span></span></div>
+                      <div class="runline num" id="runLine">第 47 笔 · 已 84 秒</div>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="tdot"></span>
+                    <div class="stagecard" style="opacity:.72"><div class="schead"><span class="idx">05</span><span class="nm">一致性校对</span><span class="badge wait">等待</span></div>
+                      <div class="scmetrics"><span>将核对人物 / 伏笔 / 时间线共 17 项</span></div>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="tdot"></span>
+                    <div class="stagecard" style="opacity:.72"><div class="schead"><span class="idx">06</span><span class="nm">定稿入库</span><span class="badge wait">等待</span></div>
+                      <div class="scmetrics"><span>自动写入卷一 · 生成章节快照</span></div>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+              <div class="side">
+                <div class="card">
+                  <h3>运行详情</h3>
+                  <div class="bignum num" id="sdPen">46 笔</div>
+                  <div class="kv"><span>当前阶段</span><b>正文成稿</b></div>
+                  <div class="kv"><span>本章已用时</span><b class="num" id="sdTime">77 分</b></div>
+                  <div class="kv"><span>笔均耗时</span><b class="num">1.7 分</b></div>
+                  <div class="kv"><span>笔均成本</span><b class="num">¥0.0052</b></div>
+                </div>
+                <div class="card">
+                  <h3>命中分布 <span class="badge ok" style="float:right"><span class="bdot"></span>达成</span></h3>
+                  <div class="distrow"><span class="hitdot g"><i></i></span><span style="width:52px">达标</span><span class="bar"><i style="width:93%;background:var(--ok)"></i></span><b class="num">43 笔</b></div>
+                  <div class="distrow"><span class="hitdot a"><i></i></span><span style="width:52px">偏低</span><span class="bar"><i style="width:7%;background:var(--warn)"></i></span><b class="num">3 笔</b></div>
+                  <div class="distrow"><span class="hitdot r"><i></i></span><span style="width:52px">未命中</span><span class="bar"><i style="width:1%;background:var(--danger)"></i></span><b class="num">0 笔</b></div>
+                  <div class="kv" style="margin-top:8px"><span>整章命中率</span><b class="num" id="sdHit">93.4%</b></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ② 阅读器 -->
+          <section class="view" id="view-reader" role="tabpanel" aria-label="阅读器">
+            <div class="reader-wrap">
+              <div class="rtools">
+                <span style="font-size:11.5px;color:var(--text-3);margin-right:auto;align-self:center;">版心 680px · 行距 1.85 · 点击段落可聚焦（K1 / R1）</span>
+                <button class="cmdbtn" id="rFocusBtn2" title="进入聚焦模式">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/></svg>
+                  <span class="lbl">聚焦</span>
+                </button>
+              </div>
+              <article class="reader">
+                <h2 class="ch-title">第002章 转折</h2>
+                <div class="ch-meta num">《雨夜长灯》 卷一 · 风起 · 约 3,400 字 · 昨晚 23:41 自动保存</div>
+                <div class="rbody" id="rbody">
+                  <p>雨是后半夜落下来的。程野把伞收在门边，伞骨上的水顺着木地板淌出一道浅痕，像谁用指尖在纸上划了一笔，没写完。</p>
+                  <p>桌上那盏长灯还亮着。灯是父亲留下的，铜座磕掉了一角，光是暖的，照着摊开的账本，也照着账本上那行被红笔圈住的数字。程野盯了很久，久到雨声都变成了背景。</p>
+                  <p>三万七。他在心里又念了一遍。三年前那个晚上，父亲签下担保的时候，大概也是这样念过一个数字的。</p>
+                  <p>门被敲响了。三下，不轻不重。程野没有动，他知道门外是谁——这条街上只有一个人敲门会数着次数，仿佛多敲一下就是失礼。</p>
+                  <p>"程老板，"门外的声音隔着雨，有点闷，"账可以慢慢算，人不能等。周家明天一早的船，你要是想去，现在就得收拾。"</p>
+                  <p>程野站起身，椅子腿在地板上拖出一声短促的响。他走到门边，手放在门闩上，却没有拉。窗外的雨忽然密了一阵，长灯的火苗晃了晃，把他的影子在墙上拉长又压短。</p>
+                  <p>"替我回一句话，"他终于开口，声音比想象中稳，"船我不上。账，我来收。"</p>
+                  <p>门外静了两秒，随后传来一声很轻的笑，像是意料之中，又像是终于等到了什么。脚步声远了，雨还在下，程野回到桌前，把账本合上，第一次觉得这个数字没那么大。</p>
+                </div>
+                <div class="focus-hint" id="focusHint">已聚焦第 <b class="num" id="focusIdx">1</b> 段 · 再点一次或按 Esc 退出</div>
+              </article>
+            </div>
+          </section>
+
+          <!-- ③ 章节面板 -->
+          <section class="view" id="view-chapters" role="tabpanel" aria-label="章节面板">
+            <div class="card" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <h3 style="margin:0">章节 · 《雨夜长灯》</h3>
+              <span class="badge ok"><span class="bdot"></span>已定稿 13</span>
+              <span class="badge run"><span class="bdot"></span>生成中 1</span>
+              <span class="badge warn"><span class="bdot"></span>草稿 2</span>
+              <span class="badge danger"><span class="bdot"></span>失败 1</span>
+              <span style="margin-left:auto;font-size:11.5px;color:var(--text-3)">卷-章两级分组（M4）· 点击章节行查看详情</span>
+            </div>
+            <div class="tree">
+              <div class="vol open" id="vol1">
+                <button class="vol-head" aria-expanded="true" data-vol="vol1">
+                  <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3l6 5-6 5V3z"/></svg>
+                  <span class="nm">卷一 · 风起</span><span class="cnt num">12 章 · 41,200 字</span>
+                  <span class="badge run"><span class="bdot"></span>生成中</span>
+                </button>
+                <div class="vol-body">
+                  <button class="chrow"><span class="nm">第001章 夜雨</span><span class="meta num">3,412 字 · 命中 95%</span><span class="badge ok">已定稿</span></button>
+                  <button class="chrow" aria-current="true"><span class="nm">第002章 转折</span><span class="meta num" id="ch002meta">46/52 笔 · 用时 77 分</span><span class="badge run" id="ch002badge"><span class="bdot"></span>生成中</span></button>
+                  <button class="chrow"><span class="nm">第003章 旧账</span><span class="meta num">1,090 字</span><span class="badge warn">草稿</span></button>
+                  <button class="chrow"><span class="nm">第004章 空白</span><span class="meta num">上次失败 · 细纲命中率 86%</span><span class="badge danger">失败</span><span class="retry" data-retry="第004章 空白">重试</span></button>
+                  <button class="chrow"><span class="nm">第005章 夜行</span><span class="meta num">620 字</span><span class="badge warn">草稿</span></button>
+                  <div class="chrow muted"><span>第006 – 012 章 · 未开始</span></div>
+                </div>
+              </div>
+              <div class="vol" id="vol2">
+                <button class="vol-head" aria-expanded="false" data-vol="vol2">
+                  <svg class="chev" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3l6 5-6 5V3z"/></svg>
+                  <span class="nm">卷二 · 入局</span><span class="cnt num">8 章 · 12,860 字</span>
+                  <span class="badge wait">进行 2/8</span>
+                </button>
+                <div class="vol-body">
+                  <button class="chrow"><span class="nm">第013章 第一课</span><span class="meta num">3,204 字 · 命中 94%</span><span class="badge ok">已定稿</span></button>
+                  <button class="chrow"><span class="nm">第014章 暗流</span><span class="meta num">2,980 字</span><span class="badge ok">已定稿</span></button>
+                  <button class="chrow"><span class="nm">第015章 接头</span><span class="meta num">1,540 字</span><span class="badge warn">草稿</span></button>
+                  <div class="chrow muted"><span>第016 – 020 章 · 未开始</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 状态栏 -->
+        <div class="statusbar num">
+          <span class="sdot"></span><span id="stState">生成中</span>
+          <span>第002章 <b id="stPen">46</b>/52 笔</span>
+          <span>用时 <b id="stTime">77 分</b></span>
+          <span>成本 <b id="stCost">¥0.24</b></span>
+          <span>命中率 <b id="stHit">93.4%</b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设计说明（折叠面板） -->
+  <div class="notes open" id="notes">
+    <button class="head" aria-expanded="true" id="notesHead">
+      设计说明 · token 表 / 与现状差异 / 适用人群
+      <svg class="chev" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>
+    </button>
+    <div class="body">
+      <div class="notes-grid">
+        <div>
+          <h4>核心 token（现代生产力风）</h4>
+          <table class="toktable">
+            <tr><th>名称</th><th>值</th><th>用途</th></tr>
+            <tr><td>bg-page</td><td><span class="sw" style="background:#edf1f8"></span>#EDF1F8</td><td>Mica 质感底 + 噪声</td></tr>
+            <tr><td>accent</td><td><span class="sw" style="background:#5d7bf0"></span>#5D7BF0</td><td>唯一 primary / 选中态</td></tr>
+            <tr><td>text-1</td><td><span class="sw" style="background:#1b2233"></span>#1B2233</td><td>正文（对比度 13.9:1）</td></tr>
+            <tr><td>ok / warn / danger</td><td>#2E9E6B / #C7862A / #D4553F</td><td>命中率与状态语义</td></tr>
+            <tr><td>radius</td><td>4 / 8 / 12px</td><td>控件 / 卡片 / 浮层</td></tr>
+            <tr><td>字体 / 行距</td><td>Segoe UI Variable 栈</td><td>阅读器 1.85，界面 1.6</td></tr>
+          </table>
+        </div>
+        <div>
+          <h4>与现状差异（3 条）</h4>
+          <ul>
+            <li><b>K1 版心</b>：阅读器从全宽长行改为 680px 版心 + 1.85 行距，长段不再扫行丢位。</li>
+            <li><b>K3 按钮层级</b>：8+ 等权按钮收敛为"每屏唯一 primary + 命令栏分层"，二级操作收进"…"溢出。</li>
+            <li><b>M1 时间线 + 成本</b>：已落盘的 phase / hit / miss 数据接成阶段时间线与本章成本 InfoBar，46 笔 / 77 分钟长任务不再是黑盒（M4 卷-章两级、R1 点击聚焦同步体现）。</li>
+          </ul>
+        </div>
+        <div>
+          <h4>适用人群</h4>
+          <p class="who">长时间挂机跑流水线、在意成本可见性的重度网文作者；需要向编辑或工作室汇报进度与花费的工坊型写手；偏好 Windows 原生桌面质感、反感"网页感"界面的用户。</p>
+          <p class="who" style="margin-top:10px;color:var(--text-3)">命名说明：本方案仅借鉴"现代生产力"设计语汇（Mica 质感、亚克力浮层、NavigationView 结构），为原创 CSS 实现，不隶属于任何官方设计系统。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>设计方法：anthropics frontend-design skill + jezweb design-review checklist（已应用）</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(s){ return document.querySelector(s); };
+  var state = { pen:46, penTotal:52, cost:0.2448, hit:93.4, seconds:84, minutes:77, paused:false, focused:true, fontSize:16 };
+
+  /* ---- toast ---- */
+  var toastEl = $("#toast"), toastTimer = null;
+  function toast(msg){
+    toastEl.textContent = msg; toastEl.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2200);
+  }
+
+  /* ---- 视图切换 ---- */
+  var crumbMap = { pipeline:"流水线 · 第002章", reader:"阅读器 · 第002章 转折", chapters:"章节面板 · 《雨夜长灯》" };
+  function switchView(name){
+    document.body.dataset.view = name;
+    document.querySelectorAll(".navitem[data-view]").forEach(function(b){
+      b.setAttribute("aria-selected", String(b.dataset.view === name));
+    });
+    document.querySelectorAll(".view").forEach(function(v){
+      v.classList.toggle("active", v.id === "view-" + name);
+    });
+    $("#crumb").textContent = crumbMap[name];
+  }
+  document.querySelectorAll(".navitem[data-view]").forEach(function(b){
+    b.addEventListener("click", function(){ switchView(b.dataset.view); });
+  });
+
+  /* ---- 导航折叠 ---- */
+  $("#navCollapse").addEventListener("click", function(){ $("#app").classList.toggle("collapsed"); });
+
+  /* ---- 数据同步 ---- */
+  function fmtCost(c){ return "¥" + c.toFixed(2); }
+  function sync(){
+    var hitStr = state.hit.toFixed(1) + "%";
+    $("#ibCost").textContent = fmtCost(state.cost);
+    $("#ibPen").textContent = state.pen;
+    $("#ibHit").textContent = hitStr;
+    $("#ibLeft").textContent = Math.max(1, Math.round((state.penTotal - state.pen) * 1.7));
+    $("#sdPen").textContent = state.pen + " 笔";
+    $("#sdTime").textContent = state.minutes + " 分";
+    $("#sdHit").textContent = hitStr;
+    $("#genLbl").textContent = state.paused ? "继续生成" : "生成第 " + (state.pen + 1) + " 笔";
+    $("#runLine").textContent = "第 " + (state.pen + 1) + " 笔 · 已 " + state.seconds + " 秒" + (state.paused ? "（已暂停）" : "");
+    $("#runHit").textContent = state.hit.toFixed(1);
+    $("#runTok").textContent = (21360 + (state.pen - 46) * 190).toLocaleString();
+    $("#runTokBar").style.width = Math.min(96, 62 + (state.pen - 46) * 1.4) + "%";
+    $("#runMin").textContent = (64.1 + (state.minutes - 77)).toFixed(1);
+    $("#stState").textContent = state.paused ? "已暂停" : "生成中";
+    $("#stPen").textContent = state.pen;
+    $("#stTime").textContent = state.minutes + " 分";
+    $("#stCost").textContent = fmtCost(state.cost);
+    $("#stHit").textContent = hitStr;
+    $("#ch002meta").textContent = state.pen + "/" + state.penTotal + " 笔 · 用时 " + state.minutes + " 分";
+    $("#btnPause").querySelector(".lbl").textContent = state.paused ? "继续" : "暂停";
+  }
+
+  /* ---- 计时器 ---- */
+  setInterval(function(){
+    if (state.paused) return;
+    state.seconds++;
+    if (state.seconds % 60 === 0) state.minutes++;
+    sync();
+  }, 1000);
+
+  /* ---- 生成一笔（模拟）---- */
+  $("#btnGen").addEventListener("click", function(){
+    if (state.pen >= state.penTotal) { toast("本章已达预计笔数，去流水线点「定稿入库」收尾"); return; }
+    state.pen++; state.cost += 0.0052;
+    state.hit = Math.min(93.7, Math.max(93.1, state.hit + (Math.random() - 0.5) * 0.4));
+    state.seconds = 0;
+    toast("已提交第 " + state.pen + " 笔（模拟）· 成本 +¥0.0052");
+    sync();
+  });
+
+  /* ---- 暂停 / 恢复 ---- */
+  $("#btnPause").addEventListener("click", function(){ state.paused = !state.paused; sync(); toast(state.paused ? "流水线已暂停，计时停止" : "流水线已恢复"); });
+
+  /* ---- CommandBar 溢出 ---- */
+  var flyout = $("#flyout"), btnMore = $("#btnMore");
+  function closeFlyout(){ flyout.classList.remove("open"); btnMore.setAttribute("aria-expanded","false"); }
+  btnMore.addEventListener("click", function(e){
+    e.stopPropagation();
+    var open = flyout.classList.toggle("open");
+    btnMore.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", function(e){
+    if (!flyout.contains(e.target)) closeFlyout();
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape"){ closeFlyout(); clearFocus(); }
+  });
+  flyout.querySelectorAll("[data-act]").forEach(function(b){
+    b.addEventListener("click", function(){ closeFlyout(); toast("已模拟：" + b.dataset.act); });
+  });
+  $("#btnReset").addEventListener("click", function(){
+    closeFlyout();
+    state = { pen:46, penTotal:52, cost:0.2448, hit:93.4, seconds:84, minutes:77, paused:false, focused:true, fontSize:16 };
+    applyFontSize(); sync(); toast("演示数据已重置为 46 笔 / ¥0.24 / 93.4%");
+  });
+
+  /* ---- 成本 InfoBar 关闭 / 恢复 ---- */
+  $("#ibClose").addEventListener("click", function(){
+    $("#costBar").style.display = "none";
+    toast("成本提示条已关闭，可在「…」里恢复");
+  });
+  $("#btnRestoreBar").addEventListener("click", function(){
+    closeFlyout(); $("#costBar").style.display = "flex";
+    toast("成本提示条已恢复");
+  });
+  document.querySelectorAll('[data-act="查看成本台账"]').forEach(function(el){
+    el.addEventListener("click", function(){ toast("已模拟：打开成本台账"); });
+  });
+  document.querySelectorAll('.grp-pipeline [data-act="重试失败笔"]').forEach(function(el){
+    el.addEventListener("click", function(){ toast("已模拟：重试失败笔（当前 0 笔待重试）"); });
+  });
+
+  /* ---- 阅读器：字号 + 聚焦 ---- */
+  var rbody = $("#rbody"), focusHint = $("#focusHint"), sizes = [15,16,18];
+  function applyFontSize(){ rbody.style.setProperty("--rfs", state.fontSize + "px"); }
+  function setFocusMode(on){
+    state.focused = on;
+    rbody.classList.toggle("focus-on", on && !!rbody.querySelector(".focused"));
+    $("#btnFocusMode").classList.toggle("toggled", on);
+    $("#rFocusBtn2").classList.toggle("toggled", on);
+    focusHint.classList.toggle("show", on && !!rbody.querySelector(".focused"));
+  }
+  rbody.querySelectorAll("p").forEach(function(p, i){
+    p.addEventListener("click", function(){
+      if (p.classList.contains("focused")) { p.classList.remove("focused"); setFocusMode(false); return; }
+      rbody.querySelectorAll("p").forEach(function(q){ q.classList.remove("focused"); });
+      p.classList.add("focused");
+      $("#focusIdx").textContent = i + 1;
+      setFocusMode(true);
+    });
+  });
+  function clearFocus(){
+    rbody.querySelectorAll("p").forEach(function(q){ q.classList.remove("focused"); });
+    setFocusMode(false);
+  }
+  $("#btnFocusMode").addEventListener("click", function(){ if (state.focused) clearFocus(); else { rbody.querySelector("p").classList.add("focused"); $("#focusIdx").textContent = "1"; setFocusMode(true); } });
+  $("#rFocusBtn2").addEventListener("click", function(){ $("#btnFocusMode").click(); });
+  $("#btnFontUp").addEventListener("click", function(){ state.fontSize = sizes[Math.min(2, sizes.indexOf(state.fontSize) + 1)]; applyFontSize(); toast("字号 " + state.fontSize + "px"); });
+  $("#btnFontDown").addEventListener("click", function(){ state.fontSize = sizes[Math.max(0, sizes.indexOf(state.fontSize) - 1)]; applyFontSize(); toast("字号 " + state.fontSize + "px"); });
+
+  /* ---- 章节面板：Expander + 选择 + 重试 ---- */
+  document.querySelectorAll(".vol-head").forEach(function(h){
+    h.addEventListener("click", function(){
+      var vol = document.getElementById(h.dataset.vol);
+      var open = vol.classList.toggle("open");
+      h.setAttribute("aria-expanded", String(open));
+    });
+  });
+  $("#btnExpandAll").addEventListener("click", function(){
+    var allOpen = document.querySelectorAll(".vol.open").length === document.querySelectorAll(".vol").length;
+    document.querySelectorAll(".vol").forEach(function(v){ v.classList.toggle("open", !allOpen); });
+    document.querySelectorAll(".vol-head").forEach(function(h){ h.setAttribute("aria-expanded", String(!allOpen)); });
+    toast(allOpen ? "已全部折叠" : "已全部展开");
+  });
+  document.querySelectorAll(".chrow:not(.muted)").forEach(function(r){
+    r.addEventListener("click", function(e){
+      if (e.target.classList.contains("retry")) return;
+      document.querySelectorAll(".chrow").forEach(function(q){ q.removeAttribute("aria-current"); });
+      r.setAttribute("aria-current", "true");
+      toast("已选中：" + r.querySelector(".nm").textContent);
+    });
+  });
+  document.querySelectorAll("[data-retry]").forEach(function(b){
+    b.addEventListener("click", function(e){
+      e.stopPropagation();
+      var row = b.closest(".chrow"), badge = row.querySelector(".badge");
+      badge.className = "badge run"; badge.innerHTML = '<span class="bdot"></span>排队中';
+      b.remove(); row.querySelector(".meta").textContent = "等待重试 · 已加入队列";
+      toast("已模拟：重试 " + b.dataset.retry);
+    });
+  });
+
+  /* ---- 设计说明折叠 ---- */
+  $("#notesHead").addEventListener("click", function(){
+    var notes = $("#notes"), open = notes.classList.toggle("open");
+    this.setAttribute("aria-expanded", String(open));
+  });
+
+  applyFontSize(); sync();
+})();
+</script>
+</body>
+</html>

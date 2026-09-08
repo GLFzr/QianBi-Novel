@@ -43,6 +43,54 @@ BENCH_LABELS = {
     "review_disabled": ("E10 审校 disabled", "全流程 3 章（埋雷召回 4/4 的档位）"),
     "prose_med": ("E8 prose=medium", "全流程 3 章（+64%，强烈否决）"),
     "review_tier_home": ("审校三档埋雷", "12 票：4 颗植入缺陷 × 3 档 × 2 票 + 干净章对照"),
+    # ---- 成本优化战役 v2（tests/bench_variants/ 预设名对齐）----
+    "baseline_e01": ("E0.1 基线", "0.19 全流程六章基线（R0：所有收益算术的新基数）"),
+    "e11_span_deslop": ("E1.1 span-deslop", "deslop 相位 span 级输出对照（O1，逐相位独立测）"),
+    "e11_span_trim": ("E1.1 span-trim", "trim 相位 span 级输出对照（预期 16k→4-6k）"),
+    "e11_span_reviewfix": ("E1.1 span-reviewfix", "review_fix 相位 span 级输出对照（预期 30k→8-12k）"),
+    "e12_outline_budget": ("E1.2 outline-budget", "细纲显式长度预算（O2：长度指令服从度）"),
+    "e12_prose_thinkbudget": ("E1.2 prose-thinkbudget", "正文思考软预算（O2，均值 60% 口径）"),
+    "e12_prose_structure": ("E1.2 prose-structure", "正文先场景卡后成文（O2 对照：结构化替代思考）"),
+    "cachecheck_e21": ("E2.1 缓存复检", "前缀卫生修复后六章命中率对照（目标 ≥88%）"),
+    "e32_cisc": ("E3.2 CISC 置信加权", "审校票 confidence 加权重裁对照（O5）"),
+    "e33_earlystop": ("E3.3 清算早停", "清算条目级早停分诊（O6：unsure 展开制）"),
+    "ext_qwen_e41": ("E4.1 摘要外迁 qwen", "tracking/摘要三相位移交 qwen-flash（O3）"),
+    "ext_doubao_e41b": ("E4.1b 摘要外迁 doubao", "同上换 doubao-1.5-lite（O3，~1/8 输出价）"),
+    # ---- S 轮结构调整（六章，DS 口径；变体缺标注即不入账，2026-09-07 补录）----
+    "s1_volume": ("S1 卷会话", "6 章 hit 93.3% / ¥0.291 每章 / 盲评 7.53 ✅（S 轮最干净增益）"),
+    "s2_volume": ("S2 会话清算+条目早停", "6 章 hit 93.5% / ¥0.335 每章 / 盲评 7.35 ✅"),
+    "s3_nopro": ("S3 节拍窗口+去 Pro", "6 章 hit 92.5% / ¥0.211 每章 / 盲评 7.22 ✅（D4 -0.9 观察）"),
+    "e13_trim_low": ("E1.3 trim=low", "六章对照，D2 爽点闭环待 T4a 雷章复验"),
+    "t1_long20": ("T1 二十章长卷", "20 章 hit 95.9% / ¥0.273 每章 / 盲评 7.10 ❌"
+                                  "（vs 同场锚点 7.69 Δ-0.59，D4 主跌；S 全栈·tr-dsv4f·无 Pro）"),
+    "t2_outline": ("T2 前置·补细纲 21-26", "两臂共读的细纲批次（--outlines-only，不出正文）"),
+    "t2_smoke1": ("冒烟·seed 续写接栈", "1 章 @tr-dsv4f：验证换名续写不再退回空栈"
+                                       "（prose in 285,683 / hit 248,320），实测 ¥0.822/章"),
+    "t1c_bailian": ("T1c 跨渠道校定", "续写 21-24 章 @bailian-flash，第 25 章撞 429 中断；"
+                                      "章界浅命中在两渠道同构复现（miss 41-42k/章）"),
+    "t2_smoke2": ("哈希诊断·续写 2 章", "@tr-dsv4f；章界那笔只记到 hit 4.5%，"
+                                        "其后同链 enrich 记到 95.8%（整跑均值 90.9%）——记账抖动的在册证据"),
+    # ---- T2 压缩 A/B 与 T4 雷章复核（2026-09-07 晚，看板 §5 22:30 / 23:10）----
+    "t2a_keep": ("T2 对照臂·不压缩", "续写 21-26 章：hit 97.7% / ¥0.332 每章；"
+                                     "短章触发字数预检跳过审校，调用数反低于压缩臂"),
+    "t2b_compact": ("T2 压缩臂", "同起点续写 21-26：读量降至 29% 但 miss 反升 105%、"
+                                 "hit 91.7%、LLM 秒 +78% ⇒ 热缓存下『压缩省钱』前提不成立"),
+    "t4a_recall": ("T4a B 类雷召回", "3 章雷稿（B01/B02+干净对照）走 去味/审校/清算："
+                                     "审校对两雷均未判阻塞（召回 ❌ 0/2），对照章无 B 类误报"),
+    "t4b_base": ("T4b 对照·修复默认档", "C01/D01 雷稿，review_fix 整段输出模式"),
+    "t4b_span": ("T4b 实验·修复 span 档", "同稿只改 review_fix.output_mode=span"
+                                          "（自有格式，不经网关参数 ⇒ TR 上有效）"),
+    "t3_long60": ("T3 压力终验·首段（9/60 章）", "tr-dsv4f 跑到第 10 章连回三次 503 SERVICE_BUSY "
+                                                 "致 cost_bench 崩、无 metrics——成本按 usage 重算；"
+                                                 "续跑见 t3b_long60（scripts/t3_resume.py）"),
+    "t3b_long60": ("T3 续跑段 b（10-38 章）", "tr-dsv4f / deepseek-v4-flash，驱动在 00:36 探到渠道恢复自动接跑；"
+                                             "04:25 再度 503 超时停"),
+    "t3c_long60": ("T3 续跑段 c（38 章）", "⚠️ 本段起切 ocgo-omen（**omen-alpha，换了生成模型**）；"
+                                          "38/39 章因驱动按正文最大章号推算起跑点而被重写一次"),
+    "t3d_long60": ("T3 续跑段 d（39-40 章）", "omen-alpha；卷三从 39 章起＝栈断崖重置（911,606→13,470 tok），"
+                                             "该章 miss 峰值即渠道切换税＋卷界税叠加"),
+    "t3e_long60": ("T3 续跑段 e（41-53 章）", "omen-alpha；单笔延迟 89s ≈ dsv4f 段的 2.7-3.4×；"
+                                             "53 章后渠道 5xx 卡住（TR 亦已 DOWN 16h+）"),
 }
 
 
@@ -116,6 +164,7 @@ def main():
     ledger = []   # (类别, 名称, 说明, metrics)
 
     # 1) bench 变体
+    unlabeled = []   # U1 台账自检（T 轮增补 §7：T3 续跑段 138M tok 曾因缺标注整段漏账）
     for d in sorted(glob.glob(os.path.join(ROOT, "tests_output", "bench", "*"))):
         name = os.path.basename(d)
         if name in ("_prepare_home",) or not os.path.isdir(d):
@@ -124,6 +173,8 @@ def main():
         if rows and name in BENCH_LABELS:
             label, note = BENCH_LABELS[name]
             ledger.append(("实验台", label + "（%s）" % name, note, _cost(rows)))
+        elif rows:
+            unlabeled.append((name, _cost(rows)))
 
     # 1.5) Temp 残留 fake home（历史 run 被清理脚本误删前的幸存数据）
     temp_root = os.environ.get("TEMP", os.path.expanduser("~/AppData/Local/Temp"))
@@ -212,6 +263,24 @@ def main():
     lines.append("   端到端（test_5ch_mock 等）不计成本。")
     lines.append("4. 价格若按 peak 档（北京时间工作日 09:00-12:00 / 14:00-18:00 全价）则翻倍，")
     lines.append("   本账全部按实际发生时段的 off-peak 口径。")
+    # U1 台账自检：有用量但缺 BENCH_LABELS 标注的变体——高声报数而非静默跳过
+    # （T 轮增补 §7 事故：T3 续跑段 138M tok 因此整段漏账，补正后总账 +¥20.68）
+    if unlabeled:
+        lines.append("")
+        lines.append("## ⚠ 未标注变体（有真实用量但不在 BENCH_LABELS——未计入上表，请补标注后重跑台账）")
+        lines.append("")
+        lines.append("| 变体 | 调用 | 输入 tok | 成本 ¥ |")
+        lines.append("|---|---|---|---|")
+        for _n, _m in unlabeled:
+            lines.append("| %s | %d | %s | %.3f |" % (_n, _m["calls"],
+                                                      f"{_m['in_tok']:,}", _m["cny"]))
+        _u_cny = sum(_m["cny"] for _c, _m in unlabeled)
+        _u_calls = sum(_m["calls"] for _c, _m in unlabeled)
+        lines.append("")
+        lines.append("**漏账合计**：%d 笔 / ¥%.3f——补进 BENCH_LABELS 重跑台账即入正表。"
+                     % (_u_calls, _u_cny))
+        print("⚠ 台账自检：%d 个变体有用量但缺标注（漏账 ¥%.3f）——详见 %s 的未标注节"
+              % (len(unlabeled), _u_cny, out))
     out = os.path.join(ROOT, "docs", "成本台账.md")
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

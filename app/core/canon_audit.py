@@ -80,6 +80,41 @@ AUDIT_PROMPT = """{project_header}
 
 EXPECTED_CATEGORIES = ("体系规则", "地理", "势力", "人物", "物品", "异火", "丹药", "斗技", "历史", "经济")
 
+# 条目级早停指令（v0.20 成本战役 E3.3，stage_params.canon_audit.early_stop: true 启用）。
+# 依据：Certaindex/Dynasor（arXiv:2412.20993）答案稳定即早停 -50% 计算量精度不掉、
+# answer convergence（arXiv:2506.02536）60% 步骤后结论收敛——prompt 层模拟：先逐条
+# 分诊（clean 不再复查），只对 suspect/unsure 展开。输出契约只追加 triage 字段，
+# 既有 JSON 解析（re.search \{.*\}）与字段 .get 全部兼容。
+EARLY_STOP_DIRECTIVE = """
+## 对账纪律（条目级早停——先分诊后展开，节省思考量）
+在思考通道先做一轮**快速分诊**：对【本章细纲】逐拍点、对正文逐段给出
+clean（明显无问题）/ suspect（疑似有问题）/ unsure（拿不准）的初步结论；
+结论已稳定为 clean 的条目**不再复查**，只对 suspect 与 unsure 条目展开完整分析。
+输出的 JSON 追加第五段 triage（每项一行，不展开）：
+  "triage": [{"item":"拍点N/段落要点（≤15字）","verdict":"clean|suspect|unsure"}]
+violations 与 cross_issues 只收录 suspect、unsure 条目展开后成立的结论。
+"""
+
+
+def _phase_flags(cfg: dict, proj: str, phase: str = "canon_audit") -> dict:
+    """本相位的合并参数档（genre 显式配置压过内置机械相位表——与 stages.preset_param_layers
+    同语义；canon_audit 本模块不 import stages（避免环），内置表只含本相位所需子集）"""
+    merged = {"thinking": "enabled", "reasoning_effort": "low", "max_tokens": 8192}
+    try:
+        from .. import presets as genre_presets
+        from . import state as st
+        pid = ""
+        try:
+            pid = st.load_state(proj).get("genre_preset", "") or ""
+        except Exception:  # noqa: BLE001
+            pass
+        sp = genre_presets.stage_params(pid)
+        for k, v in (sp.get(phase) or {}).items():
+            merged[k] = v
+    except Exception:  # noqa: BLE001
+        pass
+    return merged
+
 
 AUDIT_REVIEW_PROMPT = """{project_header}
 
@@ -311,8 +346,15 @@ def apply_ledger_updates(proj: str, num: int, updates: dict) -> int:
     return changed
 
 
-def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> dict:
-    """本章设定清算。产物：追踪/设定清算_第NNN.json；返回同构 dict（含 pattern_hits）。"""
+def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
+                  session=None) -> dict:
+    """本章设定清算。产物：追踪/设定清算_第NNN.json；返回同构 dict（含 pattern_hits）。
+
+    S2（in_session 旗标）：会话可用且审计客户端与栈基座同源（base_url+model 一致，
+    N2 红线——异构网关入会话=整栈缓存清零）时，预扫作为**会话追加轮**执行：system
+    前缀与全部历史命中，miss 只剩增量（E0.1 实测独立单发 4.7k miss/笔 → 会话内 ~3k）。
+    解析失败/退化即回退独立单发路径（F1 质量上限保留），失败轮不留在会话历史里。
+    """
     authorized = [a for a in authorized_inventions(proj) if a]
     ledger_path = os.path.join(proj, "追踪", "拆解清单.json")
     ledger_entries = []
@@ -335,6 +377,8 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
         next_opening = (project.read_file(by_num[min(n for n in by_num if n > num)])[:600]
                         or "（无）")
     outline_doc = project.read_file(project.get_outline_path(proj, num))
+    flags = _phase_flags(cfg, proj)
+    early_stop = bool(flags.get("early_stop"))
     prompt = AUDIT_PROMPT.format(num=num, names=names or "（无）",
                                 project_header=project_header(proj),
                                 authorized="、".join(authorized) or "（无）",
@@ -344,14 +388,64 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
                                 prev_ending=prev_ending,
                                 next_opening=next_opening,
                                 prose=prose[:6000])
+    if early_stop:
+        prompt += EARLY_STOP_DIRECTIVE
 
     client = _client_for(cfg, router)
-    data, last_err = None, ""
+
+    # ---- S2：预扫入会话（追加轮）——成功则跳过独立单发循环；任何失败回退原路径 ----
+    s2_in_session = False
+    if session is not None and getattr(session, "enabled", False) \
+            and bool(flags.get("in_session")):
+        try:
+            base = getattr(session, "_client", None)
+            same_domain = base is not None and \
+                (getattr(base, "base_url", ""), getattr(base, "model", "")) == \
+                (getattr(client, "base_url", ""), getattr(client, "model", ""))
+            if same_domain:
+                # 会话内正文已在历史（写作轮回复）——把 6000 字正文再注入一遍是纯冗余
+                # （S2 首跑实测：只剥 header 不剥 prose → 7.0k miss/笔，93.5% 原地踏步）
+                prose_ref = ("【＝本会话中最近一条完整的章正文消息（历史已载），"
+                             "直接对它执行对账，不要要求重复输出】")
+                body_prompt = prompt.replace(prose[:6000], prose_ref, 1)
+                # V1-④（T 轮报告 §9-F）：整段剥离渲染后的 project_header。旧写法
+                # split("\n\n", 1) 只剥掉 36 字标题行——header 首个空行在标题行后，
+                # 余下 ~3.0k 字符在会话轮里每章重复计价。会话 system 已含同一
+                # header（卷会话前缀），按 startswith 逐字节精确剥离是安全的。
+                _hdr = project_header(proj)
+                if _hdr and body_prompt.startswith(_hdr):
+                    body_prompt = body_prompt[len(_hdr):].lstrip("\n")
+                body = body_prompt
+                from .chapter_session import ChapterSession
+                turn_text = ChapterSession.SCOPE_LINE + "\n\n" + body
+                parts2 = []
+                t_before = session.turn_count()
+                session.ask(turn_text, client=client, phase="canon_audit",
+                            on_chunk=parts2.append)
+                out2 = "".join(parts2)
+                m2 = re.search(r"\{.*\}", out2, re.S)
+                s2data = json.loads(m2.group(0) if m2 else out2)
+                s2viol = (s2data or {}).get("violations") if isinstance(s2data, dict) else None
+                if s2viol is not None and not _degenerate(s2viol):
+                    data = s2data
+                    s2_in_session = True
+                else:
+                    # 解析失败/退化：废轮不留史，回退独立单发
+                    session.rollback_to(t_before)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("清算入会话失败（回退单发）：%s", str(e)[:120])
+            try:
+                session.rollback_to(session.turn_count())
+            except Exception:  # noqa: BLE001
+                pass
+
+    if not s2_in_session:
+        data, last_err = None, ""
     # 级联（v0.19，E9 实测）：flash+low 全文预扫 → 干净采信（省掉 pro 全量）；有硬伤/
     # 跨章矛盾才升 pro **只复核 flagged 项**（输入=清单+定位片段，输出=裁决，双缩水）；
     # 预扫解析失败/退化 → pro 全量兜底（保留 F1 质量上限）。thinking 模式下 temperature
     # 静默失效（官方文档），重试改用措辞扰动而非换温。
-    for attempt in range(2):
+    for attempt in range(0 if s2_in_session else 2):
         try:
             parts = []
             retry_prompt = prompt if attempt == 0 else prompt + \
@@ -368,15 +462,19 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
         if violations is not None and not _degenerate(violations):
             break
         # 退化/解析失败 → 升 pro 再试一次（F1：严格判定不许 flash 单飞）；
-        # 显式传思考档（from_connection 不吃 preset 档，模型默认 enabled+high 恰为严格档所需）
+        # 显式传思考档（from_connection 不吃 preset 档，模型默认 enabled+high 恰为严格档所需）。
+        # 无 pro 连接（--no-pro / 用户未配严格档）：保持 flash 客户端做措辞扰动重试，
+        # 不换成空连接把第二次尝试白白烧掉。
         try:
-            client = LLMClient.from_connection(_strict_conn(cfg), max_retries=1, slot="review",
-                                               stage_params={"thinking": "enabled",
-                                                             "reasoning_effort": "high"})
+            strict = _strict_conn(cfg)
+            if strict:
+                client = LLMClient.from_connection(strict, max_retries=1, slot="review",
+                                                   stage_params={"thinking": "enabled",
+                                                                 "reasoning_effort": "high"})
         except Exception:  # noqa: BLE001
             pass
 
-    cascade = {"mode": "prescan", "pro_review": False}
+    cascade = {"mode": "prescan", "pro_review": False, "in_session": s2_in_session}
     if isinstance(data, dict):
         pre_hard = [v for v in (data.get("violations") or []) if v.get("severity") == "硬伤"]
         pre_cross = data.get("cross_issues") or []
@@ -460,6 +558,8 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None) -> di
 
     report = {"num": num, "chars": len(prose), "failed": failed,
               "cascade": cascade,
+              "early_stop": early_stop,
+              "triage": (data.get("triage") or []) if isinstance(data, dict) else [],
               "beat_check": beat_check,
               "calendar_drift": drift,
               "violations": violations,
