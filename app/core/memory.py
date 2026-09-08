@@ -565,14 +565,17 @@ def merge_named_sections(existing: str, delta: str) -> tuple:
     """角色状态合并：delta 里的 `## 角色名` 小节逐字替换既有同名小节，新角色追加尾部。
 
     返回 (merged, changed_names)；delta 为空/无小节 → (existing, [])。既有文件
-    非小节结构（如缺标题行）时返回 (existing, []) 由调用方回退全量。"""
+    无小节结构（首章模板）→ delta 小节整体追加（首次落册的合法路径，模板头保留）——
+    V6 冒烟发现：拒绝空 base 会让新角色永远进不了台账。"""
     base = split_named_sections(existing)
-    if not base:
-        return existing, []
     delta_secs = split_named_sections(delta)
-    changed = [n for n in delta_secs if n in base]
     if not delta_secs:
         return existing, []
+    if not base:
+        appended_text = "\n\n".join(delta_secs[n] for n in delta_secs)
+        merged = (existing or "").rstrip("\n") + "\n\n" + appended_text + "\n"
+        return merged, list(delta_secs.keys())
+    changed = [n for n in delta_secs if n in base]
     lines = (existing or "").splitlines()
     out, i = [], 0
     replaced = set()

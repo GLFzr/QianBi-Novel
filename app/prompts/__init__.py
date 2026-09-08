@@ -31,6 +31,7 @@ from .review import (
     REVISION_TARGETS_PROMPT,  # v2: 定向改稿
     build_upstream_anchors,   # 辅助：行号锚定块
     build_issues_brief,       # 辅助：issues 紧凑化
+    review_static_tail,       # V1-③：审校静态尾段（会话 system 一次性载入）
 )
 from .co_writing import (
     CO_ROLES,
