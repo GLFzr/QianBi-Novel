@@ -1,0 +1,74 @@
+{
+ "样本-001.md": {
+  "variant": "anchor_baseline",
+  "chapter": 2
+ },
+ "样本-002.md": {
+  "variant": "t3b_long60",
+  "chapter": 21
+ },
+ "样本-003.md": {
+  "variant": "t3_long60",
+  "chapter": 1
+ },
+ "样本-004.md": {
+  "variant": "anchor_baseline",
+  "chapter": 3
+ },
+ "样本-005.md": {
+  "variant": "t3b_long60",
+  "chapter": 37
+ },
+ "样本-006.md": {
+  "variant": "anchor_baseline",
+  "chapter": 5
+ },
+ "样本-007.md": {
+  "variant": "t3_long60",
+  "chapter": 3
+ },
+ "样本-008.md": {
+  "variant": "t3_long60",
+  "chapter": 9
+ },
+ "样本-009.md": {
+  "variant": "t3b_long60",
+  "chapter": 32
+ },
+ "样本-010.md": {
+  "variant": "t3_long60",
+  "chapter": 6
+ },
+ "样本-011.md": {
+  "variant": "anchor_baseline",
+  "chapter": 1
+ },
+ "样本-012.md": {
+  "variant": "t3_long60",
+  "chapter": 7
+ },
+ "样本-013.md": {
+  "variant": "anchor_baseline",
+  "chapter": 4
+ },
+ "样本-014.md": {
+  "variant": "t3b_long60",
+  "chapter": 10
+ },
+ "样本-015.md": {
+  "variant": "t3b_long60",
+  "chapter": 15
+ },
+ "样本-016.md": {
+  "variant": "t3_long60",
+  "chapter": 4
+ },
+ "样本-017.md": {
+  "variant": "t3b_long60",
+  "chapter": 26
+ },
+ "样本-018.md": {
+  "variant": "anchor_baseline",
+  "chapter": 6
+ }
+}

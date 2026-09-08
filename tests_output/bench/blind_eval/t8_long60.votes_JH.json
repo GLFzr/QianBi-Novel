@@ -1,0 +1,308 @@
+[
+  {
+    "sample": "样本-011.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D4", "D8", "D1", "D6", "D3", "D10", "D2", "D5", "D9", "D7"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "泡面碗立在桌上，水没喝完，插头连着空手机", "one_line_why": "首段3件具象物+丧父底色；第3段有催租数字压力；章名兑现"},
+      {"dim": "D2", "score": 6, "evidence_quote": "放第六遍的时候，他听见刚才忽略的底噪。", "one_line_why": "压抑6遍后信息兑现，但零围观零结算镜头"},
+      {"dim": "D3", "score": 8, "evidence_quote": "3月16日。离那个时间，还有一天。", "one_line_why": "倒计时事件钩+明确信息缺口，勾连22:47与停表"},
+      {"dim": "D4", "score": 7, "evidence_quote": "同一个数字落在同一天里，页角、取件码、录音底噪，已经第三次。", "one_line_why": "0317三次入账可指认；仅“记不清今天几号”为衔接偷懒"},
+      {"dim": "D5", "score": 5, "evidence_quote": "笔尖抵在案字一侧，0317四个数字下方。纸面被压出一个凹痕。他没落墨。", "one_line_why": "落笔格式合规未越界，但能力未真实使用、代价0次展示"},
+      {"dim": "D6", "score": 7, "evidence_quote": "这套新做的，边角没磨净，别给了。", "one_line_why": "父声木匠语汇可辨；陈默从重拨到点备忘有选择位移"},
+      {"dim": "D7", "score": 7, "evidence_quote": "他倒回去重听。第二遍，第三遍，第五遍。", "one_line_why": "6个信息节拍/千字，重听段压缩为一句；单场景无硬切"},
+      {"dim": "D8", "score": 8, "evidence_quote": "那句话被门缝夹住，有什么东西本来要递到门外，又被铃响拽了回去。", "one_line_why": "比喻自语境生成；视线词族全章2处；情绪外化在物件"},
+      {"dim": "D9", "score": 7, "evidence_quote": "刨刃得还老王，欠他一块板。", "one_line_why": "一句兼债务/手艺/人情三件事；但全章无在场双向交锋"},
+      {"dim": "D10", "score": 8, "evidence_quote": "3月17日22:47，去东门街路口。", "one_line_why": "新线开账且带次日回收指向，旧线0317未悬空"}
+    ]
+  },
+  {
+    "sample": "样本-004.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D7", "D2", "D9", "D5", "D10", "D3", "D8", "D1", "D4", "D6"],
+    "dims": [
+      {"dim": "D1", "score": 8, "evidence_quote": "整层楼静得被抽干了声音。陈默坐在桌边", "one_line_why": "前200字有138秒数字压力+300字内洇出新字异象"},
+      {"dim": "D2", "score": 8, "evidence_quote": "五点十二分，他拧开笔帽，翻到一张空白页，先写日期：3月17日。", "one_line_why": "受阻3次后落笔，代价当场结算；无围观拍"},
+      {"dim": "D3", "score": 9, "evidence_quote": "那道影子俯下来，一个压低的女声贴着门缝，说了一句话。", "one_line_why": "事件钩+3重信息缺口（谁/信箱/七点前）"},
+      {"dim": "D4", "score": 8, "evidence_quote": "屏幕角落显示04:26。离07:12剩一百六十六分钟。", "one_line_why": "166分钟算术与钟点自洽；父录21字与他38字对账"},
+      {"dim": "D5", "score": 9, "evidence_quote": "掌心那道墨痕比刚才深了一度。页角的位置，无声浮出一串数字：0319。", "one_line_why": "字数=代价梯度递增，不可贪规则先置疑后落笔"},
+      {"dim": "D6", "score": 7, "evidence_quote": "他数了数昨天那则的字数，又数了数父亲记录里最长的几则。", "one_line_why": "盘账式声口一致，位移从不敢翻到主动挡；在场声口仅2"},
+      {"dim": "D7", "score": 8, "evidence_quote": "四点五十分，他翻回本子前页，重新读父亲留下的记录。", "one_line_why": "8个场景单元各带新信息，钟点转场即推进"},
+      {"dim": "D8", "score": 8, "evidence_quote": "像伸手去摸一盏刚灭的灯，灯罩还是温的，光已经不在了。", "one_line_why": "语境生成比喻、视线词族1处；像字比喻10处偏密"},
+      {"dim": "D9", "score": 4, "evidence_quote": "你爸让我带句话，他留了东西在楼下信箱里。明天七点前，去取。", "one_line_why": "判据材料不足：全章仅末段1句在场人声对白"},
+      {"dim": "D10", "score": 9, "evidence_quote": "0317是他父亲的。0319是他的。中间缺了一个。", "one_line_why": "开3线（0318/信箱/七点）均带回收指向，旧线不悬空"}
+    ]
+  },
+  {
+    "sample": "样本-016.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D9", "D3", "D6", "D10", "D1", "D7", "D4", "D2", "D8", "D5"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "东门街出口的位置被红笔反复划了三个叉", "one_line_why": "首段事故异象底色+第3段催租数字；章名兑现弱"},
+      {"dim": "D2", "score": 5, "evidence_quote": "她蹲下来，就蹲在斑马线上，背对着来车的方向，低头系鞋带。", "one_line_why": "全章只压不放，无反转动作亦无结算镜头"},
+      {"dim": "D3", "score": 8, "evidence_quote": "林兰发的。一张照片：老屋墙角那张木头书桌", "one_line_why": "他人知情钩=新信息缺口，勾连0317与老屋刻痕"},
+      {"dim": "D4", "score": 6, "evidence_quote": "林兰只发了六个字：“你是不是也在查这本？”", "one_line_why": "章内数值穿帮：标称六个字实为9字；12秒/138秒对账清"},
+      {"dim": "D5", "score": 6, "evidence_quote": "种子书。记人未长成的事。", "one_line_why": "边界靠一句父注支撑；本章零落笔零代价记账"},
+      {"dim": "D6", "score": 8, "evidence_quote": "那条口子咬人，上个月才啃了一个骑车的。", "one_line_why": "3声口盖名可辨；位移从看一眼即走到留下计时"},
+      {"dim": "D7", "score": 8, "evidence_quote": "下午两点出头，东门街社区学校的门开了。", "one_line_why": "8场景单元，钟点转场自带信息；密度均匀"},
+      {"dim": "D8", "score": 8, "evidence_quote": "他数着她的动作：拉鞋带，绕圈，打结，再拉紧。大约十二秒。", "one_line_why": "动词与取证细节干净；扣分：结痂的伤口为熟喻"},
+      {"dim": "D9", "score": 8, "evidence_quote": "果果的科创营调到下午了，临时通知，我这会儿走不开", "one_line_why": "老周问答释盲区机制，删两遍消息=潜台词外化"},
+      {"dim": "D10", "score": 8, "evidence_quote": "桌腿和桌面连接处，被人用硬物刻了一串数字，刻痕深得发黑", "one_line_why": "0317入新账带指向；138秒卷谜开线；红绳埋后无指向"}
+    ]
+  },
+  {
+    "sample": "样本-009.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D2", "D6", "D10", "D4", "D8", "D1", "D5", "D3", "D7", "D9"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "那行字不是他打的。他确认了三遍。", "one_line_why": "首句即信息缺口；但第2段立刻转通用夜景"},
+      {"dim": "D2", "score": 4, "evidence_quote": "他记下那个姓，合上存根册，没有多看一眼。", "one_line_why": "3次发现全无结算与代价，压抑无释放"},
+      {"dim": "D3", "score": 7, "evidence_quote": "巷子深处，老屋的窗灯还亮着。", "one_line_why": "窗灯异象+6字警告双钩，但为静态画面非动作"},
+      {"dim": "D4", "score": 5, "evidence_quote": "只有六个字：“明天别去修表铺。”", "one_line_why": "穿帮：标称六个字实为7字；空柜台出示工牌逻辑虚"},
+      {"dim": "D5", "score": 3, "evidence_quote": "他摸出手机，屏幕上是一条短信，寄件人是父亲的号码", "one_line_why": "种子书全章零出场零落笔，仅有后果性引用"},
+      {"dim": "D6", "score": 5, "evidence_quote": "手指在册脊上停了一瞬，确认它落回的位置和刚才一致", "one_line_why": "声口一致但“确认”复用5次，本章无位移"},
+      {"dim": "D7", "score": 6, "evidence_quote": "凌晨的街道空无一人，只有远处一辆洒水车缓慢驶过", "one_line_why": "正文仅1075汉字，4单元靠概述推进未演满"},
+      {"dim": "D8", "score": 6, "evidence_quote": "水雾在路灯下泛着白光", "one_line_why": "细节达标但有通用悬疑套语，放回原位句式2次同构"},
+      {"dim": "D9", "score": 2, "evidence_quote": "柜台电话响了一声就断。", "one_line_why": "整章零对白，无判据材料，只余铃声与印字"},
+      {"dim": "D10", "score": 8, "evidence_quote": "表头印着“城西第三殡仪馆夜班记账员排班表”", "one_line_why": "4条新线均带指向，22:47旧账复现"}
+    ]
+  },
+  {
+    "sample": "样本-001.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D6", "D1", "D5", "D9", "D3", "D7", "D10", "D2", "D4", "D8"],
+    "dims": [
+      {"dim": "D1", "score": 8, "evidence_quote": "钥匙串上拴着一截灰蓝色尼龙绳，接口磨出毛边", "one_line_why": "4项特征齐：物+死底、2段内差一千六、表异象"},
+      {"dim": "D2", "score": 6, "evidence_quote": "取件码每天几百个，尾号撞上不稀奇。他告诉自己。", "one_line_why": "自我合理化→表出现反驳，微型闭环；无围观拍"},
+      {"dim": "D3", "score": 8, "evidence_quote": "四楼那扇半开的窗，玻璃忽然反了一下光。", "one_line_why": "事件钩+缺口明；与自锁三圈、亲手推窗勾连"},
+      {"dim": "D4", "score": 8, "evidence_quote": "指针静止，落在二十二点四十七分", "one_line_why": "10与11之间=22:47自洽；0317三处入账；无幻影引用"},
+      {"dim": "D5", "score": 5, "evidence_quote": "种子书，记人未长成的事。", "one_line_why": "边界与禁语先立，但零落笔零代价，系统未验证"},
+      {"dim": "D6", "score": 7, "evidence_quote": "你爸过世前说，有个东西要留给你。我照他说的，没碰。", "one_line_why": "林兰迂回/陈默短句可辨；位移从怕耗到折返"},
+      {"dim": "D7", "score": 8, "evidence_quote": "背起包，走到门口，停住，又折回窗台。", "one_line_why": "7个单元各≤300字，转场即推进；无超150字空段"},
+      {"dim": "D8", "score": 8, "evidence_quote": "锁门。锁芯涩，他转了三次才锁严。", "one_line_why": "长短句收放、行业具象替代身份；视线词族3处"},
+      {"dim": "D9", "score": 8, "evidence_quote": "大哥，3门317是哪一户？", "one_line_why": "对白兼钩子与门牌矛盾；无立场交锋故不满10"},
+      {"dim": "D10", "score": 8, "evidence_quote": "靠书脊处留着细窄的撕痕", "one_line_why": "撕痕/泡烂纸卷/不可贪三线入账且各有指向"}
+    ]
+  },
+  {
+    "sample": "样本-014.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D10", "D5", "D2", "D8", "D4", "D9", "D1", "D6", "D3", "D7"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "右手手机屏上四个字：表是假的", "one_line_why": "首段即伪物矛盾+数字钩；但章名两块表承诺弱"},
+      {"dim": "D2", "score": 6, "evidence_quote": "尾号一模一样。补办手续留的电话，和发来“表是假的”那个陌生号码，同一个尾号。", "one_line_why": "尾号吻合有反转但无代价无围观，情绪单一"},
+      {"dim": "D3", "score": 7, "evidence_quote": "听筒里只有一段很轻的呼吸声", "one_line_why": "来电者=冒名者，缺口成立；静默电话属常见装置"},
+      {"dim": "D4", "score": 5, "evidence_quote": "陈默把手机屏幕翻给乔一宁看。短信正文五个字。", "one_line_why": "命中红线：同一短信先称四字后称五字；乔一宁凭空缺查档"},
+      {"dim": "D5", "score": 7, "evidence_quote": "第二次改写林果果后，页脚从0319到0320", "one_line_why": "编号=消耗可数自洽；本章零落笔，置疑拍缺"},
+      {"dim": "D6", "score": 7, "evidence_quote": "你能帮我按一下护士吗？这个铃好像坏了。", "one_line_why": "3声口盖名可辨；位移是决定留着失忆空当"},
+      {"dim": "D7", "score": 6, "evidence_quote": "一块有摔过的划痕，一块有刻过的划痕", "one_line_why": "43-45段重复23/29已结论，2处自注水"},
+      {"dim": "D8", "score": 7, "evidence_quote": "他的语气很平静，没有防备，也没有敌意", "one_line_why": "否定刹车句2处+两块表对比句2组同构，像字8处"},
+      {"dim": "D9", "score": 8, "evidence_quote": "补办手续那个人是早上七点来的，戴着口罩，说自己是程师傅的邻居", "one_line_why": "追问-否认成交锋，关键信息由护士口述释放"},
+      {"dim": "D10", "score": 8, "evidence_quote": "但有人替他动了别的账，补办了手续、留了电话、发了短信", "one_line_why": "0319/0320账本续记，冒名线开账指向下一章"}
+    ]
+  },
+  {
+    "sample": "样本-007.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D3", "D7", "D10", "D1", "D6", "D2", "D9", "D5", "D8", "D4"],
+    "dims": [
+      {"dim": "D1", "score": 6, "evidence_quote": "他盯着那四个数字看了五秒，不记得自己什么时候把它从包里翻出来放平的", "one_line_why": "开场仅记忆异象与渗水差事，无金额期限压力"},
+      {"dim": "D2", "score": 8, "evidence_quote": "十五秒后，楼道口传来一声闷响。陈默冲出去", "one_line_why": "落笔→15秒兑现→后果可见，三拍齐且有代价"},
+      {"dim": "D3", "score": 7, "evidence_quote": "他看不清那是什么字，只看到笔画的起势", "one_line_why": "第二笔浮出=新缺口；末段又接滴水氛围稀释烈度"},
+      {"dim": "D4", "score": 7, "evidence_quote": "不偏不倚接在昨日那滩旧水渍的延长线上，停住", "one_line_why": "转折可回指本章首段；24小时上限却凭空断言"},
+      {"dim": "D5", "score": 8, "evidence_quote": "知道这本子能改人近24小时内的事，不知道规则是什么，不知道代价怎么收", "one_line_why": "使用前置疑+格式合规+效果留账，代价梯度未验"},
+      {"dim": "D6", "score": 8, "evidence_quote": "导错位置了，多跑了两条街。那个单还挺怪", "one_line_why": "周航/林兰/陈默3声口盖名可辨；笔尖悬空到落笔"},
+      {"dim": "D7", "score": 8, "evidence_quote": "午后回到出租屋，灶台上摞着三只空泡面碗", "one_line_why": "9单元转场自带信息；首段单元超400字略拖"},
+      {"dim": "D8", "score": 8, "evidence_quote": "那里空了一块，像一页被撕掉的时间", "one_line_why": "情绪外化到位；扣分：像字比喻10处同构"},
+      {"dim": "D9", "score": 8, "evidence_quote": "东门街路口呀，滨河道那头，有个红绿灯的。", "one_line_why": "问答兼时间对账与藏页痕，潜台词成立"},
+      {"dim": "D10", "score": 9, "evidence_quote": "3月17日必须联系小周。", "one_line_why": "便签/14:07/第二笔三线入账且各有回收指向"}
+    ]
+  },
+  {
+    "sample": "样本-018.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D8", "D4", "D1", "D10", "D7", "D5", "D2", "D3", "D9", "D6"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "陈默蹲在老屋门沿前，把最后一道渗进来的水往外推", "one_line_why": "前500字有动作与三叉异象；开场拉力平于016"},
+      {"dim": "D2", "score": 5, "evidence_quote": "十一秒。他没记进脑子里，清零了。", "one_line_why": "全章只压不放，无行动反转亦无结算镜头"},
+      {"dim": "D3", "score": 8, "evidence_quote": "却一直响到凌晨三点十七分，才停。", "one_line_why": "重物拖台阶=事件钩，缺口明且与3:17母题勾连"},
+      {"dim": "D4", "score": 8, "evidence_quote": "前年一个送水的，去年三月一个跑闪送的，上个月又填进去一个。同一个位置。", "one_line_why": "三叉逐条入账；138/11差额账可查无穿帮"},
+      {"dim": "D5", "score": 6, "evidence_quote": "隔一道纸纹，下方压痕成了一行完整的字，颜色比上午深", "one_line_why": "自洇留痕但零落笔零代价，边界只靠主角自制"},
+      {"dim": "D6", "score": 8, "evidence_quote": "上个月那台车把人撞了以后，街道才来重划的线。早干什么去了。", "one_line_why": "调度/匠人/陈默3声口可辨；位移是清零不写"},
+      {"dim": "D7", "score": 8, "evidence_quote": "他等到下午四点十七分。", "one_line_why": "11个单元转场即推进；秒表后接200字呼吸段"},
+      {"dim": "D8", "score": 8, "evidence_quote": "最后一个比前两个新，笔道还没氧化发黄", "one_line_why": "取证级具象；扣分：像水一样涌出为熟喻"},
+      {"dim": "D9", "score": 8, "evidence_quote": "放学的时候这条路基本过不去。小孩都爱抢那最后几秒绿灯", "one_line_why": "闲话承担事故史与学校分布，匠人语汇点睛"},
+      {"dim": "D10", "score": 9, "evidence_quote": "同一个数字，从不同地方叠起来往外爬", "one_line_why": "0317四源入账，138秒未解线带明确回收指向"}
+    ]
+  },
+  {
+    "sample": "样本-013.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D2", "D9", "D5", "D10", "D3", "D7", "D1", "D4", "D8", "D6"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "掌根那道蓝黑墨痕还在，比睡下前深了半度", "one_line_why": "醒来300字内代价加深+无痕通话；开场靠悬念非冲突"},
+      {"dim": "D2", "score": 8, "evidence_quote": "弯折的起点，就在林果果刚才蹲过的路肩旁，差出约半米", "one_line_why": "兑现/代价/围观三拍齐；主角在场只看不做"},
+      {"dim": "D3", "score": 9, "evidence_quote": "通话计时停在00:42。和他昨夜拨出去的那通，一秒不差。", "one_line_why": "回拨兑现翻纸声+42秒镜像，缺口指向本体外"},
+      {"dim": "D4", "score": 9, "evidence_quote": "拍摄时间，昨夜18:43。离那通拨出不到一分钟。", "one_line_why": "5:40/6:03/7:11/42秒全链可对账无一处打架"},
+      {"dim": "D5", "score": 9, "evidence_quote": "多次改写致第二人擦伤。路人，男性，左臂轻微剐蹭。", "one_line_why": "代价连带且梯度加深，纸面自收行=边界生效"},
+      {"dim": "D6", "score": 7, "evidence_quote": "低，哑，尾音往下沉，跟平时说话的调子不一样", "one_line_why": "自录音声口成立；在场无第二人可比对声口"},
+      {"dim": "D7", "score": 9, "evidence_quote": "6:50，他站在修鞋摊西侧的人行道上。", "one_line_why": "10单元全带新信息，钟点转场；无注水段"},
+      {"dim": "D8", "score": 9, "evidence_quote": "像一小段被活生生剪掉的时间，只留下这条票根", "one_line_why": "比喻自语境生成、零套语；视线词族0处"},
+      {"dim": "D9", "score": 4, "evidence_quote": "爸，距离0317还剩13天", "one_line_why": "无在场对白，仅1段自录独白，判据材料缺"},
+      {"dim": "D10", "score": 9, "evidence_quote": "灯壳边缘有一道已经干了的擦痕，不是撞护栏留下的", "one_line_why": "138秒当章回收，另开未拆信封/干擦痕/半句三线"}
+    ]
+  },
+  {
+    "sample": "样本-006.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D1", "D8", "D4", "D2", "D10", "D6", "D3", "D7", "D5", "D9"],
+    "dims": [
+      {"dim": "D1", "score": 6, "evidence_quote": "不记得自己昨晚什么时候把它从包里翻出来，还压得这么平", "one_line_why": "开场仅记忆异象+查渗水任务，无金额或期限压力"},
+      {"dim": "D2", "score": 8, "evidence_quote": "但他知道它动过了，他添了一笔不知道什么时候会收的账。", "one_line_why": "落笔→15秒兑现→代价认知，另加半寸量化"},
+      {"dim": "D3", "score": 7, "evidence_quote": "老屋的门没关严。门缝里传出一声滴水声。", "one_line_why": "第二笔浮出+门未关严双事件钩，烈度偏柔"},
+      {"dim": "D4", "score": 8, "evidence_quote": "凌晨2:17拨出一个号码，时长十一秒，尾号0317。", "one_line_why": "2:17/11秒/0317全入账；14:07与七点差额明记"},
+      {"dim": "D5", "score": 6, "evidence_quote": "他只知道录音里那句没说完的话，不知道这一笔落下去，账要从哪里开始算。", "one_line_why": "置疑与格式达标；代价仅口头挂账无可见扣减"},
+      {"dim": "D6", "score": 8, "evidence_quote": "钥匙你先收着，老屋还渗水就言语一声。明天我走得早，有事打我手机。", "one_line_why": "4声口盖名可辨；位移从慢点滑到落笔"},
+      {"dim": "D7", "score": 7, "evidence_quote": "午后回到出租屋。灶台上三只空泡面碗摞着，调料渣干在碗底", "one_line_why": "记忆缺口拍重复4次，11段与43段句式同构"},
+      {"dim": "D8", "score": 8, "evidence_quote": "水凉得渗进指缝，嘴里却嚼不出任何一样昨天的味道", "one_line_why": "通感外化记忆缺口；像字比喻4处（5/2k）"},
+      {"dim": "D9", "score": 8, "evidence_quote": "明天一早七点，果果要去东门街那边上科创营，她爸顺路送。", "one_line_why": "一句兼时间/地点/人物关系，应答短促成对照"},
+      {"dim": "D10", "score": 8, "evidence_quote": "页角是下午两点七分，果果是早晨七点。", "one_line_why": "0317三处递进复现，页痕埋设即带回收指向"}
+    ]
+  },
+  {
+    "sample": "样本-002.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D9", "D4", "D2", "D7", "D10", "D1", "D8", "D5", "D3", "D6"],
+    "dims": [
+      {"dim": "D1", "score": 8, "evidence_quote": "马路对面那辆黑色车的灯灭了一盏", "one_line_why": "首段盯梢对峙+订单倒计时；100字内成钩"},
+      {"dim": "D2", "score": 4, "evidence_quote": "那辆车退走的方式，是要亲眼看见他坐在驾驶座里才肯离开", "one_line_why": "全章只压不放，退车反成恐惧；无结算无围观"},
+      {"dim": "D3", "score": 8, "evidence_quote": "通信录里备注代驾的号码弹出一条短信，只有两个数字：22。", "one_line_why": "未拆信封+22呼应廿二，双缺口；数字短信属常见招"},
+      {"dim": "D4", "score": 7, "evidence_quote": "那它和0317、0320、0316这一排竖写的数字就属于同一套序列", "one_line_why": "编号账自洽；0316本章无来源，行程结束早于抵达"},
+      {"dim": "D5", "score": 6, "evidence_quote": "没有被接触者靠近而加深的迹象，字迹保持原样", "one_line_why": "仅效果留账1项，零落笔零代价，规则靠转述"},
+      {"dim": "D6", "score": 8, "evidence_quote": "这张纸你现在不要看，到了再看。", "one_line_why": "阿莲命令式与陈默短答对照；位移仅是原地等"},
+      {"dim": "D7", "score": 6, "evidence_quote": "他没有办法从自己现有的信息里判断这套序列的规则", "one_line_why": "中段3段连排复盘/地理说明，Sequel拖拍超1段"},
+      {"dim": "D8", "score": 6, "evidence_quote": "页脚上方并排的0317与0320，阿莲这个名字的陌生性", "one_line_why": "名词化说明腔1处，像字比喻9处每2千字"},
+      {"dim": "D9", "score": 7, "evidence_quote": "弯腰探进半个身，先问了一句：“车上还有别人吗。”", "one_line_why": "5句短对白兼警戒与规则；无交锋，量偏少"},
+      {"dim": "D10", "score": 8, "evidence_quote": "下次两个字在屏幕上停了很久。", "one_line_why": "廿二/22/戒指三线入账带指向；盯梢线当章悬空"}
+    ]
+  },
+  {
+    "sample": "样本-015.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D6", "D3", "D8", "D10", "D2", "D5", "D1", "D9", "D7", "D4"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "枕边种子书的位置他摸了两次，最后空着手出门", "one_line_why": "首段带道具交代；“收据那行字”本章未引"},
+      {"dim": "D2", "score": 6, "evidence_quote": "里面是一块烧痕表。表盘被火燎得变形，玻璃面裂成蛛网纹", "one_line_why": "取证式认知释放，无代价亦无围观结算"},
+      {"dim": "D3", "score": 8, "evidence_quote": "下方多出一行竖写铅笔字：今晚东门街23:00。", "one_line_why": "23:00期限钩+白车未熄火双钩并列"},
+      {"dim": "D4", "score": 8, "evidence_quote": "烧痕表没有表带，只剩一对断耳", "one_line_why": "三表比对与表带结论互咬；0316来源未入账"},
+      {"dim": "D5", "score": 7, "evidence_quote": "笔尖悬在页面上方，没有落下去。", "one_line_why": "置疑与格式2项达标，代价仅1处墨渍"},
+      {"dim": "D6", "score": 8, "evidence_quote": "他来这里，先问的是表在哪。你从头到尾没问过这块表一次。", "one_line_why": "老赵谚语声口独立且有自保处境；主角守口"},
+      {"dim": "D7", "score": 8, "evidence_quote": "他弯腰从储物柜底层取出一个透明证物袋", "one_line_why": "9单元全靠物件与对白推进；无复盘段"},
+      {"dim": "D8", "score": 8, "evidence_quote": "屋里暖气片发出一声闷响，像什么东西在管子里翻了个身", "one_line_why": "行业具象足；扣分：直引号混用1处、没接话2次"},
+      {"dim": "D9", "score": 9, "evidence_quote": "你是替程师傅跑腿，还是替你自己跑。", "one_line_why": "全程盘问-回避交锋，关键事实由立誓者口出"},
+      {"dim": "D10", "score": 8, "evidence_quote": "王开志死前留过一句话。他说，天亮前，如果有人来问表，什么也不要告诉他。", "one_line_why": "新案入账带准点指向，0319/0320旧账复现"}
+    ]
+  },
+  {
+    "sample": "样本-010.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D4", "D2", "D7", "D9", "D1", "D10", "D6", "D3", "D8", "D5"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "他醒来时后脑勺是空的，像被人从里面挖走了什么", "one_line_why": "100字内代价+无痕通话异象；无数字压力"},
+      {"dim": "D2", "score": 8, "evidence_quote": "变形段的起点，离林果果站过的路肩不到半米", "one_line_why": "鞋带未散再压一拍后兑现，新闻对上纸面结算"},
+      {"dim": "D3", "score": 6, "evidence_quote": "门外楼道里传来一声很轻的脚步声", "one_line_why": "末拍是已解矛盾的余波脚步，未添新信息缺口"},
+      {"dim": "D4", "score": 8, "evidence_quote": "快门时间是昨晚18:44，就在那通电话之后的第2分钟", "one_line_why": "18:42/44/38秒灯序/12.04秒全可查；单位标签1处糊"},
+      {"dim": "D5", "score": 8, "evidence_quote": "那行“多次改写致第二人擦伤”已经淡了一截，像正在退潮的墨迹", "one_line_why": "连带代价+纸面自淡=边界生效，本章零落笔"},
+      {"dim": "D6", "score": 8, "evidence_quote": "这条街邪门，路口尤其邪。上个月那个外卖小哥", "one_line_why": "老周俚语与陈默遮话可辨；位移是决定不问"},
+      {"dim": "D7", "score": 9, "evidence_quote": "7点11分，林果果从路口西北角出现。", "one_line_why": "13节拍全带新信息，钟点转场；零注水段"},
+      {"dim": "D8", "score": 7, "evidence_quote": "通话时长00:42秒。他不记得自己拨过", "one_line_why": "时长单位与“她身边的时间”语病2处，像字9处每2k"},
+      {"dim": "D9", "score": 8, "evidence_quote": "记不清了。每个季度都得啃一回。", "one_line_why": "闲话兼事故账与暗示，问-避成立但仅2回合"},
+      {"dim": "D10", "score": 8, "evidence_quote": "白色轿车右前灯下方有一片斑驳的擦痕，像刚蹭过什么东西", "one_line_why": "13天/半句男声/擦痕三线入账且互不悬空"}
+    ]
+  },
+  {
+    "sample": "样本-003.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D7", "D10", "D3", "D6", "D1", "D9", "D5", "D2", "D4", "D8"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "那截蓝色尼龙绳绑在铁圈上，是父亲系上去的", "one_line_why": "物+死底在首段；绳喻被作者自己解释掉"},
+      {"dim": "D2", "score": 5, "evidence_quote": "他掏出来，是块旧手表，表盘上有几道细裂痕，指针停在22点47分", "one_line_why": "全章仅认知发现，无反转动作无结算无代价"},
+      {"dim": "D3", "score": 6, "evidence_quote": "他翻过表壳，背面有人用硬物划了一串数字", "one_line_why": "定格在第4次0317上，无新异象动作与新缺口"},
+      {"dim": "D4", "score": 6, "evidence_quote": "他低头，自己手心里还攥着一小块刚夹出来的旧纸角", "one_line_why": "纸角来源未交代；房价/装修款两笔账自洽"},
+      {"dim": "D5", "score": 5, "evidence_quote": "种子书。记人未长成的事。", "one_line_why": "规则先立，零落笔零代价，表凭空入手无机制"},
+      {"dim": "D6", "score": 8, "evidence_quote": "他把刨子放进铁皮箱，又伸手拿出来，搁在窗台上，单独放着。", "one_line_why": "5声口盖名可辨；放刨子又取出的情感位移"},
+      {"dim": "D7", "score": 8, "evidence_quote": "半小时后，屋里只剩床头柜没动。", "one_line_why": "9单元转场带信息；首段与第9段偏说明"},
+      {"dim": "D8", "score": 7, "evidence_quote": "墙角蛛网挂着半截干掉的虫壳", "one_line_why": "具象达标；直白告知“对账的毛病”1处，像字9处每2k"},
+      {"dim": "D9", "score": 9, "evidence_quote": "陈哥，那是装修价，不掺在房价里算。", "one_line_why": "中介4轮议价真交锋，丧父情绪藏在报价里"},
+      {"dim": "D10", "score": 8, "evidence_quote": "父亲记账从不写案字，也不写这种格式。", "one_line_why": "笔迹/撕痕/泡烂名字三线入账且各有指向"}
+    ]
+  },
+  {
+    "sample": "样本-017.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D8", "D5", "D10", "D2", "D7", "D3", "D9", "D1", "D6", "D4"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "第三次拨出时他盯着屏幕上的号码，前缀1709，虚拟号段", "one_line_why": "首段空号异常成钩；无数字压力亦无对手在场"},
+      {"dim": "D2", "score": 5, "evidence_quote": "工作证。城西殡仪馆，夜班记账员，陈国平，工号F-17。", "one_line_why": "3次证据释放全无代价与围观，纯认知爽"},
+      {"dim": "D3", "score": 8, "evidence_quote": "F-17，你去过没有。", "one_line_why": "陌生号反问知他工号，缺口+威胁双钩"},
+      {"dim": "D4", "score": 6, "evidence_quote": "他还想起一件事。放回断笔芯时，指尖感觉到它的朝向有问题。", "one_line_why": "断笔芯/空信封均未在本章发生；六个字实为9符"},
+      {"dim": "D5", "score": 5, "evidence_quote": "确认没有新的变化，才合上书。他把书攥在手里", "one_line_why": "种子书只被查验，零落笔零代价零置疑"},
+      {"dim": "D6", "score": 7, "evidence_quote": "怎么，不是你认识的人？", "one_line_why": "老魏哈欠与短答可辨；主角本章无认知位移"},
+      {"dim": "D7", "score": 6, "evidence_quote": "凌晨的老屋楼道没有灯。陈默摸出钥匙，锁孔转了一整圈才打开", "one_line_why": "正文仅1315汉字，2段纯比对分析无场景"},
+      {"dim": "D8", "score": 7, "evidence_quote": "盒面是蓝色铁皮，油漆剥落成一张地图", "one_line_why": "物证具象好；扣分：弧线/弧度母题词重复8处"},
+      {"dim": "D9", "score": 8, "evidence_quote": "我以为是你的熟人，就说你不上这边的班，让他去老屋那边找你。", "one_line_why": "老魏自责+泄线索，陈默否认藏潜台词"},
+      {"dim": "D10", "score": 9, "evidence_quote": "档案室在西北角，用铅笔圈了三遍，旁边写着“不可贪”三个字", "one_line_why": "F-17/0316/白布指三线入账且指向档案室"}
+    ]
+  },
+  {
+    "sample": "样本-008.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D2", "D5", "D9", "D1", "D7", "D4", "D10", "D8", "D6", "D3"],
+    "dims": [
+      {"dim": "D1", "score": 8, "evidence_quote": "程师傅平躺在床上，输液管垂到床沿，石膏从裤管里露出一截", "one_line_why": "首段伤情+“小默”称呼成钩；400字内交车祸疑点"},
+      {"dim": "D2", "score": 7, "evidence_quote": "他看了很久，久到陈默以为他不会开口了", "one_line_why": "钱包空层+追问两拍兑现，但主角无行动反转"},
+      {"dim": "D3", "score": 9, "evidence_quote": "陌生号码。正文五个字：“表是假的。”", "one_line_why": "末句推翻本章“这是你爸的表”，缺口直接对撞"},
+      {"dim": "D4", "score": 6, "evidence_quote": "他翻出手机，打开纸片背面的照片", "one_line_why": "纸条/纸片来源未交代；标五字实4字穿帮"},
+      {"dim": "D5", "score": 6, "evidence_quote": "本子不能碰。但你已经碰了。第三个人会替你付账", "one_line_why": "边界与代偿规则靠转述，零落笔零代价演示"},
+      {"dim": "D6", "score": 8, "evidence_quote": "他说这些时语气平淡，像在交代一件不相干的事。", "one_line_why": "程/乔/陈3声口盖名可辨；位移是两次不答"},
+      {"dim": "D7", "score": 8, "evidence_quote": "陈默接过塑料袋，看了两秒，推门回观察区。", "one_line_why": "11单元在1710汉字内完成，无复盘拖拍"},
+      {"dim": "D8", "score": 5, "evidence_quote": "目光落在他手里的钱包上", "one_line_why": "命中红线：视线词族8处/2千字，像字对冲10处"},
+      {"dim": "D9", "score": 9, "evidence_quote": "你爸当年把表和本子一起来找我，说这两样东西得分开搁", "one_line_why": "两问两避成交锋，关键规则由失忆者口出"},
+      {"dim": "D10", "score": 9, "evidence_quote": "绳子的颜色、编织的纹理，和他钥匙串上那一截一模一样", "one_line_why": "湿绳环/空层纸/第三个人三线入账带指向"}
+    ]
+  },
+  {
+    "sample": "样本-005.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D10", "D7", "D1", "D8", "D4", "D6", "D3", "D5", "D9", "D2"],
+    "dims": [
+      {"dim": "D1", "score": 6, "evidence_quote": "他合上书，手指在封皮上停了片刻，下了一个与前一晚相反的决定", "one_line_why": "首段是决定而非冲突；1200字后才进现场"},
+      {"dim": "D2", "score": 6, "evidence_quote": "3月17日22:47。写这一次。之后不要写。", "one_line_why": "前半张到手机制反证兑现，但零代价零围观"},
+      {"dim": "D3", "score": 8, "evidence_quote": "门缝外有一道影子横在光线里，停了三秒，才移开。", "one_line_why": "被困+门外影子=人身危险钩，缺口明确"},
+      {"dim": "D4", "score": 4, "evidence_quote": "先把监控截图放大：深色外套人进门前的两秒", "one_line_why": "进门帧不可能带离场蹭痕；截图来源与潜入因果空"},
+      {"dim": "D5", "score": 7, "evidence_quote": "那套字迹骗不过正面接触过页脚的人", "one_line_why": "伪造被设定拒+父注禁令，代价仍未演示"},
+      {"dim": "D6", "score": 6, "evidence_quote": "档案室的灯，九点后会全灭。", "one_line_why": "阿莲声口立但提示与凌晨两点相冲；仅1人开口"},
+      {"dim": "D7", "score": 5, "evidence_quote": "凌晨两点，他骑电动车到殡仪馆后门，出示物流网点夜班送货工牌。", "one_line_why": "1120汉字塞7节拍，潜入与陷阱各1句概述"},
+      {"dim": "D8", "score": 5, "evidence_quote": "双方的筹码是信息差，位置差只在其次", "one_line_why": "议论文腔+“位移轨迹”报告腔；全章直引号16处"},
+      {"dim": "D9", "score": 5, "evidence_quote": "你查我，我查你。你爸的账，你还没看完", "one_line_why": "短信声口利，但在场对白仅阿莲2句无交锋"},
+      {"dim": "D10", "score": 8, "evidence_quote": "他手里握着前半张底稿，对方取走了后半张，两人各持一半", "one_line_why": "前后半张/纸筒/绳痕四线入账且各有指向"}
+    ]
+  },
+  {
+    "sample": "样本-012.md",
+    "judge_id": "J-H",
+    "randomized_dim_order": ["D1", "D6", "D4", "D9", "D2", "D8", "D5", "D7", "D3", "D10"],
+    "dims": [
+      {"dim": "D1", "score": 7, "evidence_quote": "那行字在页角上待了一上午，像一根刺横在念头里：第二人擦伤。", "one_line_why": "站台开场偏软；300字内新墨规则成异象"},
+      {"dim": "D6", "score": 8, "evidence_quote": "我寻思是有人放错车了，本来想扔了，后来拆开看了一眼，上头写的是你的名。", "one_line_why": "护士/林兰/老周4声口盖名可辨；位移是转身离开"},
+      {"dim": "D4", "score": 6, "evidence_quote": "缝了四针。左臂剐蹭，皮肉外翻，没留名就走了。", "one_line_why": "轻微剐蹭升为缝四针未对账；两名左臂伤者未并线"},
+      {"dim": "D9", "score": 8, "evidence_quote": "修鞋那个？下午四点收吧，路修完他就搬了。你问他干嘛？", "one_line_why": "一句兼3事且反问试探，陈默假托修鞋回避"},
+      {"dim": "D2", "score": 6, "evidence_quote": "他盯着那行字看了很久，把本子合上，又翻开，字还在。", "one_line_why": "认知连击但主角无行动反转，代价全落他人"},
+      {"dim": "D8", "score": 7, "evidence_quote": "他站在外面看了一会儿，没进任何楼门，就离开了。", "one_line_why": "具象收梢好；此句主语漂移，报告腔2处"},
+      {"dim": "D5", "score": 8, "evidence_quote": "第三连接点：老周。若未对应改写，代价自动延至时空最近的下一个名字。", "one_line_why": "代价可传导且梯度可见，规则由纸面自陈"},
+      {"dim": "D7", "score": 7, "evidence_quote": "他第一次看到连接点这个说法，但意思不难懂", "one_line_why": "8单元；规则讲解段300字，尾声救护车拍重复3次"},
+      {"dim": "D3", "score": 8, "evidence_quote": "底下的灰泥里埋着一只锡皮盒，盖子微微翘起，缝隙里探出半截蓝黑墨水的笔尖", "one_line_why": "物证钩+两重缺口（盒内容/埋笔者）"},
+      {"dim": "D10", "score": 9, "evidence_quote": "案：0320已配送成功。旧账有第三连接点，别拆。", "one_line_why": "0319/0320续账，程姓与锡盒均带回收指向"}
+    ]
+  }
+]

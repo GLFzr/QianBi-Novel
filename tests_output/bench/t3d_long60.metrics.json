@@ -1,0 +1,172 @@
+{
+ "variant": "t3d_long60",
+ "calls": 15,
+ "input_tok": 344803,
+ "hit_tok": 176448,
+ "miss_tok": 168355,
+ "hit_pct": 51.2,
+ "out_tok": 136012,
+ "reasoning_tok": 0,
+ "cost_usd": 0.128,
+ "cost_cny": 0.922,
+ "llm_seconds": 2684.6,
+ "wall_seconds": 3269.7,
+ "per_tier": {
+  "flash": {
+   "calls": 15,
+   "hit": 176448,
+   "miss": 168355,
+   "out": 136012,
+   "cost_usd": 0.128
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 2,
+   "hit": 0,
+   "miss": 0,
+   "out": 11720,
+   "reasoning": 0,
+   "lat": 234.44,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 0,
+     "out": 11720
+    }
+   },
+   "cost_usd": 0.0077,
+   "hit_pct": 0.0,
+   "avg_lat": 117.2
+  },
+  "review": {
+   "calls": 6,
+   "hit": 81600,
+   "miss": 111249,
+   "out": 106701,
+   "reasoning": 0,
+   "lat": 2036.9699999999998,
+   "tier_tok": {
+    "flash": {
+     "hit": 81600,
+     "miss": 111249,
+     "out": 106701
+    }
+   },
+   "cost_usd": 0.0955,
+   "hit_pct": 42.3,
+   "avg_lat": 339.5
+  },
+  "chapter_summary": {
+   "calls": 2,
+   "hit": 43584,
+   "miss": 23125,
+   "out": 2674,
+   "reasoning": 0,
+   "lat": 53.25,
+   "tier_tok": {
+    "flash": {
+     "hit": 43584,
+     "miss": 23125,
+     "out": 2674
+    }
+   },
+   "cost_usd": 0.0072,
+   "hit_pct": 65.3,
+   "avg_lat": 26.6
+  },
+  "canon_audit": {
+   "calls": 2,
+   "hit": 0,
+   "miss": 0,
+   "out": 2242,
+   "reasoning": 0,
+   "lat": 83.27,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 0,
+     "out": 2242
+    }
+   },
+   "cost_usd": 0.0015,
+   "hit_pct": 0.0,
+   "avg_lat": 41.6
+  },
+  "outline": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 0,
+   "out": 2875,
+   "reasoning": 0,
+   "lat": 70.36,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 0,
+     "out": 2875
+    }
+   },
+   "cost_usd": 0.0019,
+   "hit_pct": 0.0,
+   "avg_lat": 70.4
+  },
+  "enrich": {
+   "calls": 1,
+   "hit": 5888,
+   "miss": 31547,
+   "out": 7889,
+   "reasoning": 0,
+   "lat": 134.37,
+   "tier_tok": {
+    "flash": {
+     "hit": 5888,
+     "miss": 31547,
+     "out": 7889
+    }
+   },
+   "cost_usd": 0.0122,
+   "hit_pct": 15.7,
+   "avg_lat": 134.4
+  },
+  "global_summary": {
+   "calls": 1,
+   "hit": 45376,
+   "miss": 2434,
+   "out": 1911,
+   "reasoning": 0,
+   "lat": 71.94,
+   "tier_tok": {
+    "flash": {
+     "hit": 45376,
+     "miss": 2434,
+     "out": 1911
+    }
+   },
+   "cost_usd": 0.0021,
+   "hit_pct": 94.9,
+   "avg_lat": 71.9
+  }
+ },
+ "chapters": [
+  {
+   "num": 39,
+   "title": "接尸簿",
+   "words": 2002,
+   "review_blocking": 0
+  },
+  {
+   "num": 40,
+   "title": "以北",
+   "words": 2119,
+   "review_blocking": 0
+  }
+ ]
+}
