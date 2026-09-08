@@ -1,0 +1,7 @@
+{
+ "_note": "V 轮全栈（V1+V2+V5，对照 t1_long20 基线）：S 卷会话+静态冻结+会话清算/早停 + V1-③审校指令入 system + V2 增量台账 + CISC 置信票。V5 L0 预检无需旗标（l0_checks 恒开注入）。压缩旗标关=与 T1 同基线（压缩是 T2 单独裁决的机制）。判据见《深度研究_下一代上下文架构_v1.md》§7 与看板。",
+ "writing": {"volume_session": true, "s4_static_freeze": true, "session_pace_seconds": 45,
+             "tracking_delta": true, "review_in_system": true},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}},
+ "gates": {"review_confidence_vote": true}
+}

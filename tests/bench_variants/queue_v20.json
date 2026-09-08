@@ -1,0 +1,12 @@
+{
+ "id": "v_full20_20260909",
+ "budget_cny_max": 6.0,
+ "_note": "V6 二十章复测对表 T1（t1_long20: hit 93.8%真分母 / ¥0.273实付 / D4 6.72 / 盲评7.10）。渠道：omen 当前上游故障（400 实测）→ 按用户序钉百炼（健康+DS原生计量全）。判据：整卷均值 hit ≥93.8%、¥/章 ≤0.273、单章追踪输出 ≤2k、盲评 Δ≥-0.5（含 D2/D4 单维）、栈斜率 ≤+25k/章。先 3 章冒烟再全量。",
+ "variants": [
+  {"name": "v_full20",
+   "args": {"preset": "tests/bench_variants/v_full_stack.json",
+            "chapters": 20,
+            "user_id": "qianbi-bench-v20",
+            "extra": ["--flash-conn", "bailian-flash"]}}
+ ]
+}
