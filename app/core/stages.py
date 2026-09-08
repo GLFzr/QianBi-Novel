@@ -1688,6 +1688,15 @@ def review_l0_block(proj: str, num: int, prose: str) -> str:
     must_fs = mustscan.scan_proj(proj, prose)
     if must_fs:
         block += "\n\n【正则 must 契约·本地确定性命中】\n" + mustscan.format_must_findings(must_fs)
+    # V5（深度研究 §5）：账本对照——爽点兑现/钟点复现/禁止释放三探测器 + 状态在场
+    # 清单（证据供给）。确定性正则，fail-open，绝不阻断。
+    from .l0_checks import build_v5_block
+    _v5 = build_v5_block(
+        proj, num, prose,
+        read_outline=lambda: project.read_file(project.get_outline_path(proj, num)),
+        read_states=lambda: project.read_file(project.get_tracking_path(proj, "角色状态")))
+    if _v5:
+        block += "\n\n" + _v5
     return block
 
 
