@@ -44,15 +44,29 @@ def test_merge_named_sections_replaces_and_appends():
     assert merged.count("## 沈孤灯") == 1             # 不产生重复小节
 
 
-def test_merge_named_sections_rejects_non_section_base():
-    """既有文件不是 `## 名` 小节结构 → 拒绝合并（调用方回退全量，绝不写坏）"""
+def test_merge_named_sections_non_section_base_appends():
+    """既有文件无小节结构 → delta 整体追加（首册落盘合法路径，V6 冒烟后改判：
+    旧"拒绝"语义会让新角色永远进不了台账）"""
     merged, changed = merge_named_sections("# 纯文本没有小节结构", DELTA_STATES)
-    assert changed == [] and merged == "# 纯文本没有小节结构"
+    assert set(changed) == {"沈孤灯", "老更头"}
+    assert merged.startswith("# 纯文本没有小节结构")
+    assert "灯焰转橙" in merged
 
 
 def test_merge_named_sections_empty_delta_noop():
     merged, changed = merge_named_sections(EXISTING_STATES, "（本节无变更）")
     assert changed == [] and merged == EXISTING_STATES
+
+
+def test_merge_named_sections_populates_template_base():
+    """首章模板（无小节结构）：delta 小节整体追加——V6 冒烟发现拒绝空 base
+    会让新角色永远进不了台账"""
+    template = "# 角色状态追踪\n\n> 每章写完后更新主要角色的状态变化。\n"
+    merged, changed = merge_named_sections(template, DELTA_STATES)
+    assert set(changed) == {"沈孤灯", "老更头"}
+    assert "灯焰转橙" in merged
+    assert merged.startswith("# 角色状态追踪")          # 模板头保留
+    assert merged.count("## 沈孤灯") == 1
 
 
 FORESHADOW_EXISTING = """# 伏笔追踪
