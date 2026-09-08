@@ -1,0 +1,10 @@
+{"ts": "2026-09-08 11:02:19", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "writing", "in": 884144, "out": 1027, "latency": 109.92, "hit": 0, "miss": 0, "phase": "prose", "reasoning": 0}
+{"ts": "2026-09-08 11:04:12", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "writing", "in": 885556, "out": 1166, "latency": 67.93, "hit": 0, "miss": 0, "phase": "enrich", "reasoning": 0}
+{"ts": "2026-09-08 11:04:53", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "writing", "in": 887107, "out": 1166, "latency": 40.96, "hit": 886528, "miss": 579, "phase": "enrich", "reasoning": 0}
+{"ts": "2026-09-08 11:05:12", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "writing", "in": 889635, "out": 1138, "latency": 19.22, "hit": 888064, "miss": 1571, "phase": "deslop", "reasoning": 0}
+{"ts": "2026-09-08 11:06:52", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "helper", "in": 892648, "out": 8192, "latency": 99.69, "hit": 888064, "miss": 4584, "phase": "tracking", "reasoning": 0}
+{"ts": "2026-09-08 11:07:03", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "helper", "in": 900977, "out": 103, "latency": 10.42, "hit": 888064, "miss": 12913, "phase": "chapter_summary", "reasoning": 0}
+{"ts": "2026-09-08 11:07:46", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "helper", "in": 903436, "out": 2048, "latency": 42.99, "hit": 888064, "miss": 15372, "phase": "global_summary", "reasoning": 0}
+{"ts": "2026-09-08 11:08:53", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "review", "in": 911606, "out": 916, "latency": 67.9, "hit": 0, "miss": 0, "phase": "canon_audit", "reasoning": 0}
+{"ts": "2026-09-08 11:09:40", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "helper", "in": 16487, "out": 2994, "latency": 46.41, "hit": 0, "miss": 0, "phase": "outline", "reasoning": 0}
+{"ts": "2026-09-08 11:10:41", "ymd": "2026-09-08", "model": "omen-alpha", "slot": "writing", "in": 13470, "out": 3669, "latency": 61.42, "hit": 0, "miss": 0, "phase": "prose", "reasoning": 0}
