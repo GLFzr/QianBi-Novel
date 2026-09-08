@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>千笔一文 · UI 优化演示（对应 UI优化计划_v1）</title>
+<style>
+/* ============ 三主题 token（对齐 Theme.qml：夜间/羊皮纸/纯白）============ */
+:root, [data-theme="dark"]{
+  --bg-page:#101216; --bg-panel:#191c22; --bg-panel2:#1f232b; --bg-raise:#262b34;
+  --border:#2a2f39; --border-soft:#232830;
+  --text:#d8dbe1; --text-2:#9aa0aa; --text-3:#6b7280;
+  --accent:#4d9fec; --accent-soft:rgba(77,159,236,.14);
+  --ok:#3fac7e; --ok-soft:rgba(63,172,126,.15);
+  --warn:#d9a13c; --warn-soft:rgba(217,161,60,.14);
+  --danger:#e06c5f; --danger-soft:rgba(224,108,95,.13);
+  --shadow:0 8px 28px rgba(0,0,0,.45);
+}
+[data-theme="sepia"]{
+  --bg-page:#efe6d2; --bg-panel:#f7efdd; --bg-panel2:#fbf5e7; --bg-raise:#fffaf0;
+  --border:#dccfae; --border-soft:#e6dbc0;
+  --text:#4a4234; --text-2:#7d7360; --text-3:#a89c85;
+  --accent:#3d7fb8; --accent-soft:rgba(61,127,184,.12);
+  --ok:#4a8f68; --ok-soft:rgba(74,143,104,.14);
+  --warn:#b5822c; --warn-soft:rgba(181,130,44,.14);
+  --danger:#bd5445; --danger-soft:rgba(189,84,69,.12);
+  --shadow:0 8px 24px rgba(120,100,60,.25);
+}
+[data-theme="light"]{
+  --bg-page:#f2f3f5; --bg-panel:#ffffff; --bg-panel2:#f7f8fa; --bg-raise:#eef0f3;
+  --border:#e2e5ea; --border-soft:#eaecf0;
+  --text:#2b2f36; --text-2:#5f6570; --text-3:#9aa1ac;
+  --accent:#3a86d6; --accent-soft:rgba(58,134,214,.10);
+  --ok:#2f9e68; --ok-soft:rgba(47,158,104,.10);
+  --warn:#c08a26; --warn-soft:rgba(192,138,38,.12);
+  --danger:#d05a4c; --danger-soft:rgba(208,90,76,.10);
+  --shadow:0 8px 24px rgba(30,40,60,.12);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  font-family:"PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Source Han Sans SC",sans-serif;
+  background:var(--bg-page); color:var(--text); font-size:14px;
+  transition:background .25s,color .25s;
+}
+/* ============ 演示控制条（非应用部分）============ */
+#demoBar{
+  position:sticky; top:0; z-index:99; display:flex; gap:10px; align-items:center;
+  padding:8px 14px; background:var(--bg-panel); border-bottom:1px solid var(--border);
+  flex-wrap:wrap;
+}
+#demoBar .ttl{font-weight:600; font-size:13px;}
+#demoBar .sep{flex:1;}
+.db{border:1px solid var(--border); background:var(--bg-panel2); color:var(--text-2);
+    padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12px;}
+.db:hover{color:var(--text); border-color:var(--accent);}
+.db.on{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
+.db.note{border-style:dashed;}
+/* ============ 应用壳 ============ */
+#app{display:flex; height:calc(100vh - 41px); min-height:560px;}
+#rail{width:52px; background:var(--bg-panel); border-right:1px solid var(--border);
+      display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:6px;}
+#rail .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-weight:700;margin-bottom:10px;}
+.railBtn{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+      color:var(--text-3);cursor:pointer;position:relative;}
+.railBtn:hover{background:var(--bg-raise);color:var(--text);}
+.railBtn.on{background:var(--accent-soft);color:var(--accent);}
+.railBtn svg{width:18px;height:18px;}
+#main{flex:1; display:flex; flex-direction:column; min-width:0;}
+#viewHead{display:flex; align-items:center; gap:10px; padding:10px 18px;
+      border-bottom:1px solid var(--border); background:var(--bg-panel);}
+#viewHead h1{font-size:15px; font-weight:600;}
+#viewHead .sub{color:var(--text-3); font-size:12px;}
+#viewBody{flex:1; overflow:auto; position:relative;}
+.view{display:none; height:100%;}
+.view.on{display:block;}
+/* ============ 标注 chips ============ */
+.chip{display:inline-flex; align-items:center; gap:4px; font-size:10.5px; padding:1px 7px;
+  border-radius:99px; vertical-align:middle; border:1px solid transparent;}
+.chip.k{background:var(--ok-soft); color:var(--ok); border-color:color-mix(in srgb,var(--ok) 35%,transparent);}
+.chip.m{background:var(--accent-soft); color:var(--accent); border-color:color-mix(in srgb,var(--accent) 35%,transparent);}
+.chip.r{background:var(--warn-soft); color:var(--warn); border-color:color-mix(in srgb,var(--warn) 35%,transparent);}
+body.hideChips .chip{display:none;}
+.note{display:none; font-size:11px; color:var(--text-2); background:var(--bg-raise);
+  border:1px dashed var(--border); border-radius:6px; padding:5px 8px; margin-top:5px; line-height:1.6;}
+body.notes .note{display:block;}
+/* ============ 按钮（K3）============ */
+.btn{border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; border:1px solid var(--border);
+  background:var(--bg-panel2); color:var(--text-2);}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+.btn.ghost{background:transparent; border-color:transparent; color:var(--text-2);}
+.btn.ghost:hover{background:var(--bg-raise); color:var(--text);}
+.btn.danger-ghost{background:transparent; border-color:transparent; color:var(--danger);}
+.btn.sm{padding:4px 10px; font-size:12px;}
+/* ============ 流水线视图 ============ */
+#pipeline{display:flex; height:100%;}
+#pipeLeft{width:400px; min-width:340px; border-right:1px solid var(--border);
+  background:var(--bg-panel); padding:14px; overflow:auto;}
+#pipeCenter{flex:1; display:flex; flex-direction:column; min-width:0; background:var(--bg-page);}
+.projHead{display:flex; align-items:baseline; gap:8px; margin-bottom:12px;}
+.projHead b{font-size:15px;}
+.projHead span{color:var(--text-3); font-size:12px;}
+.stageLine{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3);
+  margin:4px 0 14px;}
+.stageLine .st{padding:2px 8px; border-radius:99px; background:var(--bg-panel2); border:1px solid var(--border-soft);}
+.stageLine .st.done{color:var(--ok);}
+.stageLine .st.run{color:var(--accent); border-color:var(--accent); background:var(--accent-soft);}
+/* 时间线（M1） */
+.tlCard{background:var(--bg-panel2); border:1px solid var(--border-soft); border-radius:10px; overflow:hidden;}
+.tlHead{display:flex; justify-content:space-between; align-items:center; padding:9px 12px;
+  font-size:12.5px; font-weight:600; border-bottom:1px solid var(--border-soft);}
+.tlHead .r{color:var(--text-3); font-weight:400; font-size:11.5px;}
+.tlRow{display:grid; grid-template-columns:118px 1fr 92px 76px; gap:8px; align-items:center;
+  padding:8px 12px; border-bottom:1px solid var(--border-soft); font-size:12px; cursor:pointer;}
+.tlRow:last-child{border-bottom:none;}
+.tlRow:hover{background:var(--bg-raise);}
+.tlRow .name{display:flex; align-items:center; gap:6px; color:var(--text);}
+.dot{width:7px;height:7px;border-radius:99px;flex:none;}
+.dot.ok{background:var(--ok);} .dot.run{background:var(--accent); animation:pulse 1.2s infinite;}
+.dot.warn{background:var(--warn);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.tlRow .meta{color:var(--text-3); font-size:11px;}
+.bar{height:5px; border-radius:99px; background:var(--bg-raise); overflow:hidden; display:flex;}
+.bar i{display:block; height:100%;}
+.bar i.h{background:var(--accent);} .bar i.m{background:var(--warn);}
+.bar i.o{background:var(--ok); opacity:.55;}
+.hitpct{font-variant-numeric:tabular-nums; text-align:right;}
+.hitpct.good{color:var(--ok);} .hitpct.mid{color:var(--warn);} .hitpct.bad{color:var(--danger);}
+.runline{font-size:11.5px; color:var(--accent); padding:4px 12px 8px 26px;}
+.tlRow .peek{grid-column:1/-1; display:none; font-size:11.5px; color:var(--text-2);
+  background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px; line-height:1.7;}
+.tlRow.open .peek{display:block;}
+/* 成本小结（M1） */
+.costStrip{display:flex; gap:8px; margin-top:12px;}
+.costCell{flex:1; background:var(--bg-panel2); border:1px solid var(--border-soft); border-radius:10px;
+  padding:8px 10px; text-align:center;}
+.costCell b{font-size:16px; font-variant-numeric:tabular-nums;}
+.costCell span{display:block; font-size:11px; color:var(--text-3); margin-top:2px;}
+.goalOk{color:var(--ok);}
+/* 旧版对照（K3） */
+.oldWall{border:1px solid var(--border-soft); border-radius:10px; padding:10px; margin-top:12px;}
+.oldWall h4{font-size:12px; color:var(--text-3); font-weight:500; margin-bottom:8px;}
+.btnWall{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+.btnWall .btn{text-align:center; font-size:12px;}
+.newOps{display:flex; flex-direction:column; gap:6px; margin-top:12px;}
+.rowOps{display:flex; gap:6px;}
+/* 中央阅读（K1 版心） */
+#readerWrap{flex:1; overflow:auto; padding:26px 20px;}
+#reader{margin:0 auto; transition:max-width .35s ease;}
+#reader.wide{max-width:none;}
+#reader.measure{max-width:680px;}
+#reader h3{font-size:17px; margin-bottom:14px; font-weight:600;}
+#reader p{font-size:16.5px; line-height:1.85; margin-bottom:1em; text-align:justify;
+  font-family:"Source Han Serif SC","Noto Serif CJK SC","LXGW WenKai Screen",serif;
+  transition:opacity .3s;}
+#reader p.dim{opacity:.32;}
+#reader p.cur{background:var(--accent-soft); border-radius:6px; box-shadow:0 0 0 6px var(--accent-soft);}
+.focusHint{font-size:11.5px; color:var(--text-3); text-align:center; margin-top:10px;}
+/* 流式演示（M2） */
+.streamDemo{margin-top:10px;}
+.streamLine{opacity:0; animation:fadeIn .45s ease forwards; font-size:12.5px; color:var(--text-2);
+  padding:3px 0; line-height:1.7;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(3px)}to{opacity:1; transform:none}}
+.grp{border:1px solid var(--border-soft); border-radius:8px; margin-bottom:6px; overflow:hidden;}
+.grp>summary{list-style:none; cursor:pointer; display:flex; gap:8px; align-items:center;
+  padding:7px 10px; font-size:12px; background:var(--bg-panel2);}
+.grp>summary::-webkit-details-marker{display:none;}
+.grp[open]>summary{border-bottom:1px solid var(--border-soft);}
+.grp .cnt{color:var(--text-3); margin-left:auto; font-size:11px;}
+/* ============ 章节面板（M4）============ */
+.chList{max-width:760px; margin:0 auto; padding:20px;}
+.volHead{display:flex; align-items:center; gap:8px; padding:9px 12px; background:var(--bg-panel2);
+  border:1px solid var(--border-soft); border-radius:8px; margin:14px 0 6px; cursor:pointer; font-size:13px; font-weight:600;}
+.volHead .n{color:var(--text-3); font-weight:400; font-size:11.5px; margin-left:auto;}
+.chRow{display:flex; align-items:center; gap:12px; padding:9px 14px; border-bottom:1px solid var(--border-soft);
+  font-size:13px; cursor:pointer; border-left:2px solid transparent;}
+.chRow:hover{background:var(--bg-panel2);}
+.chRow.sel{background:var(--accent-soft); border-left-color:var(--accent);}
+.chRow .no{color:var(--text-3); width:46px; font-variant-numeric:tabular-nums; font-size:12px;}
+.chRow .tt{flex:1;}
+.chRow .meta{color:var(--text-3); font-size:11.5px; font-variant-numeric:tabular-nums;}
+.badge{font-size:10.5px; padding:2px 8px; border-radius:99px;}
+.badge.ok{background:var(--ok-soft); color:var(--ok);}
+.badge.warn{background:var(--warn-soft); color:var(--warn);}
+.badge.run{background:var(--accent-soft); color:var(--accent);}
+.kbd{font-size:10.5px; border:1px solid var(--border); border-bottom-width:2px; border-radius:4px;
+  padding:0 5px; color:var(--text-3); background:var(--bg-panel2);}
+/* ============ 总览 ============ */
+.ovWrap{max-width:980px; margin:0 auto; padding:22px;}
+.tierTitle{display:flex; align-items:center; gap:8px; margin:18px 0 10px; font-size:13.5px; font-weight:600;}
+.tierTitle:first-child{margin-top:0;}
+.cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:10px;}
+.card{background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:10px; padding:12px 14px;}
+.card b{font-size:13px;}
+.card p{font-size:12px; color:var(--text-2); margin-top:5px; line-height:1.65;}
+.card .src{font-size:11px; color:var(--text-3); margin-top:6px;}
+.dontCard{border-style:dashed;}
+/* ============ 底栏 ============ */
+#statusBar{display:flex; align-items:center; gap:14px; padding:6px 14px; font-size:11.5px;
+  color:var(--text-3); background:var(--bg-panel); border-top:1px solid var(--border);}
+#statusBar .r{margin-left:auto; display:flex; gap:14px; align-items:center;}
+#statusBar b{color:var(--text-2); font-weight:600; font-variant-numeric:tabular-nums;}
+.legend{display:flex; gap:14px; font-size:11px; color:var(--text-3); padding:0 12px 10px;}
+.legend i{display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:4px; vertical-align:-1px;}
+</style>
+</head>
+<body data-theme="dark" class="hideChips">
+
+<!-- 演示控制条 -->
+<div id="demoBar">
+  <span class="ttl">千笔一文 · UI 优化演示</span>
+  <span style="font-size:11px;color:var(--text-3)">对应 docs/UI优化计划_v1.md</span>
+  <span class="sep"></span>
+  <button class="db" id="themeBtn">主题：夜间</button>
+  <button class="db note" id="noteBtn">显示优化标注</button>
+  <span style="width:8px"></span>
+  <button class="db viewBtn on" data-view="pipeline">① 流水线（M1/M2/K3/M5）</button>
+  <button class="db viewBtn" data-view="reader">② 阅读器（K1/K2/R1）</button>
+  <button class="db viewBtn" data-view="chapters">③ 章节面板（M4）</button>
+  <button class="db viewBtn" data-view="overview">④ 优化总览</button>
+</div>
+
+<div id="app">
+  <!-- 图标栏（M3：Lucide path data 风格 1.6px 线性图标） -->
+  <div id="rail">
+    <div class="logo">千</div>
+    <div class="railBtn" title="书架"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></div>
+    <div class="railBtn on" title="流水线"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></div>
+    <div class="railBtn" title="章节"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></div>
+    <div class="railBtn" title="共写"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+    <div class="railBtn" title="契约"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+    <div style="flex:1"></div>
+    <div class="railBtn" title="设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+  </div>
+
+  <div id="main">
+    <div id="viewHead">
+      <h1 id="vhTitle">流水线 · 第 002 章 转折</h1>
+      <span class="sub" id="vhSub">写作中 · 自动档 · off-peak</span>
+    </div>
+
+    <div id="viewBody">
+    <!-- ============ 视图①：流水线 ============ -->
+    <div class="view on" id="v-pipeline">
+      <div id="pipeline">
+        <div id="pipeLeft">
+          <div class="projHead"><b>m1_proj</b><span>都市 · 番茄 · 200万字规划</span></div>
+          <!-- M5：阶段信息收敛为一行点（旧版=左栏卡片组+中栏tabs两套导航） -->
+          <div class="stageLine">
+            <span class="st done">设定 ✓</span><span class="st done">大纲 ✓</span><span class="st done">细纲 ✓</span><span class="st run">正文 · 002</span><span class="st">完本</span>
+          </div>
+          <span class="chip m">M5</span><span style="font-size:11px;color:var(--text-3)">阶段收敛为一行；闲置态整个收起，仅活跃时展开</span>
+          <div class="note"><b>M5 导航收敛</b>：旧版同一流水线信息出现 3 处可点入口（左栏阶段卡片组 + 中栏 6 个 tabs + StepPills）。新版：闲置态收合为一行阶段点，运行中自动展开；nav 分组为 写作/资料/设置 三组。</div>
+
+          <div style="margin-top:14px">
+            <button class="btn primary" style="width:100%">▶ 继续写作（第 002 章）</button>
+            <span class="chip k">K3</span>
+            <span style="font-size:11px;color:var(--text-3)">同屏唯一 primary——主操作 3 秒可辨</span>
+            <div class="note"><b>K3 按钮层级</b>：AppButton 增加 hierarchy: primary|secondary|ghost。旧版左栏同屏 8+ 个等权重按钮（4 个"重生成"、开始、重写本章、打开最新、生成物料）；新版每组只留 1 个 primary，其余降 ghost，破坏性操作挪入章节菜单。</div>
+          </div>
+          <div class="newOps">
+            <div class="rowOps">
+              <button class="btn ghost sm">⟳ 重生成 · 正文</button>
+              <button class="btn ghost sm">⟳ 重生成 · 审校</button>
+              <button class="btn ghost sm">⟳ 重生成 · 细纲</button>
+            </div>
+            <div class="rowOps">
+              <button class="btn sm">发布物料 · 标签与简介</button>
+              <button class="btn danger-ghost sm">重写本章…</button>
+            </div>
+          </div>
+
+          <!-- K3 旧版对照 -->
+          <div class="oldWall">
+            <h4>旧版对照（点此记忆：为什么改）——同屏 9 个等权重按钮</h4>
+            <div class="btnWall">
+              <button class="btn">开始</button><button class="btn">重生成</button>
+              <button class="btn">重生成</button><button class="btn">重生成</button>
+              <button class="btn">重写本章</button><button class="btn">打开最新</button>
+              <button class="btn">生成</button><button class="btn">重生成</button>
+            </div>
+          </div>
+
+          <!-- M2：ConsoleDock 折叠 -->
+          <div style="margin-top:16px">
+            <div style="font-size:12.5px;font-weight:600;margin-bottom:6px">控制台 <span class="chip m">M2</span><span style="font-size:11px;color:var(--text-3)">默认折叠 ≤7 组，点组看中间产物</span></div>
+            <details class="grp"><summary><span class="dot ok"></span>细纲<span class="cnt">2 笔 · 86s</span></summary><div style="padding:8px 12px;font-size:11.5px;color:var(--text-2);line-height:1.7">第 3-4 章细纲生成完成 · 冻结表 6 条 · 伏笔推进 2 条（预计回收：第 9/14 章）</div></details>
+            <details class="grp" open><summary><span class="dot run"></span>正文 · 流式淡入演示<span class="cnt">笔 1 · 运行中</span></summary>
+              <div class="streamDemo" id="streamDemo"></div>
+              <button class="btn ghost sm" id="replayStream" style="margin:4px 12px 10px">↻ 重放淡入动画（150ms/句 · 不延迟 token）</button>
+            </details>
+            <details class="grp"><summary><span class="dot ok"></span>去味（本地扫描未触发）<span class="cnt">0 笔</span></summary><div style="padding:8px 12px;font-size:11.5px;color:var(--text-2)">阻断 0 · 建议 3（已并入下次审校）</div></details>
+          </div>
+          <div class="note"><b>M2 流式排版</b>：流式新句按句淡入（150ms opacity，纯视觉层不延迟 token——LibreChat Smooth Streaming 模式）；ConsoleDock 从平铺日志改为按阶段分组折叠，折叠头=阶段名+耗时+状态。</div>
+        </div>
+
+        <div id="pipeCenter">
+          <div id="readerWrap">
+            <div id="reader" class="measure">
+              <h3>第 002 章 转折（写作中 · 预览）</h3>
+              <p>陈默把那支笔在指间转了半圈，笔尖悬在契约书的落款处，迟迟没有落下。窗外的霓虹把桌面切成红蓝两半，像一份没人签字的最后通牒。</p>
+              <p>他知道对面的人等不了太久——茶几上的手机屏幕亮了第三次，来电备注是那个他躲了半年的号码。</p>
+              <p style="color:var(--accent)">（↓ 点击任意段落体验 R1 聚焦模式；顶部开关切换 K1 版心）</p>
+              <p>笔尖落下的一瞬，纸面上浮起一行只有他能看见的小字：【代价已登记：三日内的某段记忆。】</p>
+              <p>他没有停。有些转折，本来就是拿记忆去换的。</p>
+            </div>
+            <div style="max-width:680px;margin:14px auto 0;display:flex;gap:8px;align-items:center">
+              <button class="db on" id="measureBtn">K1 版心：开（680px ≈ 42 字/行）</button>
+              <button class="db" id="focusBtn">R1 段落聚焦：关</button>
+              <span style="font-size:11px;color:var(--text-3)">行距 1.85 · 宋体栈：思源宋→内置文楷兜底（K2）</span>
+            </div>
+            <div class="note" style="max-width:680px;margin:8px auto 0"><b>K1 版心</b>：旧版正文 contentWidth=窗口全宽，1600px 窗下一行 90+ 字。新版 maximumWidth=字号×42 字当量（640-700px）居中，两侧留白透出 bgPage。<b>K2 字体栈</b>：硬编码单字体名改为多族回退 + 内置子集化霞鹜文楷（OFL 可随包分发）。<b>R1 聚焦</b>：当前段全亮、前后段降灰 40%，可选拉字机滚动（衔接 M3 设计文档的 immersive 状态机）。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 视图②：阅读器全宽对照 ============ -->
+    <div class="view" id="v-reader">
+      <div style="display:flex;height:100%">
+        <div style="flex:1;border-right:1px solid var(--border);display:flex;flex-direction:column">
+          <div style="padding:8px 16px;font-size:12px;color:var(--text-3);border-bottom:1px solid var(--border-soft)">旧版：无版心（contentWidth = 窗口全宽，本视图约 90 字/行）</div>
+          <div style="flex:1;overflow:auto;padding:24px 20px">
+            <p style="font-size:16.5px;line-height:1.85;margin-bottom:1em;text-align:justify;font-family:'Source Han Serif SC','Noto Serif CJK SC',serif">旧版阅读器把正文铺满整个窗口宽度。在 1400 到 1600 像素宽的窗口里，一行中文轻松超过九十字，眼睛从行尾跳回行首的距离太长，扫读时容易串行，长时间校对疲劳感明显上升。这是中文长文排版的经典问题：行宽没有上限。</p>
+            <p style="font-size:16.5px;line-height:1.85;text-align:justify;font-family:'Source Han Serif SC','Noto Serif CJK SC',serif">更隐蔽的是字体栈：主题里 serifFont 硬编码为单一字体名，没有回退列表。没装思源宋体的机器会静默退回系统默认黑体——阅读器的衬线形态名存实亡，而用户只会觉得「好像哪里不对」。</p>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column">
+          <div style="padding:8px 16px;font-size:12px;color:var(--ok);border-bottom:1px solid var(--border-soft)">新版：版心 680px（≈42 字/行）+ 字体栈兜底 + 聚焦模式</div>
+          <div style="flex:1;overflow:auto;padding:24px 0" id="reader2Wrap">
+            <div style="max-width:680px;margin:0 auto;padding:0 20px" id="reader2">
+              <p class="fp" style="font-size:16.5px;line-height:1.85;margin-bottom:1em;text-align:justify;font-family:'Source Han Serif SC','Noto Serif CJK SC','LXGW WenKai Screen',serif;transition:opacity .3s">新版阅读器给正文加了版心：内容列最宽六百八十像素，居中放置，两侧留白与页面底色同色，不画分界线。每行落在四十个字上下，正好在中文舒适行长三十五到四十五字的区间里——这是 W3C《中文排版需求》与多家字库厂商共同给出的经验值。</p>
+              <p class="fp" style="font-size:16.5px;line-height:1.85;margin-bottom:1em;text-align:justify;font-family:'Source Han Serif SC','Noto Serif CJK SC','LXGW WenKai Screen',serif;transition:opacity .3s">字体从「单名硬编码」改为「多族回退列表」：用户装了思源宋体就用思源宋体，没装就回退到随包内置的霞鹜文楷屏幕阅读版——它本身就是为屏幕长时间阅读调校过的字重，体积经三千五百常用字子集化后可控，许可证 OFL 允许随商业应用分发。</p>
+              <p class="fp" style="font-size:16.5px;line-height:1.85;text-align:justify;font-family:'Source Han Serif SC','Noto Serif CJK SC','LXGW WenKai Screen',serif;transition:opacity .3s">再往上叠一层段落聚焦：定稿后人工润色时，当前段保持全亮，前后段降灰到三成，视线自然只落在要改的那一段。整个状态机复用 M3 设计文档已定稿的 immersive 属性，不另起炉灶。</p>
+            </div>
+          </div>
+          <div style="padding:8px 16px;border-top:1px solid var(--border-soft)">
+            <button class="db" id="focusBtn2">在右栏体验 R1 聚焦（点击段落）</button>
+            <span style="font-size:11px;color:var(--text-3);margin-left:8px">左右对照可拖动窗口宽度验证</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 视图③：章节面板 ============ -->
+    <div class="view" id="v-chapters">
+      <div class="chList">
+        <div style="font-size:12.5px;color:var(--text-3);margin-bottom:6px">卷-章两级分组（Ulysses Sheet List 式）· 状态徽章语义色 · 键盘跨栏 <span class="kbd">↑</span><span class="kbd">↓</span> 选择 <span class="kbd">→</span> 进阅读 <span class="chip m">M4</span></div>
+        <div class="note"><b>M4 章节面板</b>：旧版章节平铺、百章规模必乱、状态色点靠猜。新版：卷分组头可折叠；行结构规范为 章号+标题 / 字数+日期 / 状态徽章（定稿·审校带注·待修·写作中，统一 AppBadge 语义色）；全键盘完成选章进阅读。验收：100 章项目滚动不卡、状态不看 tooltip 可辨。</div>
+        <div class="volHead">▾ 第一卷 · 夜行者<span class="n">14 章 · 41,238 字 · 完稿 12</span></div>
+        <div class="chRow"><span class="no">001</span><span class="tt">雨夜来客</span><span class="meta">3,214 字 · 09-01</span><span class="badge ok">定稿</span></div>
+        <div class="chRow sel"><span class="no">002</span><span class="tt">转折</span><span class="meta">1,420 字 · 写作中</span><span class="badge run">写作中</span></div>
+        <div class="chRow"><span class="no">003</span><span class="tt">旧账</span><span class="meta">—</span><span class="badge" style="background:var(--bg-raise);color:var(--text-3)">待生成</span></div>
+        <div class="volHead">▸ 第二卷 · 契约之下<span class="n">规划 22 章</span></div>
+        <div style="font-size:11.5px;color:var(--text-3);padding:8px 14px">（折叠态——卷头点击展开/收起；每书记住展开状态与上次激活面板，M5 的每书布局记忆）</div>
+      </div>
+    </div>
+
+    <!-- ============ 视图④：总览 ============ -->
+    <div class="view" id="v-overview">
+      <div class="ovWrap">
+        <div style="font-size:12.5px;color:var(--text-3);line-height:1.8">前提：本项目 UI 是 QML（Theme.qml 三主题 token + 约 26 个自研 App* 组件），不换皮、不引组件库，只做 token 级打磨与模式升级。许可证红线：PyQt-Fluent-Widgets 为 GPLv3+商业双授权且无 QML 版，<b style="color:var(--danger)">不引入</b>；可引入素材仅 Lucide 图标（ISC）与霞鹜文楷屏幕阅读版（OFL）。</div>
+        <div class="tierTitle"><span class="chip k">第一档 · 快赢（1 天）</span></div>
+        <div class="cards">
+          <div class="card"><b>K1 阅读器版心</b><p>正文列宽上限 680px（42 字/行）居中，治 1600px 窗 90+ 字/行的硬伤。证据：W3C《中文排版需求》。</p><div class="src">改 ReaderView.qml / Main.qml 中央列</div></div>
+          <div class="card"><b>K2 字体栈兜底 + 内置阅读字体</b><p>单名硬编码 → 多族回退；内置子集化霞鹜文楷（3500 字，≤6MB），商业分发不再赌用户装了什么。</p><div class="src">改 Theme.qml + qrc 资源</div></div>
+          <div class="card"><b>K3 按钮层级分级</b><p>primary|secondary|ghost 三档；任意面板同屏 primary ≤1；破坏性操作挪章节菜单。</p><div class="src">改 AppButton.qml + PipelinePanel.qml</div></div>
+          <div class="card"><b>K4 截图链路字体自检</b><p>渲染"千"字验非 tofu，失败报缺 CJK 字体——发布素材救回来。</p><div class="src">截图脚本前置检查</div></div>
+          <div class="card"><b>K5 离峰文案对齐 v4 价格表</b><p>时段说明与现行价表一致 + 一句"为什么省钱"。</p><div class="src">改 SettingsPanel.qml 文案</div></div>
+        </div>
+        <div class="tierTitle"><span class="chip m">第二档 · 中期（2-4 天）</span></div>
+        <div class="cards">
+          <div class="card"><b>M1 阶段时间线 + 成本面板 ★</b><p>把 v0.19 已落盘的 hit/miss/phase/reasoning 接上 UI：每阶段耗时/token 迷你条/命中率色点，运行中显示"第 N 笔·已 x 秒"；数字与 report_cache.py 对齐（±1%）。</p><div class="src">改 PipelinePanel.qml + UsageDialog.qml</div></div>
+          <div class="card"><b>M2 流式排版 + 阶段折叠</b><p>流式按句淡入（150ms，纯视觉层不延迟 token）；控制台折叠 ≤7 组。</p><div class="src">改 ConsoleDock.qml / ReaderView.qml</div></div>
+          <div class="card"><b>M3 图标 Lucide 化</b><p>Lucide 24×24 path data 批量录入 AppIcon 注册表（1.6px 描边风格天然一致），1500+ 图标零依赖。</p><div class="src">改 AppIcon.qml + 导出脚本</div></div>
+          <div class="card"><b>M4 章节 卷-章两级</b><p>卷分组折叠 + 状态徽章语义色 + 键盘跨栏；百章规模验收。</p><div class="src">改 ChapterPanel.qml</div></div>
+          <div class="card"><b>M5 导航收敛 + 每书布局记忆</b><p>阶段信息三处入口收敛为一处；nav 分组三组；每书记住上次布局。</p><div class="src">改 Main.qml + bridge 配置</div></div>
+        </div>
+        <div class="tierTitle"><span class="chip r">第三档 · 远期（另行立项）</span></div>
+        <div class="cards">
+          <div class="card"><b>R1 沉浸写作（聚焦+打字机）</b><p>当前段全亮其余降灰、可选拉字机滚动；衔接 M3 设计文档 immersive 状态机。</p><div class="src">改 ReaderView.qml</div></div>
+          <div class="card"><b>R2 契约/世界书卡片化</b><p>Story Bible 式卡片流，每卡挂"最近出场/命中状态/待回收"，清算提案=卡片 diff 一键采纳（≤2 次点击）。</p><div class="src">改 ContractPanel.qml</div></div>
+          <div class="card"><b>R3 信息架构终态：四模式壳</b><p>Plan / Write / Chat / Review 四模式（Novelcrafter 式），7 面板收敛为模式内 tab。</p><div class="src">新用户 10 分钟建书跑通 1 章为验收</div></div>
+          <div class="card dontCard"><b>R4 明确不做</b><p>节点画布（线性流水线画布是负资产）；任何 GPL 组件库；换设计系统——自研 Theme 是资产。</p><div class="src">—</div></div>
+        </div>
+        <div class="tierTitle"><span class="chip m">M1 数据来源（真实链路）</span></div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>缓存命中 tok</span>
+          <span><i style="background:var(--warn)"></i>未命中 tok（miss）</span>
+          <span><i style="background:var(--ok)"></i>输出 tok（含思考）</span>
+          <span style="margin-left:auto">数据源：~/.qianbi_novel/usage/usage.jsonl（hit/miss/phase/reasoning 已落盘）· 口径对齐 tests/report_cache.py</span>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <!-- 升级后的底栏（M1） -->
+    <div id="statusBar">
+      <span>进度 <b>2</b> 章</span>
+      <span>写作 <b>deepseek-v4-flash</b> · 审校 <b>flash</b> · 清算严格档 <b>pro</b></span>
+      <span class="r">
+        <span>本章 <b>¥0.24</b></span>
+        <span>调用 <b>27</b> 笔</span>
+        <span>命中率 <b class="goalOk">93.4%</b> <span class="badge ok">目标 93% ✓</span></span>
+        <span>今日 <b>0</b> tok · ¥0.00</span>
+        <span>用量 ↗</span>
+      </span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- 视图切换 ----
+const heads={pipeline:["流水线 · 第 002 章 转折","写作中 · 自动档 · off-peak"],
+  reader:["阅读器 · K1 版心 / K2 字体栈 / R1 聚焦","左右分栏 = 旧版 vs 新版 对照"],
+  chapters:["章节 · 卷-章两级（M4）","百章规模验收 · 全键盘可达"],
+  overview:["UI 优化总览（13 项 · 三档）","对应 docs/UI优化计划_v1.md · 待作者评审"]};
+document.querySelectorAll('.viewBtn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.viewBtn').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById('v-'+b.dataset.view).classList.add('on');
+  document.getElementById('vhTitle').textContent=heads[b.dataset.view][0];
+  document.getElementById('vhSub').textContent=heads[b.dataset.view][1];
+}));
+// ---- 主题三态 ----
+const themes=['dark','sepia','light'],names=['夜间','羊皮纸','纯白'];let ti=0;
+document.getElementById('themeBtn').addEventListener('click',e=>{
+  ti=(ti+1)%3;document.body.dataset.theme=themes[ti];e.target.textContent='主题：'+names[ti];});
+// ---- 标注 ----
+const noteBtn=document.getElementById('noteBtn');
+noteBtn.addEventListener('click',()=>{
+  const on=document.body.classList.toggle('notes');
+  document.body.classList.toggle('hideChips',!on);
+  noteBtn.classList.toggle('on',on);
+  noteBtn.textContent=on?'隐藏优化标注':'显示优化标注';});
+// ---- K1 版心开关 ----
+const readerEl=document.querySelector('#reader');
+const measureBtn=document.getElementById('measureBtn');
+measureBtn.addEventListener('click',()=>{
+  const on=readerEl.classList.toggle('measure');
+  readerEl.classList.toggle('wide',!on);
+  measureBtn.classList.toggle('on',on);
+  measureBtn.textContent=on?'K1 版心：开（680px ≈ 42 字/行）':'K1 版心：关（旧版全宽）';});
+// ---- R1 聚焦 ----
+let focusOn=false;
+function bindFocus(container,btn){
+  const ps=container.querySelectorAll('p');
+  btn.addEventListener('click',()=>{
+    focusOn=!focusOn;btn.classList.toggle('on',focusOn);
+    btn.textContent=focusOn?'R1 段落聚焦：开（点击段落切换 · 再点按钮退出）':'R1 段落聚焦：关';
+    if(!focusOn)ps.forEach(p=>p.classList.remove('dim','cur'));});
+  ps.forEach(p=>p.addEventListener('click',()=>{
+    if(!focusOn)return;
+    ps.forEach(x=>x.classList.remove('cur','dim'));
+    p.classList.add('cur');
+    ps.forEach(x=>{if(x!==p)x.classList.add('dim');});}));}
+bindFocus(document.getElementById('reader'),document.getElementById('focusBtn'));
+bindFocus(document.getElementById('reader2'),document.getElementById('focusBtn2'));
+// ---- M2 流式淡入 ----
+const sentences=["陈默把那支笔在指间转了半圈，","笔尖悬在契约书的落款处，迟迟没有落下。","窗外的霓虹把桌面切成红蓝两半，","像一份没人签字的最后通牒。","他知道对面的人等不了太久——","手机屏幕亮了第三次，来电备注是那个他躲了半年的号码。"];
+const streamDemo=document.getElementById('streamDemo');
+function playStream(){
+  streamDemo.innerHTML='';
+  sentences.forEach((s,i)=>{
+    const d=document.createElement('div');d.className='streamLine';d.textContent=s;
+    d.style.animationDelay=(i*0.45)+'s';streamDemo.appendChild(d);});}
+playStream();
+document.getElementById('replayStream').addEventListener('click',playStream);
+// ---- M1 时间线：运行中阶段的假实时计数 ----
+const runMeta=document.getElementById('runMeta');
+let sec=132,tok=8400;
+const tl=document.createElement('div');tl.className='runline';tl.id='runMeta';
+// 造数据：把 M1 时间线动态插入流水线中央上方（保持 HTML 简洁）
+const tlData=[
+  {n:'细纲',st:'ok',meta:'2 笔 · 86s',out:'8.2k',hit:96,bar:[86,6,8],peek:'冻结表 6 条 · 伏笔推进 2 条（预计回收：第 9 / 14 章）· 本批含第 3-4 章'},
+  {n:'正文',st:'run',meta:'笔 1 · 206s 均值',out:'8.4k…',hit:null,bar:[60,8,32],peek:'双层前缀 + 章会话首轮 · 思考档 high · 输出预算（预设旗标 length_budget 生效中）'},
+  {n:'去味扫描',st:'ok',meta:'本地 · 0 LLM',out:'0',hit:100,bar:[100,0,0],peek:'阻断 0 · 建议 3 —— 未触发改写轮（机械扫描零成本）'},
+  {n:'审校 ×3 票',st:'ok',meta:'3 票 · 5.4s/票',out:'0.6k/票',hit:99,bar:[92,4,4],peek:'首票全维 PASS → 快速道免投 2 票（review_pass_fast）· disabled 档（埋雷召回 4/4）· 点行可展开单票原文'},
+  {n:'清算（级联）',st:'ok',meta:'预扫 1 + 复核 0',out:'4.8k',hit:99.8,bar:[95,2,3],peek:'flash+low 预扫干净 → 零 pro 复核（E9 级联）· 跨章台账更新 4 条'},
+  {n:'追踪+摘要（三合一）',st:'ok',meta:'1 笔 · 12s',out:'1.9k',hit:99,bar:[96,2,2],peek:'v3 结构 S3 预演：tracking + chapter_summary + global_summary 单调用 JSON'}
+];
+const tlHost=document.createElement('div');
+tlHost.style.cssText='padding:14px 18px 4px;max-width:760px';
+tlHost.innerHTML='<div class="tlCard" id="tlCard"><div class="tlHead"><span>本章阶段时间线 <span class="chip m">M1</span>（点行查看中间产物）</span><span class="r">数据源 usage.jsonl · 实时</span></div></div>';
+const rc=document.querySelector('#v-pipeline #pipeCenter');
+rc.insertBefore(tlHost,rc.firstChild);
+const tlCard=document.getElementById('tlCard');
+tlData.forEach(d=>{
+  const row=document.createElement('div');row.className='tlRow';
+  row.innerHTML='<span class="name"><span class="dot '+d.st+'"></span>'+d.n+'</span>'
+    +'<span class="bar"><i class="h" style="width:'+(d.bar?d.bar[0]:0)+'%"></i><i class="m" style="width:'+(d.bar?d.bar[1]:0)+'%"></i><i class="o" style="width:'+(d.bar?d.bar[2]:0)+'%"></i></span>'
+    +'<span class="meta">'+d.meta+'</span>'
+    +'<span class="hitpct '+(d.hit==null?'mid':(d.hit>=93?'good':(d.hit>=80?'mid':'bad')))+'">'+(d.hit==null?'运行中':d.hit+'%')+'</span>'
+    +'<div class="peek">'+d.peek+'</div>';
+  row.addEventListener('click',()=>row.classList.toggle('open'));
+  tlCard.appendChild(row);
+  if(d.st==='run'){
+    const rl=document.createElement('div');rl.className='runline';rl.id='runMeta';
+    rl.textContent='正文运行中 · 第 1 笔 · 已 132s · 已 8.4k tok（含思考）…';
+    tlCard.appendChild(rl);}});
+// 运行计数动画
+setInterval(()=>{
+  const el=document.getElementById('runMeta');if(!el)return;
+  sec+=2;tok+=Math.round(120+Math.random()*80);
+  el.textContent='正文运行中 · 第 1 笔 · 已 '+sec+'s · 已 '+(tok/1000).toFixed(1)+'k tok（含思考）…';},2000);
+</script>
+</body>
+</html>

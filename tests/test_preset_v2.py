@@ -15,6 +15,18 @@ _FH = tempfile.mkdtemp(prefix="qbn_test_preset_v2_")
 os.environ["USERPROFILE"] = _FH
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# 导入期 env 改写会被"最后导入的模块"覆盖（pytest 先收集全部模块再运行），
+# autouse 夹具保证本模块每个测试运行时重新声明自己的隔离目录——
+# 否则与 test_preset_v2/test_review_v2/test_scene_cards 同批收集时互相劫持 user_dir()。
+import pytest
+
+@pytest.fixture(autouse=True)
+def _isolate_fake_home():
+    os.environ["USERPROFILE"] = _FH
+    os.environ["HOME"] = _FH
+    yield
+
+
 from app.presets import (
     list_presets, load_preset, genre_block, genre_block_for,
     stage_hint, STAGE_HINT_KEYS, _STAGE_SHARED_FIELDS,

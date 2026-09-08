@@ -5,11 +5,17 @@
 - 输出 `tests_output/5ch_e2e/issues.md` 报告
 
 注意：不打开 GUI 窗口（避免 conhost 穿透），通过 headless Bridge + Orchestrator 直接跑。
+注意：本文件烧真实 API（约 46-61 笔调用）——全量收集时自动跳过，
+只在显式 QIANBI_E2E_REAL=1 时运行（2026-09-07 事故：全量回归误触发真机跑）。
 """
 import os
 import sys
 import time
 import datetime
+
+import pytest
+if not os.environ.get("QIANBI_E2E_REAL"):
+    pytest.skip("真机 5 章 e2e 烧真实 API：设 QIANBI_E2E_REAL=1 显式运行", allow_module_level=True)
 import json
 import shutil
 import tempfile
@@ -35,8 +41,9 @@ else:
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# 实例守卫：同进程已有 Qt 实例（如 pytest 全量收集）时复用，避免 shiboken 冲突
 from PySide6.QtGui import QGuiApplication
-app = QGuiApplication([])
+app = QGuiApplication.instance() or QGuiApplication([])
 
 # ---- 创建项目 ----
 

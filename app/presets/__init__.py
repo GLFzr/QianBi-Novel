@@ -250,6 +250,51 @@ STAGE_PARAM_FIELDS = [
     ("reasoning_effort", "思考强度", None, None, False),
 ]
 
+# 相位旗标（v0.20 成本战役 E1.1/O2/E3.3）：客户端行为开关，**不进 HTTP 请求体**。
+# 刻意不进 STAGE_PARAM_FIELDS——那张表喂设置页采样编辑器与快照模板，旗标是实验变量，
+# 混进去会在 UI 上冒出一排没接线旋钮；只在本模块 stage_params() 里校验透传，
+# stages/canon_audit 经 router.stage_params[phase] 读取。
+#   output_mode      span|full            修订类相位 span 级输出（E1.1/O1）
+#   length_budget    int 字               prompt 内显式输出长度上限（E1.2/O2，L1 证据）
+#   think_budget     int token            prompt 内思考软预算（E1.2/O2）
+#   output_structure scene_card           正文先场景卡后成文（E1.2 prose-structure 对照）
+#   early_stop       true                 清算条目级早停分诊（E3.3，Certaindex 思想）
+#   shuffle_dims     true                 审校每票随机化六维检查顺序（LLM-judge 首位偏置消除）
+STAGE_FLAG_FIELDS = {
+    "output_mode": ("span", "full"),
+    "output_structure": ("scene_card",),
+    "early_stop": None,        # 布尔
+    "shuffle_dims": None,      # 布尔
+    "in_session": None,        # 布尔（S2：清算预扫走章/卷会话追加轮，失败回退单发）
+    "length_budget": (1, 100000, True),
+    "think_budget": (1, 1000000, True),
+}
+
+
+def _coerce_flag(key: str, val):
+    """旗标取值校验：枚举串/布尔/整数区间，脏值一律丢弃（同 _coerce_param 哲学）"""
+    if key not in STAGE_FLAG_FIELDS:
+        return None   # 未知键丢弃；布尔旗标以 None 登记语义，不能与未知键混淆
+    spec = STAGE_FLAG_FIELDS[key]
+    if isinstance(spec, tuple):
+        if key in ("length_budget", "think_budget"):
+            lo, hi, as_int = spec
+            if isinstance(val, str):
+                try:
+                    val = float(val.strip())
+                except ValueError:
+                    return None
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                return None
+            v = float(val)
+            return int(v) if (as_int and lo <= v <= hi) else (v if lo <= v <= hi else None)
+        s = str(val or "").strip().lower()
+        return s if s in spec else None
+    if isinstance(val, bool):
+        return val
+    s = str(val or "").strip().lower()
+    return True if s in ("true", "1", "yes", "on") else (False if s in ("false", "0", "no", "off") else None)
+
 
 def _coerce_param(key: str, val, lo, hi, as_int: bool):
     """单个参数取值校验：非数 / 越界 / 空串一律丢弃
@@ -296,6 +341,11 @@ def stage_params(preset_id: str) -> dict:
             v = _coerce_param(key, vals[key], lo, hi, as_int)
             if v is not None:
                 ov[key] = v
+        for key in STAGE_FLAG_FIELDS:
+            if key in vals:
+                v = _coerce_flag(key, vals[key])
+                if v is not None:
+                    ov[key] = v
         if ov:
             out[phase] = ov
     return out

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纸砚书房 · 千笔一文 设计方向 A</title>
+<style>
+/* ============================================================
+   纸砚书房 —— 人文纸感 · 书卷气
+   设计 token：纸 / 墨 / 朱砂 / 黛青，四色足矣
+   ============================================================ */
+:root{
+  --paper:      #f7f2e8;  /* 宣纸底 */
+  --paper-2:    #f1eadb;  /* 深一度的纸（面板） */
+  --paper-3:    #e9e0cc;  /* 悬停纸 */
+  --ink:        #2b2620;  /* 浓墨 */
+  --ink-2:      #6b6154;  /* 淡墨 */
+  --ink-3:      #a29781;  /* 宿墨（弱化） */
+  --line:       #d9cfb8;  /* 细墨线 */
+  --line-2:     #bdb093;  /* 重墨线 */
+  --cinnabar:   #a83f2e;  /* 朱砂（唯一强调） */
+  --cinnabar-2: #8c3324;  /* 朱砂深（按压） */
+  --indigo:     #3d5a66;  /* 黛青（次要点缀） */
+  --serif: "Source Han Serif SC","Noto Serif CJK SC","Songti SC","STSong","SimSun",serif;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{font-size:16px;}
+body{
+  font-family:var(--serif);
+  background:var(--paper);
+  color:var(--ink);
+  line-height:1.7;
+  min-height:100vh;
+  display:flex; flex-direction:column;
+}
+::selection{background:rgba(168,63,46,.16);}
+button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer;}
+:focus-visible{outline:2px solid var(--cinnabar);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+
+/* ---------- 题头 ---------- */
+.masthead{
+  display:flex; align-items:baseline; gap:var(--sp-4);
+  padding:var(--sp-4) var(--sp-6);
+  border-bottom:1px solid var(--line-2);
+}
+.brand{font-size:1.375rem; letter-spacing:.14em; font-weight:600;}
+.brand small{font-size:.75rem; color:var(--ink-3); letter-spacing:.1em; margin-left:var(--sp-2); font-weight:400;}
+.mast-chapter{color:var(--ink-2); font-size:.875rem; letter-spacing:.05em;}
+.mast-tabs{margin-left:auto; display:flex; gap:var(--sp-1); align-items:baseline;}
+.tab{
+  padding:var(--sp-1) var(--sp-3);
+  font-size:.9375rem; letter-spacing:.12em; color:var(--ink-2);
+  border-bottom:2px solid transparent;
+  transition:color .18s ease, border-color .18s ease;
+}
+.tab:hover{color:var(--ink);}
+.tab[aria-selected="true"]{color:var(--cinnabar); border-bottom-color:var(--cinnabar); font-weight:600;}
+.btn-notes{
+  margin-left:var(--sp-4); font-size:.8125rem; letter-spacing:.1em; color:var(--indigo);
+  border-bottom:1px dotted var(--indigo); padding-bottom:1px;
+}
+.btn-notes:hover{color:#2c444e;}
+
+/* ---------- 主骨架：窄竖栏 + 画面区（三栏书斋） ---------- */
+.desk{flex:1; display:flex; min-height:0;}
+.spine{
+  width:56px; flex:none;
+  border-right:1px solid var(--line-2);
+  display:flex; flex-direction:column; align-items:center;
+  padding:var(--sp-5) 0; gap:var(--sp-5);
+}
+.bookmark{
+  writing-mode:vertical-rl;            /* 竖排书签 */
+  font-size:.875rem; letter-spacing:.32em;
+  color:var(--ink-2); padding:var(--sp-3) var(--sp-1);
+  border-left:2px solid transparent;
+  transition:color .18s ease, border-color .18s ease;
+}
+.bookmark:hover{color:var(--ink);}
+.bookmark[aria-selected="true"]{
+  color:var(--cinnabar); border-left-color:var(--cinnabar); font-weight:600;
+}
+.spine-sep{width:16px; border-top:1px solid var(--line);}
+.spine-icon{flex:none; margin-top:auto; opacity:.75;}
+
+.stage{flex:1; min-width:0; overflow-y:auto; padding:var(--sp-6) var(--sp-6) var(--sp-7);}
+.view{display:none;}
+.view.active{display:block;}
+
+/* ---------- 计划项编号 chip（编码真实计划映射，非装饰） ---------- */
+.kchip{
+  position:absolute; top:var(--sp-3); right:var(--sp-3);
+  font-size:.6875rem; letter-spacing:.08em; color:var(--ink-3);
+  border:1px solid var(--line); padding:1px 6px; border-radius:2px;
+  background:var(--paper);
+}
+.kchip b{color:var(--indigo); font-weight:600;}
+
+/* ============================================================
+   画面一 · 流水线（中栏卷轴 + 右侧工作区）
+   ============================================================ */
+.pipe{display:grid; grid-template-columns:300px 1fr; gap:var(--sp-6); max-width:1080px; margin:0 auto;}
+.scroll-col{position:relative; border-right:1px solid var(--line); padding-right:var(--sp-5);}
+.volume-tag{font-size:.75rem; letter-spacing:.2em; color:var(--indigo); margin-bottom:var(--sp-1);}
+.chapter-title{font-size:1.625rem; font-weight:600; letter-spacing:.08em; line-height:1.3; margin-bottom:var(--sp-2);}
+.badge{
+  display:inline-block; font-size:.75rem; letter-spacing:.12em;
+  padding:1px 8px; border-radius:2px; border:1px solid;
+}
+.badge-doing{color:var(--cinnabar); border-color:var(--cinnabar);}
+.badge-done{color:var(--ink); border-color:var(--ink-2); background:var(--paper-3);}
+.badge-note{color:var(--indigo); border-color:var(--indigo);}
+.badge-empty{color:var(--ink-3); border-color:var(--line);}
+.scroll-meta{color:var(--ink-2); font-size:.8125rem; margin-top:var(--sp-3); line-height:2;}
+.scroll-meta b{color:var(--ink); font-weight:600;}
+
+/* 墨尺：总进度以刻度呈现，不是科技感进度条 */
+.ruler{display:flex; gap:5px; align-items:flex-end; height:34px; margin:var(--sp-4) 0 var(--sp-2);}
+.ruler i{width:2px; height:14px; background:var(--line); transition:background .18s ease;}
+.ruler i.tall{height:24px;}
+.ruler i.ink{background:var(--ink);}
+.ruler i.pen{background:var(--cinnabar); animation:breath 2.2s ease-in-out infinite;}
+@keyframes breath{50%{opacity:.35;}}
+.ruler-cap{font-size:.75rem; color:var(--ink-3); letter-spacing:.1em;}
+
+/* 工作区：阶段时间线 */
+.work-col{position:relative; min-width:0;}
+.work-head{display:flex; align-items:baseline; gap:var(--sp-3); margin-bottom:var(--sp-4);}
+.work-head h2{font-size:1.125rem; font-weight:600; letter-spacing:.15em;}
+.work-head span{font-size:.75rem; color:var(--ink-3); letter-spacing:.08em;}
+.phase-list{border-top:1px solid var(--line-2);}
+.phase{
+  display:grid;
+  grid-template-columns:14px 5.5em 3.5em 1fr 5em 9.5em;
+  gap:var(--sp-3); align-items:center;
+  padding:var(--sp-3) var(--sp-1);
+  border-bottom:1px solid var(--line);
+  font-size:.875rem;
+}
+.phase .dot{width:8px; height:8px; border-radius:50%; border:1.5px solid var(--ink-2); justify-self:center;}
+.phase.done .dot{background:var(--ink); border-color:var(--ink);}
+.phase.running .dot{border-color:var(--cinnabar); background:var(--cinnabar); animation:breath 1.6s ease-in-out infinite;}
+.phase.waiting{color:var(--ink-3);}
+.phase .name{font-weight:600; letter-spacing:.1em;}
+.phase .calls{color:var(--ink-2); font-variant-numeric:tabular-nums;}
+.tok{height:3px; background:var(--paper-3); position:relative;}
+.tok i{position:absolute; inset:0 auto 0 0; background:var(--ink-2);}
+.phase.running .tok i{background:var(--cinnabar);}
+.hit{font-size:.8125rem; display:flex; align-items:center; gap:5px; font-variant-numeric:tabular-nums;}
+.hit::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--indigo);}
+.hit.low::before{background:#b0813a;}
+.phase .dur{color:var(--ink-2); text-align:right; font-variant-numeric:tabular-nums;}
+.phase.running .dur{color:var(--cinnabar);}
+
+/* 成本小结条 */
+.cost{
+  margin-top:var(--sp-5); border:1px solid var(--line-2); border-radius:2px;
+  background:var(--paper-2); padding:var(--sp-3) var(--sp-4);
+  display:flex; align-items:baseline; gap:var(--sp-5); flex-wrap:wrap;
+}
+.cost .cell{display:flex; align-items:baseline; gap:var(--sp-2); font-size:.8125rem; color:var(--ink-2);}
+.cost .cell b{font-size:1.25rem; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums;}
+.cost .cell em{font-style:normal; color:var(--cinnabar); font-weight:600;}
+.cost .cell small{font-size:.6875rem; color:var(--ink-3);}
+
+/* 按钮层级：同屏唯一 primary */
+.actions{margin-top:var(--sp-5); display:flex; gap:var(--sp-3); align-items:center;}
+.btn{font-size:.9375rem; letter-spacing:.14em; padding:var(--sp-2) var(--sp-5); border-radius:2px;
+     transition:background .18s ease, color .18s ease, border-color .18s ease;}
+.btn-primary{background:var(--cinnabar); color:#f9f4ea;}
+.btn-primary:hover{background:var(--cinnabar-2);}
+.btn-ghost{border:1px solid var(--line-2); color:var(--ink-2);}
+.btn-ghost:hover{border-color:var(--ink-2); color:var(--ink); background:var(--paper-2);}
+.btn-danger{border:1px solid var(--cinnabar); color:var(--cinnabar);}
+.btn-danger:hover{background:rgba(168,63,46,.07);}
+.actions .hint{margin-left:auto; font-size:.75rem; color:var(--ink-3);}
+
+/* ============================================================
+   画面二 · 阅读器：版心 680px，行距 1.85，段落聚焦
+   ============================================================ */
+.reader{position:relative; max-width:680px; margin:0 auto;}
+.reader-head{text-align:center; margin-bottom:var(--sp-6); position:relative;}
+.reader-head .volume-tag{display:block; margin-bottom:var(--sp-2);}
+.reader-head h1{font-size:1.75rem; font-weight:600; letter-spacing:.2em;}
+.reader-head .orn{width:56px; border-top:1px solid var(--line-2); margin:var(--sp-4) auto 0;}
+.reader-body p{
+  font-size:1rem; line-height:1.85; text-indent:2em;
+  margin-bottom:var(--sp-4); color:var(--ink);
+  cursor:pointer; transition:opacity .2s ease;
+}
+.reader-body.focusing p{opacity:.32;}
+.reader-body.focusing p.focused{opacity:1;}
+.reader-note{                     /* 审校带注：行内朱砂小注 */
+  display:inline-block; text-indent:0; font-size:.75rem; color:var(--cinnabar);
+  border-bottom:1px dotted var(--cinnabar); margin-left:.5em; line-height:1.5;
+  vertical-align:baseline;
+}
+.reader-tools{margin-top:var(--sp-5); display:flex; gap:var(--sp-3); justify-content:center; align-items:center;}
+.reader-tools .hint{font-size:.75rem; color:var(--ink-3);}
+.sentence{opacity:.16; transition:opacity .3s ease;}   /* M2：流式按句淡入 */
+.sentence.on{opacity:1;}
+
+/* ============================================================
+   画面三 · 章节面板：卷—章两级
+   ============================================================ */
+.chapters{position:relative; display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:var(--sp-6); max-width:1000px; margin:0 auto;}
+.vol{border:1px solid var(--line-2); border-radius:2px; background:var(--paper); margin-bottom:var(--sp-4);}
+.vol summary{
+  list-style:none; cursor:pointer; display:flex; align-items:baseline; gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--line);
+  transition:background .18s ease;
+}
+.vol summary::-webkit-details-marker{display:none;}
+.vol summary:hover{background:var(--paper-2);}
+.vol summary .vt{font-weight:600; letter-spacing:.12em;}
+.vol summary .vc{font-size:.75rem; color:var(--ink-3); margin-left:auto; letter-spacing:.08em;}
+.vol summary .tri{color:var(--ink-3); transition:transform .18s ease; font-size:.75rem;}
+.vol[open] summary .tri{transform:rotate(90deg);}
+.chap{
+  display:flex; align-items:baseline; gap:var(--sp-3);
+  padding:var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-5);
+  border-bottom:1px solid var(--line); cursor:pointer;
+  transition:background .18s ease;
+}
+.chap:last-child{border-bottom:none;}
+.chap:hover{background:var(--paper-2);}
+.chap.cur{background:var(--paper-3); box-shadow:inset 2px 0 0 var(--cinnabar);}
+.chap .no{color:var(--ink-3); font-size:.8125rem; font-variant-numeric:tabular-nums; width:4em;}
+.chap .ct{letter-spacing:.05em;}
+.chap .badge{margin-left:auto; flex:none;}
+.chap-detail{border-left:1px solid var(--line); padding-left:var(--sp-5); align-self:start; position:sticky; top:0;}
+.chap-detail h3{font-size:1.25rem; font-weight:600; letter-spacing:.1em; margin:var(--sp-1) 0 var(--sp-2);}
+.chap-detail dl{font-size:.8125rem; color:var(--ink-2); line-height:2.1; margin-top:var(--sp-4);}
+.chap-detail dt{display:inline; color:var(--ink-3);}
+.chap-detail dd{display:inline; margin:0 0 0 var(--sp-2); color:var(--ink);}
+.chap-detail .note-quote{
+  margin-top:var(--sp-4); padding:var(--sp-3); background:var(--paper-2);
+  border-left:2px solid var(--indigo); font-size:.8125rem; color:var(--ink-2); line-height:1.8;
+}
+
+/* ============================================================
+   设计说明 dialog
+   ============================================================ */
+dialog.notes{
+  border:1px solid var(--line-2); border-radius:2px;
+  background:var(--paper); color:var(--ink);
+  max-width:720px; width:92vw; padding:var(--sp-6);
+  font-family:var(--serif);
+}
+dialog.notes::backdrop{background:rgba(43,38,32,.45);}
+dialog.notes h2{font-size:1.25rem; letter-spacing:.2em; font-weight:600; margin-bottom:var(--sp-4);}
+dialog.notes h3{font-size:.9375rem; letter-spacing:.15em; font-weight:600; margin:var(--sp-5) 0 var(--sp-2); color:var(--cinnabar);}
+.notes table{border-collapse:collapse; width:100%; font-size:.8125rem;}
+.notes th,.notes td{border-bottom:1px solid var(--line); text-align:left; padding:var(--sp-1) var(--sp-2); vertical-align:middle;}
+.notes th{color:var(--ink-3); font-weight:400; letter-spacing:.1em;}
+.sw{display:inline-block; width:14px; height:14px; border:1px solid var(--line-2); vertical-align:-2px; margin-right:6px; border-radius:2px;}
+.notes ol{padding-left:1.4em; font-size:.875rem; color:var(--ink-2); line-height:2;}
+.notes .close{float:right; font-size:.8125rem; color:var(--ink-2); border:1px solid var(--line-2); padding:2px 10px; border-radius:2px;}
+.notes .close:hover{color:var(--ink); border-color:var(--ink-2);}
+
+/* ---------- 页脚 ---------- */
+.colophon{
+  border-top:1px solid var(--line-2); padding:var(--sp-3) var(--sp-6);
+  font-size:.75rem; color:var(--ink-3); letter-spacing:.06em;
+  display:flex; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap;
+}
+
+@media (max-width:960px){
+  .pipe,.chapters{grid-template-columns:1fr;}
+  .scroll-col{border-right:none; padding-right:0;}
+  .chap-detail{border-left:none; padding-left:0;}
+  .phase{grid-template-columns:12px 5em 3em 1fr 4.5em;}
+  .phase .dur{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ================= 题头 ================= -->
+<header class="masthead">
+  <div class="brand">千笔一文<small>纸砚书房 · 方向 A</small></div>
+  <div class="mast-chapter">第二卷 青冥剑鸣 · 第002章 转折</div>
+  <nav class="mast-tabs" role="tablist" aria-label="画面切换">
+    <button class="tab" role="tab" aria-selected="true"  data-view="pipeline">流水线</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="reader">阅读器</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="chapters">章节面板</button>
+    <button class="btn-notes" id="openNotes">设计说明</button>
+  </nav>
+</header>
+
+<div class="desk">
+  <!-- ============ 窄竖栏：书签式导航（竖排） ============ -->
+  <nav class="spine" aria-label="书签导航">
+    <button class="bookmark" role="tab" aria-selected="true"  data-view="pipeline">流水线</button>
+    <button class="bookmark" role="tab" aria-selected="false" data-view="reader">阅读器</button>
+    <button class="bookmark" role="tab" aria-selected="false" data-view="chapters">章节面板</button>
+    <span class="spine-sep" aria-hidden="true"></span>
+    <button class="bookmark" aria-selected="false" title="示意入口">设定库</button>
+    <button class="bookmark" aria-selected="false" title="示意入口">导出</button>
+    <svg class="spine-icon" width="18" height="18" viewBox="0 0 24 24" fill="none"
+         stroke="#6b6154" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+      <path d="M4 19.5V5.5A1.5 1.5 0 0 1 5.5 4H20v14H5.5A1.5 1.5 0 0 0 4 19.5zm0 0A1.5 1.5 0 0 0 5.5 21H20"/>
+    </svg>
+  </nav>
+
+  <main class="stage">
+
+    <!-- ============================================================
+         画面一 · 流水线
+         ============================================================ -->
+    <section class="view active" id="view-pipeline" role="tabpanel">
+      <div class="pipe">
+        <!-- 中栏：本章卷轴 -->
+        <aside class="scroll-col">
+          <span class="kchip">M1 · <b>K1</b></span>
+          <div class="volume-tag">第二卷 · 青冥剑鸣</div>
+          <h1 class="chapter-title">第002章 转折</h1>
+          <span class="badge badge-doing">写作中</span>
+          <div class="scroll-meta">
+            目标字数 <b>4,000</b> · 已成 <b>3,214</b> 字<br>
+            开笔 14:02 · 已历 <b>77</b> 分钟<br>
+            累计调用 <b>46</b> 笔 · 命中 <b>93.4%</b>
+          </div>
+          <!-- 墨尺：六阶段总进度 -->
+          <div class="ruler" role="img" aria-label="六阶段进度：前三段已完成，第四段进行中">
+            <i class="tall ink"></i><i class="ink"></i><i class="ink"></i>
+            <i class="tall ink"></i><i class="ink"></i><i class="pen"></i>
+            <i class="tall"></i><i></i><i></i>
+            <i class="tall"></i><i></i><i></i>
+            <i class="tall"></i><i></i><i></i>
+            <i class="tall"></i><i></i><i></i>
+          </div>
+          <div class="ruler-cap">设定 · 对齐 · 初稿 · 自审 · 润色 · 定稿</div>
+        </aside>
+
+        <!-- 右侧工作区 -->
+        <div class="work-col">
+          <span class="kchip">M1 · <b>K3</b></span>
+          <div class="work-head">
+            <h2>阶段时间线</h2>
+            <span>本章 46 笔调用 · 数据已落盘</span>
+          </div>
+
+          <div class="phase-list">
+            <div class="phase done">
+              <span class="dot"></span><span class="name">设定检索</span>
+              <span class="calls">12 笔</span>
+              <span class="tok"><i style="width:34%"></i></span>
+              <span class="hit">93.4%</span>
+              <span class="dur">4 分 12 秒</span>
+            </div>
+            <div class="phase done">
+              <span class="dot"></span><span class="name">大纲对齐</span>
+              <span class="calls">3 笔</span>
+              <span class="tok"><i style="width:9%"></i></span>
+              <span class="hit">100%</span>
+              <span class="dur">1 分 08 秒</span>
+            </div>
+            <div class="phase running">
+              <span class="dot"></span><span class="name">初 稿</span>
+              <span class="calls">23 笔</span>
+              <span class="tok"><i style="width:41%"></i></span>
+              <span class="hit low">96.1%</span>
+              <span class="dur">第 23 笔 · 已 35 分 12 秒</span>
+            </div>
+            <div class="phase waiting">
+              <span class="dot"></span><span class="name">自 审</span>
+              <span class="calls">—</span>
+              <span class="tok"></span>
+              <span class="hit">—</span>
+              <span class="dur">待初稿</span>
+            </div>
+            <div class="phase waiting">
+              <span class="dot"></span><span class="name">润 色</span>
+              <span class="calls">—</span>
+              <span class="tok"></span>
+              <span class="hit">—</span>
+              <span class="dur">待自审</span>
+            </div>
+            <div class="phase waiting">
+              <span class="dot"></span><span class="name">定 稿</span>
+              <span class="calls">—</span>
+              <span class="tok"></span>
+              <span class="hit">—</span>
+              <span class="dur">待润色</span>
+            </div>
+          </div>
+
+          <!-- 成本小结条 -->
+          <div class="cost" aria-label="本章成本小结">
+            <span class="cell"><b>¥0.24</b><small>/ 章</small></span>
+            <span class="cell"><b>46</b><small>笔</small></span>
+            <span class="cell"><em>93.4%</em><small>命中率</small></span>
+            <span class="cell"><b>¥0.11</b><small>预估剩余</small></span>
+          </div>
+
+          <!-- 按钮层级：同屏唯一 primary -->
+          <div class="actions">
+            <button class="btn btn-primary">继续写作</button>
+            <button class="btn btn-ghost">暂停</button>
+            <button class="btn btn-ghost">查看设定引用</button>
+            <button class="btn btn-danger">重写本章</button>
+            <span class="hint">朱砂唯一 · 其余退后</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         画面二 · 阅读器
+         ============================================================ -->
+    <section class="view" id="view-reader" role="tabpanel">
+      <div class="reader">
+        <span class="kchip">K1 · <b>R1</b> · M2</span>
+        <header class="reader-head">
+          <span class="volume-tag">第二卷 · 青冥剑鸣</span>
+          <h1>第002章 转折</h1>
+          <div class="orn" aria-hidden="true"></div>
+        </header>
+
+        <div class="reader-body" id="readerBody">
+          <p>山门外的雾比往日更沉。陈砚之立在青石阶下，掌心那半块青玉硌得生疼——三日前它还温润如水，如今却像一块烧不尽的炭。</p>
+          <p>「灵根测出个废字，也配回山？」身后的讥笑声不重，却顺着雾气爬进耳朵。他没有回头。师尊临终前只留了一句话：玉裂之时，便是你登顶之日。</p>
+          <p>他抬手，将青玉按在石阶中央的刻痕上。裂痕里渗出一线微光，细得像针，却把整段石阶照得透亮<span class="reader-note">审校注：此处「刻痕」前文第001章作「剑痕」，需统一</span>。雾，霎时向两侧退开。</p>
+          <p id="streamPara">阶上之人尽数变色。执剑长老的手按上剑柄，声音发紧：「守阁老祖的封印——被一个废灵根解了。」陈砚之收回手，青玉已碎成齑粉，随风散去。</p>
+          <p>他终于抬头，望向那座困了他七年的问剑阁。这一次，眼里再没有雾。</p>
+        </div>
+
+        <div class="reader-tools">
+          <button class="btn btn-ghost" id="replayStream">重演流式按句淡入</button>
+          <span class="hint">点正文任意段落进入聚焦 · 再点一次退出</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         画面三 · 章节面板
+         ============================================================ -->
+    <section class="view" id="view-chapters" role="tabpanel">
+      <div class="chapters">
+        <span class="kchip">M4</span>
+
+        <div class="vol-list">
+          <details class="vol" open>
+            <summary>
+              <span class="tri">▸</span>
+              <span class="vt">第一卷 · 风起青萍</span>
+              <span class="vc">2 章 · 已定稿 1</span>
+            </summary>
+            <div class="chap" data-no="第001章" data-title="山门" data-st="定稿"
+                 data-words="4,127" data-time="09-03 21:40" data-note="">
+              <span class="no">第001章</span><span class="ct">山门</span>
+              <span class="badge badge-done">定稿</span>
+            </div>
+            <div class="chap cur" data-no="第002章" data-title="转折" data-st="写作中"
+                 data-words="3,214 / 4,000" data-time="今日 14:02 起笔"
+                 data-note="">
+              <span class="no">第002章</span><span class="ct">转折</span>
+              <span class="badge badge-doing">写作中</span>
+            </div>
+          </details>
+
+          <details class="vol">
+            <summary>
+              <span class="tri">▸</span>
+              <span class="vt">第二卷 · 青冥剑鸣</span>
+              <span class="vc">大纲已锁 · 未开笔</span>
+            </summary>
+            <div class="chap" data-no="第014章" data-title="洗髓" data-st="审校带注"
+                 data-words="3,860" data-time="09-05 23:12"
+                 data-note="「剑痕/刻痕」用词前后不一，见第002章审校注；长老对白三处节奏过密，建议拆段。">
+              <span class="no">第014章</span><span class="ct">洗髓</span>
+              <span class="badge badge-note">审校带注</span>
+            </div>
+            <div class="chap" data-no="第015章" data-title="剑试" data-st="空稿"
+                 data-words="0" data-time="—" data-note="">
+              <span class="no">第015章</span><span class="ct">剑试</span>
+              <span class="badge badge-empty">空稿</span>
+            </div>
+          </details>
+        </div>
+
+        <!-- 右栏：选中章详情 -->
+        <aside class="chap-detail">
+          <span class="volume-tag">选中章节</span>
+          <h3 id="dTitle">第002章 转折</h3>
+          <span class="badge badge-doing" id="dBadge">写作中</span>
+          <dl>
+            <dt>字数</dt><dd id="dWords">3,214 / 4,000</dd><br>
+            <dt>最近动作</dt><dd id="dTime">今日 14:02 起笔</dd><br>
+            <dt>所在卷</dt><dd>第二卷 · 青冥剑鸣</dd>
+          </dl>
+          <div class="note-quote" id="dNote" hidden></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= 页脚 ================= -->
+<footer class="colophon">
+  <span>设计方法：anthropics frontend-design skill + jezweb design-review checklist（已应用）</span>
+  <span>纸 · 墨 · 朱砂 · 黛青 —— 纸砚书房</span>
+</footer>
+
+<!-- ================= 设计说明 ================= -->
+<dialog class="notes" id="notesDialog">
+  <button class="close" id="closeNotes">收起</button>
+  <h2>设计说明 · 纸砚书房</h2>
+
+  <h3>设计 Token</h3>
+  <table>
+    <tr><th>色</th><td>
+      <span class="sw" style="background:#f7f2e8"></span>宣纸 #f7f2e8　
+      <span class="sw" style="background:#f1eadb"></span>深纸 #f1eadb　
+      <span class="sw" style="background:#2b2620"></span>浓墨 #2b2620　
+      <span class="sw" style="background:#6b6154"></span>淡墨 #6b6154　
+      <span class="sw" style="background:#d9cfb8"></span>墨线 #d9cfb8　
+      <span class="sw" style="background:#a83f2e"></span>朱砂 #a83f2e　
+      <span class="sw" style="background:#3d5a66"></span>黛青 #3d5a66
+    </td></tr>
+    <tr><th>字体</th><td>Source Han Serif SC → Noto Serif CJK SC → 宋体栈，serif 兜底；正文 16px / 行距 1.85；大标题 26px / 字距 0.2em</td></tr>
+    <tr><th>间距</th><td>8px 刻度：4 / 8 / 12 / 16 / 24 / 32，全文无随机值</td></tr>
+    <tr><th>圆角</th><td>0–2px，直角书卷感；无边框投影，分隔只用 1px 墨线与留白</td></tr>
+    <tr><th>版心</th><td>阅读区 680px ≈ 42 字/行（K1）；图标内联 SVG 描边 1.5px</td></tr>
+  </table>
+
+  <h3>与现状的三条差异</h3>
+  <ol>
+    <li>暗色软件界面 → 纸墨书房：正文纸底墨字、衬线主导，行长从 90+ 字压进 680px 版心（K1），段落可聚焦（R1）；</li>
+    <li>8+ 等权重按钮 → 同屏唯一朱砂 primary「继续写作」，其余 ghost、重写为朱砂描边 danger-ghost（K3）；</li>
+    <li>长任务只有状态 pills → 阶段时间线 + 成本小结条：每阶段笔数 / token 迷你条 / 命中率色点、「第 N 笔 · 已 x 秒」实时态，¥ 与命中率直读（M1），章节按卷分组折叠（M4）。</li>
+  </ol>
+
+  <h3>适用人群</h3>
+  <ol start="1" style="list-style:none;padding-left:0;">
+    <li>长期伏案、日均盯 1–3 章流水线的长篇作者；对纸书与宋体排版有情感偏好的写作者；需要成本与命中率可审的「监工型」用户。反过来说：偏好科技感仪表盘或深色依赖的用户会更适合方向 B。</li>
+  </ol>
+</dialog>
+
+<script>
+/* ---------- Tab 切换：顶部 tab 与竖排书签联动 ---------- */
+(function(){
+  var tabs = document.querySelectorAll('[data-view]');
+  function activate(name){
+    document.querySelectorAll('.view').forEach(function(v){
+      v.classList.toggle('active', v.id === 'view-' + name);
+    });
+    tabs.forEach(function(t){
+      t.setAttribute('aria-selected', String(t.dataset.view === name));
+    });
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ activate(t.dataset.view); });
+  });
+
+  /* ---------- R1 段落聚焦：点段落 = 当前段全亮，其余降灰 ---------- */
+  var body = document.getElementById('readerBody');
+  body.addEventListener('click', function(e){
+    var p = e.target.closest('p');
+    if(!p) return;
+    var already = body.classList.contains('focusing') && p.classList.contains('focused');
+    body.classList.remove('focusing');
+    body.querySelectorAll('p').forEach(function(x){ x.classList.remove('focused'); });
+    if(!already){
+      body.classList.add('focusing');
+      p.classList.add('focused');
+    }
+  });
+
+  /* ---------- M2 流式按句淡入：切句成 span，逐句点亮 ---------- */
+  var para = document.getElementById('streamPara');
+  var played = false;
+  function splitSentences(){
+    if(para.dataset.split) return;
+    var text = para.textContent;
+    var parts = text.split(/(?<=[。！？」])/).filter(Boolean);
+    para.textContent = '';
+    parts.forEach(function(s){
+      var sp = document.createElement('span');
+      sp.className = 'sentence';
+      sp.textContent = s;
+      para.appendChild(sp);
+    });
+    para.dataset.split = '1';
+  }
+  document.getElementById('replayStream').addEventListener('click', function(){
+    splitSentences();
+    var spans = para.querySelectorAll('.sentence');
+    spans.forEach(function(s){ s.classList.remove('on'); });
+    spans.forEach(function(s, i){
+      setTimeout(function(){ s.classList.add('on'); }, 260 * i);
+    });
+    played = true;
+  });
+
+  /* ---------- M4 章节面板：点章行更新右栏详情 ---------- */
+  var badgeCls = {'定稿':'badge-done','写作中':'badge-doing','审校带注':'badge-note','空稿':'badge-empty'};
+  document.querySelectorAll('.chap').forEach(function(row){
+    row.addEventListener('click', function(){
+      document.querySelectorAll('.chap').forEach(function(x){ x.classList.remove('cur'); });
+      row.classList.add('cur');
+      document.getElementById('dTitle').textContent = row.dataset.no + ' ' + row.dataset.title;
+      var b = document.getElementById('dBadge');
+      b.textContent = row.dataset.st;
+      b.className = 'badge ' + (badgeCls[row.dataset.st] || 'badge-empty');
+      document.getElementById('dWords').textContent = row.dataset.words;
+      document.getElementById('dTime').textContent = row.dataset.time;
+      var note = document.getElementById('dNote');
+      if(row.dataset.note){ note.textContent = '审校注：' + row.dataset.note; note.hidden = false; }
+      else { note.hidden = true; }
+    });
+  });
+
+  /* ---------- 设计说明 dialog ---------- */
+  var dlg = document.getElementById('notesDialog');
+  document.getElementById('openNotes').addEventListener('click', function(){ dlg.showModal(); });
+  document.getElementById('closeNotes').addEventListener('click', function(){ dlg.close(); });
+})();
+</script>
+</body>
+</html>

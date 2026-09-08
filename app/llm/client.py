@@ -65,11 +65,17 @@ class LLMClient:
                  temperature: float = 0.7, max_tokens: int = 8192, timeout: int = 300,
                  max_retries: int = 2, backoff_base: float = 2.0, thinking: str = "",
                  reasoning_effort: str = "", slot: str = "",
-                 payload_defaults: dict = None, stage_params: dict = None):
+                 payload_defaults: dict = None, stage_params: dict = None,
+                 user_id: str = ""):
         self.slot = slot or ""   # 槽位标签（token 用量统计维度，插件）
         self.base_url = (base_url or "").rstrip("/")
         self.api_key = api_key or ""
         self.model = model
+        self.user_id = user_id or ""   # DeepSeek user 字段：KV 缓存隔离（E2.2，官方 API 参考）
+        # opencode 的 Console Go 网关（omen-alpha）要求 `x-session-id`，缺失直接 400
+        # MissingSessionID；DS / TokenRhythm 不看这个头。取 user_id 派生的**稳定**值：
+        # 同一跑次同一会话域——按进程随机会把缓存域打散，长测命中直接失真。
+        self.session_id = (user_id or "qianbi-novel").strip().replace(" ", "-") or "qianbi-novel"
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.timeout = timeout
@@ -112,6 +118,7 @@ class LLMClient:
             slot=slot,
             payload_defaults=payload_defaults,
             stage_params=stage_params,
+            user_id=conn.get("user_id", ""),
         )
 
     def _record_usage(self, usage: dict, latency: float, phase: str = ""):
@@ -122,6 +129,15 @@ class LLMClient:
             # DeepSeek 上下文缓存命中/未命中 tokens（其他网关可能不返回，默认 0）
             hit = int(usage.get("prompt_cache_hit_tokens", 0) or 0)
             miss = int(usage.get("prompt_cache_miss_tokens", 0) or 0)
+            if not hit and not miss:
+                # OpenAI 系网关（部分中转渠道）只报 prompt_tokens_details.cached_tokens：
+                # 命中回退该字段，未命中 = prompt_tokens − 命中，口径与 DS 字段对齐，
+                # 使命中率在任何渠道上都可测量（渠道探针 scripts/provider_probe.py）
+                cached = int((usage.get("prompt_tokens_details") or {})
+                             .get("cached_tokens") or 0)
+                if cached:
+                    hit = cached
+                    miss = max(int(usage.get("prompt_tokens", 0) or 0) - cached, 0)
             # 推理 tokens 口径（OpenAI 兼容 completion_tokens_details.reasoning_tokens，
             # DeepSeek 思考模式等网关可能不返回，默认 0）
             reasoning = int((usage.get("completion_tokens_details") or {})
@@ -145,6 +161,10 @@ class LLMClient:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        if "opencode" in self.base_url:
+            # 仅 opencode（omen-alpha / Console Go）要求；DS 与 TokenRhythm 不看，
+            # 多发一个头可能影响它们的路由/缓存，所以别的渠道一个字节都不加。
+            headers["x-session-id"] = self.session_id
         return headers
 
     def _build_messages(self, prompt: str, system: str = "") -> list:
@@ -224,9 +244,14 @@ class LLMClient:
             try:
                 _roles = [m.get("role", "") for m in messages]
                 _lens = [len(m.get("content", "")) for m in messages]
-                _h = hashlib.sha1(messages[0].get("content", "").encode("utf-8")).hexdigest()[:12] if messages else ""
+                # 逐消息哈希：等长改写只看 lens 是看不见的（章界 32k 二次计价的定位就靠它）
+                _hashes = [hashlib.sha1(m.get("content", "").encode("utf-8")).hexdigest()[:10]
+                           for m in messages]
+                _h = _hashes[0] if _hashes else ""
                 _line = json.dumps({"phase": phase or "", "roles": _roles,
-                                    "lens": _lens, "sys_hash": _h}, ensure_ascii=False)
+                                    "lens": _lens, "sys_hash": _h, "hashes": _hashes,
+                                    "model": self.model, "user": self.user_id or ""},
+                                   ensure_ascii=False)
                 with open(_dbg, "a", encoding="utf-8") as _f:
                     _f.write(_line + chr(10))
             except Exception:
@@ -242,6 +267,10 @@ class LLMClient:
             val = self._resolve(key, None, over)
             if val is not None:
                 payload[key] = val
+        if self.user_id:
+            # 连接档案 user_id → API `user` 字段：DeepSeek 官方口径"can be used for
+            # KVCache isolation"——实验分支/不同书之间隔离缓存空间（E2.2）
+            payload["user"] = self.user_id
         if stream:
             payload["stream_options"] = {"include_usage": True}   # 末 chunk 携带 usage（用量统计）
         if thinking:

@@ -413,6 +413,192 @@ def _session_ask(ctx, session, slot: str, prompt: str, label: str = "", *,
     return text
 
 
+# ============ 相位旗标与 span 改写器（v0.20 成本战役 E1.1/O2/E4.1）============
+
+def _phase_param(ctx, phase: str, key: str, default=None):
+    """读相位旗标（router.stage_params[phase][key]）——预设旗标经 presets.stage_params
+    校验透传，内置机械相位表不设旗标。router 无该相位/键时返回 default。"""
+    sp = getattr(getattr(ctx, "router", None), "stage_params", None) or {}
+    return (sp.get(phase) or {}).get(key, default)
+
+
+def _pace_after_long_call(ctx, cfg_mod, session, default_seconds: int = 0):
+    """S5：长生成后的注册窗口节拍——给服务端缓存单元注册留时间。
+
+    `writing.session_pace_seconds` 控制时长，**默认 0（关闭）**——由实验预设/用户
+    设置显式开启（如 s3_pace 的 45s）。仅会话启用时生效；休眠可被 ctx.stopped 打断。
+    """
+    try:
+        seconds = int((ctx.cfg.get("writing", {}) or {}).get("session_pace_seconds",
+                                                             default_seconds))
+    except (TypeError, ValueError):
+        seconds = default_seconds
+    if seconds <= 0 or not _session_usable(session):
+        return
+    import time as _time
+    _end = _time.monotonic() + seconds
+    while _time.monotonic() < _end:
+        if bool(getattr(ctx, "stopped", False)):
+            return
+        _time.sleep(0.5)
+
+
+# ============ S4 指令库前置（成本优化方案 v3 §3/S4；仅卷会话模式触达）============
+
+# S4-c：追踪卷会话轮的冗余节引用行——{character_state}/{foreshadow_table}/
+# {timeline}/{old_context}/{worldbook} 五节与本章开幕轮/会话历史逐字重复，
+# 卷会话模式下替换为本行；{roster}（花名册）是追踪的功能性输入，保留。
+TRACKING_SESSION_REF = "（角色状态/伏笔/时间线以本章开幕轮共享上下文为准，本步输出其增量更新）"
+
+
+def _volume_prose_opening_values(*, num: int, word_target: int, next_brief: str,
+                                 user_guidance: str, user_ideas: str,
+                                 used_setpieces: str, craft_block: str,
+                                 author_note: str, tic_blacklist: str) -> str:
+    """S4-a：卷会话开幕轮的「本章动态值」段。
+
+    PROSE 指令体已模板化冻结进卷会话 system（volume_session.volume_system_text），
+    开幕轮只携带 chapter_header（volume_mode，S4-b）+ 逐章动态值 + 一行指令库
+    执行指针。条目名与 prose_instruction_library 的引用行逐名对应——指令库说
+    「以开幕轮给定的 X 为准」，这里就提供 X；静态部分一字不重复（重复即烧 miss）。
+    """
+    return "\n".join([
+        "## 本章动态值（逐章变化；写作指令与固定红线见系统「写作指令库」，不在此重复）",
+        f"- 本章章号：第 {num} 章",
+        f"- 字数目标：{word_target} 字",
+        f"- 下一章预告：{next_brief}",
+        f"- 用户补充指导：{user_guidance}",
+        f"- 用户创作想法：{user_ideas}",
+        f"- 名场面不复用清单：{used_setpieces}",
+        f"- 本章工艺路线：{craft_block}",
+        f"- 作者按：{author_note}",
+        "- 口头禅黑名单：",
+        tic_blacklist,
+        "",
+        "按写作指令库执行本章写作。",
+    ])
+
+
+def _dyn_directives(ctx, phase: str) -> str:
+    """预设旗标 → prompt 尾部动态指令块（E1.2/O2）。
+
+    L1/s1 的 budget forcing 证据：把目标长度显式写进 prompt 能实际改变输出与思考
+    长度。未配置任何旗标时返回空串——**基线请求体逐字节不变**（变量隔离纪律，
+    对照实验的公共前提）。放尾部是缓存纪律：动态内容永远殿后（shared_prefix 三定律）。
+    """
+    lines = []
+    lb = _phase_param(ctx, phase, "length_budget")
+    if lb:
+        lines.append(f"- 输出总长硬上限：约 {lb} 字。超出上限即视为任务失败，"
+                     "先收束场景再收尾，宁少勿超。")
+    tb = _phase_param(ctx, phase, "think_budget")
+    if tb:
+        lines.append(f"- 思考预算：总思考量控制在约 {tb} tokens 内，按当前证据直接给结论，"
+                     "不要反复重推已确定的点。")
+    struct = _phase_param(ctx, phase, "output_structure")
+    if struct == "scene_card":
+        lines.append("- 输出结构：正文之前先输出「本章场景卡」（每场景一行："
+                     "地点｜在场人物｜事件推进｜章末钩子归属），场景卡之后空一行直接输出正文；"
+                     "场景卡不算正文字数。")
+    if not lines:
+        return ""
+    return "\n\n## 输出预算与结构（预设硬约束，优先级高于常规写法取舍）\n" + "\n".join(lines)
+
+
+def _use_session(ctx, session, slot: str, phase: str) -> bool:
+    """本相位是否走章会话栈（E4.1 的 N2 红线守卫）。
+
+    会话栈的历史前缀属于「栈基座模型」的缓存域：某相位经 stage_params.slot 外迁到
+    异构网关（qwen/doubao 等）时，整栈重发=逐 token 全价 miss（缓存按模型索引清零，
+    ProjectDiscovery 实测 7% 命中的翻车路径）。此时该相位降级为无栈单发——显式喂
+    所需文本（stateless），栈内其余相位不动。"""
+    if not _session_usable(session):
+        return False
+    resolved = genre_presets.stage_slot(_preset_id(getattr(ctx, "proj", "")), phase) or slot
+    if resolved == slot:
+        return True
+    c_ext = ctx.router.client(resolved)
+    c_base = ctx.router.client(slot)
+    return (c_ext.base_url, c_ext.model) == (c_base.base_url, c_base.model)
+
+
+def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
+                   *, prose: str, label: str = "", stream: bool = True,
+                   temperature=None) -> str:
+    """修订类相位统一入口（deslop/trim/enrich/review_fix 四相位共用）。
+
+    stage_params[phase].output_mode == "span" 时先走 span 路径：
+      标注正文 → 模型回 JSON 编辑列表 → apply_spans 合并 → 会话内固化合成轮
+      （user=标注稿请求，assistant=合并后全文——历史里"最近一条章正文消息"
+      仍指向最新正文，后续相位的 {prose} 历史引用语义不变）；
+    span 输出畸形/空/无变化 → 回退全量路径重试一次（E1.1 kill criteria），
+    全量路径即改造前的 session/stream 双分支，语义逐字保留。
+
+    返回改写后全文；完全失败返回空串（调用方既有守卫接管）。
+    """
+    use_sess = _use_session(ctx, session, slot, phase)
+    if _phase_param(ctx, phase, "output_mode") == "span" and prose.strip():
+        from . import span_edit
+        t_before = session.turn_count() if use_sess else 0
+        kw_span = dict(kw)
+        kw_span["prose"] = span_edit.annotate(prose)
+        try:
+            if use_sess:
+                req = prompts.session_turn_text(template, prose_sentinel="").format(**kw_span) \
+                    + "\n\n" + span_edit.OUTPUT_CONTRACT
+                client = ctx.router.client(
+                    genre_presets.stage_slot(_preset_id(ctx.proj), phase) or slot)
+                ctx.last_prompt = req
+                raw = clean_llm_output(client.chat_turn(
+                    session.snapshot() + [{"role": "user", "content": req}],
+                    on_chunk=ctx.stream_chunk, phase=phase,
+                    temperature=temperature,
+                    abort=(lambda: bool(getattr(ctx, "stopped", False)))))
+                if getattr(client, "last_aborted", False):
+                    raise PipelineStopped()
+                _record_call(ctx, phase, slot, client, req)
+            else:
+                req = template.format(**kw_span) + "\n\n" + span_edit.OUTPUT_CONTRACT
+                ctx.last_prompt = req
+                raw = clean_llm_output(_stream(ctx, slot, req, label=label,
+                                               phase=phase))
+            spans = span_edit.parse_spans(raw)
+            merged = span_edit.apply_spans(prose, spans)
+            if merged.strip() and merged != prose:
+                if use_sess:
+                    session.commit_turn(req, merged)
+                try:
+                    stats = span_edit.span_stats(prose, spans)
+                    ctx.log("info", f"span 修订生效：{stats['ops']}，"
+                                    f"点名 {len(stats['paras_touched'])}/{stats['total_paras']} 段")
+                except Exception:
+                    pass
+                span_edit.record_event(ctx.proj, phase, "merged")
+                return merged
+            if merged == prose:
+                span_edit.record_event(ctx.proj, phase, "zero_edit")
+                return prose   # 模型认为无需改动：零编辑是合法结论，不算失败
+            span_edit.record_event(ctx.proj, phase, "fallback", "empty_merge")
+            ctx.log("warn", "span 合并结果为空，回退全量模式重试")
+        except PipelineStopped:
+            raise
+        except Exception as e:  # noqa: BLE001
+            if use_sess:
+                session.rollback_to(t_before)   # span 尝试未固化，栈保持原状
+            span_edit.record_event(ctx.proj, phase, "fallback", str(e))
+            ctx.log("warn", f"span 输出无效（{e}），回退全量模式重试")
+    # —— 全量路径（改造前原语义）——
+    prompt = template.format(**kw)
+    ctx.last_prompt = prompt
+    if use_sess:
+        _session_seed(session, prose)
+        turn_text = prompts.session_turn_text(template).format(**kw)
+        ctx.last_prompt = turn_text
+        return _session_ask(ctx, session, slot, turn_text, label=label,
+                            phase=phase, stream=stream, temperature=temperature)
+    return _stream(ctx, slot, prompt, label=label, phase=phase)
+
+
 # ============ 阶段①：核心设定 ============
 
 def stage_core_setting(ctx) -> str:
@@ -622,7 +808,7 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         worldbook_block=wb_block_text,
         regex_block=rg_block_text,
         user_directive=ctx.consume_gate_idea() or "（无）",
-    )
+    ) + _dyn_directives(ctx, PHASE_OUTLINE)   # O2 长度预算（未配置=空串，基线字节不变）
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
         result = _stream(ctx, cfg_mod.SLOT_HELPER, prompt, label="细纲",
@@ -721,6 +907,136 @@ def _store_inner_gate_idea(ctx, proj: str, num: int, gate_key: str, idea: str):
     ctx.log("info", f"{gate_key} 想法已登记（重写本章时注入）：{idea[:60]}")
 
 
+def _acquire_volume_session(ctx, proj: str, num: int, static_freeze: bool = False,
+                            compaction: bool = False):
+    """S1 卷级会话栈（writing.volume_session，v3 §2）：按卷取/建 VolumeSession。
+
+    生命周期挂在 ctx（orchestrator.run）持有的按卷缓存上：每次连跑一个实例集，
+    卷内各章在同一实例上 open_chapter 累积跨章历史；进程重启后首次取用时从
+    项目/会话/卷N_messages.jsonl 恢复（消息逐字节一致 → 服务端前缀缓存继续
+    有效）。ctx 无缓存表（旁路调用方）/客户端不支持 chat_turn → 返回 None，
+    本章回退单轮路径。flag 关闭时本函数不被触达（行为逐字节不变）。
+
+    static_freeze（writing.s4_static_freeze，S4 指令库前置的独立 A/B 开关，默认
+    关）：开启时 system = 全书冻结前缀 + PROSE 指令库（volume_system_text）；
+    关闭时 system 仍只含全书前缀——S1 行为逐字节不变（test_volume_session 的
+    旗标开字节锁钉住的正是这份请求体）。
+    """
+    cache = getattr(ctx, "volume_sessions", None)
+    if not isinstance(cache, dict):
+        return None
+    try:
+        from .volume_session import (VolumeSession, resolve_volume_number,
+                                     volume_messages_path, volume_system_text)
+        vol = resolve_volume_number(proj, num)
+        sess = cache.get(vol)
+        if sess is None:
+            probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+            if not callable(getattr(probe, "chat_turn", None)):
+                return None
+            # S4-a：指令库开启时 system = 全书冻结前缀 + PROSE 指令库（模板化
+            # 冻结版）——指令体不再随每章开幕轮重发（prose 首轮 miss 的大头）；
+            # 关闭时与 S1 逐字节一致。旧栈 system 失配 → load 拒绝，按全新栈继续
+            # （缓存域切换本就该全灭一次）。
+            system_text = (volume_system_text(proj) if static_freeze
+                           else project_header(proj))
+            # V1-③（writing.review_in_system，缺省关）：审校静态指令尾段一次性进
+            # system——每章审校轮只带动态块，指令体不再随章数在历史里累积
+            # （T 轮实测审校轮指令体 4.6k chars/章逐章重发）。旧行为逐字节不变。
+            if bool((ctx.cfg or {}).get("writing", {}).get("review_in_system", False)):
+                _rt = prompts.review_static_tail()
+                if _rt:
+                    system_text = system_text + "\n\n" + _rt
+            # 压缩开时接最新一代栈（卷V_cK），关时 gen 恒 0 = 文件名与行为逐字节不变
+            gen = _live_stack_gen(proj, vol) if compaction else 0
+            sess = VolumeSession(probe, system_text=system_text,
+                                 volume=vol, proj=proj, gen=gen)
+            path = volume_messages_path(proj, vol, gen)
+            if os.path.exists(path):
+                if sess.load(path):
+                    ctx.log("info", f"卷 {vol} 会话已从盘恢复（{sess.turn_count()} 轮，"
+                                    f"历史前缀缓存继续有效）")
+                else:
+                    ctx.log("warn", f"卷 {vol} 会话恢复失败（全书前缀已变化或文件损坏），"
+                                    f"按全新卷栈继续")
+            cache[vol] = sess
+            ctx.log("info", f"第 {num} 章 卷会话已启用（卷 {vol}：跨章共享历史，"
+                            f"章头入开幕轮）")
+        return sess
+    except Exception as e:  # noqa: BLE001
+        try:
+            ctx.log("warn", f"卷级会话不可用（{e}），本章按无会话继续")
+        except Exception:
+            pass
+        return None
+
+
+def _live_stack_gen(proj: str, vol: int) -> int:
+    """盘上该卷最新的会话栈代次：接力压缩会另起 卷V_cK 新栈（旧栈留盘作证据），
+    崩溃续跑必须接最新那一代，否则会把压缩前的长历史又续上（writing.compaction
+    关时恒 0 = 改造前的文件名与字节）。"""
+    best = 0
+    d = os.path.join(proj, "会话")
+    if not os.path.isdir(d):
+        return 0
+    pat = re.compile(r"^卷%d_c(\d+)_messages\.jsonl$" % int(vol))
+    for fn in os.listdir(d):
+        m = pat.match(fn)
+        if m:
+            best = max(best, int(m.group(1)))
+    return best
+
+
+def _compaction_step(ctx, proj: str, num: int, session):
+    """长程压缩 §4.3「接力压缩」接线（writing.compaction，默认关）。
+
+    触发（§6.2 卷界 / 输入越阈 / 手动）时：把本卷历史折叠成装配式交接块（零 LLM
+    调用），另起一代会话栈——system 逐字节沿用旧栈（它就是新前缀的共享段），
+    交接块作为新栈首个开幕轮的前置段给一次，此后随历史永久命中。
+    旧栈文件不删不改：压缩前后对照与 T2 A/B 的证据都在盘上。
+
+    返回 (session, preface)；旗标关闭时调用方根本不触达本函数。
+    """
+    from . import history_compaction as hc
+    cfg = ctx.cfg or {}
+    if session is None:
+        return session, ""
+    # V1-a：covered 取本卷与上一卷落盘块的 to_chapter 最大值——卷界场景覆盖块
+    # 落在上一卷文件里，只查本卷会算成 0、守卫失效（T2 实测 ch25 二次点火根源之一）
+    _d_cur = hc.load_handoff(proj, session.volume) or {}
+    _d_prev = hc.load_handoff(proj, session.volume - 1) if session.volume > 1 else {}
+    covered = max(int(_d_cur.get("to_chapter") or 0), int(_d_prev.get("to_chapter") or 0))
+    trig = hc.should_compact(proj, num, cfg=cfg, volume=session.volume)
+    if trig.fire and covered < num - 1:
+        # V1-b：被顶替规模按旧栈实测计（ha 口径）——不再用单章正文那把失真的尺子
+        from .history_compaction import han_tokens as _han
+        _msgs = getattr(session, "_messages", None) or []
+        replaced_hint = _han("\n".join(str(m.get("content") or "") for m in _msgs))
+        ob = hc.opening_block(proj, num, cfg=cfg, volume=session.volume,
+                              replaced_hint=replaced_hint)
+        if not ob.contributed:
+            ctx.log("info", f"第 {num} 章 压缩触发（{trig.reason}）但装配拒绝："
+                            f"{ob.reason}——沿用当前会话（fail-open）")
+            return session, ""
+        from .volume_session import VolumeSession
+        probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+        new = VolumeSession(probe, system_text=session.system_text,
+                            volume=session.volume, proj=proj, gen=session.gen + 1)
+        cache = getattr(ctx, "volume_sessions", None)
+        if isinstance(cache, dict):
+            cache[session.volume] = new
+        new._handoff = ob.text
+        ctx.log("ok", f"第 {num} 章 接力压缩（{trig.reason}）：交接块 {ob.tokens} tok "
+                      f"顶替逐字历史 {ob.replaced_tokens} tok（压缩比 "
+                      f"{100 * (1 - ob.shrink_ratio):.0f}%），另起会话栈 "
+                      f"卷{new.volume}_c{new.gen}")
+        session = new
+    preface = getattr(session, "_handoff", "") or ""
+    if preface:
+        session._handoff = ""      # 只给一次：新栈开幕轮之后它进入历史、永久命中
+    return session, preface
+
+
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
     proj = ctx.proj
@@ -734,8 +1050,26 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
 
     # ---- 章会话（v0.19）：system=双层稳定前缀，正文与后续阶段作为追加轮次。
     # 关闭（writing.chapter_session=false）或客户端不支持 chat_turn 时回退单轮路径。
+    # S1 卷级会话栈（writing.volume_session，默认关，v3 §2）：开启时跨章复用一个
+    # VolumeSession（system 只含 project_header，章头挪到每章开幕轮）；flag 关闭
+    # 时走下方原分支，请求体与改造前逐字节一致（A/B 对照的公共前提）。
+    # S4 指令库前置（writing.s4_static_freeze，默认关，v3 §3）：挂在本旗标下的
+    # 独立 A/B 步——卷会话开 + 本旗标开才生效（system 入指令库/开幕轮瘦身/
+    # 追踪轮引用行）；卷会话开 + 本旗标关 = S1 请求体逐字节不变。
+    _w_cfg = (ctx.cfg or {}).get("writing", {})
+    _s4_freeze = bool(_w_cfg.get("s4_static_freeze", False))
+    # 长程压缩（writing.compaction，默认关，长程压缩文档 §6.2）：只在卷会话之上
+    # 加一步「历史折叠成交接块 + 另起会话栈」，关闭时下方 _compaction_step 不触达。
+    _compaction = bool(_w_cfg.get("compaction", False))
+    # 缺省无会话：纯单轮路径（旧客户端/配置全关），后续 _session_usable(None) 兜底
     session = None
-    if (ctx.cfg or {}).get("writing", {}).get("chapter_session", True):
+    _comp_preface = ""
+    if _w_cfg.get("volume_session", False):
+        session = _acquire_volume_session(ctx, proj, num, static_freeze=_s4_freeze,
+                                          compaction=_compaction)
+        if _compaction and session is not None:
+            session, _comp_preface = _compaction_step(ctx, proj, num, session)
+    elif _w_cfg.get("chapter_session", True):
         try:
             probe = ctx.router.client(cfg_mod.SLOT_HELPER)
             if callable(getattr(probe, "chat_turn", None)):
@@ -820,6 +1154,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                              outline_fp=outline_fp)
         ctx.log("ok", f"第 {num} 章 已从断点恢复草稿（{project.count_chars(prose)} 字）")
 
+    # S1 卷会话断点续跑：卷栈逐章落盘，崩在中途=盘上栈只到上一章末尾——本章
+    # 开幕轮与正文都缺。先把盘上草稿播种进下一次会话调用（语义同章会话恢复的
+    # restart_with_prose，只是不清 1..N-1 章历史），防「最近一条章正文消息」
+    # 仍指向上章正文导致后续相位审错对象。
+    if resume_at and _session_usable(session) and hasattr(session, "seed_prose") \
+            and getattr(session, "current_chapter", 0) != num:
+        session.seed_prose(prose, chapter_num=num)
+        ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
+
     # ---- ② 草稿生成 ----
     if resume_at == "":
         ctx.step(num, st.STEP_DRAFT)
@@ -851,14 +1194,40 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             "craft_block": scene_cards.craft_block(num, _total_chapters(proj, chapter_words), outline),
             "author_note": _author_note(proj),
         }
+        _prose_directives = _dyn_directives(ctx, PHASE_PROSE)   # E1.2/O2（未配置=空串）
         if _session_usable(session):
-            # 章会话：正文写作是本会话首轮（system=双层前缀），回复固化为章正文轮
-            turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw)
+            # 章会话：正文写作是本会话首轮，回复固化为章正文轮。
+            # S1 卷会话：本轮同时是「本章开幕轮」——开幕声明 + 章头并入同一
+            # user 轮（system 只含全书冻结前缀；章头逐卷只 miss 一次，此后
+            # 永久命中）。开幕声明显式锚定「本章正文以本次回复为准」。
+            if _s4_freeze and hasattr(session, "open_chapter"):
+                # S4（v3 §3 指令库前置）：PROSE 指令体已模板化冻结进卷会话
+                # system（volume_system_text），开幕轮只带本章共享上下文
+                # （volume_mode 八节去三节，S4-b）+ 逐章动态值 + 一行指令库
+                # 执行指针。S1 卷会话/章会话/单轮走 else，请求体逐字节不变。
+                turn_text = _volume_prose_opening_values(
+                    num=num, word_target=chapter_words, next_brief=next_brief,
+                    user_guidance=prose_kw["user_guidance"],
+                    user_ideas=prose_kw["user_ideas"],
+                    used_setpieces=prose_kw["used_setpieces"],
+                    craft_block=prose_kw["craft_block"],
+                    author_note=prose_kw["author_note"],
+                    tic_blacklist=prose_kw["tic_blacklist"]) + _prose_directives
+                turn_text = session.open_chapter(
+                    chapter_header(proj, num, volume_mode=True), turn_text,
+                    chapter_num=num, preface=_comp_preface)
+            else:
+                turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
+                    + _prose_directives
+                if hasattr(session, "open_chapter"):
+                    turn_text = session.open_chapter(chapter_header(proj, num), turn_text,
+                                                     chapter_num=num,
+                                                     preface=_comp_preface)
             ctx.last_prompt = turn_text
             prose = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, turn_text,
                                  label=f"草稿 第{num}章", phase=PHASE_PROSE)
         else:
-            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw)
+            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _prose_directives
             ctx.last_prompt = prompt
             prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章",
                             phase=PHASE_PROSE)
@@ -870,31 +1239,25 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
         max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
         low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+        # S5 注册窗口节拍：正文是长生成（130s+），紧随其后的快调用会在前轮输出单元
+        # 注册完成前发车，吃全价 miss（S1 实测 enrich 12.7k miss/笔）。在会话模式下
+        # 等一个注册窗口再发（本地扫描/断点保存已消耗一部分窗口）。
+        _pace_after_long_call(ctx, cfg_mod, session)
         enrich_rounds = 0
         while not low_ok and enrich_rounds < max_enrich_rounds:
             enrich_rounds += 1
             ctx.step(num, st.STEP_ENRICH)
             ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
             ctx.checkpoint()
-            enrich_prompt = prompts.ENRICH_PROMPT.format(chapter_num=num, actual=actual,
-                                                         target=chapter_words, prose=prose,
-                                                         tic_blacklist=_tic_blacklist(proj),
-                                                         must_block=_must_block(proj, ctx.cfg),
-                                                     chapter_header=chapter_header(proj, num),
-                                                         project_header=project_header(proj))
-            ctx.last_prompt = enrich_prompt
-            if _session_usable(session):
-                _session_seed(session, prose)
-                turn_text = prompts.session_turn_text(prompts.ENRICH_PROMPT).format(
-                    chapter_num=num, actual=actual, target=chapter_words, prose=prose,
-                    tic_blacklist=_tic_blacklist(proj), must_block=_must_block(proj, ctx.cfg),
-                    chapter_header=chapter_header(proj, num), project_header=project_header(proj))
-                ctx.last_prompt = turn_text
-                rewritten = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, turn_text,
-                                         label=f"扩写 第{enrich_rounds}轮", phase=PHASE_ENRICH)
-            else:
-                rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, enrich_prompt, label=f"扩写 第{enrich_rounds}轮",
-                                    phase=PHASE_ENRICH)
+            enrich_kw = dict(chapter_num=num, actual=actual,
+                             target=chapter_words, prose=prose,
+                             tic_blacklist=_tic_blacklist(proj),
+                             must_block=_must_block(proj, ctx.cfg),
+                             chapter_header=chapter_header(proj, num),
+                             project_header=project_header(proj))
+            rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_ENRICH,
+                                       prompts.ENRICH_PROMPT, enrich_kw, prose=prose,
+                                       label=f"扩写 第{enrich_rounds}轮")
             # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
             if rewritten.strip() and project.count_chars(rewritten) >= actual:
                 prose = rewritten
@@ -909,27 +1272,16 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             ctx.checkpoint()
             pre_prose, pre_actual = prose, actual
             cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
-            trim_prompt = prompts.TRIM_PROMPT.format(chapter_num=num, actual=actual,
-                                                     target=chapter_words, cut_pct=cut_pct,
-                                                     prose=prose,
-                                                     tic_blacklist=_tic_blacklist(proj),
-                                                     must_block=_must_block(proj, ctx.cfg),
-                                                 chapter_header=chapter_header(proj, num),
-                                                     project_header=project_header(proj))
-            ctx.last_prompt = trim_prompt
             t_trim = session.turn_count() if _session_usable(session) else 0
-            if _session_usable(session):
-                turn_text = prompts.session_turn_text(prompts.TRIM_PROMPT).format(
-                    chapter_num=num, actual=actual, target=chapter_words, cut_pct=cut_pct,
-                    prose=prose, tic_blacklist=_tic_blacklist(proj),
-                    must_block=_must_block(proj, ctx.cfg),
-                    chapter_header=chapter_header(proj, num), project_header=project_header(proj))
-                ctx.last_prompt = turn_text
-                prose = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, turn_text,
-                                     label="压缩", phase=PHASE_TRIM)
-            else:
-                prose = _stream(ctx, cfg_mod.SLOT_WRITING, trim_prompt, label="压缩",
-                                phase=PHASE_TRIM)
+            trim_kw = dict(chapter_num=num, actual=actual, target=chapter_words,
+                           cut_pct=cut_pct, prose=prose,
+                           tic_blacklist=_tic_blacklist(proj),
+                           must_block=_must_block(proj, ctx.cfg),
+                           chapter_header=chapter_header(proj, num),
+                           project_header=project_header(proj))
+            prose = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_TRIM,
+                                   prompts.TRIM_PROMPT, trim_kw, prose=prose,
+                                   label="压缩")
             low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
             if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
                 # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
@@ -981,25 +1333,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.log("warn", f"第 {num} 章 阻断 {len(blocking)} 处 → 去味改写（第 {rounds} 轮）…")
         ctx.checkpoint()
         findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
-        rewrite_prompt = prompts.DESLOP_REWRITE_PROMPT.format(findings=findings_text, prose=prose,
-                                                               tic_blacklist=_tic_blacklist(proj),
-                                                               must_block=_must_block(proj, ctx.cfg),
-                                                           chapter_header=chapter_header(proj, num),
-                                                               project_header=project_header(proj))
-        ctx.last_prompt = rewrite_prompt
         t_round = session.turn_count() if _session_usable(session) else 0
-        if _session_usable(session):
-            _session_seed(session, prose)
-            turn_text = prompts.session_turn_text(prompts.DESLOP_REWRITE_PROMPT).format(
-                findings=findings_text, prose=prose,
-                tic_blacklist=_tic_blacklist(proj), must_block=_must_block(proj, ctx.cfg),
-                chapter_header=chapter_header(proj, num), project_header=project_header(proj))
-            ctx.last_prompt = turn_text
-            rewritten = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, turn_text,
-                                     label=f"去味改写 第{rounds}轮", phase=PHASE_DESLOP)
-        else:
-            rewritten = _stream(ctx, cfg_mod.SLOT_WRITING, rewrite_prompt, label=f"去味改写 第{rounds}轮",
-                                phase=PHASE_DESLOP)
+        deslop_kw = dict(findings=findings_text, prose=prose,
+                         tic_blacklist=_tic_blacklist(proj),
+                         must_block=_must_block(proj, ctx.cfg),
+                         chapter_header=chapter_header(proj, num),
+                         project_header=project_header(proj))
+        rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_DESLOP,
+                                   prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=prose,
+                                   label=f"去味改写 第{rounds}轮")
         if rewritten.strip():
             prose = rewritten
         elif _session_usable(session):
@@ -1135,20 +1477,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             fix_kwargs = dict(chapter_num=num, findings="\n".join(blocking_review), prose=prose,
                               project_header=project_header(proj),
                               chapter_header=chapter_header(proj, num))
-            fix_prompt = prompts.REVIEW_FIX_PROMPT.format(**fix_kwargs)
-            ctx.last_prompt = fix_prompt
             t_fix = session.turn_count() if _session_usable(session) else 0
-            if _session_usable(session):
-                _session_seed(session, prose)
-                turn_text = prompts.session_turn_text(prompts.REVIEW_FIX_PROMPT).format(**fix_kwargs)
-                ctx.last_prompt = turn_text
-                rewritten = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, turn_text,
-                                         label=f"审校修改 第{review_rounds}轮",
-                                         phase=PHASE_REVIEW_FIX)
-            else:
-                rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt,
-                                   label=f"审校修改 第{review_rounds}轮",
-                                   phase=PHASE_REVIEW_FIX)
+            rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_REVIEW, PHASE_REVIEW_FIX,
+                                       prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
+                                       label=f"审校修改 第{review_rounds}轮")
             # 修复稿健全性守卫（真机缺陷修复：模型可能返回 ===REVISIONS=== 修订计划
             # 而非改后正文；采纳会把整章替换成指令清单，且空文本复检阻塞更少被误判改善）
             looks_like_plan = rewritten.lstrip().startswith("===")
@@ -1258,7 +1590,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             prose_excerpt=excerpt, project_header=project_header(proj),
             chapter_header=chapter_header(proj, num))
         ctx.last_prompt = summary_prompt
-        if _session_usable(session):
+        if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
             _session_seed(session, prose)
             turn_text = prompts.session_turn_text(
                 prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
@@ -1281,7 +1613,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             chapter_header=chapter_header(proj, num),
                 project_header=project_header(proj))
             ctx.last_prompt = global_prompt
-            if _session_usable(session):
+            if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_G_SUMMARY):
                 turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
                     old_summary=old_global or "（全书刚开始）",
                     chapter_num=num, chapter_summary=chapter_summary,
@@ -1303,7 +1635,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # ---- 设定清算（方案 D1）：本章自创设定三分类对账（不阻断，产物落追踪/）----
     try:
         from .canon_audit import audit_chapter
-        audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router)
+        audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router, session=session)
         v = audit.get("violations") or []
         hard = [x for x in v if x.get("severity") == "硬伤"]
         adopt = audit.get("adoptions") or []
@@ -1320,6 +1652,13 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
 
     # 断点收尾（方案 H）：本章全流程完成，清除章内断点
     st.clear_chapter_step(proj)
+    # S1 卷会话：逐章 append-only 落盘（v3 §2.4）——崩溃恢复后消息逐字节一致，
+    # 服务端前缀缓存继续有效（不重放、不重新 miss）。
+    if _session_usable(session) and hasattr(session, "save"):
+        try:
+            session.save()
+        except Exception as e:  # noqa: BLE001
+            ctx.log("warn", f"卷会话消息栈落盘失败（不阻断）：{e}")
     gr.word_actual = project.count_chars(prose)
     record = {"num": num, "title": title, **gr.to_record()}
     return record
@@ -1379,6 +1718,9 @@ def _build_final_review_prompt(ctx, num: int, prose: str) -> str:
 
 _LEVEL_STRICT = {"fail": 2, "marginal": 1, "pass": 0}
 
+# CISC 置信权重（E3.2，arXiv:2502.06233：置信加权投票在路径数 -40% 后仍胜普通 SC）
+_VOTE_WEIGHTS = {"high": 1.0, "medium": 0.6, "low": 0.3}
+
 
 def merge_review_votes(parsed_list: list) -> dict:
     """多轮独立审校结果聚合（P5）：每维多数票，平票从严。
@@ -1386,9 +1728,17 @@ def merge_review_votes(parsed_list: list) -> dict:
     - fail（阻塞）需 ≥2 票（不足票数的 fail 维降 marginal 并进 advisory）；k=1 时 quorum=1
     - 每维合并为一条代表条目（阻塞项跨票去重合并）
     - summary/verdict 全部重算（丢弃单票声明的判决）
+    - **CISC 置信加权**（E3.2）：所有票都带 confidence（parse_final_review_v2 从
+      ===CONFIDENCE=== 行解析）时切换加权制——每维等级按票权计分（high 1.0/medium
+      0.6/low 0.3），得分最高者为合并等级（平票从严）；fail 维阻塞线=加权分 ≥1.0
+      （≈两票 high，或 high+medium+low），不足降级 marginal 进 advisory。
+      任一票缺 confidence → 整体回退多数票制（向后兼容，断点续跑混票也安全）。
     """
     k = len(parsed_list)
     quorum = 2 if k >= 2 else 1
+    confs = [str(v.get("confidence") or "").strip().lower() for v in parsed_list]
+    weights = ([_VOTE_WEIGHTS[c] for c in confs]
+               if parsed_list and all(c in _VOTE_WEIGHTS for c in confs) else None)
     dim_items = {}    # dim -> [item, ...]（跨票）
     dim_levels = {}   # dim -> [level, ...]
     order = []
@@ -1408,17 +1758,34 @@ def merge_review_votes(parsed_list: list) -> dict:
     summary = {"pass": 0, "marginal": 0, "fail": 0}
     for d in order:
         levels = dim_levels[d]
-        counts = {}
-        for lvl in levels:
-            counts[lvl] = counts.get(lvl, 0) + 1
-        top = max(counts.values())
-        cands = [lvl for lvl, c in counts.items() if c == top]
+        scores = {}
+        if weights:
+            for lvl, w in zip(levels, weights):
+                scores[lvl] = scores.get(lvl, 0.0) + w
+            top = max(scores.values())
+            cands = [lvl for lvl, sc in scores.items() if abs(sc - top) < 1e-9]
+        else:
+            counts = {}
+            for lvl in levels:
+                counts[lvl] = counts.get(lvl, 0) + 1
+            scores = {lvl: float(c) for lvl, c in counts.items()}
+            top = max(counts.values())
+            cands = [lvl for lvl, c in counts.items() if c == top]
         merged_lvl = max(cands, key=lambda x: _LEVEL_STRICT[x])   # 平票从严
         cand_items = dim_items[d]
         if merged_lvl == "fail":
-            fail_votes = counts.get("fail", 0)
+            if weights:
+                fail_votes = scores.get("fail", 0.0)
+                fail_ok = fail_votes >= 1.0
+                votes_txt = "w%.1f/%d" % (fail_votes, k)
+                demote_prefix = "[票权不足降级 %s] " % votes_txt
+            else:
+                fail_votes = int(scores.get("fail", 0.0))
+                fail_ok = fail_votes >= quorum
+                votes_txt = f"{fail_votes}/{k}"
+                demote_prefix = f"[票数不足降级 {votes_txt}] "
             fail_items = [it for it in cand_items if it.get("level") == "fail"]
-            if fail_votes >= quorum:
+            if fail_ok:
                 # 阻塞项跨票去重合并（引证或文首 30 字为键）
                 seen, merged_texts = set(), []
                 for it in fail_items:
@@ -1432,17 +1799,17 @@ def merge_review_votes(parsed_list: list) -> dict:
                         "text": " ｜ ".join(t for t in merged_texts if t),
                         "quote": rep.get("quote", ""),
                         "root_layer": rep.get("root_layer", "ROOT_PROSE"),
-                        "line": "", "votes": f"{fail_votes}/{k}"}
+                        "line": "", "votes": votes_txt}
                 items.append(item)
                 blocking.append(item["text"])
                 summary["fail"] += 1
             else:
                 rep = fail_items[0] if fail_items else cand_items[0]
                 item = {"dim": d, "level": "marginal",
-                        "text": f"[票数不足降级 {fail_votes}/{k}] " + rep.get("text", ""),
+                        "text": demote_prefix + rep.get("text", ""),
                         "quote": rep.get("quote", ""),
                         "root_layer": rep.get("root_layer", ""),
-                        "line": "", "votes": f"{fail_votes}/{k}"}
+                        "line": "", "votes": votes_txt}
                 items.append(item)
                 advisory.append(item["text"])
                 summary["marginal"] += 1
@@ -1452,7 +1819,7 @@ def merge_review_votes(parsed_list: list) -> dict:
             item = {"dim": d, "level": "marginal", "text": rep.get("text", ""),
                     "quote": rep.get("quote", ""),
                     "root_layer": rep.get("root_layer", ""), "line": "",
-                    "votes": f"{counts.get('marginal', 0)}/{k}"}
+                    "votes": f"{scores.get('marginal', 0):g}/{k}"}
             items.append(item)
             advisory.append(item["text"])
             summary["marginal"] += 1
@@ -1460,7 +1827,8 @@ def merge_review_votes(parsed_list: list) -> dict:
             summary["pass"] += 1
     verdict = compute_verdict(summary, items, "")   # 丢弃单票声明，按聚合计数重算
     return {"verdict": verdict, "items": items, "blocking": blocking,
-            "advisory": advisory, "summary": summary, "vote_count": k}
+            "advisory": advisory, "summary": summary, "vote_count": k,
+            "vote_mode": "confidence_weighted" if weights else "majority"}
 
 
 def _votes_identical(a: dict, b: dict) -> bool:
@@ -1505,10 +1873,38 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     )
     prompt = _build_final_review_prompt(ctx, num, prose)
     turn_text = prompts.session_turn_text(prompts.FINAL_REVIEW_PROMPT).format(**kw) if use_sess else ""
+    if use_sess and bool((ctx.cfg or {}).get("writing", {}).get("review_in_system", False)):
+        # V1-③：静态尾段已随会话 system 载入（_acquire_volume_session），审校轮
+        # 只保留动态块——尾段无占位符，渲染后必为 turn_text 的逐字节后缀
+        _tail = prompts.review_static_tail()
+        if _tail and turn_text.endswith(_tail):
+            turn_text = turn_text[:-len(_tail)].rstrip("\n")
     ctx.last_prompt = turn_text or prompt
     # 副本票基线快照：必须在首票固化**之前**取（否则副本栈里带着首票回复，
     # 变成"审过一次再重审"而非独立重采样）
     replica_base = session.snapshot() if use_sess else None
+
+    # E3.2 CISC 置信票：gates.review_confidence_vote 开启时票尾追加 ===CONFIDENCE=== 行，
+    # merge_review_votes 检测到全票带置信度即切换加权制（任一票缺失→回退多数票制）
+    _vote_base_extra = ""
+    if bool(gates_cfg.get("review_confidence_vote", False)):
+        _vote_base_extra += (
+            "\n\n===CONFIDENCE===\n"
+            "输出最后追加一行：===CONFIDENCE=== high|medium|low"
+            "（对本次审校整体判断的置信度：每条 fail 都核到真实原文引证才给 high；"
+            "拿不准的判据较多给 low）。")
+
+    def _vote_extra(vote_idx: int) -> str:
+        """每票附加段：shuffle_dims 旗标按票序随机化六维检查顺序——LLM-as-judge 的
+        首位偏置消除（MT-Bench 系证据），零成本；种子=(章号,票号) 可重放。"""
+        if not _phase_param(ctx, PHASE_REVIEW, "shuffle_dims"):
+            return _vote_base_extra
+        import random
+        order = list(_DIM_MAP.values())
+        random.Random((int(num), int(vote_idx))).shuffle(order)
+        return _vote_base_extra + (
+            "\n\n（本次投票建议按以下顺序逐维检查，六维全部输出、不得缺维："
+            + "、".join(order) + "）")
 
     def _parse(raw: str) -> dict:
         v2 = verify_review_quotes(prose, parse_final_review_v2(raw))
@@ -1527,26 +1923,27 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
 
     def _cast_solo() -> tuple:
         """首票：单发流式（写前缀缓存 / 会话固化首票轮）"""
+        text = (turn_text if use_sess else prompt) + _vote_extra(1)
         if use_sess:
-            raw = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, turn_text,
+            raw = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, text,
                                label=f"审校投票 第{num}章", phase=PHASE_REVIEW,
                                temperature=temp)
         else:
             client = ctx.router.client(_review_slot)
             raw = clean_llm_output(client.chat_stream(
-                prompt, on_chunk=ctx.stream_chunk, temperature=temp, phase=PHASE_REVIEW))
+                text, on_chunk=ctx.stream_chunk, temperature=temp, phase=PHASE_REVIEW))
         return raw, _parse(raw)
 
-    def _cast_replica() -> tuple:
+    def _cast_replica(vote_idx: int = 2) -> tuple:
         """副本票：以首票请求快照并行重采样（输出不计入会话正史）"""
         if use_sess:
-            msgs = replica_base + [{"role": "user", "content": turn_text}]
+            msgs = replica_base + [{"role": "user", "content": turn_text + _vote_extra(vote_idx)}]
             client = ctx.router.client(_review_slot)
             raw = clean_llm_output(client.chat_turn(msgs, temperature=temp, phase=PHASE_REVIEW))
         else:
             client = ctx.router.client(_review_slot)
             raw = clean_llm_output(client.chat_stream(
-                prompt, temperature=temp, phase=PHASE_REVIEW))
+                prompt + _vote_extra(vote_idx), temperature=temp, phase=PHASE_REVIEW))
         return raw, _parse(raw)
 
     def _collect(replicas: int):
@@ -1555,7 +1952,8 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
             return
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=replicas) as ex:
-            futs = [ex.submit(_cast_replica) for _ in range(replicas)]
+            futs = [ex.submit(_cast_replica, len(parsed_list) + j + 1)
+                    for j in range(replicas)]
             for f in futs:
                 raw, v2 = f.result()
                 raws.append(raw)
@@ -1682,19 +2080,9 @@ def _author_review_entry(ctx, num: int, prose: str, *,
         fix_kwargs = dict(chapter_num=num, findings=chr(10).join(lines), prose=prose,
                           project_header=project_header(proj),
                           chapter_header=chapter_header(proj, num))
-        if _session_usable(session):
-            _session_seed(session, prose)
-            turn_text = prompts.session_turn_text(prompts.REVIEW_FIX_PROMPT).format(**fix_kwargs)
-            ctx.last_prompt = turn_text
-            rewritten = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, turn_text,
-                                     label=f"人工审校修复 第{manual_rounds}轮",
-                                     phase=PHASE_REVIEW_FIX)
-        else:
-            fix_prompt = prompts.REVIEW_FIX_PROMPT.format(**fix_kwargs)
-            ctx.last_prompt = fix_prompt
-            rewritten = _stream(ctx, cfg_mod.SLOT_REVIEW, fix_prompt,
-                                label=f"人工审校修复 第{manual_rounds}轮",
-                                phase=PHASE_REVIEW_FIX)
+        rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_REVIEW, PHASE_REVIEW_FIX,
+                                   prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
+                                   label=f"人工审校修复 第{manual_rounds}轮")
         # 修复稿健全性守卫（与自动修复环同款）
         looks_like_plan = rewritten.lstrip().startswith("===")
         too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))
@@ -1985,6 +2373,13 @@ def parse_final_review_v2(text: str) -> dict:
                 break
     verdict = compute_verdict(summary, items, declared)
 
+    # ===CONFIDENCE=== 置信度行（E3.2 CISC：gates.review_confidence_vote 开启时
+    # prompt 要求票尾追加；merge_review_votes 据此加权）。缺省空串＝票无置信度。
+    confidence = ""
+    m_conf = re.search(r"===CONFIDENCE===\s*\n?\s*(high|medium|low)\b", text, re.I)
+    if m_conf:
+        confidence = m_conf.group(1).lower()
+
     # 阶段 3：verdict 与 findings 一致性兜底（真机缺陷③）。
     # 模型可能用 markdown 写维度（### A_GOLDEN_OPEN：fail …）导致 ===X=== 协议段
     # 全部缺失、blocking 为空——修复轮与 G8 失去抓手。两级兜底：
@@ -2023,6 +2418,7 @@ def parse_final_review_v2(text: str) -> dict:
         "blocking": blocking,
         "advisory": advisory,
         "summary": summary,
+        "confidence": confidence,
     }
 
 
@@ -2056,19 +2452,37 @@ def _update_tracking(ctx, num: int, prose: str, session=None) -> dict:
         chapter_header=chapter_header(proj, num),
     )
     ctx.last_prompt = prompt
-    if _session_usable(session):
+    if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
-        turn_text = prompts.session_turn_text(prompts.TRACKING_UPDATE_PROMPT).format(
-            chapter_num=num,
-            roster=_roster(proj), prose=prose,
-            character_state=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000],
-            foreshadow_table=project.read_file(project.get_tracking_path(proj, "伏笔"))[:2000],
-            timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
-            old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
-            or "（尚无写作上下文）",
-            worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
-            project_header=project_header(proj),
-            chapter_header=chapter_header(proj, num))
+        _s4_freeze = bool(((ctx.cfg or {}).get("writing", {}) or {})
+                          .get("s4_static_freeze", False))
+        if _s4_freeze and hasattr(session, "open_chapter"):
+            # S4-c（卷会话）：{character_state}/{foreshadow_table}/{timeline}/
+            # {old_context}/{worldbook} 五节与本章开幕轮/会话历史逐字重复 →
+            # 短引用行（TRACKING_SESSION_REF）；{roster} 花名册是追踪的功能性
+            # 输入，保留。S1 卷会话/章会话走 else，请求体逐字节不变。
+            turn_text = prompts.session_turn_text(prompts.TRACKING_UPDATE_PROMPT).format(
+                chapter_num=num,
+                roster=_roster(proj), prose=prose,
+                character_state=TRACKING_SESSION_REF,
+                foreshadow_table=TRACKING_SESSION_REF,
+                timeline=TRACKING_SESSION_REF,
+                old_context=TRACKING_SESSION_REF,
+                worldbook=TRACKING_SESSION_REF,
+                project_header=project_header(proj),
+                chapter_header=chapter_header(proj, num))
+        else:
+            turn_text = prompts.session_turn_text(prompts.TRACKING_UPDATE_PROMPT).format(
+                chapter_num=num,
+                roster=_roster(proj), prose=prose,
+                character_state=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000],
+                foreshadow_table=project.read_file(project.get_tracking_path(proj, "伏笔"))[:2000],
+                timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
+                old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
+                or "（尚无写作上下文）",
+                worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+                project_header=project_header(proj),
+                chapter_header=chapter_header(proj, num))
         ctx.last_prompt = turn_text
         result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
                               phase=PHASE_TRACKING, stream=False)

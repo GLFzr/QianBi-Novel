@@ -2,3 +2,91 @@
 09-08 00:28:40 T3 续跑驱动启动：目标 60 章｜上限成本预算 ¥24.0｜渠道 deepseek-v4-flash
 2026-09-08 00:29:08,326 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 503 Service Unavailable"
 09-08 00:29:08 渠道仍 5xx/异常，180s 后重探（1/40）
+2026-09-08 00:32:37,531 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 503 Service Unavailable"
+09-08 00:32:37 渠道仍 5xx/异常，180s 后重探（2/40）
+2026-09-08 00:36:28,031 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 200 OK"
+09-08 00:36:28 渠道已恢复（第 3 次探测）
+09-08 00:36:28 段 1：从第 10 章续跑 → t3b_long60（种子 t3_long60）
+09-08 03:25:13   段留痕：t3b_long60.usage.jsonl + t3b_long60.chapters（prose 29 章，累计上限成本 ¥15.78）
+09-08 03:25:13 段 1 结束 rc=1 用时 169min｜本段 prose 29 笔
+2026-09-08 03:25:14,161 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:25:14 渠道仍 5xx/异常，180s 后重探（1/40）
+2026-09-08 03:28:14,402 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:28:14 渠道仍 5xx/异常，180s 后重探（2/40）
+2026-09-08 03:31:15,736 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:31:15 渠道仍 5xx/异常，180s 后重探（3/40）
+2026-09-08 03:34:16,020 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:34:16 渠道仍 5xx/异常，180s 后重探（4/40）
+2026-09-08 03:37:16,347 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:37:16 渠道仍 5xx/异常，180s 后重探（5/40）
+2026-09-08 03:40:16,669 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:40:16 渠道仍 5xx/异常，180s 后重探（6/40）
+2026-09-08 03:43:16,975 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:43:16 渠道仍 5xx/异常，180s 后重探（7/40）
+2026-09-08 03:46:17,732 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:46:17 渠道仍 5xx/异常，180s 后重探（8/40）
+2026-09-08 03:49:18,024 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:49:18 渠道仍 5xx/异常，180s 后重探（9/40）
+2026-09-08 03:52:19,753 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:52:19 渠道仍 5xx/异常，180s 后重探（10/40）
+2026-09-08 03:55:21,294 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:55:21 渠道仍 5xx/异常，180s 后重探（11/40）
+2026-09-08 03:58:21,520 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 03:58:21 渠道仍 5xx/异常，180s 后重探（12/40）
+2026-09-08 04:01:21,837 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:01:21 渠道仍 5xx/异常，180s 后重探（13/40）
+2026-09-08 04:04:22,084 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:04:22 渠道仍 5xx/异常，180s 后重探（14/40）
+2026-09-08 04:07:22,514 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:07:22 渠道仍 5xx/异常，180s 后重探（15/40）
+2026-09-08 04:10:22,775 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:10:22 渠道仍 5xx/异常，180s 后重探（16/40）
+2026-09-08 04:13:23,102 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:13:23 渠道仍 5xx/异常，180s 后重探（17/40）
+2026-09-08 04:16:23,405 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:16:23 渠道仍 5xx/异常，180s 后重探（18/40）
+2026-09-08 04:19:23,747 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:19:23 渠道仍 5xx/异常，180s 后重探（19/40）
+2026-09-08 04:22:24,333 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:22:24 渠道仍 5xx/异常，180s 后重探（20/40）
+2026-09-08 04:25:25,080 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:25:25 渠道仍 5xx/异常，180s 后重探（21/40）
+2026-09-08 04:28:25,551 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:28:25 渠道仍 5xx/异常，180s 后重探（22/40）
+2026-09-08 04:31:25,879 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:31:25 渠道仍 5xx/异常，180s 后重探（23/40）
+2026-09-08 04:34:26,202 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:34:26 渠道仍 5xx/异常，180s 后重探（24/40）
+2026-09-08 04:37:27,569 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:37:27 渠道仍 5xx/异常，180s 后重探（25/40）
+2026-09-08 04:40:27,803 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:40:27 渠道仍 5xx/异常，180s 后重探（26/40）
+2026-09-08 04:43:28,399 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:43:28 渠道仍 5xx/异常，180s 后重探（27/40）
+2026-09-08 04:46:28,635 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:46:28 渠道仍 5xx/异常，180s 后重探（28/40）
+2026-09-08 04:49:28,879 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:49:28 渠道仍 5xx/异常，180s 后重探（29/40）
+2026-09-08 04:52:29,118 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:52:29 渠道仍 5xx/异常，180s 后重探（30/40）
+2026-09-08 04:55:29,566 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:55:29 渠道仍 5xx/异常，180s 后重探（31/40）
+2026-09-08 04:58:29,821 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 04:58:29 渠道仍 5xx/异常，180s 后重探（32/40）
+2026-09-08 05:01:30,063 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:01:30 渠道仍 5xx/异常，180s 后重探（33/40）
+2026-09-08 05:04:30,392 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:04:30 渠道仍 5xx/异常，180s 后重探（34/40）
+2026-09-08 05:07:30,643 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:07:30 渠道仍 5xx/异常，180s 后重探（35/40）
+2026-09-08 05:10:30,939 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:10:30 渠道仍 5xx/异常，180s 后重探（36/40）
+2026-09-08 05:13:31,390 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:13:31 渠道仍 5xx/异常，180s 后重探（37/40）
+2026-09-08 05:16:31,649 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:16:31 渠道仍 5xx/异常，180s 后重探（38/40）
+2026-09-08 05:19:31,900 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:19:31 渠道仍 5xx/异常，180s 后重探（39/40）
+2026-09-08 05:22:33,316 INFO httpx HTTP Request: POST https://tokenrhythm.studio/v1/chat/completions "HTTP/1.1 402 Payment Required"
+09-08 05:22:33 渠道仍 5xx/异常，180s 后重探（40/40）
+09-08 05:25:33 等待超时，退出——不通宵空转
