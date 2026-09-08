@@ -1244,11 +1244,56 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         # 等一个注册窗口再发（本地扫描/断点保存已消耗一部分窗口）。
         _pace_after_long_call(ctx, cfg_mod, session)
         enrich_rounds = 0
+        _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
         while not low_ok and enrich_rounds < max_enrich_rounds:
             enrich_rounds += 1
             ctx.step(num, st.STEP_ENRICH)
             ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
             ctx.checkpoint()
+            # V7（writing.enrich_tail，缺省关）：补尾式扩写——只续写缺口（400-600 字），
+            # 输出∝缺口；旧全量重写每轮输出整章且模型对「扩写」天然保守（每轮只加
+            # 300-400 字、常需 2 轮）。续写完成后把「完整正文」固化进会话，保持
+            # 「最近一条章正文消息」语义不变。
+            if _enrich_tail:
+                gap = max(chapter_words - actual, 200)
+                tail_kw = dict(chapter_num=num, actual=actual, target=chapter_words,
+                               gap=gap,
+                               ending=prose[-400:],
+                               tic_blacklist=_tic_blacklist(proj),
+                               must_block=_must_block(proj, ctx.cfg),
+                               chapter_header=chapter_header(proj, num),
+                               project_header=project_header(proj))
+                _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or cfg_mod.SLOT_WRITING
+                req = prompts.ENRICH_TAIL_PROMPT.format(**tail_kw)
+                ctx.last_prompt = req
+                cont = clean_llm_output(ctx.router.client(_slot).chat(
+                    req, phase=PHASE_ENRICH))
+                cont = (cont or "").strip()
+                if cont and len(cont) >= gap * 0.35:
+                    prose = prose.rstrip("\n") + "\n\n" + cont
+                    if _session_usable(session):
+                        try:
+                            session.commit_turn(
+                                f"（字数补尾第 {enrich_rounds} 轮已并入，以下为并入后的完整本章正文）",
+                                prose)
+                        except Exception:  # noqa: BLE001
+                            pass
+                else:
+                    ctx.log("warn", f"补尾产出过短（{len(cont)} 字），本轮回退全量扩写")
+                    enrich_full_kw = dict(chapter_num=num, actual=actual,
+                                          target=chapter_words, prose=prose,
+                                          tic_blacklist=_tic_blacklist(proj),
+                                          must_block=_must_block(proj, ctx.cfg),
+                                          chapter_header=chapter_header(proj, num),
+                                          project_header=project_header(proj))
+                    rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_ENRICH,
+                                               prompts.ENRICH_PROMPT, enrich_full_kw,
+                                               prose=prose,
+                                               label=f"扩写(全量) 第{enrich_rounds}轮")
+                    if rewritten.strip() and project.count_chars(rewritten) >= actual:
+                        prose = rewritten
+                low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
+                continue
             enrich_kw = dict(chapter_num=num, actual=actual,
                              target=chapter_words, prose=prose,
                              tic_blacklist=_tic_blacklist(proj),
@@ -1605,28 +1650,35 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
         if chapter_summary:
             memory.append_chapter_summary(proj, num, title or f"第{num}章", chapter_summary)
-            old_global = memory.read_global_summary(proj)
-            ctx.checkpoint()
-            global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
-                old_summary=old_global or "（全书刚开始）",
-                chapter_num=num, chapter_summary=chapter_summary,
-            chapter_header=chapter_header(proj, num),
-                project_header=project_header(proj))
-            ctx.last_prompt = global_prompt
-            if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_G_SUMMARY):
-                turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
+            # V7（writing.summary_every，缺省 1=每章重算）：全局摘要降频——非重算章
+            # 沿用旧摘要（滞后至多 N-1 章，消费方为章头快照，可容忍）。
+            _every = max(1, int(((ctx.cfg or {}).get("writing", {}) or {})
+                                .get("summary_every", 1)))
+            if _every > 1 and num % _every != 0:
+                ctx.log("info", f"第 {num} 章 全局摘要降频跳过（每 {_every} 章重算一次）")
+            else:
+                old_global = memory.read_global_summary(proj)
+                ctx.checkpoint()
+                global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
                     old_summary=old_global or "（全书刚开始）",
                     chapter_num=num, chapter_summary=chapter_summary,
-                    chapter_header=chapter_header(proj, num), project_header=project_header(proj))
-                ctx.last_prompt = turn_text
-                new_global = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
-                                          phase=PHASE_G_SUMMARY, stream=False)
-            else:
-                new_global = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
-                    global_prompt, phase=PHASE_G_SUMMARY))
-            if new_global.strip():
-                memory.write_global_summary(proj, new_global)
-            ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
+                    chapter_header=chapter_header(proj, num),
+                    project_header=project_header(proj))
+                ctx.last_prompt = global_prompt
+                if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_G_SUMMARY):
+                    turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
+                        old_summary=old_global or "（全书刚开始）",
+                        chapter_num=num, chapter_summary=chapter_summary,
+                        chapter_header=chapter_header(proj, num), project_header=project_header(proj))
+                    ctx.last_prompt = turn_text
+                    new_global = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                                              phase=PHASE_G_SUMMARY, stream=False)
+                else:
+                    new_global = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+                        global_prompt, phase=PHASE_G_SUMMARY))
+                if new_global.strip():
+                    memory.write_global_summary(proj, new_global)
+                ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
     except PipelineStopped:
         ctx.log("info", f"第 {num} 章摘要链更新被停止请求中断（不影响已落库正文与记录）")
     except Exception as e:
@@ -2580,74 +2632,134 @@ def parse_tracking_updates(text: str) -> dict:
     return updates
 
 
+def _extract_json_block(text: str) -> dict:
+    """从回复中提取第一个平衡的 JSON 对象（```json 围栏或裸对象均可）"""
+    import json as _json
+    t = text or ""
+    fence = t.find("```json")
+    if fence >= 0:
+        t = t[fence + 7:]
+    start = t.find("{")
+    if start < 0:
+        raise ValueError("无 JSON 对象")
+    dec = _json.JSONDecoder()
+    obj, _ = dec.raw_decode(t[start:])
+    if not isinstance(obj, dict):
+        raise ValueError("JSON 非对象")
+    return obj
+
+
+def _cast_checklist(proj: str, num: int, outline: str) -> str:
+    """本章出场角色清单（V2.1 完整性自检的输入）：sidecar/花名册中名字出现在
+    细纲里的角色 + 提示补检正文新角色"""
+    from .tracking_store import load_characters
+    chars = load_characters(proj)
+    names = list(chars.get("order") or chars.get("characters", {}).keys())
+    hit = [n for n in names if n and n in (outline or "")]
+    out = "、".join(hit[:12]) if hit else "（花名册角色均未在细纲点名——请按正文实际出场判断）"
+    return out + "——逐个自检五字段与状态记录，有变化才出条目；正文新角色走 new。"
+
+
+def _timeline_recent(proj: str, n: int = 2) -> str:
+    """时间线最近 n 行数据行（供补丁器对齐格式，不含全表）"""
+    rows = []
+    for line in (project.read_file(project.get_tracking_path(proj, "时间线")) or "").splitlines():
+        t = line.strip()
+        if t.startswith("|") and t.endswith("|") \
+                and not set(t.replace("|", "").strip()) <= {"-", ":", " "} \
+                and not t.startswith("| 故事内时间"):
+            rows.append(t)
+    return "\n".join(rows[-n:]) or "（时间线尚空）"
+
+
 def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
-    """V2 增量台账（writing.tracking_delta，缺省关）：只让模型输出有变化的条目，
-    本地按锚点合并进既有文件——追踪输出从整本重述（2.2k→7.9k 增长、撞 8192 截顶）
-    降到 ~1k/章。合并失败抛异常由调用方回退全量；解析成功但零变化是合法结论。"""
+    """V2.1 增量台账（writing.tracking_delta，缺省关）：JSON 补丁协议。
+
+    LLM 只输出本章变更（键控 upsert + 追加记录行），本地由 tracking_store
+    键控合并进 sidecar 并渲染派生 markdown 视图——输出量绑定「本章出场实体数」
+    而非章数（根除照抄膨胀：V6 实测 13 章从 1.3k 涨到 8192 截顶）。
+    解析失败 → 旧 markdown 增量 → 全量重述（三层回退）。"""
     proj = ctx.proj
+    from . import tracking_store
+    outline = project.read_file(project.get_outline_path(proj, num))
     kw = dict(
         chapter_num=num,
-        roster=_roster(proj), prose=prose,
-        character_state=project.read_file(project.get_tracking_path(proj, "角色状态"))[:2000],
-        foreshadow_table=project.read_file(project.get_tracking_path(proj, "伏笔"))[:2000],
-        timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
-        old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
+        prose=prose,
+        character_table=tracking_store.character_brief_table(proj),
+        cast_checklist=_cast_checklist(proj, num, outline),
+        foreshadow_table=tracking_store.render_foreshadow_md(proj)[:1200],
+        timeline_recent=_timeline_recent(proj),
+        old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1200]
         or "（尚无写作上下文）",
         worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+        roster=_roster(proj),
         project_header=project_header(proj),
         chapter_header=chapter_header(proj, num),
     )
     if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
-        turn_text = prompts.session_turn_text(prompts.TRACKING_DELTA_PROMPT).format(**kw)
+        turn_text = prompts.session_turn_text(prompts.TRACKING_PATCH_PROMPT).format(**kw)
         ctx.last_prompt = turn_text
         result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
                               phase=PHASE_TRACKING, stream=False)
     else:
-        prompt = prompts.TRACKING_DELTA_PROMPT.format(**kw)
+        prompt = prompts.TRACKING_PATCH_PROMPT.format(**kw)
         ctx.last_prompt = prompt
         result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
             prompt, phase=PHASE_TRACKING))
-    updates = parse_tracking_updates(result)
-    # 世界书反哺与全量模式同款（零新增 LLM）
-    try:
-        entities, rules = memory.parse_entity_rules(result)
-        evolutions, reveals = memory.parse_evolution_reveals(result)
-        if entities or rules or evolutions or reveals:
-            memory.upsert_worldbook_entries(proj, num, entities, rules,
-                                            evolutions, reveals)
-    except Exception:  # noqa: BLE001
-        logging.getLogger("qianbi.stages").exception("追踪反哺回写失败（第 %s 章）", num)
+    patch = _extract_json_block(result)
 
-    from .memory import merge_named_sections, merge_table_rows
-    applied = {}
-    for name, content in updates.items():
-        path = project.get_tracking_path(proj, name)
-        if name == "上下文":
-            project.write_file(path, f"# 写作上下文\n\n{content}\n")
-            applied[name] = content
-            continue
-        existing = project.read_file(path)
-        if name == "角色状态":
-            merged, changed = merge_named_sections(existing, content)
-            if not changed:
-                ctx.log("info", f"第 {num} 章 角色状态零变更（增量）")
-                continue
-        elif name == "伏笔":
-            merged, changed = merge_table_rows(existing, content, key_col=0)
-            if not changed:
-                ctx.log("info", f"第 {num} 章 伏笔零变更（增量）")
-                continue
-        elif name == "时间线":
-            merged, changed = merge_table_rows(existing, content, key_col=-1)
-            if not changed:
-                ctx.log("info", f"第 {num} 章 时间线零变更（增量）")
-                continue
-        else:
-            continue   # 未知节不落盘（全量模式的 mapping 之外本就忽略）
-        if name == "角色状态":
-            merged = _verify_tracking_numbers(prose, existing, merged)
-        project.write_file(path, merged)
-        applied[name] = merged
-    ctx.log("info", f"第 {num} 章 增量台账：{', '.join(applied) or '零变更'}")
-    return applied
+    # ---- 应用补丁（键控合并 + 派生视图渲染）----
+    applied = []
+    ch = patch.get("characters") or {}
+    changed = tracking_store.apply_character_updates(
+        proj, num, ch.get("updates") or [], ch.get("records") or [], ch.get("new") or [])
+    if changed:
+        project.write_file(project.get_tracking_path(proj, "角色状态"),
+                           tracking_store.render_characters_md(proj))
+        applied.append("角色状态(%d)" % len(changed))
+    fs = (patch.get("foreshadow") or {}).get("upserts") or []
+    fs_changed = tracking_store.apply_foreshadow_upserts(proj, fs)
+    if fs_changed:
+        project.write_file(project.get_tracking_path(proj, "伏笔"),
+                           tracking_store.render_foreshadow_md(proj))
+        applied.append("伏笔(%d)" % len(fs_changed))
+    tl_rows = (patch.get("timeline") or {}).get("rows") or []
+    if tl_rows:
+        delta_md = ("| 故事内时间 | 章节 | 事件 |\n|---|---|---|\n" + "\n".join(
+            "| %s | %s | %s |" % (r.get("故事内时间", ""), r.get("章节", "第%d章" % num),
+                                  r.get("事件", "")) for r in tl_rows))
+        existing = project.read_file(project.get_tracking_path(proj, "时间线"))
+        from .memory import merge_table_rows
+        merged, _ch = merge_table_rows(existing, delta_md, key_col=-1)
+        project.write_file(project.get_tracking_path(proj, "时间线"), merged)
+        applied.append("时间线(%d)" % len(tl_rows))
+    ctx_text = str(patch.get("context") or "").strip()
+    if ctx_text:
+        project.write_file(project.get_tracking_path(proj, "上下文"),
+                           f"# 写作上下文\n\n{ctx_text}\n")
+        applied.append("上下文")
+
+    # ---- 世界书反哺（JSON 数组适配旧解析器，零新增 LLM）----
+    wb = patch.get("worldbook") or {}
+    _sec = ""
+    if wb.get("new_entities"):
+        _sec += "===新实体===\n" + "\n".join("｜".join(str(x) for x in r) for r in wb["new_entities"]) + "\n"
+    if wb.get("new_rules"):
+        _sec += "===新规则===\n" + "\n".join("｜".join(str(x) for x in r) for r in wb["new_rules"]) + "\n"
+    if wb.get("evolutions"):
+        _sec += "===实体演进===\n" + "\n".join("｜".join(str(x) for x in r) for r in wb["evolutions"]) + "\n"
+    if wb.get("reveals"):
+        _sec += "===世界观揭示===\n" + "\n".join("｜".join(str(x) for x in r) for r in wb["reveals"]) + "\n"
+    if _sec:
+        try:
+            entities, rules = memory.parse_entity_rules(_sec)
+            evolutions, reveals = memory.parse_evolution_reveals(_sec)
+            if entities or rules or evolutions or reveals:
+                memory.upsert_worldbook_entries(proj, num, entities, rules,
+                                                evolutions, reveals)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("qianbi.stages").exception("追踪反哺回写失败（第 %s 章）", num)
+
+    ctx.log("info", f"第 {num} 章 增量台账(JSON补丁)：{', '.join(applied) or '零变更'}")
+    return {"applied": applied}

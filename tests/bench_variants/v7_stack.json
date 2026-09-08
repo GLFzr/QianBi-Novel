@@ -1,0 +1,8 @@
+{
+ "_note": "V7 输出侧组合：V 全栈 + 补尾式扩写（enrich_tail，输出∝缺口）+ 全局摘要降频（summary_every=2）+ 追踪 JSON 补丁协议（tracking_delta 升级为 events+键控upsert，输出绑定本章出场实体数）。",
+ "writing": {"volume_session": true, "s4_static_freeze": true, "session_pace_seconds": 45,
+             "tracking_delta": true, "review_in_system": true,
+             "enrich_tail": true, "summary_every": 2},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}},
+ "gates": {"review_confidence_vote": true}
+}

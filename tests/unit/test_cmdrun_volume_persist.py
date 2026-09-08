@@ -29,12 +29,12 @@ def test_cmd_run_smoke_persists_volume_stack(mock_llm, tmp_path):
     import scripts.cost_bench as cb
     from app.core.volume_session import volume_messages_path
     variant = "v_repro"
-    cb.cmd_run(variant=variant, chapters=1,
-               preset_params={"writing": {"volume_session": True,
-                                          "s4_static_freeze": True,
-                                          "tracking_delta": True,
-                                          "review_in_system": True,
-                                          "chapter_word_target": 60}},
+    cb.cmd_run(variant=variant, chapters=1, preset_params=None,
+               writing={"volume_session": True,
+                        "s4_static_freeze": True,
+                        "tracking_delta": True,
+                        "review_in_system": True,
+                        "chapter_word_target": 60},
                fast_path=False, user_id="qianbi-repro",
                flash_conn="bailian-flash")
     proj = os.path.join(cb.BENCH, variant, "bench", cb.BOOK)
