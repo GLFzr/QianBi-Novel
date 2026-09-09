@@ -411,10 +411,17 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
                 # V1-④（T 轮报告 §9-F）：整段剥离渲染后的 project_header。旧写法
                 # split("\n\n", 1) 只剥掉 36 字标题行——header 首个空行在标题行后，
                 # 余下 ~3.0k 字符在会话轮里每章重复计价。会话 system 已含同一
-                # header（卷会话前缀），按 startswith 逐字节精确剥离是安全的。
+                # header（卷会话前缀），逐字节精确剥离是安全的。W-2 把判据从
+                # startswith 放宽成"整块出现"：模板版式一旦在 header 前多出前导行，
+                # startswith 会静默失配 ⇒ 每章白骑一遍前缀（t3b 卷2 实测 24 章 ×6.3k 字）。
                 _hdr = project_header(proj)
-                if _hdr and body_prompt.startswith(_hdr):
-                    body_prompt = body_prompt[len(_hdr):].lstrip("\n")
+                if _hdr and _hdr in body_prompt:
+                    body_prompt = body_prompt.replace(_hdr, "", 1).lstrip("\n")
+                elif _hdr and "## 核心设定节选" in body_prompt:
+                    # 剥不干净＝每章白骑一遍 system 前缀（t3b 实测 ~6.3k 字/章）——
+                    # 静默多花钱比报错更糟，这里出声
+                    logger.warning("清算会话轮未匹配到 project_header 整块（模板版式变了？），"
+                                   "本轮将重复注入约 %d 字前缀", len(_hdr))
                 body = body_prompt
                 from .chapter_session import ChapterSession
                 turn_text = ChapterSession.SCOPE_LINE + "\n\n" + body

@@ -116,6 +116,26 @@ def test_in_session_used_and_header_stripped(tmp_path, monkeypatch):
     assert rep["failed"] is False
 
 
+def test_header_stripped_even_with_preamble(tmp_path, monkeypatch):
+    """W-2 加固：header 不在开头也必须剥——旧写法要求 startswith，版式一动就静默失配
+
+    t3b 卷2 实测：失配时每章多骑 ~6.3k 字（其中 2,521 han 字与 system 逐字节相同），
+    24 章就是 15 万字的历史噪声，且这部分**带复利**（入栈后每章都被重读）。"""
+    proj = _proj(str(tmp_path))
+    _flags_via_preset(proj, True)
+    solo = FakeClient()
+    s = FakeSession(solo, output=VALID)
+    monkeypatch.setattr(ca, "_client_for", lambda cfg, router=None, strict=False: solo)
+    monkeypatch.setattr(ca, "AUDIT_PROMPT", "【清算 v2 前导行】\n\n" + ca.AUDIT_PROMPT)
+    audit_chapter(proj, 1, "他推开了西角的铁门，门后有风。", {"gates": {}, "writing": {}},
+                  router=None, session=s)
+    body, _phase = s.asked[0]
+    assert "【清算 v2 前导行】" in body                    # 前导行照留
+    assert "【项目设定基准" not in body and "## 核心设定节选" not in body
+    assert "你是网文世界观的合规审校" in body              # 指令体没被误剥
+    assert "他推开了西角的铁门，门后有风" not in body
+
+
 def test_degenerate_falls_back_and_rolls_back(tmp_path, monkeypatch):
     proj = _proj(str(tmp_path))
     _flags_via_preset(proj, True)
