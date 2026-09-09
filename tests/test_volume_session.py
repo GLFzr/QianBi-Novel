@@ -936,3 +936,49 @@ def test_compaction_fails_open_when_refused(tmp_path, monkeypatch):
     assert not os.path.exists(_handoff_json(proj))
     assert "终交接块" not in [m[-1]["content"] for m, ph in client.turn_calls if ph == "prose"][-1]
     assert any("fail-open" in m for _lv, m in ctx.logs)
+
+
+def test_has_history_predicate(tmp_path):
+    """W-2 的判定基石：只有**逐字节确已在栈里**才允许换成引用行（不靠猜）"""
+    s, _path = _build_two_chapter_stack(tmp_path)
+    assert s.has_history("1章审校") is True          # 已固化的 assistant 回复
+    assert s.has_history("这一句还没进栈") is False
+    assert s.has_history("") is False and s.has_history("   ") is False
+
+
+def test_global_summary_references_history_instead_of_repaste(tmp_path):
+    """W-2 ②-c：既有全局摘要已在栈里时改发引用行（t3b 实测 ~2.4k han 字/章纯重贴、95% 重复）"""
+    proj = _make_proj(tmp_path)
+    cfg = {"writing": {"chapter_session": True, "volume_session": True,
+                       "chapter_word_target": 60},
+           "gates": {"review_enabled": False}}
+    client = CycleClient()
+    _ctx, _r = _run_microcycle(proj, cfg, client, 1)
+    g1 = mem.read_global_summary(proj).strip()
+    assert g1, "第 1 章应当已产出全局摘要"
+    _ctx2, _r2 = _run_microcycle(proj, cfg, client, 2, ctx=_ctx)
+    gs = [msgs for msgs, ph in client.turn_calls if ph == "global_summary"]
+    assert len(gs) >= 2
+    first, second = gs[0][-1]["content"], gs[-1][-1]["content"]
+    REF = "本会话历史中最近一条全局摘要"
+    assert REF not in first                       # 第一章没有历史可引用 → 字节不变
+    assert REF in second                          # 第二章：引用行
+    assert g1 not in second                       # 旧摘要全文不再重贴
+    assert g1 in first or "全书刚开始" in first
+
+
+def test_vote_fingerprints_written_per_vote(tmp_path):
+    """W-6 接线：review_with_votes 每投一票就在 追踪/vote_fingerprints.jsonl 留一条指纹
+
+    假客户端不产出协议段 ⇒ 指纹如实记 unstructured；三票同 hash 正是"确定性复读"的
+    仪器读数——明天真机跑一次，同构率与空转率就都能裁决"3 票要不要降到 1/2 票"。"""
+    from app.core import stages
+    proj = _make_proj(tmp_path)
+    ctx = CycleCtx(proj, {"gates": {"review_votes": 3}}, CycleClient())
+    stages.review_with_votes(ctx, 1, _prose_fixture(1), 3)
+    p = os.path.join(proj, "追踪", "vote_fingerprints.jsonl")
+    assert os.path.isfile(p), "票指纹没落盘（降票判据仍然无仪器）"
+    rows = [json.loads(ln) for ln in open(p, encoding="utf-8") if ln.strip()]
+    assert [r["i"] for r in rows] == [1, 2, 3] and all(r["ch"] == 1 for r in rows)
+    assert all(r["unstructured"] for r in rows), "假回复没有协议段，指纹必须如实记空转"
+    assert len({r["sha1"] for r in rows}) == 1

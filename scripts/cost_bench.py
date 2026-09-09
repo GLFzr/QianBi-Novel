@@ -501,6 +501,9 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
                 _d["cost"] = round(_d["cost"] + float(_r.get("cost") or 0), 4)
     if _ev:
         metrics["session_events"] = _ev
+    _iso = _agg_vote_iso(os.path.join(proj, "追踪", "vote_fingerprints.jsonl"))
+    if _iso:
+        metrics["vote_iso"] = _iso
     out = os.path.join(BENCH, "%s.metrics.json" % variant)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=1)
@@ -512,6 +515,42 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
                     ignore=shutil.ignore_patterns(".drafts", ".versions"))
     _mark("完成：%s（%.0fs）→ %s" % (variant, wall, out))
     _print_metrics(metrics)
+
+
+def _agg_vote_iso(path: str) -> dict:
+    """W-6 判据：票间**同构率**（降票前必须先看这个数）。
+
+    按章把 k 张票两两配对：`identical_bytes`＝整票逐字相同（真复读），
+    `identical_levels`＝六维等级向量相同（哪怕文字不同，判定也没多一分信息）。
+    iso_pct 高 ⇒ k 票退化成一票多打，该降；低 ⇒ 票确实各自独立。"""
+    if not os.path.isfile(path):
+        return {}
+    by = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            by.setdefault(int(r.get("ch") or 0), []).append(r)
+    pairs = sha = lvl = chs = echo = 0
+    for rs in by.values():
+        echo += sum(1 for r in rs if r.get("echo"))
+        if len(rs) < 2:
+            continue
+        chs += 1
+        for i in range(len(rs)):
+            for j in range(i + 1, len(rs)):
+                pairs += 1
+                if rs[i].get("sha1") == rs[j].get("sha1"):
+                    sha += 1
+                if (rs[i].get("levels") or {}) == (rs[j].get("levels") or {}):
+                    lvl += 1
+    if not pairs:
+        return {}
+    return {"chapters": chs, "pairs": pairs, "identical_bytes": sha,
+            "identical_levels": lvl, "iso_pct": round(100.0 * lvl / pairs, 1),
+            "echo_votes": echo}
 
 
 def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:

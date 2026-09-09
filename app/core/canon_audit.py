@@ -83,23 +83,27 @@ EXPECTED_CATEGORIES = ("体系规则", "地理", "势力", "人物", "物品", "
 # 条目级早停指令（v0.20 成本战役 E3.3，stage_params.canon_audit.early_stop: true 启用）。
 # 依据：Certaindex/Dynasor（arXiv:2412.20993）答案稳定即早停 -50% 计算量精度不掉、
 # answer convergence（arXiv:2506.02536）60% 步骤后结论收敛——prompt 层模拟：先逐条
-# 分诊（clean 不再复查），只对 suspect/unsure 展开。输出契约只追加 triage 字段，
-# 既有 JSON 解析（re.search \{.*\}）与字段 .get 全部兼容。
+# 分诊（clean 不再复查），只对 suspect/unsure 展开。
+# W-7：分诊**只留在思考通道**，不再要求输出 triage 字段——全仓无读方（report["triage"]
+# 只写不读），却按章付输出价并把它永久留在栈里（带复利）。
 EARLY_STOP_DIRECTIVE = """
 ## 对账纪律（条目级早停——先分诊后展开，节省思考量）
 在思考通道先做一轮**快速分诊**：对【本章细纲】逐拍点、对正文逐段给出
 clean（明显无问题）/ suspect（疑似有问题）/ unsure（拿不准）的初步结论；
 结论已稳定为 clean 的条目**不再复查**，只对 suspect 与 unsure 条目展开完整分析。
-输出的 JSON 追加第五段 triage（每项一行，不展开）：
-  "triage": [{"item":"拍点N/段落要点（≤15字）","verdict":"clean|suspect|unsure"}]
+分诊过程只留在思考通道，**不要输出分诊清单**：输出仍只有 violations / cross_issues /
+adoptions 等既有字段。
 violations 与 cross_issues 只收录 suspect、unsure 条目展开后成立的结论。
 """
 
 
-def _phase_flags(cfg: dict, proj: str, phase: str = "canon_audit") -> dict:
+def _phase_flags(cfg: dict, proj: str, phase: str = "canon_audit",
+                 builtin: dict = None) -> dict:
     """本相位的合并参数档（genre 显式配置压过内置机械相位表——与 stages.preset_param_layers
-    同语义；canon_audit 本模块不 import stages（避免环），内置表只含本相位所需子集）"""
-    merged = {"thinking": "enabled", "reasoning_effort": "low", "max_tokens": 8192}
+    同语义；canon_audit 本模块不 import stages（避免环），内置表只含本相位所需子集）
+    builtin 传入时用它作默认档——终审判要的是 high，不是预扫那档 low。"""
+    merged = dict(builtin) if builtin else {
+        "thinking": "enabled", "reasoning_effort": "low", "max_tokens": 8192}
     try:
         from .. import presets as genre_presets
         from . import state as st
@@ -199,9 +203,13 @@ def _pro_review_flagged(cfg: dict, proj: str, num: int, prose: str, prescan_prom
     conn = _strict_conn(cfg)
     if not conn:
         return None
+    # W-7：终审判档位改为**可配**（默认仍 pro+high——它是误报进台账的唯一闸门）。
+    # 实测该相位 out 116,646 / reasoning 113,541＝97.3% 思考，而裁决文本合计仅 1,473 tok；
+    # 关不关交给预设显式声明（stage_params.canon_audit_review），判据＝雷章召回不降。
+    review_tier = _phase_flags(cfg, proj, "canon_audit_review",
+                               builtin={"thinking": "enabled", "reasoning_effort": "high"})
     client = LLMClient.from_connection(conn, max_retries=1, slot="review",
-                                       stage_params={"thinking": "enabled",
-                                                     "reasoning_effort": "high"})
+                                       stage_params={"canon_audit_review": review_tier})
     prompt = AUDIT_REVIEW_PROMPT.format(
         project_header=prescan_prompt.split("【核心设定约束条款】")[0].split("你是网文")[0],
         flagged_list=fl,

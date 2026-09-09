@@ -496,3 +496,55 @@ def test_preset_details_expose_stage_params(tmp_path, monkeypatch):
     for pid in ("", "没有这个预设"):
         detail = bridge.presetDetails(pid)
         assert detail["stage_params"] == {} and detail["sampling"] == {}
+
+
+def test_effort_config_without_thinking_warns_once(tmp_path, caplog):
+    """W-7：配了 reasoning_effort 却没开思考＝整条档位配置空转，必须出声（且只提示一次）"""
+    import logging
+    import app.llm.client as lc
+    lc._EFFORT_DROPPED_WARNED.clear()
+    c = lc.LLMClient("https://example.test/v1", "k", "deepseek-v4-flash",
+                     stage_params={"review": {"thinking": "disabled",
+                                              "reasoning_effort": "high"}})
+    with caplog.at_level(logging.WARNING, logger="qianbi.llm"):
+        p1 = c._build_payload([{"role": "user", "content": "x"}], stream=True, phase="review")
+        p2 = c._build_payload([{"role": "user", "content": "x"}], stream=True, phase="review")
+    assert "reasoning_effort" not in p1 and "reasoning_effort" not in p2
+    assert p1.get("thinking") == {"type": "disabled"}
+    hits = [r for r in caplog.records if "不会随请求下发" in r.getMessage()]
+    assert len(hits) == 1, "effort 空转应只提示一次（同组合去重）"
+
+
+def test_effort_still_sent_when_thinking_enabled():
+    import app.llm.client as lc
+    c = lc.LLMClient("https://example.test/v1", "k", "m",
+                     stage_params={"canon_audit": {"thinking": "enabled",
+                                                   "reasoning_effort": "low"}})
+    p = c._build_payload([{"role": "user", "content": "x"}], stream=True, phase="canon_audit")
+    assert p["thinking"] == {"type": "enabled"} and p["reasoning_effort"] == "low"
+
+
+def test_audit_review_tier_default_high_and_overridable(tmp_path, monkeypatch):
+    """W-7：终审判默认仍 pro+high；预设显式声明才降档（明天雷章复测给证据）"""
+    from app.core import canon_audit as ca
+    from app import presets as gp
+    from app.core import state as st
+    proj = str(tmp_path)
+    (tmp_path / "设定").mkdir(exist_ok=True)
+    assert ca._phase_flags({}, proj, "canon_audit_review",
+                           builtin={"thinking": "enabled",
+                                    "reasoning_effort": "high"})["reasoning_effort"] == "high"
+    pid = "t_review_tier"
+    gp.save_preset({"id": pid, "name": "t", "version": 2,
+                    "stage_params": {"canon_audit_review": {"thinking": "disabled"}}})
+    st.save_state(proj, {"genre_preset": pid})
+    got = ca._phase_flags({}, proj, "canon_audit_review",
+                          builtin={"thinking": "enabled", "reasoning_effort": "high"})
+    assert got["thinking"] == "disabled"
+
+
+def test_early_stop_directive_no_longer_asks_for_triage_output():
+    """W-7：分诊纪律留下，triage 清单不再输出（全仓无读方，却要按章付输出价并永久占栈）"""
+    from app.core.canon_audit import EARLY_STOP_DIRECTIVE as D
+    assert "不要输出分诊清单" in D and '"triage"' not in D
+    assert "clean" in D and "不再复查" in D          # 省思考的机制本身必须还在

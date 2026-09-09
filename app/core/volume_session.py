@@ -432,6 +432,17 @@ class VolumeSession(ChapterSession):
         except Exception:  # noqa: BLE001
             pass
 
+    # ---- W-2：历史引用判定（"这段字节栈里已经有了"必须可证，不靠猜）----
+
+    def history_text(self) -> str:
+        """已固化消息的全文拼接——只用于子串判定，绝不进请求体。"""
+        return "\n".join(m.get("content") or "" for m in self._messages)
+
+    def has_history(self, text: str) -> bool:
+        """text 是否已逐字节在栈里。为真时再发一遍＝纯重复（还带复利：入栈后每章重读）。"""
+        t = (text or "").strip()
+        return bool(t) and t in self.history_text()
+
     # ---- 持久化（append-only；逐字节 round-trip）----
 
     def _serialize(self, m: dict) -> str:

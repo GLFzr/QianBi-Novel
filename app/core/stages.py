@@ -49,6 +49,7 @@ PHASE_TRACKING = "tracking"
 PHASE_CH_SUMMARY = "chapter_summary"
 PHASE_G_SUMMARY = "global_summary"
 PHASE_CANON_AUDIT = "canon_audit"
+PHASE_CANON_AUDIT_REVIEW = "canon_audit_review"   # W-7：级联终审（此前相位表点不到，档位写死）
 
 
 def _wb_rg_blocks(proj: str, cfg: dict, num: int = 0) -> tuple:
@@ -1702,8 +1703,16 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     project_header=project_header(proj))
                 ctx.last_prompt = global_prompt
                 if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_G_SUMMARY):
+                    # W-2 ②-c：既有全局摘要＝上一章本相位自己的回复，多半已逐字节固化在
+                    # 栈里（t3b 实测 ~2.4k han 字/章、类内重复率 95%）。**可证才替换**：
+                    # 判定命中才换引用行，否则与改造前逐字相同（崩溃续跑/无历史时必然走这条）
+                    _old_g = old_global or "（全书刚开始）"
+                    if old_global and getattr(session, "has_history", None) \
+                            and session.has_history(old_global):
+                        _old_g = ("【＝本会话历史中最近一条全局摘要（既有内容已在其中），"
+                                  "在它基础上更新，不要要求重新输出旧摘要】")
                     turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
-                        old_summary=old_global or "（全书刚开始）",
+                        old_summary=_old_g,
                         chapter_num=num, chapter_summary=chapter_summary,
                         chapter_header=chapter_header(proj, num), project_header=project_header(proj))
                     ctx.last_prompt = turn_text
@@ -1946,6 +1955,49 @@ def review_vote_structured(raw: str) -> bool:
     return any(m in (raw or "") for m in REVIEW_PROTOCOL_MARKS)
 
 
+def _record_vote_fingerprints(proj: str, num: int, raws: list, parsed_list: list) -> None:
+    """W-6 前置仪器：**不装仪器不许降票**。
+
+    审校是 `review_temperature=0.2` + `thinking:disabled` + TEMP_LOCKED_PHASES ⇒ 三票近乎
+    确定性；代码注释里的"票间必不同构"只在思考模式下成立。但票原文从不落盘，
+    于是"3 票里有多少是真独立信息"根本量不出来，而降票（k=3→1）省的是最贵的钱。
+    这里逐票落指纹：sha1 + 六维等级向量 + fail/marginal 计数 + 是否整章回声 + 是否未产出协议，
+    追加到 项目/追踪/vote_fingerprints.jsonl（cost_bench 聚合成 metrics["vote_iso"]）。
+    纯观测件：任何失败静默，绝不影响主流水线。"""
+    try:
+        import datetime as _dt
+        import hashlib
+        import json as _json
+        import os as _os
+        path = _os.path.join(proj, "追踪", "vote_fingerprints.jsonl")
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        for i, raw in enumerate(raws):
+            v2 = parsed_list[i] if i < len(parsed_list) and isinstance(parsed_list[i], dict) else {}
+            levels, fails, marg = {}, 0, 0
+            for it in (v2.get("items") or []):
+                if not isinstance(it, dict):
+                    continue
+                dim = str(it.get("dim") or "?")
+                lvl = str(it.get("level") or "")
+                levels[dim[:24]] = lvl[:9]
+                if lvl == "fail":
+                    fails += 1
+                elif lvl == "marginal":
+                    marg += 1
+            txt = raw or ""
+            rec = {"ts": _dt.datetime.now().strftime("%H:%M:%S"),
+                   "ch": int(num or 0), "i": i + 1,
+                   "sha1": hashlib.sha1(txt.encode("utf-8")).hexdigest()[:12],
+                   "han": sum(1 for c in txt if "一" <= c <= "鿿"),
+                   "levels": levels, "fail": fails, "marginal": marg,
+                   "echo": txt.lstrip().startswith("# 第"),
+                   "unstructured": bool(v2.get("unstructured"))}
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def review_with_votes(ctx, num: int, prose: str, votes: int,
                       done_votes: list = None, vote_saver=None, session=None) -> dict:
     """k 次独立审校投票（P5）：温度治理 + 引证验真后按维聚合。
@@ -2133,6 +2185,8 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         merged["verdict"] = ""
         merged["unstructured_votes"] = len(parsed_list)
     ctx.review_raw = raws[0] if raws else ""
+    # W-6 前置仪器：逐票落指纹（同构率明天才量得出来；不装仪器不许降票）
+    _record_vote_fingerprints(ctx.proj, num, raws, parsed_list)
     # A2 双轨裁决：【世界书修正】条目（正文自洽而世界书条目疑过时）→ 登记修正提案
     try:
         n_proposed = memory.propose_worldbook_corrections(ctx.proj, num, merged.get("items", []))
