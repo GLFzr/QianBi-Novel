@@ -398,19 +398,125 @@ def test_save_after_rollback_rewrites_truncated_file(tmp_path):
 
 
 def test_load_rejects_changed_system_and_missing_file(tmp_path):
-    """system（全书前缀）变化 / 文件缺失 / 损坏行 → 拒绝恢复，栈保持全新状态"""
+    """W-3：system（全书前缀）变化 / 文件缺失 → 拒绝恢复，原因记在 sess.reject"""
     s, path = _build_two_chapter_stack(tmp_path)
     s.save()
     s2 = VolumeSession(FakeClient(), "另一套全书前缀", volume=1, proj=str(tmp_path))
     assert s2.load(path) is False
     assert s2.snapshot() == [{"role": "system", "content": "另一套全书前缀"}]
     assert s2.turn_count() == 0
-    assert s2.load(os.path.join(str(tmp_path), "会话", "不存在.jsonl")) is False
-    with open(path, "a", encoding="utf-8") as f:
-        f.write("{broken json\n")
+    assert s2.reject["event"] == "system_mismatch"
+    s4 = VolumeSession(FakeClient(), SYS, volume=1, proj=str(tmp_path))
+    assert s4.load(os.path.join(str(tmp_path), "会话", "不存在.jsonl")) is False
+    assert s4.reject["event"] == "stack_missing"
+    assert s4.turn_count() == 0
+
+
+def _session_events(tmp_path):
+    p = os.path.join(str(tmp_path), "追踪", "session_events.jsonl")
+    if not os.path.isfile(p):
+        return []
+    with open(p, encoding="utf-8") as f:
+        return [json.loads(ln) for ln in f if ln.strip()]
+
+
+def test_load_truncates_at_corrupt_line_keeps_prefix(tmp_path):
+    """W-3 核心：中途一行坏 → 只丢该行之后，前缀完好部分照恢复（旧行为=全栈弃）
+
+    截断结果必须原子写回文件：否则后续 append 落在坏行**之后**，这段历史再也读不回。
+    """
+    s, path = _build_two_chapter_stack(tmp_path)
+    s.save()
+    good = open(path, encoding="utf-8").read().splitlines()
+    assert len(good) == 7
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(good[:3]) + "\n{broken json\n" + good[3] + "\n")
+    s2 = VolumeSession(FakeClient(), SYS, volume=1, proj=str(tmp_path))
+    assert s2.load(path) is True
+    assert s2.turn_count() == 1                     # 只保住坏行之前那一轮
+    assert [m["content"] for m in s2.snapshot()] == \
+        [json.loads(ln)["content"] for ln in good[:3]]
+    assert open(path, encoding="utf-8").read().splitlines() == good[:3]
+    assert "{broken json" in open(path + ".corrupt", encoding="utf-8").read()
+    ev = _session_events(tmp_path)
+    assert [e["event"] for e in ev] == ["stack_truncated"]
+    assert ev[0]["dropped_lines"] == 2 and ev[0]["kept"] == 3
+    # 恢复后的栈照常追加，且新行紧接好前缀 → 再 load 不受坏行影响
+    s2.ask("续写第2章")
+    s2.save()
     s3 = VolumeSession(FakeClient(), SYS, volume=1, proj=str(tmp_path))
-    assert s3.load(path) is False
-    assert s3.turn_count() == 0
+    assert s3.load(path) is True
+    assert s3.turn_count() == 2
+
+
+def test_load_rejects_when_first_line_corrupt(tmp_path):
+    """首行就坏（连 system 都读不出）→ 无段可保，仍拒绝恢复并记事件"""
+    s, path = _build_two_chapter_stack(tmp_path)
+    s.save()
+    good = open(path, encoding="utf-8").read().splitlines()
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("{broken json\n" + "\n".join(good[1:]) + "\n")
+    s2 = VolumeSession(FakeClient(), SYS, volume=1, proj=str(tmp_path))
+    assert s2.load(path) is False
+    assert s2.reject["event"] == "stack_first_line_corrupt"
+    assert s2.turn_count() == 0
+    assert open(path, encoding="utf-8").read().splitlines() == ["{broken json"] + good[1:]
+
+
+def test_system_mismatch_reject_reports_discarded_volume(tmp_path):
+    """W-3：整栈作废的告警必须带体积——丢几轮、约多少 tok、一次全量 miss 多少钱"""
+    s, path = _build_two_chapter_stack(tmp_path)
+    s.save()
+    s2 = VolumeSession(FakeClient(), "另一套全书前缀", volume=1, proj=str(tmp_path))
+    assert s2.load(path) is False
+    r = s2.reject
+    assert r["turns"] == 3 and r["tok"] > 0
+    assert r["cost"] == pytest.approx(r["tok"] / 1e6 * 1.584, abs=1e-4)
+    ev = _session_events(tmp_path)
+    assert ev and ev[-1]["event"] == "system_mismatch"
+    assert ev[-1]["turns"] == 3 and ev[-1]["cost"] == r["cost"]
+
+
+def test_rollback_rewrite_leaves_no_half_file(tmp_path):
+    """W-3：回退触发的整文重写走 tmp+os.replace ⇒ 目录里不留 .tmp 半文件"""
+    s, path = _build_two_chapter_stack(tmp_path)
+    s.save()
+    s.rollback_to(1)
+    d = os.path.dirname(path)
+    assert sorted(os.listdir(d)) == ["卷1_messages.jsonl"]
+    assert json.loads(open(path, encoding="utf-8").read().splitlines()[-1])["content"] == \
+        s.snapshot()[-1]["content"]
+
+
+def test_acquire_volume_session_failure_is_counted(tmp_path, monkeypatch):
+    """W-3：取卷会话异常不再静默——告警带异常类名，且落 acquire_failed 事件可数
+
+    实例：fd7b8fe 前缺一个导出符号 → AttributeError 被吞 → v7_long13 整卷无会话，
+    跑完都看不出来。
+    """
+    from app.core import stages as sg
+    import app.core.volume_session as vs
+
+    def boom(*a, **kw):
+        raise AttributeError("module 'prompts' has no attribute 'review_static_tail'")
+
+    monkeypatch.setattr(vs, "resolve_volume_number", boom)
+
+    class Ctx:
+        def __init__(self):
+            self.volume_sessions = {}
+            self.logs = []
+
+        def log(self, level, msg):
+            self.logs.append((level, msg))
+
+    ctx = Ctx()
+    assert sg._acquire_volume_session(ctx, str(tmp_path), 7) is None
+    assert any(lvl == "warn" and "AttributeError" in msg and "无会话" in msg
+               for lvl, msg in ctx.logs)
+    ev = _session_events(tmp_path)
+    assert [e["event"] for e in ev] == ["acquire_failed"]
+    assert ev[0]["chapter"] == 7 and "AttributeError" in ev[0]["err"]
 
 
 def test_resolve_volume_number_from_outline(tmp_path):
@@ -576,6 +682,34 @@ def test_flag_on_system_project_header_only_header_in_opening_turn(tmp_path):
     sess = ctx.volume_sessions[1]
     assert isinstance(sess, VolumeSession)
     assert sess.current_chapter == 1 and sess.turn_count() == len(client.turn_calls)
+
+
+def test_in_chapter_checkpoints_persist_stack_before_finalize(tmp_path, monkeypatch):
+    """W-3 里程碑落盘：卷栈不再只在章末写一次——崩在章中最多回退到一个里程碑"""
+    from app.core import stages as sg
+    proj = _make_proj(tmp_path)
+    cfg = {"writing": {"chapter_session": True, "volume_session": True,
+                       "chapter_word_target": 60},
+           "gates": {"review_enabled": True}}
+    client = CycleClient()
+    saves = []
+    real = sg._save_session_checkpoint
+
+    def spy(ctx, session, where=""):
+        saves.append((where, session.turn_count() if session is not None else -1))
+        return real(ctx, session, where)
+
+    monkeypatch.setattr(sg, "_save_session_checkpoint", spy)
+    ctx, _r = _run_microcycle(proj, cfg, client, 1)
+    sess = ctx.volume_sessions[1]
+    assert saves, "整章没有任何一次卷栈落盘"
+    assert any(w == "enrich 后" for w, _n in saves), "enrich 后未落盘"
+    assert any(w == "审校后" for w, _n in saves), "审校后未落盘"
+    assert saves[-1][0] == "定稿后"
+    # 章中那次落盘时栈还没长到最终长度 = 真增量，而不是同一状态写三遍
+    assert any(n < sess.turn_count() for _w, n in saves[:-1])
+    path = volume_messages_path(proj, 1)
+    assert len(open(path, encoding="utf-8").read().splitlines()) == len(sess.snapshot())
 
 
 def test_two_chapters_share_volume_stack_and_persist_per_chapter(tmp_path):

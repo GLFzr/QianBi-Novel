@@ -480,6 +480,25 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
                 continue
         if _agg:
             metrics["span_stats"] = _agg
+    # W-3：卷栈降级事件计数（整栈作废/坏行截尾/取会话失败此前只有一行 warn，
+    # 跑完一本书就查不出来了）——按事件给出次数、丢弃轮数/token 与一次 miss 的钱
+    _ev_path = os.path.join(proj, "追踪", "session_events.jsonl")
+    _ev = {}
+    if os.path.isfile(_ev_path):
+        with open(_ev_path, encoding="utf-8") as _fh:
+            for _line in _fh:
+                try:
+                    _r = json.loads(_line)
+                except ValueError:
+                    continue
+                _d = _ev.setdefault(_r.get("event") or "?",
+                                    {"n": 0, "turns": 0, "tok": 0, "cost": 0.0})
+                _d["n"] += 1
+                _d["turns"] += int(_r.get("turns") or 0)
+                _d["tok"] += int(_r.get("tok") or 0)
+                _d["cost"] = round(_d["cost"] + float(_r.get("cost") or 0), 4)
+    if _ev:
+        metrics["session_events"] = _ev
     out = os.path.join(BENCH, "%s.metrics.json" % variant)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(metrics, f, ensure_ascii=False, indent=1)

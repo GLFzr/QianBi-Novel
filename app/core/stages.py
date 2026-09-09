@@ -385,6 +385,20 @@ def _session_usable(session) -> bool:
     return session is not None and getattr(session, "enabled", False)
 
 
+def _save_session_checkpoint(ctx, session, where: str = "") -> None:
+    """W-3 章内里程碑落盘（append-only，只写新行）。
+
+    改造前整章只在定稿后 save 一次 ⇒ 崩在章中＝整卷栈停在上一章末尾，
+    下一章起的全部历史都要重打；现在崩点最多回退到一个里程碑，续跑时
+    open_chapter 的同章重入会把本章半截尝试截掉（不留双份正文）。"""
+    if not (_session_usable(session) and hasattr(session, "save")):
+        return
+    try:
+        session.save()
+    except Exception as e:  # noqa: BLE001
+        ctx.log("warn", f"卷会话消息栈落盘失败（不阻断{'·' + where if where else ''}）：{e}")
+
+
 def _session_seed(session, prose_text: str):
     """会话栈尚无正文（断点续跑等场景）时先播种，保证历史前缀完整。"""
     if _session_usable(session) and session.turn_count() == 0 and prose_text:
@@ -957,15 +971,29 @@ def _acquire_volume_session(ctx, proj: str, num: int, static_freeze: bool = Fals
                     ctx.log("info", f"卷 {vol} 会话已从盘恢复（{sess.turn_count()} 轮，"
                                     f"历史前缀缓存继续有效）")
                 else:
-                    ctx.log("warn", f"卷 {vol} 会话恢复失败（全书前缀已变化或文件损坏），"
-                                    f"按全新卷栈继续")
+                    r = dict(getattr(sess, "reject", None) or {})
+                    turns = int(r.get("turns") or 0)
+                    tok = int(r.get("tok") or 0)
+                    ctx.log("warn", f"卷 {vol} 会话恢复失败（{r.get('event') or '未知原因'}）"
+                                    f"：丢弃 {turns} 轮 / 约 {tok:,} tok 历史，"
+                                    f"本章起按全新栈继续，每次调用全量 miss 重发 "
+                                    f"≈¥{float(r.get('cost') or 0):.4f}")
             cache[vol] = sess
             ctx.log("info", f"第 {num} 章 卷会话已启用（卷 {vol}：跨章共享历史，"
                             f"章头入开幕轮）")
         return sess
     except Exception as e:  # noqa: BLE001
+        # W-3：不静默。无会话比空栈更贵（每个相位都重发整条双层前缀），且这种
+        # 降级会一路跑完整本书——fd7b8fe 就是缺一个导出符号导致 v7_long13 整卷无会话。
         try:
-            ctx.log("warn", f"卷级会话不可用（{e}），本章按无会话继续")
+            from .volume_session import record_event
+            record_event(proj, "acquire_failed", chapter=num,
+                         err=f"{type(e).__name__}: {e}"[:160])
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            ctx.log("warn", f"卷级会话不可用（{type(e).__name__}: {e}），"
+                            f"第 {num} 章按无会话继续（每相位重发整条前缀）")
         except Exception:
             pass
         return None
@@ -1346,6 +1374,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     project.write_file(project.chapter_draft_path(proj, num), prose)
     st.save_chapter_step(proj, num, step_done="enrich",
                          draft_path=draft_rel, votes=saved_votes, outline_fp=outline_fp)
+    # W-3 里程碑①：与草稿同步把卷栈落一次盘（此后崩在扫描/去味/审校都不用重打整卷）
+    _save_session_checkpoint(ctx, session, "enrich 后")
 
     # ---- ③ AI 味扫描（本地，零成本；断点在此步之后时跳过）----
     skip_scan_deslop = resume_at in ("deslop", "review", "finalize")
@@ -1576,6 +1606,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     else:
         ctx.log("info", "审校已跳过（未启用或审校槽未绑定连接）")
 
+    # W-3 里程碑②：审校与修复环的轮次先落盘（G8 若要回退，rollback_to 自己会重写持久层）
+    _save_session_checkpoint(ctx, session, "审校后")
+
     # ---- ④.9 决策门 G8：审校完成后（T4.1 内侧门；回退=保留原稿=还原审校前文本）----
     # 人工审校模式下 G8 门已由人工审校循环承担，不再二次弹门
     if review_ran and not manual_review:
@@ -1709,11 +1742,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     st.clear_chapter_step(proj)
     # S1 卷会话：逐章 append-only 落盘（v3 §2.4）——崩溃恢复后消息逐字节一致，
     # 服务端前缀缓存继续有效（不重放、不重新 miss）。
-    if _session_usable(session) and hasattr(session, "save"):
-        try:
-            session.save()
-        except Exception as e:  # noqa: BLE001
-            ctx.log("warn", f"卷会话消息栈落盘失败（不阻断）：{e}")
+    _save_session_checkpoint(ctx, session, "定稿后")
     gr.word_actual = project.count_chars(prose)
     record = {"num": num, "title": title, **gr.to_record()}
     return record

@@ -64,6 +64,79 @@ def chapter_of_opening(text: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+# ---- W-3：栈生命周期事件（"loud" 必须有地方可读）----
+#
+# 整栈作废 / 坏行截尾 / 取会话异常这三条降级路径过去只有一行 warn，跑完几十章
+# 就再也回溯不到（v7_long13 整卷无会话是靠人眼读正文才发现的）。事件追加到
+# 项目/追踪/session_events.jsonl，cost_bench 聚合成 metrics["session_events"]。
+# 与 span_edit.record_event 同纪律：纯观测件，任何失败静默，绝不碰主流水线。
+_SESSION_EVENTS = os.path.join("追踪", "session_events.jsonl")
+
+# 未命中输入价（元/百万 token）：官方 flash 与百炼同价，口径同 scripts/chapter_curve.py
+_MISS_PRICE_PER_MTOK = 1.584
+
+
+def session_events_path(proj: str) -> str:
+    return os.path.join(proj, _SESSION_EVENTS) if proj else ""
+
+
+def record_event(proj: str, event: str, **fields) -> None:
+    """记一条会话栈事件（volume/turns/tok/cost 等按需给）。proj 为空即不记。"""
+    path = session_events_path(proj)
+    if not path:
+        return
+    try:
+        import datetime
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        rec = {"ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+               "event": event}
+        rec.update({k: v for k, v in fields.items() if v is not None})
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def lines_size(lines) -> tuple:
+    """落盘行 →（轮数, 估算 token）。按**原始行**计而非解析后内容：坏行本来就读不出
+    内容，且 JSON 转义只会让报出的"丢弃体积"偏大——作废是坏事，宁可报高。
+    token 用仓库既有 han 口径（懒导入，避免与 history_compaction 成环）。"""
+    try:
+        from .history_compaction import han_tokens
+    except Exception:  # noqa: BLE001
+        han_tokens = None
+    lines = list(lines or [])
+    if han_tokens is None:
+        tok = int(sum(len(ln) for ln in lines) * 0.5)
+    else:
+        tok = sum(han_tokens(ln) for ln in lines)
+    return max((len(lines) - 1) // 2, 0), tok
+
+
+def miss_cost(tokens: int) -> float:
+    """一次全量 miss 重发的钱（元）——栈作废的实际代价按每章每相位各付一次计。"""
+    return round(int(tokens or 0) / 1e6 * _MISS_PRICE_PER_MTOK, 4)
+
+
+def _atomic_write(path: str, data: str) -> None:
+    """tmp + fsync + os.replace：盘上任何时刻都不出现「半文件」版本的历史栈。"""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _keep_aside(path: str, data: str) -> None:
+    """被截掉的坏尾另存证据（追加，不覆盖上一次的现场）。"""
+    try:
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
+            f.write(data)
+    except OSError:
+        pass
+
+
 # 卷号解析（章号 → 卷号）：从 大纲/大纲.md 卷级大纲的章号声明按出现顺序切分。
 # 解析不出任何卷声明（旧格式大纲/自由体）时整体回退卷 1——单栈语义，
 # 正确性不受影响，只是文件名退化为「卷1」。卷结构解析是启发式的，供 gate 评审。
@@ -227,6 +300,7 @@ class VolumeSession(ChapterSession):
         self._pending_opening = None  # open_chapter 合成的开幕轮：随下一次 ask 固化
         self._current_chapter = 0     # 栈中最后一条开幕轮的章号（0=尚无）
         self._chapter_start_turns = 0  # 本章开幕前的轮数（同章重入时截断基准）
+        self.reject = {}              # 最近一次 load() 拒绝的原因与丢弃体积（W-3）
 
     # ---- 卷身份 ----
 
@@ -289,10 +363,11 @@ class VolumeSession(ChapterSession):
     def seed_prose(self, prose: str, chapter_num: int = 0) -> None:
         """断点续跑：卷栈缺本章历史时把盘上草稿播种进下一次 ask（不清栈）。
 
-        卷会话崩溃在中途时，盘上 jsonl 只落到上一章末尾（save 逐章调用）——
-        本章的开幕轮与正文都不在栈里，若不播种，「最近一条章正文消息」会指向
-        上一章。播种语义与 ChapterSession.restart_with_prose 一致（正文前缀拼
-        进下一次 ask），区别只在不清掉 1..N-1 章历史。
+        卷栈落盘点 = 章内里程碑（enrich 后／审校后／定稿后，W-3），所以崩在章中时
+        盘上可能带着本章的半截轮次（同章重入由 open_chapter/seed_prose 的截断兜住），
+        也可能停在上一章末尾——后者若不播种，「最近一条章正文消息」会指向上一章。
+        播种语义与 ChapterSession.restart_with_prose 一致（正文前缀拼进下一次 ask），
+        区别只在不清掉 1..N-1 章历史。
         """
         if chapter_num and self._current_chapter == chapter_num:
             self.rollback_to(self._chapter_start_turns)   # 本章旧尝试不留双份
@@ -367,7 +442,8 @@ class VolumeSession(ChapterSession):
 
         append-only：正常路径只追加新行，历史行逐字节不动（save 两次=文件不变）。
         栈被回退截断到已落盘游标之下时整文重写一次（截断后的前缀仍逐字节一致，
-        服务端前缀缓存按位置匹配不受影响）。
+        服务端前缀缓存按位置匹配不受影响）。重写走 tmp+os.replace **原子替换**：
+        1.5MB 整文写到一半被 kill 会把整卷历史换成半文件（W-3 前是非原子 open("w")）。
         """
         if not self._path:
             return ""
@@ -377,40 +453,72 @@ class VolumeSession(ChapterSession):
         os.makedirs(os.path.dirname(self._path), exist_ok=True)
         if n < self._saved_len:
             data = "\n".join(self._serialize(m) for m in self._messages) + "\n"
-            with open(self._path, "w", encoding="utf-8", newline="\n") as f:
-                f.write(data)
+            _atomic_write(self._path, data)
         else:
+            payload = "".join(self._serialize(m) + "\n"
+                              for m in self._messages[self._saved_len:])
             with open(self._path, "a", encoding="utf-8", newline="\n") as f:
-                for m in self._messages[self._saved_len:]:
-                    f.write(self._serialize(m) + "\n")
+                f.write(payload)
         self._saved_len = n
         return self._path
 
     def load(self, path: str) -> bool:
         """从 jsonl 恢复消息栈；成功返回 True（此后消息与落盘时逐字节一致）。
 
-        文件缺失/损坏/首条 system 与当前全书前缀不一致（设定/正则/世界书在两次
-        运行之间改过——旧栈缓存域已死）时返回 False，栈保持构造时的全新状态。
-        恢复内容含章节边界：current_chapter / 章开幕轮数一并还原，断点续跑的
-        「本章缺历史才播种」判断因此成立。
+        文件缺失 / 首行不可读 / 首条 system 与当前全书前缀不一致（设定/正则/世界书
+        在两次运行之间改过——旧栈缓存域已死）时返回 False，栈保持构造时的全新状态，
+        拒绝详情（丢弃轮数/token/一次 miss 的钱）记在 `self.reject` 供调用方告警。
+
+        **坏行截尾（W-3）**：中途某行 JSON 坏掉不再作废全栈——保留前缀完好的部分
+        并把截断结果原子写回文件（否则后续 append 落在坏行之后，这段历史再也读不回）。
+        坏行及其之后的行留在 `.corrupt` 里作证据。恢复内容含章节边界：current_chapter /
+        章开幕轮数一并还原，断点续跑的「本章缺历史才播种」判断因此成立。
         """
+        self.reject = {}
         try:
             with open(path, "r", encoding="utf-8") as f:
                 lines = [ln.strip() for ln in f if ln.strip()]
         except OSError:
+            self.reject = {"event": "stack_missing", "vol": self._volume,
+                           "gen": self._gen}
             return False
         msgs = []
-        for ln in lines:
+        bad_at = -1
+        for i, ln in enumerate(lines):
             try:
                 m = json.loads(ln)
             except ValueError:
-                return False
+                bad_at = i
+                break
             if not (isinstance(m, dict) and isinstance(m.get("role"), str)
                     and isinstance(m.get("content"), str)):
-                return False
+                bad_at = i
+                break
             msgs.append({"role": m["role"], "content": m["content"]})
+        if bad_at > 0:
+            turns, tok = lines_size(lines[bad_at:])
+            _atomic_write(path, "\n".join(lines[:bad_at]) + "\n")
+            _keep_aside(path + ".corrupt", "\n".join(lines[bad_at:]) + "\n")
+            record_event(self._proj, "stack_truncated", vol=self._volume,
+                         gen=self._gen, dropped_lines=len(lines) - bad_at,
+                         turns=turns, tok=tok, kept=bad_at)
+            lines = lines[:bad_at]
+            msgs = msgs[:bad_at]
         if not msgs or msgs[0]["role"] != "system" \
                 or msgs[0]["content"] != self._system_text:
+            turns, tok = lines_size(lines)
+            if not lines:
+                event = "stack_empty"
+            elif bad_at == 0:
+                event = "stack_first_line_corrupt"   # 前缀都读不出 → 无段可保
+            elif msgs and msgs[0]["role"] == "system":
+                event = "system_mismatch"            # 缓存域已死，整栈作废
+            else:
+                event = "stack_unreadable"
+            self.reject = {"event": event, "vol": self._volume, "gen": self._gen,
+                           "turns": turns, "tok": tok, "cost": miss_cost(tok)}
+            record_event(self._proj, event, vol=self._volume, gen=self._gen,
+                         turns=turns, tok=tok, cost=self.reject["cost"])
             return False
         self._messages = msgs
         self._saved_len = len(msgs)
@@ -426,6 +534,9 @@ class VolumeSession(ChapterSession):
             if chap:
                 self._current_chapter = chap
                 self._chapter_start_turns = max((i - 1) // 2, 0)
+        if bad_at == 0:
+            record_event(self._proj, "stack_first_line_corrupt", vol=self._volume,
+                         gen=self._gen, lines=len(lines))
         return True
 
     # snapshot() / commit_turn() / turn_count() / enabled / system_text
