@@ -93,6 +93,7 @@ def analyze(path: str) -> dict:
     seen = set()
     ch = {}
     kinds = {}
+    sections = {}
     cur = 0
     sys_lines = set()
     for m in msgs:
@@ -113,8 +114,17 @@ def analyze(path: str) -> dict:
         kind = kind_of(m)
         k = kinds.setdefault(kind, {"new": 0, "dup": 0, "dupsys": 0, "msgs": 0})
         k["msgs"] += 1
+        # ②-d 定位：开幕轮按 "## 节名" 拆开，看哪一节在往栈里骑重复
+        opening = kind == "开幕轮(章头+指令)"
+        sec = None
+        secs_this_msg = set()
         for line in content.split("\n"):
             key = line.strip()
+            if opening and key.startswith("## "):
+                sec = key[:24]
+                sections.setdefault(sec, {"new": 0, "dup": 0, "n": 0})
+                secs_this_msg.add(sec)
+                continue
             if not key:
                 continue
             h = han(line)
@@ -124,11 +134,18 @@ def analyze(path: str) -> dict:
             if key in seen:
                 d["dup"] += h
                 k["dup"] += h
+                if opening and sec:
+                    sections[sec]["dup"] += h
             else:
                 seen.add(key)
                 d["new"] += h
                 k["new"] += h
-    return {"ch": ch, "kinds": kinds}
+                if opening and sec:
+                    sections[sec]["new"] += h
+        if opening:
+            for sname in secs_this_msg:
+                sections[sname]["n"] += 1
+    return {"ch": ch, "kinds": kinds, "sections": sections}
 
 
 def main() -> None:
@@ -171,6 +188,16 @@ def main() -> None:
                   % (name, d["msgs"], format(d["new"], ","), format(d["dup"], ","),
                      format(d["dupsys"], ","), format(tot, ","),
                      100.0 * d["dup"] / max(1, tot), format(tot // max(1, len(chs)), ",")))
+        secs = r.get("sections") or {}
+        if secs:
+            print("   开幕轮分节（②-d 的目标就在这张表里）：")
+            print("     %-26s %5s %10s %10s %7s" % ("节", "章数", "每章新增", "每章重复", "重复率"))
+            for name, d in sorted(secs.items(), key=lambda kv: -(kv[1]["dup"] + kv[1]["new"])):
+                tot = d["new"] + d["dup"]
+                print("     %-26s %5d %10s %10s %6.1f%%"
+                      % (name, d["n"], format(d["new"] // max(1, d["n"]), ","),
+                         format(d["dup"] // max(1, d["n"]), ","),
+                         100.0 * d["dup"] / max(1, tot)))
         print("   逐章（前 8 章）：" + "、".join(
             "第%d章 %d/%d" % (c, r["ch"][c]["new"], r["ch"][c]["dup"])
             for c in chs[:8]))
