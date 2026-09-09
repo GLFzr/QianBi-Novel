@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """逐章曲线切章与判据（scripts/chapter_curve.py）回归
 
-usage.jsonl 不带章号，曲线全靠"每章恰调用一次"的相位作锚点切分——切错就会把 T1 的
-头号产出（hit% 随章数爬升）做成假证据。故锁：锚点选择、段数与章数不符必须报警、
-判据在体量不足时不得下裁决、以及双口径计价。
+2026-09-09 起 usage.jsonl 可带真章号 `ch`（stages 章循环入口登记）：有 ch 时曲线直接按章分组、
+同章多段合并（崩溃重跑/多段拼接不再把 53 章数成 56 段），猜锚点退为兜底路径。故锁：
+真章号分组与合并、锚点选择、段数与章数不符必须报警、判据在体量不足时不得下裁决、双口径计价。
 """
-from scripts.chapter_curve import PRICES, _agg, _cut, _pick_anchor, _verdict
+from scripts.chapter_curve import PRICES, _agg, _cut, _cut_by_ch, _pick_anchor, _verdict
 
 
 def _r(phase, hit=0, miss=0, out=0, lat=1.0):
@@ -76,3 +76,26 @@ def test_verdict_reports_volume_roll():
             "miss": 40870, "cost": 0.268, "lat": 35.0}]
     txt = "\n".join(_verdict(chs, "ds"))
     assert "卷界 @第2章（卷 1→2）" in txt and "换卷税" in txt
+
+
+def _rc(ch, phase="prose", hit=100, miss=10):
+    r = _r(phase, hit, miss)
+    r["ch"] = ch
+    return r
+
+
+def test_cut_by_ch_groups_and_merges_real_chapters():
+    """真章号优先：乱序按章号排单调；同章多段（崩溃重跑/多段拼接）合并成一章"""
+    rows = [_rc(39), _rc(38, "prose"), _rc(38, "review", hit=50, miss=5),
+            _rc(0, "outline"), _rc(40)]
+    setup, segs, chnos = _cut_by_ch(rows)
+    assert chnos == [38, 39, 40], "章号必须单调且合并同章"
+    assert [len(s) for s in segs] == [2, 1, 1]
+    assert [r["phase"] for r in setup] == ["outline"], "ch=0 的行归备料段"
+
+
+def test_cut_by_ch_keeps_row_order_inside_a_chapter():
+    """章内顺序保留（相位归因与延迟统计依赖它）"""
+    rows = [_rc(7, "review"), _rc(7, "prose"), _rc(7, "tracking")]
+    _setup, segs, chnos = _cut_by_ch(rows)
+    assert chnos == [7] and [r["phase"] for r in segs[0]] == ["review", "prose", "tracking"]

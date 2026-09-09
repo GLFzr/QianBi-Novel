@@ -1040,6 +1040,9 @@ def _compaction_step(ctx, proj: str, num: int, session):
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
     proj = ctx.proj
+    # 用量行归属章号：T 轮的逐章曲线一直靠"prose 每章恰一次"反推，就是缺这一格
+    from .. import usage as _usage
+    _usage.set_chapter(num)
     chapter_words = _outline_word_target(
         proj, num, ctx.cfg.get("writing", {}).get("chapter_word_target", 3000))
     gates_cfg = ctx.cfg.get("gates", {})

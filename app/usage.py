@@ -19,6 +19,7 @@ DIR = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "usage")
 FILE = os.path.join(DIR, "usage.jsonl")
 
 _lock = threading.Lock()
+_chapter = 0   # 当前章号（章循环入口经 set_chapter 设置；0＝未知，用量行如实落 0）
 _cache = None   # {"ymd": 当天日期串, "days": {ymd: {"in","out","calls","by_model","by_slot"}}}
 
 # 默认费率（元/百万 tokens）：与 router.estimate_cost 口径一致
@@ -105,8 +106,21 @@ def _ensure_today():
     return _cache["days"][today]
 
 
+def set_chapter(num: int) -> None:
+    """设置当前章号（供用量行的 ch 字段归属）。
+
+    章循环入口调用一次即可：副本票虽在别的线程，但同属本章。不设置则落 0＝未知，
+    比猜一个章号诚实。"""
+    global _chapter
+    try:
+        _chapter = int(num or 0)
+    except (TypeError, ValueError):
+        _chapter = 0
+
+
 def record(cfg: dict, model: str, slot: str, tin: int, tout: int, latency: float = 0.0,
-           hit: int = 0, miss: int = 0, phase: str = "", reasoning: int = 0):
+           hit: int = 0, miss: int = 0, phase: str = "", reasoning: int = 0,
+           sent: dict = None):
     """记录一次 LLM 调用（工作线程安全）。tin/tout 为该次响应的 usage 计数
 
     hit/miss 为 DeepSeek prompt_cache_hit_tokens / prompt_cache_miss_tokens（缺省 0）；
@@ -122,7 +136,11 @@ def record(cfg: dict, model: str, slot: str, tin: int, tout: int, latency: float
            "model": model or "", "slot": slot or "",
            "in": int(tin), "out": int(tout), "latency": round(float(latency or 0), 2),
            "hit": int(hit or 0), "miss": int(miss or 0), "phase": phase or "",
-           "reasoning": int(reasoning or 0)}
+           "reasoning": int(reasoning or 0), "ch": int(_chapter or 0)}
+    if sent:
+        # 只记**真正随请求下发**的参数（网关剥参、thinking 未设导致 effort 被丢，
+        # 都只有这一格能看出来）；未设置时不落空字段，保持旧行形状
+        rec["sent"] = {str(k): sent.get(k) for k in sorted(sent)}
     with _lock:
         day = _ensure_today()   # 先加载历史（含跨天切分），再落盘本条，避免双计
         try:

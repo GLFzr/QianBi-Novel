@@ -148,7 +148,8 @@ class LLMClient:
             self.total_completion_tokens += tout
             from .. import usage as _usage
             _usage.record(None, self.model, self.slot, tin, tout, latency,
-                          hit=hit, miss=miss, phase=phase, reasoning=reasoning)
+                          hit=hit, miss=miss, phase=phase, reasoning=reasoning,
+                          sent=getattr(self, "last_sampling", None) or None)
         except Exception as e:  # noqa: BLE001
             logger.debug("用量埋点失败（忽略）: %s", e)
 

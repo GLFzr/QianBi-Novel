@@ -35,8 +35,10 @@ def test_record_writes_reasoning_field():
                  hit=30, miss=70, phase="draft", reasoning=123)
     rec = _last_line()
     assert rec["reasoning"] == 123
-    # 既有字段原样保留、顺序不受影响
-    assert list(rec.keys())[-1] == "reasoning"
+    # 既有字段原样保留、顺序不受影响；新增观测字段（ch/sent）只允许追加在尾部
+    assert list(rec.keys())[:11] == ["ts", "ymd", "model", "slot", "in", "out", "latency",
+                                     "hit", "miss", "phase", "reasoning"]
+    assert set(list(rec.keys())[11:]) <= {"ch", "sent"}
     assert rec["in"] == 100 and rec["out"] == 50
     assert rec["hit"] == 30 and rec["miss"] == 70 and rec["phase"] == "draft"
 

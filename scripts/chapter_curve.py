@@ -57,8 +57,29 @@ def _rows(path: str) -> list:
                 out.append({"phase": r.get("phase") or "", "slot": r.get("slot") or "",
                             "hit": int(r.get("hit") or 0), "miss": int(r.get("miss") or 0),
                             "in": int(r.get("in") or 0), "out": int(r.get("out") or 0),
-                            "lat": float(r.get("latency") or 0.0), "ts": r.get("ts") or ""})
+                            "lat": float(r.get("latency") or 0.0), "ts": r.get("ts") or "",
+                            "ch": int(r.get("ch") or 0)})
     return out
+
+
+def _cut_by_ch(rows: list) -> tuple:
+    """按**真章号**分组（usage 行带 ch 时优先用它，不再靠"某相位每章恰一次"猜锚点）。
+
+    同章多段合并：崩溃后重跑、或多段拼接的长跑里同一章会被写两遍——按 prose 数段会
+    虚报章数（今天 T3 五段拼出 56 段 ≠ 实际 53 章就是这个坑），合并后章数诚实，
+    重跑烧掉的量也如实挂在那一章上。"""
+    groups, order, setup = {}, [], []
+    for r in rows:
+        ch = int(r.get("ch") or 0)
+        if ch <= 0:
+            setup.append(r)                       # 章号未知（旧行/细纲备料）
+            continue
+        if ch not in groups:
+            groups[ch] = []
+            order.append(ch)
+        groups[ch].append(r)
+    ordered = sorted(order)
+    return setup, [groups[c] for c in ordered], ordered
 
 
 def _expected_chapters(variant: str) -> int:
@@ -214,13 +235,19 @@ def main() -> None:
         rows += _rows(up)
     want = a.chapters or sum(_expected_chapters(v) for v in vars_)
     price = PRICES[a.price]
-    anchor, setup, segs, warn = _pick_anchor(rows, want)
+    if any(int(r.get("ch") or 0) > 0 for r in rows):
+        # usage 行带真章号（2026-09-09 起）→ 直接按章分组，同章多段合并；
+        # 不再靠"某相位每章恰一次"猜锚点，续跑/重跑的章数也不会虚报
+        setup, segs, chnos = _cut_by_ch(rows)
+        anchor, warn = "ch（真章号）", ""
+    else:
+        anchor, setup, segs, warn = _pick_anchor(rows, want)
+        chnos = list(range(1, len(segs) + 1))
 
     chs = []
     cum = {"hit": 0, "in": 0, "in_book": 0}
-    vols = _volumes(a.proj or os.path.join(BENCH, vars_[0], "bench", "种子书"),
-                    [i for i in range(1, len(segs) + 1)])
-    for i, seg in enumerate(segs, 1):
+    vols = _volumes(a.proj or os.path.join(BENCH, vars_[0], "bench", "种子书"), chnos)
+    for i, seg in zip(chnos, segs):
         g = _agg(seg, price)
         cum["hit"] += g["hit"]
         cum["in"] += g["in_true"]

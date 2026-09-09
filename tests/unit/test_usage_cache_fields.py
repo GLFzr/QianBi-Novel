@@ -141,3 +141,29 @@ def test_other_channels_get_no_extra_header():
     for base in ("https://api.deepseek.com/v1", "https://tokenrhythm.studio/v1"):
         h = lc.LLMClient(base, "sk", "deepseek-v4-flash", user_id="qianbi-bench-t1")._headers()
         assert set(h) == {"Content-Type", "Authorization"}, base
+
+
+def test_usage_row_carries_chapter(tmp_path, monkeypatch):
+    """ch：未登记章号落 0（未知），登记后每行带章号；非法值不抛、退回 0"""
+    um = _fresh_usage(tmp_path, monkeypatch)
+    um.set_chapter(7)
+    um.record(None, "m", "s", 100, 10, 0.5, hit=90, miss=10, phase="prose")
+    um.set_chapter("8")                       # 字符串章号也要吃得下
+    um.record(None, "m", "s", 120, 12, 0.6, phase="review")
+    um.set_chapter(None)                      # 未知 → 0，不去猜
+    um.record(None, "m", "s", 50, 5, 0.1, phase="outline")
+    um.set_chapter("bad")                     # 非法值不抛异常
+    um.record(None, "m", "s", 60, 6, 0.2, phase="tracking")
+    rows = [json.loads(l) for l in open(um.FILE, encoding="utf-8") if l.strip()]
+    assert [r["ch"] for r in rows] == [7, 8, 0, 0]
+
+
+def test_usage_row_records_actually_sent_params(tmp_path, monkeypatch):
+    """sent＝真正随请求下发的参数：剥参与静默丢弃只有这格看得出来；空值不写保旧行形状"""
+    um = _fresh_usage(tmp_path, monkeypatch)
+    um.record(None, "m", "s", 10, 1, 0.1, phase="prose",
+              sent={"thinking": "enabled", "reasoning_effort": "low", "temperature": 0.7})
+    um.record(None, "m", "s", 10, 1, 0.1, phase="tracking", sent={})
+    rows = [json.loads(l) for l in open(um.FILE, encoding="utf-8") if l.strip()]
+    assert rows[0]["sent"] == {"reasoning_effort": "low", "temperature": 0.7, "thinking": "enabled"}
+    assert "sent" not in rows[1], "空 sent 不该改变旧行形状"
