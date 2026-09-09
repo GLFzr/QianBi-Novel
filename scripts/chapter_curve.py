@@ -29,6 +29,9 @@ if os.name == "nt":
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+# W-5：盲区 token 的口径与 cost_ledger 必须同源，唯一定义在 app.usage
+from app.usage import blind_spread, cache_caliber  # noqa: E402
+
 BENCH = os.path.join(ROOT, "tests_output", "bench")
 ANCHORS = ("prose", "global_summary", "chapter_summary", "tracking")
 USD_CNY = 7.2
@@ -55,6 +58,7 @@ def _rows(path: str) -> list:
             if line:
                 r = json.loads(line)
                 out.append({"phase": r.get("phase") or "", "slot": r.get("slot") or "",
+                            "model": r.get("model") or "",
                             "hit": int(r.get("hit") or 0), "miss": int(r.get("miss") or 0),
                             "in": int(r.get("in") or 0), "out": int(r.get("out") or 0),
                             "lat": float(r.get("latency") or 0.0), "ts": r.get("ts") or "",
@@ -120,31 +124,44 @@ def _pick_anchor(rows: list, want: int) -> tuple:
 
 
 def _agg(rows: list, price: dict) -> dict:
-    """缺缓存明细的行（hit+miss < in，网关没回 prompt_tokens_details）按**全 miss** 计——
-    未证明命中的 token 不能算命中；把它们从分母里悄悄摘掉会让每个 hit% 都偏乐观。
+    """三段口径（W-5，唯一定义在 app.usage.cache_caliber）：
 
-    hit_pct      = hit / 实际 prompt（诚实口径，本报告的判据）
-    hit_pct_book = hit / (hit+上报 miss)（在册口径，与 cost_bench/S 轮数字同尺）"""
-    hit = miss = miss_book = out = 0
+    - **已知**：网关回了缓存明细 → hit / miss_known；
+    - **盲区** `blind_tok`：什么都没回（含缺 hit 键的历史行）→ **既不进 hit% 分子也不进分母**；
+    - **账面** `cost`：盲区按 miss 计（未证明命中的 token 不能算命中，保守上限）；
+    - **真实** `cost_real`：盲区按**本渠道已知行的实测命中率**摊派——omen-alpha 33.7% 调用
+      没回明细，账面因此比真实高 2.4 倍，两个数一起报才解释得清。
+
+    hit_pct      = hit / 实际 prompt（含盲区，账面口径）
+    hit_pct_book = hit / (hit+上报 miss)＝**只看已知行**的命中率（分渠道可裁决的那个数）"""
+    hit = miss_known = out = 0
     in_true = 0
-    blind = 0
+    blind = blind_tok = 0
+    blind_by = {}
     for r in rows:
-        i, h, o, m = r["in"], r["hit"], r["out"], r["miss"]
-        in_true += max(i, h + m)
+        h, m, b = cache_caliber(r)
         hit += h
-        miss_book += m
-        if i and h + m < i:
+        miss_known += m
+        blind_tok += b
+        in_true += h + m + b
+        out += r["out"]
+        if b:
             blind += 1
-            m = i - h
-        miss += m
-        out += o
-    cost = (hit * price["hit"] + miss * price["miss"] + out * price["out"]) / 1e6
-    return {"calls": len(rows), "hit": hit, "miss": miss, "out": out,
-            "in": in_true, "in_true": in_true, "in_book": hit + miss_book,
-            "blind": blind,
+            key = r.get("model") or "?"
+            blind_by[key] = blind_by.get(key, 0) + b
+    miss_book = miss_known + blind_tok                       # 账面：盲区一律按 miss 计
+    add_hit, add_miss = blind_spread(hit, miss_known, blind_tok)
+    cost = (hit * price["hit"] + miss_book * price["miss"] + out * price["out"]) / 1e6
+    cost_real = ((hit + add_hit) * price["hit"]
+                 + (add_miss + miss_known) * price["miss"]
+                 + out * price["out"]) / 1e6
+    return {"calls": len(rows), "hit": hit, "miss": miss_book, "miss_known": miss_known,
+            "out": out, "in": in_true, "in_true": in_true, "in_book": hit + miss_book,
+            "blind": blind, "blind_tok": blind_tok, "blind_by_model": blind_by,
             "hit_pct": 100.0 * hit / max(1, in_true),
-            "hit_pct_book": 100.0 * hit / max(1, hit + miss_book),
-            "cost": cost, "lat": sum(r["lat"] for r in rows) / max(1, len(rows))}
+            "hit_pct_book": 100.0 * hit / max(1, hit + miss_known),
+            "cost": cost, "cost_real": cost_real,
+            "lat": sum(r["lat"] for r in rows) / max(1, len(rows))}
 
 
 def _volumes(proj: str, nums: list) -> dict:
@@ -170,6 +187,7 @@ def _verdict(chs: list, price_name: str) -> list:
     n = len(chs)
     tail = chs[-1]["cum_hit_pct"]
     out.append("卷末累计 hit%% %.1f%%（验收线 ≥97-99%%，N=%d）→ %s"
+               "｜判据只看整跑累计：单章 hit%% 受盲区上报与卷界影响，一律不作裁决"
                % (tail, n, "✅" if tail >= 97.0 else ("⚠️ 体量未到 20 章，不作裁决" if n < 20 else "❌")))
     if n >= 10:
         c10 = [c for c in chs if c["num"] >= 10]
@@ -181,30 +199,52 @@ def _verdict(chs: list, price_name: str) -> list:
                % (worst_miss["miss"], worst_miss["num"],
                   "✅" if worst_miss["miss"] <= 15000 else "❌"))
     per = sum(c["cost"] for c in chs) / n
-    out.append("章均成本（%s 价）¥%.3f（验收线 DS 口径 ≤¥0.30）→ %s"
-               % (price_name, per, "✅" if price_name != "ds" or per <= 0.30 else "❌"))
+    per_real = sum(c.get("cost_real", c["cost"]) for c in chs) / n
+    out.append("章均成本（%s 价）账面 ¥%.3f／真实 ¥%.3f（验收线 DS 口径 ≤¥0.30）→ %s"
+               % (price_name, per, per_real,
+                  "✅" if price_name != "ds" or per <= 0.30 else "❌"))
     tot = sum(c["cost"] for c in chs)
-    out.append("正文累计成本（%s 价）¥%.2f（预算 ¥7.0 / 全停 ¥10.5，DS 口径对照台账）" % (price_name, tot))
+    tot_real = sum(c.get("cost_real", c["cost"]) for c in chs)
+    out.append("正文累计成本（%s 价）账面 ¥%.2f／真实 ¥%.2f"
+               "（预算 ¥7.0 / 全停 ¥10.5，DS 口径对照台账）" % (price_name, tot, tot_real))
     lat = [c["lat"] for c in chs]
     out.append("章均延迟 %.1fs（首章 %.1fs → 末章 %.1fs，读税/延迟曲线看趋势）"
                % (sum(lat) / len(lat), lat[0], lat[-1]))
     blind = sum(c.get("blind", 0) for c in chs)
+    blind_tok = sum(c.get("blind_tok", 0) for c in chs)
     if blind:
-        out.append("缺缓存明细的调用 %d 笔（网关未回 prompt_tokens_details）——其 token 全部"
-                   "按 miss 计。在册口径（分母只算上报的 hit+miss，cost_bench/S 轮同尺）"
-                   "累计 %.1f%%，本报告判据用真分母口径 %.1f%%"
-                   % (blind, chs[-1]["cum_hit_pct_book"], tail))
+        out.append("📚 三段对账（W-5）：缺缓存明细的调用 %d 笔／盲区 %s tok"
+                   "｜账面 ¥%.2f（盲区按 miss 计）／真实 ¥%.2f（盲区按本渠道已知行实测命中率 %s%% 摊派）"
+                   "＝虚高 %.1f 倍｜hit%% 只在已知行上算：在册口径 %.1f%%、账面口径 %.1f%%"
+                   % (blind, format(blind_tok, ","), tot, tot_real,
+                      "%.1f" % (100.0 * sum(c["hit"] for c in chs)
+                                / max(1, sum(c["hit"] + c.get("miss_known", 0)
+                                             for c in chs))),
+                      tot / max(0.01, tot_real),
+                      chs[-1]["cum_hit_pct_book"], tail))
+        by = {}
+        for c in chs:
+            for mdl, tok in (c.get("blind_by_model") or {}).items():
+                by[mdl] = by.get(mdl, 0) + tok
+        if by:
+            out.append("　盲区按渠道：" + "、".join(
+                "%s %s tok" % (m, format(t, ","))
+                for m, t in sorted(by.items(), key=lambda kv: -kv[1])))
     # 卷界：换卷 = 新会话 = 历史一次性全 miss，这是"99% 能不能靠章数堆出来"的结构性上限
     rolls = [chs[i] for i in range(1, len(chs))
              if chs[i].get("vol", 0) and chs[i]["vol"] != chs[i - 1].get("vol", 0)]
     for r in rolls:
         prev = chs[r["num"] - 2]
+        # 真换栈的指纹＝输入断崖（历史不跟随）；没跌下来说明跑次当时并未换栈
+        # （W-1 前的卷号解析把区间末章号当章数 ⇒ 卷界形同虚设），别把税算在它头上
+        no_reset = ("｜⚠ 未见栈重置（该卷界在跑次当时并未换栈——卷号解析 bug 或渠道沿用旧栈）"
+                    if r["in"] > 0.6 * max(1, prev["in"]) else "")
         out.append("卷界 @第%d章（卷 %s→%s）：单章输入 %s → %s tok（-%.0f%%），"
-                   "单章 hit%% %.1f%% → %.1f%%（换卷税＝把整卷历史重新 miss 一遍）"
+                   "单章 hit%% %.1f%% → %.1f%%（换卷税＝把整卷历史重新 miss 一遍）%s"
                    % (r["num"], prev.get("vol", "?"), r["vol"], format(prev["in"], ","),
                       format(r["in"], ","),
                       100.0 * (1 - r["in"] / max(1, prev["in"])),
-                      prev["hit_pct"], r["hit_pct"]))
+                      prev["hit_pct"], r["hit_pct"], no_reset))
     vols = {}
     for c in chs:
         vols.setdefault(c.get("vol", 0), []).append(c)
@@ -265,14 +305,14 @@ def main() -> None:
                 want or "未给", pre["calls"], pre["cost"]), ""]
     if warn:
         lines += ["> ⚠️ " + warn, ""]
-    lines += ["| 章 | 卷 | 笔数 | 输入 tok | hit tok | miss tok | hit% | 累计 hit% | ¥ | 均延迟 s |",
-              "|---|---|---|---|---|---|---|---|---|---|"]
+    lines += ["| 章 | 卷 | 笔数 | 输入 tok | hit tok | miss tok | hit% | 累计 hit% | ¥账面 | ¥真实 | 均延迟 s |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for c in chs:
-        lines.append("| %d | %s | %d | %s | %s | %s | %.1f%% | %.1f%% | %.3f | %.1f |"
+        lines.append("| %d | %s | %d | %s | %s | %s | %.1f%% | %.1f%% | %.3f | %.3f | %.1f |"
                      % (c["num"], c["vol"] or "?", c["calls"], format(c["in"], ","),
                         format(c["hit"], ","),
                         format(c["miss"], ","), c["hit_pct"], c["cum_hit_pct"],
-                        c["cost"], c["lat"]))
+                        c["cost"], c.get("cost_real", c["cost"]), c["lat"]))
     lines += ["", "## 判据对照", ""] + ["- " + v for v in _verdict(chs, a.price)]
     txt = "\n".join(lines) + "\n"
     out = a.out or os.path.join(BENCH, "chapter_curve_%s.md" % "+".join(vars_))

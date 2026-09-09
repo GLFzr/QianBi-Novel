@@ -99,3 +99,31 @@ def test_cut_by_ch_keeps_row_order_inside_a_chapter():
     rows = [_rc(7, "review"), _rc(7, "prose"), _rc(7, "tracking")]
     _setup, segs, chnos = _cut_by_ch(rows)
     assert chnos == [7] and [r["phase"] for r in segs[0]] == ["review", "prose", "tracking"]
+
+
+def test_verdict_blind_rows_get_their_own_column():
+    """W-5：盲区行不参与 hit% 分母，但账面/真实两个钱数必须一起报出来"""
+    chs = [{"num": 1, "vol": 1, "in": 2000, "hit": 400, "miss_known": 300,
+            "miss": 1300, "blind": 1, "blind_tok": 1000,
+            "blind_by_model": {"omen-alpha": 1000},
+            "hit_pct": 400 / 2000 * 100, "cum_hit_pct": 400 / 2000 * 100,
+            "hit_pct_book": 400 / 700 * 100, "cum_hit_pct_book": 400 / 700 * 100,
+            "cost": 0.5, "cost_real": 0.2, "lat": 20.0}]
+    txt = "\n".join(_verdict(chs, "ds"))
+    assert "三段对账" in txt
+    assert "盲区 1,000 tok" in txt
+    assert "账面 ¥0.50／真实 ¥0.20" in txt
+    assert "虚高 2.5 倍" in txt
+    assert "盲区按渠道：omen-alpha 1,000 tok" in txt
+    assert "在册口径 57.1%" in txt          # 400/700，盲区不进分母
+
+
+def test_verdict_flags_volume_roll_that_never_reset():
+    """W-1 的读数护栏：曲线标出的卷界若在跑次当刻输入没断崖，必须标注并未换栈"""
+    def c(num, vol, in_tok):
+        return {"num": num, "vol": vol, "in": in_tok, "hit_pct": 96.0,
+                "cum_hit_pct": 96.0, "miss": 1000, "cost": 0.3, "lat": 20.0}
+    real = "\n".join(_verdict([c(1, 1, 900000), c(2, 2, 267000)], "ds"))
+    assert "未见栈重置" not in real
+    stale = "\n".join(_verdict([c(1, 2, 3700000), c(2, 3, 3150000)], "ds"))
+    assert "未见栈重置" in stale

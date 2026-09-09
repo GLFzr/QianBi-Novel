@@ -18,6 +18,9 @@ if os.name == "nt":
     except Exception:
         pass
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+# W-5：盲区 token 的口径与 chapter_curve 必须同源，唯一定义在 app.usage
+from app.usage import blind_spread, cache_caliber  # noqa: E402
 REAL_USAGE = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "usage", "usage.jsonl")
 USD_CNY = 7.2
 PRICE = {
@@ -91,6 +94,15 @@ BENCH_LABELS = {
                                              "该章 miss 峰值即渠道切换税＋卷界税叠加"),
     "t3e_long60": ("T3 续跑段 e（41-53 章）", "omen-alpha；单笔延迟 89s ≈ dsv4f 段的 2.7-3.4×；"
                                              "53 章后渠道 5xx 卡住（TR 亦已 DOWN 16h+）"),
+    # ---- 09-09 凌晨 V7 审校空转取证族（官方 deepseek-v4-flash-0731；驱动中断⇒无 metrics.json）----
+    "v_smoke3": ("V7 取证·3 章 a", "09-09 00:50 起跑 3 章；审校轮在跑但不出协议（P0 复现）"),
+    "v_smoke3b": ("V7 取证·3 章 b", "09-09 01:30 同族第二段 28 笔，hit 89.6%"),
+    "v_smoke3c": ("V7 取证·3 章 c", "09-09 03:42 同族第三段，hit 87.3%"),
+    "v_full20": ("V7 取证·20 章规格", "09-09 01:45 起跑，实落 13 章 prose／review 27 笔；"
+                                      "整章回声取证见《T 轮增补》表2②（正常票 948 字 vs 回声票）"),
+    "v_full20b": ("V7 取证·20 章续段", "09-09 02:43 同族续跑 3 章 prose"),
+    "v7_long13": ("V7 取证·13 章长卷", "09-09 04:03，11 章 prose／review 33 票＝**11/11 整章回声**"
+                                       "⇒ P0（review_static_tail 把 92.7% 审校轮搬进 system）的对照基线"),
 }
 
 
@@ -99,38 +111,57 @@ def _tier(model: str) -> str:
 
 
 def _cost(rows) -> dict:
-    hit = miss = out = reas = 0.0
-    in_total = 0
-    cost_usd = 0.0
-    models = {}
-    has_cache = False
+    """逐行按**模型档位**分价重算（W-5 口径：盲区既不白给也不白拿）。
+
+    每个档位（flash/pro＝渠道）单独累计 hit/miss/盲区，于是：
+    - `cny`（账面）＝盲区全按 miss 计——未证明命中的 token 不能算命中；
+    - `cny_real`（真实）＝盲区按**该档自己已知行的实测命中率**摊派；
+    - `hit_pct` 只在已知行上算（盲区不参与分子分母），另单独报 `blind_tok`。
+    旧实现对没回缓存明细的行**只计输出钱**（输入当免费），与 chapter_curve 的
+    「按 miss 计」正好相反——同一份数据两个数，判据就废了。"""
+    out = reas = 0.0
+    out_tier = {}
     for r in rows:
         t = _tier(r.get("model", ""))
-        models[t] = models.get(t, 0) + 1
+        h, m, b = cache_caliber(r)
+        d = out_tier.setdefault(t, {"hit": 0, "miss": 0, "blind": 0, "out": 0.0,
+                                    "reas": 0.0, "calls": 0})
+        d["hit"] += h
+        d["miss"] += m
+        d["blind"] += b
         o = r.get("out") or 0
+        d["out"] += o
+        d["reas"] += r.get("reasoning") or 0
+        d["calls"] += 1
         out += o
-        # 0.18.3 时代的行只有 in（总输入）没有 hit/miss 字段：按 miss 价计并标注
-        if r.get("hit") is None or r.get("miss") is None:
-            i = r.get("in") or 0
-            in_total += i
-            cost_usd += i * PRICE[t]["miss"] + o * PRICE[t]["out"]
-            continue
-        has_cache = True
-        h, m = r.get("hit") or 0, r.get("miss") or 0
-        hit += h
-        miss += m
-        in_total += h + m
         reas += r.get("reasoning") or 0
-        cost_usd += h * PRICE[t]["hit"] + m * PRICE[t]["miss"] + o * PRICE[t]["out"]
+    usd_book = usd_real = 0.0
+    hit = miss = blind = in_total = 0
+    for t, d in out_tier.items():
+        p = PRICE[t]
+        usd_book += d["hit"] * p["hit"] + (d["miss"] + d["blind"]) * p["miss"] \
+            + d["out"] * p["out"]
+        add_h, add_m = blind_spread(d["hit"], d["miss"], d["blind"])
+        usd_real += (d["hit"] + add_h) * p["hit"] + (d["miss"] + add_m) * p["miss"] \
+            + d["out"] * p["out"]
+        hit += d["hit"]
+        miss += d["miss"]
+        blind += d["blind"]
+        in_total += d["hit"] + d["miss"] + d["blind"]
+    known = hit + miss
     return {
         "calls": len(rows),
         "in_tok": int(in_total),
-        "hit_pct": (round(hit / (hit + miss) * 100, 1) if hit + miss else 0.0) if has_cache else "无记录",
+        "hit_pct": (round(hit / known * 100, 1) if known else 0.0) if out_tier else 0.0,
+        "blind_tok": int(blind),
+        "blind_share": round(100.0 * blind / max(1, in_total), 1),
         "out_tok": int(out),
         "reasoning": int(reas),
-        "usd": round(cost_usd, 4),
-        "cny": round(cost_usd * USD_CNY, 3),
-        "models": models,
+        "usd": round(usd_book, 4),
+        "cny": round(usd_book * USD_CNY, 3),
+        "usd_real": round(usd_real, 4),
+        "cny_real": round(usd_real * USD_CNY, 3),
+        "models": {t: d["calls"] for t, d in sorted(out_tier.items())},
     }
 
 
@@ -209,29 +240,44 @@ def main():
     # 输出
     total_calls = sum(m["calls"] for _c, _n, _s, m in ledger)
     total_cny = sum(m["cny"] for _c, _n, _s, m in ledger)
+    total_real = sum(m.get("cny_real", m["cny"]) for _c, _n, _s, m in ledger)
+    total_blind = sum(m.get("blind_tok", 0) for _c, _n, _s, m in ledger)
     lines = ["# 成本台账（全部真机调用，逐行按模型分价重算）", "",
              "> 价格口径：DeepSeek v4 off-peak——flash 输入 hit $0.007 / miss $0.22 / 输出 $0.66；",
              "> pro 输入 hit $0.022 / miss $0.66 / 输出 $1.98（每百万 token，¥=$×7.2）。",
              "> 每行 usage 记录按其模型分价——修正了早期 metrics 按统一 flash 价低估 pro 行的问题。",
+             "> **口径（W-5）**：「命中」只在网关回了缓存明细的行上算；「盲区 tok」＝什么都没回的行，",
+             "> 既不进命中的分子也不进分母。¥账面＝盲区按 miss 计（保守上限）；",
+             "> ¥真实＝盲区按该档自身实测命中率摊派。两者差额全部来自盲区，不是模型行为。",
              ""]
     cur = None
     for cat, name, note, m in ledger:
         if cat != cur:
             lines.append("## %s" % cat)
             lines.append("")
-            lines.append("| 跑次 | 章 | 调用 | 输入 tok | 命中 | 输出 tok | 推理 tok | 成本 ¥ | 模型分布 |")
-            lines.append("|---|---|---|---|---|---|---|---|---|")
+            lines.append("| 跑次 | 章 | 调用 | 输入 tok | 命中 | 盲区 tok | 输出 tok | "
+                         "推理 tok | ¥账面 | ¥真实 | 模型分布 |")
+            lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
             cur = cat
         models = " / ".join("%s×%d" % (k, v) for k, v in sorted(m["models"].items()))
         ch = _chapters_of(name) if cat == "实验台" else None
         hit_s = m["hit_pct"] if isinstance(m["hit_pct"], str) else "%s%%" % m["hit_pct"]
-        lines.append("| %s | %s | %d | %s | %s | %s | %s | %.3f | %s |"
+        lines.append("| %s | %s | %d | %s | %s | %s | %s | %s | %.3f | %.3f | %s |"
                      % (name, str(ch) if ch else "—", m["calls"], f"{m['in_tok']:,}",
-                        hit_s, f"{m['out_tok']:,}", f"{m['reasoning']:,}", m["cny"], models))
+                        hit_s, f"{m.get('blind_tok', 0):,}", f"{m['out_tok']:,}",
+                        f"{m['reasoning']:,}", m["cny"],
+                        m.get("cny_real", m["cny"]), models))
         if note:
             lines.append("  ^ ^ %s" % note)
     lines.append("")
-    lines.append("**合计**：%d 笔真机调用，约 **¥%.2f**（全部实验 + 验收 + 探针）。" % (total_calls, total_cny))
+    lines.append("**合计**：%d 笔真机调用，约 **¥%.2f**（账面）／**¥%.2f**（真实）"
+                 "（全部实验 + 验收 + 探针）。" % (total_calls, total_cny, total_real))
+    if total_blind:
+        lines.append("")
+        lines.append("　两口径差额 ¥%.2f 全部来自 **%s tok 盲区**（网关没回 "
+                     "`prompt_tokens_details`）——盲区率高的渠道（如 omen-alpha ~34%% 调用）"
+                     "其**账面**数不可与其它渠道互比，只能用同一渠道内部对比。"
+                     % (total_cny - total_real, format(total_blind, ",")))
     lines.append("")
     lines.append("## 实验有效性注记（读表前必看）")
     lines.append("")
@@ -279,11 +325,12 @@ def main():
         lines.append("")
         lines.append("**漏账合计**：%d 笔 / ¥%.3f——补进 BENCH_LABELS 重跑台账即入正表。"
                      % (_u_calls, _u_cny))
-        print("⚠ 台账自检：%d 个变体有用量但缺标注（漏账 ¥%.3f）——详见 %s 的未标注节"
-              % (len(unlabeled), _u_cny, out))
     out = os.path.join(ROOT, "docs", "成本台账.md")
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+    if unlabeled:
+        print("⚠ 台账自检：%d 个变体有用量但缺标注（漏账 ¥%.3f）——详见 %s 的未标注节"
+              % (len(unlabeled), sum(_m["cny"] for _c, _m in unlabeled), out))
     print("\n".join(lines[-14:]))
     print("→", out)
 

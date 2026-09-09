@@ -49,6 +49,8 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s %(message)s")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+# W-5：盲区 token 口径三工具同源（metrics / chapter_curve / cost_ledger）
+from app.usage import blind_spread, cache_caliber  # noqa: E402
 
 BENCH = os.path.join(ROOT, "tests_output", "bench")
 REAL_HOME = os.path.expanduser("~")   # 模块加载时记下真实家目录（后续会被重定向）
@@ -523,35 +525,45 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
     out = sum(r.get("out") or 0 for r in rows)
     reas = sum(r.get("reasoning") or 0 for r in rows)
     # 分档计价：逐行按其 model 分价（"pro" in model → pro 价，否则 flash 价），
-    # 顶层 cost 为分档加总（台账口径；旧版统一 flash 价会低估 pro 行）
+    # 顶层 cost 为分档加总（台账口径；旧版统一 flash 价会低估 pro 行）。
+    # W-5：网关没回缓存明细的行＝**盲区**，既不按命中也不按未命中上报；
+    # 顶层 cost_usd 是**账面**（盲区按 miss 计，保守），cost_usd_real 按该档
+    # 自身实测命中率摊派。旧实现把盲区输入当免费（虚低），与 chapter_curve（虚高）
+    # 相反——三工具现在同源 app.usage.cache_caliber。
     cost_usd = 0.0
-    per_tier = {"flash": {"calls": 0, "hit": 0, "miss": 0, "out": 0, "cost_usd": 0.0},
-                "pro": {"calls": 0, "hit": 0, "miss": 0, "out": 0, "cost_usd": 0.0}}
+    blind_total = 0
+    per_tier = {"flash": {"calls": 0, "hit": 0, "miss": 0, "blind": 0, "out": 0,
+                          "cost_usd": 0.0},
+                "pro": {"calls": 0, "hit": 0, "miss": 0, "blind": 0, "out": 0,
+                        "cost_usd": 0.0}}
     per = {}
     for r in rows:
         tier = _tier_of(r.get("model", ""))
         pr = TIER_PRICE[tier]
-        h, m, o = r.get("hit") or 0, r.get("miss") or 0, r.get("out") or 0
-        c = h * pr["hit"] + m * pr["miss"] + o * pr["out"]
+        h, m, b = cache_caliber(r)
+        blind_total += b
+        o = r.get("out") or 0
+        c = h * pr["hit"] + (m + b) * pr["miss"] + o * pr["out"]
         cost_usd += c
         pt = per_tier[tier]
         pt["calls"] += 1
         pt["hit"] += h
         pt["miss"] += m
+        pt["blind"] += b
         pt["out"] += o
         pt["cost_usd"] += c
         a = per.setdefault(r.get("phase", ""), {"calls": 0, "hit": 0, "miss": 0,
                                                "out": 0, "reasoning": 0, "lat": 0.0})
         a["calls"] += 1
         a["hit"] += h
-        a["miss"] += m
+        a["miss"] += m + b          # 账面口径：盲区摊到 miss 上
         a["out"] += o
         a["reasoning"] += r.get("reasoning") or 0
         a["lat"] += r.get("latency") or 0.0
         # 相位级也按分档记：--compare --phase 的 cost_cny 才不会重蹈统一 flash 价
         tt = a.setdefault("tier_tok", {}).setdefault(tier, {"hit": 0, "miss": 0, "out": 0})
         tt["hit"] += h
-        tt["miss"] += m
+        tt["miss"] += m + b
         tt["out"] += o
         a["cost_usd"] = a.get("cost_usd", 0.0) + c
     for a in per.values():
@@ -559,19 +571,31 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
         a["hit_pct"] = round(a["hit"] / t * 100, 1) if t else 0.0
         a["avg_lat"] = round(a["lat"] / a["calls"], 1)
         a["cost_usd"] = round(a.get("cost_usd", 0.0), 4)
-    for pt in per_tier.values():
+    cost_real = 0.0
+    for tier, pt in per_tier.items():
         pt["cost_usd"] = round(pt["cost_usd"], 4)
+        add_h, add_m = blind_spread(pt["hit"], pt["miss"], pt["blind"])
+        pr = TIER_PRICE[tier]
+        pt["cost_usd_real"] = round(
+            (pt["hit"] + add_h) * pr["hit"] + (pt["miss"] + add_m) * pr["miss"]
+            + pt["out"] * pr["out"], 4)
+        cost_real += pt["cost_usd_real"]
+    in_true = hit + miss + blind_total
     return {
         "variant": variant,
         "calls": len(rows),
-        "input_tok": hit + miss,
+        "input_tok": in_true,
         "hit_tok": hit,
         "miss_tok": miss,
+        "blind_tok": blind_total,
+        "blind_pct": round(blind_total / in_true * 100, 1) if in_true else 0.0,
         "hit_pct": round(hit / (hit + miss) * 100, 1) if hit + miss else 0.0,
         "out_tok": out,
         "reasoning_tok": reas,
         "cost_usd": round(cost_usd, 4),
         "cost_cny": round(cost_usd * USD_CNY, 3),
+        "cost_usd_real": round(cost_real, 4),
+        "cost_cny_real": round(cost_real * USD_CNY, 3),
         "llm_seconds": round(sum(r.get("latency") or 0 for r in rows), 1),
         "wall_seconds": round(wall, 1),
         "per_tier": per_tier,
@@ -582,16 +606,20 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
 
 def _print_metrics(m: dict) -> None:
     print("\n== %s ==" % m["variant"])
-    print("调用 %d | 输入 %s tok（命中 %s%%）| 输出 %s tok（推理 %s）"
+    print("调用 %d | 输入 %s tok（命中 %s%%／盲区 %s tok＝%s%%）| 输出 %s tok（推理 %s）"
           % (m["calls"], f"{m['input_tok']:,}", m["hit_pct"],
+             f"{m.get('blind_tok', 0):,}", m.get("blind_pct", 0.0),
              f"{m['out_tok']:,}", f"{m['reasoning_tok']:,}"))
     pt = m.get("per_tier") or {}
     if pt.get("pro", {}).get("calls"):
         print("分档：flash %d 笔 $%s | pro %d 笔 $%s"
               % (pt["flash"]["calls"], pt["flash"]["cost_usd"],
                  pt["pro"]["calls"], pt["pro"]["cost_usd"]))
-    print("费用 $%s ≈ ¥%s | LLM %ss / 墙钟 %ss"
-          % (m["cost_usd"], m["cost_cny"], m["llm_seconds"], m["wall_seconds"]))
+    print("费用（账面）$%s ≈ ¥%s | （真实，盲区按本档命中率摊派）$%s ≈ ¥%s"
+          " | LLM %ss / 墙钟 %ss"
+          % (m["cost_usd"], m["cost_cny"], m.get("cost_usd_real", m["cost_usd"]),
+             m.get("cost_cny_real", m["cost_cny"]),
+             m["llm_seconds"], m["wall_seconds"]))
     for ph, a in sorted(m["per_phase"].items(), key=lambda x: -(x[1]["miss"] + x[1]["hit"])):
         print("  %-16s 笔%-3d hit %5.1f%% out %7s tok lat %ss"
               % (ph, a["calls"], a["hit_pct"], f"{a['out']:,}", a["avg_lat"]))
@@ -635,14 +663,24 @@ def cmd_compare(phase: str = "") -> None:
             print("* 旧 metrics 无相位级分档，按统一 flash 价回算（只影响历史变体）")
         return
     base = next((m for m in ms if m["variant"] == "base"), ms[0])
-    print("%-14s %8s %7s %9s %9s %9s %8s %6s"
-          % ("variant", "cost¥", "hit%", "miss_tok", "out_tok", "reason_tok", "LLM秒", "章"))
+    print("%-14s %8s %7s %6s %9s %9s %9s %8s %6s"
+          % ("variant", "cost¥", "hit%", "盲区%", "miss_tok", "out_tok", "reason_tok",
+             "LLM秒", "章"))
+    starred = False
     for m in ms:
         d = (m["cost_cny"] - base["cost_cny"]) / base["cost_cny"] * 100 if base["cost_cny"] else 0
-        print("%-14s %8.3f %6.1f%% %9s %9s %9s %8.0f %3d  (%+.0f%% vs %s)"
-              % (m["variant"], m["cost_cny"], m["hit_pct"], f"{m['miss_tok']:,}",
+        bp = float(m.get("blind_pct") or 0.0)
+        star = "*" if bp >= 5.0 else " "
+        starred = starred or bool(star)
+        print("%-14s %8.3f %6.1f%%%s %6.1f%% %9s %9s %9s %8.0f %3d  (%+.0f%% vs %s)"
+              % (m["variant"], m["cost_cny"], m["hit_pct"], star, bp,
+                 f"{m['miss_tok']:,}",
                  f"{m['out_tok']:,}", f"{m['reasoning_tok']:,}", m["llm_seconds"],
                  len(m["chapters"]), d, base["variant"]))
+    if starred:
+        print("* 盲区 ≥5%（网关大面积没回 prompt_tokens_details）：cost¥ 是**账面**口径"
+              "（盲区按 miss 计），与盲区率不同的渠道**不可直接互比**；"
+              "同渠道内部对比仍然有效。")
     phases = sorted(set().union(*[set(m.get("per_phase") or {}) for m in ms])) if ms else []
     print("可用相位（--compare --phase <名> 逐变体下钻）：%s" % " ".join(phases))
 

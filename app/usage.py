@@ -49,6 +49,42 @@ def _today() -> str:
     return datetime.date.today().strftime("%Y-%m-%d")
 
 
+# ---- W-5 计量口径：盲区 token 的唯一定义（chapter_curve / cost_ledger 共用）----
+#
+# 一条用量行的输入只有三种归属：上报为命中、上报为未命中、**网关根本没回缓存明细**。
+# 第三种过去被两个工具各算各的——chapter_curve 把它按 miss 计（保守，账面虚高），
+# cost_ledger 干脆不计价（虚低）。同一份数据两个数，判据就废了。现在统一：
+# 盲区既不进 hit% 的分子也不进分母，单独报 blind_tok，钱给**账面/真实**两个口径。
+
+
+def cache_caliber(rec: dict) -> tuple:
+    """用量行 → (hit, miss, blind)：in 中未被任何缓存字段解释的部分即盲区 token。
+
+    上报了 prompt_cache_hit/miss 的行 blind=0；只回 cached_tokens 的行由
+    client._record_usage 折算成 (cached, in-cached)；什么都没回（hit=miss=0 而
+    in>0，含无 hit 键的历史行）整条落盲区——**不许猜命中**。"""
+    i = int(rec.get("in") or 0)
+    h = int(rec.get("hit") or 0)
+    m = int(rec.get("miss") or 0)
+    if h + m >= i:
+        return h, m, 0
+    return h, m, i - h - m
+
+
+def blind_spread(hit: int, miss: int, blind: int) -> tuple:
+    """盲区按**本渠道已知行的实测命中率**摊派 → (add_hit, add_miss)。
+
+    全盲（没有任何已知行）时无从摊派，只能全按 miss 计（与账面口径一致）。"""
+    blind = int(blind or 0)
+    if blind <= 0:
+        return 0, 0
+    known = int(hit or 0) + int(miss or 0)
+    if known <= 0:
+        return 0, blind
+    add_hit = int(round(blind * (int(hit) / known)))
+    return add_hit, blind - add_hit
+
+
 def _new_day() -> dict:
     return {"in": 0, "out": 0, "calls": 0, "hit": 0, "miss": 0, "reasoning": 0,
             "by_model": {}, "by_slot": {}}

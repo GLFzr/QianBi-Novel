@@ -58,6 +58,26 @@ _UNSUPPORTED = {}
 _UNSUPPORTED_HINT_KEYS = STAGE_PARAM_KEYS[1:] + ("thinking", "reasoning_effort", "stream_options")
 
 
+def _cache_split(usage: dict, tin: int) -> tuple:
+    """一次响应的 usage → (hit, miss)。W-5 口径：**"报了 0"与"没报"不是同一件事**。
+
+    - DS 原生 `prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`：键在就照收（含 0/0）；
+    - OpenAI 系只回 `prompt_tokens_details.cached_tokens`：命中=cached、未命中=tin-cached，
+      **cached=0 也算上报**（旧代码 `if cached:` 把"真没命中"和"网关没回字段"揉成同一行，
+      omen-alpha 33.7% 的调用因此分不清是盲区还是全 miss）；
+    - 什么都没回 → (0, 0)＝盲区，由 app.usage.cache_caliber 把整条输入划成 blind_tok，
+      既不按命中也不按未命中计价。"""
+    usage = usage or {}
+    h, m = usage.get("prompt_cache_hit_tokens"), usage.get("prompt_cache_miss_tokens")
+    if h is not None or m is not None:
+        return int(h or 0), int(m or 0)
+    det = usage.get("prompt_tokens_details")
+    if isinstance(det, dict) and det.get("cached_tokens") is not None:
+        cached = int(det.get("cached_tokens") or 0)
+        return cached, max(tin - cached, 0)
+    return 0, 0
+
+
 class LLMClient:
     """单连接配置对应的调用客户端（无状态，可反复使用）"""
 
@@ -126,18 +146,8 @@ class LLMClient:
         try:
             tin = int(usage.get("prompt_tokens", 0) or 0)
             tout = int(usage.get("completion_tokens", 0) or 0)
-            # DeepSeek 上下文缓存命中/未命中 tokens（其他网关可能不返回，默认 0）
-            hit = int(usage.get("prompt_cache_hit_tokens", 0) or 0)
-            miss = int(usage.get("prompt_cache_miss_tokens", 0) or 0)
-            if not hit and not miss:
-                # OpenAI 系网关（部分中转渠道）只报 prompt_tokens_details.cached_tokens：
-                # 命中回退该字段，未命中 = prompt_tokens − 命中，口径与 DS 字段对齐，
-                # 使命中率在任何渠道上都可测量（渠道探针 scripts/provider_probe.py）
-                cached = int((usage.get("prompt_tokens_details") or {})
-                             .get("cached_tokens") or 0)
-                if cached:
-                    hit = cached
-                    miss = max(int(usage.get("prompt_tokens", 0) or 0) - cached, 0)
+            # DeepSeek 上下文缓存命中/未命中 tokens（其他网关可能不返回）
+            hit, miss = _cache_split(usage, tin)
             # 推理 tokens 口径（OpenAI 兼容 completion_tokens_details.reasoning_tokens，
             # DeepSeek 思考模式等网关可能不返回，默认 0）
             reasoning = int((usage.get("completion_tokens_details") or {})

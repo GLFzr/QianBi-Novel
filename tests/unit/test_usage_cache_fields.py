@@ -167,3 +167,31 @@ def test_usage_row_records_actually_sent_params(tmp_path, monkeypatch):
     rows = [json.loads(l) for l in open(um.FILE, encoding="utf-8") if l.strip()]
     assert rows[0]["sent"] == {"reasoning_effort": "low", "temperature": 0.7, "thinking": "enabled"}
     assert "sent" not in rows[1], "空 sent 不该改变旧行形状"
+
+
+def test_cache_split_reports_blind_separately():
+    """W-5：「报了 0」与「没报字段」不是一件事——cached_tokens=0 是真·全未命中"""
+    from app.llm.client import _cache_split
+    # DS 原生字段：键在就照收（含显式 0）
+    assert _cache_split({"prompt_cache_hit_tokens": 64,
+                         "prompt_cache_miss_tokens": 36}, 100) == (64, 36)
+    assert _cache_split({"prompt_cache_hit_tokens": 0,
+                         "prompt_cache_miss_tokens": 100}, 100) == (0, 100)
+    # OpenAI 系只回 cached_tokens：折算成 (cached, in-cached)，**0 也算上报**
+    assert _cache_split({"prompt_tokens_details": {"cached_tokens": 700}}, 1000) == (700, 300)
+    assert _cache_split({"prompt_tokens_details": {"cached_tokens": 0}}, 1000) == (0, 1000)
+    # 什么都没回 → 盲区 (0,0)，由 usage.cache_caliber 把整条输入划成 blind_tok
+    assert _cache_split({}, 1000) == (0, 0)
+    assert _cache_split({"prompt_tokens_details": {"other": 1}}, 1000) == (0, 0)
+
+
+def test_record_usage_writes_blind_row_as_zero_zero_not_fake_miss(tmp_path, monkeypatch):
+    """盲区行进账是 hit=miss=0（in 仍在）——账面按 miss 计、真实按摊派，都不许猜命中"""
+    um = _fresh_usage(tmp_path, monkeypatch)
+    import app.llm.client as lc
+    c = lc.LLMClient("http://fake.invalid/v1", "sk", "deepseek-v4-flash", slot="writing")
+    c._record_usage({"prompt_tokens": 1000, "completion_tokens": 50}, 1.0, phase="prose")
+    (row,) = _rows(tmp_path / "usage.jsonl")
+    assert (row["in"], row["hit"], row["miss"]) == (1000, 0, 0)
+    from app.usage import cache_caliber
+    assert cache_caliber(row) == (0, 0, 1000)
