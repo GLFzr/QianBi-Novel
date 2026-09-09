@@ -64,15 +64,48 @@ def chapter_of_opening(text: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-# 卷号解析（章号 → 卷号）：从 大纲/大纲.md 卷级大纲的「…N章」章数声明按出现顺序
-# 累计推导。解析不出任何卷声明（旧格式大纲/自由体）时整体回退卷 1——单栈语义，
+# 卷号解析（章号 → 卷号）：从 大纲/大纲.md 卷级大纲的章号声明按出现顺序切分。
+# 解析不出任何卷声明（旧格式大纲/自由体）时整体回退卷 1——单栈语义，
 # 正确性不受影响，只是文件名退化为「卷1」。卷结构解析是启发式的，供 gate 评审。
 _VOLUME_HEAD_RE = re.compile(
-    r"^#{2,4}\s*第[0-9一二两三四五六七八九十百]+卷[^\n]*?(\d[\d,]*)\s*章", re.M)
+    r"^#{2,4}\s*第[0-9一二两三四五六七八九十百]+卷[^\n]*", re.M)
+# 绝对区间声明「（第14-25章…）」「（第1章-第60章）」→ 25/60 是本卷**末章号**。
+# 早于章数式判断：区间里的末章号不是"本卷有几章"，混用会把卷界整体后移
+# （t3_long60 实测：真卷界 13/25/37/46/50 被算成 13/38/75/121/171）。
+_VOLUME_RANGE_RE = re.compile(
+    r"第\s*(\d[\d,]*)\s*章?\s*[-—–~～至到]\s*第?\s*(\d[\d,]*)\s*章")
+# 相对章数声明「（约15万字，50章）」→ 本卷 50 章，起点 = 上一卷末章 + 1。
+_VOLUME_COUNT_RE = re.compile(r"(\d[\d,]*)\s*章")
+
+
+def _volume_head_end(line: str, prev_end: int):
+    """单条卷级标题 → 本卷末章号（绝对）；无可用声明返回 None。
+
+    章数式的 end = prev_end + count，与「累计求和」逐字节等价（纯章数大纲下
+    本函数与改造前返回同样的边界）。"""
+    m = _VOLUME_RANGE_RE.search(line)
+    if m:
+        try:
+            start, end = (int(m.group(1).replace(",", "")),
+                          int(m.group(2).replace(",", "")))
+        except ValueError:
+            pass
+        else:
+            if end >= start > 0:
+                return end
+    m = _VOLUME_COUNT_RE.search(line)
+    if m:
+        try:
+            count = int(m.group(1).replace(",", ""))
+        except ValueError:
+            return None
+        if count > 0:
+            return prev_end + count
+    return None
 
 
 def resolve_volume_number(proj: str, num: int) -> int:
-    """章号 → 卷号：按大纲卷级声明的章数累计切分；无声明/解析失败回退 1。"""
+    """章号 → 卷号：优先取大纲卷级「第X-Y章」区间的绝对末章号，退回「N章」累计。"""
     from .. import project
     try:
         text = project.read_file(os.path.join(proj, "大纲", "大纲.md"))
@@ -83,14 +116,11 @@ def resolve_volume_number(proj: str, num: int) -> int:
     cum = 0
     idx = 0
     for m in _VOLUME_HEAD_RE.finditer(text or ""):
-        try:
-            count = int(m.group(1).replace(",", ""))
-        except ValueError:
-            continue
-        if count <= 0:
+        end = _volume_head_end(m.group(0), cum)
+        if end is None:
             continue
         idx += 1
-        cum += count
+        cum = end
         if num <= cum:
             return idx
     return max(idx, 1)

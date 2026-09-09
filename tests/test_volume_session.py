@@ -433,6 +433,72 @@ def test_resolve_volume_number_from_outline(tmp_path):
         os.path.join("会话", "卷3_messages.jsonl"))
 
 
+def _write_outline(tmp_path, text):
+    os.makedirs(os.path.join(str(tmp_path), "大纲"), exist_ok=True)
+    with open(os.path.join(str(tmp_path), "大纲", "大纲.md"), "w",
+              encoding="utf-8") as f:
+        f.write(text)
+    return str(tmp_path)
+
+
+def test_resolve_volume_number_range_form(tmp_path):
+    """W-1：「（第14-25章…）」的 25 是本卷**末章号**，不是章数——按绝对章号切卷界
+
+    旧解析把区间末章号当章数累加 ⇒ t3_long60 的真卷界 13/25/37/46/50 被算成
+    13/38/75/121/171 ⇒ 26 章起永不换栈（栈长实测 88 万 tok）。"""
+    proj = _write_outline(tmp_path, (
+        "## 卷级大纲\n\n"
+        "## 第一卷：空页（第1-13章，约2.6万字）\n"
+        "## 第二卷：旧账（第14-25章，约2.4万字）\n"
+        "## 第三卷：墨痕（第26-37章，约2.4万字）\n"
+        "## 第四卷：收账（第38-46章，约1.8万字）\n"
+        "## 第五卷：不可贪（第47-50章，约0.8万字）\n"))
+    for n in (1, 12, 13):
+        assert resolve_volume_number(proj, n) == 1
+    for n in (14, 24, 25):
+        assert resolve_volume_number(proj, n) == 2
+    for n in (26, 37):                        # 旧实现此处返回 2
+        assert resolve_volume_number(proj, n) == 3
+    for n in (38, 46):                        # 旧实现返回 2
+        assert resolve_volume_number(proj, n) == 4
+    for n in (47, 50, 51, 60):                # 旧实现返回 3；超出末卷兜底
+        assert resolve_volume_number(proj, n) == 5
+
+
+def test_resolve_volume_number_range_form_chapter_style(tmp_path):
+    """「第1章-第60章」逐章写法同样取末章号（旧实现会抓到 1 当章数）"""
+    proj = _write_outline(tmp_path, (
+        "### 第一卷：杂役之怒（第1章-第60章，约15万字）\n"
+        "### 第二卷：坊市风波（第61章-第150章，约20万字）\n"))
+    assert resolve_volume_number(proj, 60) == 1
+    assert resolve_volume_number(proj, 61) == 2
+    assert resolve_volume_number(proj, 150) == 2
+
+
+def test_resolve_volume_number_mixed_range_and_count(tmp_path):
+    """混合大纲：区间声明给绝对边界，其后的章数声明从上一卷末章 +1 续算"""
+    proj = _write_outline(tmp_path, (
+        "## 第一卷：空页（第1-13章）\n"
+        "## 第二卷：旧账（第14-25章）\n"
+        "## 第三卷：墨痕（约2.4万字，12章）\n"
+        "## 第四卷：无名\n"))                   # 无任何章号声明 → 跳过
+    assert resolve_volume_number(proj, 25) == 2
+    assert resolve_volume_number(proj, 26) == 3
+    assert resolve_volume_number(proj, 37) == 3   # 25 + 12 = 37
+    assert resolve_volume_number(proj, 38) == 3   # 无声明的卷不成边界 → 末卷兜底
+
+
+def test_resolve_volume_number_count_form_unchanged(tmp_path):
+    """章数式旧写法结果与 W-1 之前逐字节一致（累计求和语义不变）"""
+    proj = _write_outline(tmp_path, (
+        "### 第一卷：边陲凡尘（约15万字，50章）\n"
+        "### 第二卷：初入江湖（约20万字，67章）\n"))
+    assert resolve_volume_number(proj, 50) == 1
+    assert resolve_volume_number(proj, 51) == 2
+    assert resolve_volume_number(proj, 117) == 2
+    assert resolve_volume_number(proj, 999) == 2
+
+
 # ---------------- Part B：stages 集成（chapter_microcycle 端到端，假客户端） ----------------
 
 def _make_proj(tmp_path):
