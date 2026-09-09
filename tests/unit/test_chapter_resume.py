@@ -23,6 +23,19 @@ def _mk_proj(tmp_path):
     return str(proj)
 
 
+_STRUCTURED_REVIEW = """===A_GOLDEN_OPEN=== pass 开篇有钩子 【原文引证：“草稿内容这是一段完整的断点测试正文。”】
+===B_PAYOFF=== pass 爽点当章结算 【原文引证：“草稿内容这是一段完整的断点测试正文。”】
+===C_FINGER=== pass 金手指合规
+===D_PLOT=== pass 因果自洽
+===E_CHARACTER=== pass 声口一致
+===F_HOOK=== pass 章尾有钩
+===TOTAL=== pass=6 marginal=0 fail=0
+===VERDICT=== PASS
+===ITEMS===
+===END===
+"""
+
+
 class _FakeClient:
     """按 phase 分路计数：prose/desloal/enrich 是草稿系调用，
     canon_audit 是设定清算调用——混在一起就分不清「草稿有没有重写」"""
@@ -35,6 +48,10 @@ class _FakeClient:
         self.calls[phase] = self.calls.get(phase, 0) + 1
         if phase == "prose" and on_chunk:
             on_chunk(self.draft_text)
+        if phase == "review":
+            # 假件保真：审校必须返回带协议段的回复。返回草稿正文＝整章回声，
+            # 正是 review_vote_structured 要拦的失效形态（旧假件一直把这形态当"审校通过"）。
+            return _STRUCTURED_REVIEW
         return self.draft_text
 
     def chat(self, prompt, **kw):

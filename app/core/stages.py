@@ -1901,6 +1901,19 @@ def _votes_identical(a: dict, b: dict) -> bool:
     return la == lb
 
 
+REVIEW_PROTOCOL_MARKS = ("===A_GOLDEN_OPEN===", "===B_PAYOFF===", "===C_FINGER===",
+                         "===D_PLOT===", "===E_CHARACTER===", "===F_HOOK===",
+                         "===VERDICT===")
+
+
+def review_vote_structured(raw: str) -> bool:
+    """审校票是否真按协议产出。
+
+    一条协议标记都没有＝模型在整章回声（或网关吞了格式），**不能**当成"审过、没问题"——
+    2026-09-09 的 v7_long13 就是 11/11 空转、0 findings、verdict 恒 PASS、修复环 0 次。"""
+    return any(m in (raw or "") for m in REVIEW_PROTOCOL_MARKS)
+
+
 def review_with_votes(ctx, num: int, prose: str, votes: int,
                       done_votes: list = None, vote_saver=None, session=None) -> dict:
     """k 次独立审校投票（P5）：温度治理 + 引证验真后按维聚合。
@@ -1935,11 +1948,15 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     prompt = _build_final_review_prompt(ctx, num, prose)
     turn_text = prompts.session_turn_text(prompts.FINAL_REVIEW_PROMPT).format(**kw) if use_sess else ""
     if use_sess and bool((ctx.cfg or {}).get("writing", {}).get("review_in_system", False)):
-        # V1-③：静态尾段已随会话 system 载入（_acquire_volume_session），审校轮
-        # 只保留动态块——尾段无占位符，渲染后必为 turn_text 的逐字节后缀
-        _tail = prompts.review_static_tail()
-        if _tail and turn_text.endswith(_tail):
-            turn_text = turn_text[:-len(_tail)].rstrip("\n")
+        # V1-③：rubric 已随会话 system 载入（_acquire_volume_session），审校轮剥掉它；
+        # **输出协议必须留在近场**——2026-09-09 v7_long13 实测：整条尾段一起搬进 system 后
+        # 审校轮只剩 394 字、零协议标记，11/11 整章回声 → 0 findings → verdict 恒 PASS。
+        _rubric = prompts.review_static_tail()
+        _proto = prompts.review_output_protocol()
+        _full = _rubric + _proto
+        if _full and turn_text.endswith(_full):
+            turn_text = (turn_text[:-len(_full)].rstrip("\n")
+                         + ("\n\n" + _proto if _proto else ""))
     ctx.last_prompt = turn_text or prompt
     # 副本票基线快照：必须在首票固化**之前**取（否则副本栈里带着首票回复，
     # 变成"审过一次再重审"而非独立重采样）
@@ -1973,6 +1990,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
             fb, fa = parse_review_findings(raw)
             v2["blocking"] = v2["blocking"] or fb
             v2["advisory"] = v2["advisory"] or fa
+        v2["unstructured"] = not review_vote_structured(raw)
         return v2
 
     parsed_list = [dict(v) for v in (done_votes or [])][:votes]
@@ -1982,9 +2000,13 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     raws = []
     _review_slot = genre_presets.stage_slot(_preset_id(getattr(ctx, "proj", "")), PHASE_REVIEW) or cfg_mod.SLOT_REVIEW
 
-    def _cast_solo() -> tuple:
+    _RETRY_PROTOCOL = ("\n\n（重申：上一条回复没有按协议输出。必须逐维输出 "
+                       "===A_GOLDEN_OPEN=== … ===F_HOOK=== 六段，再输出 ===VERDICT===/===ITEMS===/===END===，"
+                       "不得复述正文。）")
+
+    def _cast_solo(extra: str = "") -> tuple:
         """首票：单发流式（写前缀缓存 / 会话固化首票轮）"""
-        text = (turn_text if use_sess else prompt) + _vote_extra(1)
+        text = (turn_text if use_sess else prompt) + _vote_extra(1) + extra
         if use_sess:
             raw = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, text,
                                label=f"审校投票 第{num}章", phase=PHASE_REVIEW,
@@ -2031,6 +2053,12 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
                     pass
 
     raw, v2 = _cast_solo()
+    if v2.get("unstructured"):
+        # 空转票重投一次（带协议重申）。不重投就等于把"模型没按格式答"当成"这章没问题"。
+        ctx.log("warn", f"第 {num} 章 审校首票未产出协议段（疑似整章回声）→ 重申格式重投…")
+        raw, v2 = _cast_solo(_RETRY_PROTOCOL)
+        if v2.get("unstructured"):
+            ctx.log("warn", f"第 {num} 章 审校重投后仍无协议段：本章按「未审」处理，不放行 PASS")
     raws.append(raw)
     parsed_list.append(v2)
     if vote_saver:
@@ -2048,6 +2076,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     # fail 收紧（不足票数的 fail 降级），单票 PASS 在合并函数里本就成立。
     _fast = (bool((ctx.cfg.get("gates") or {}).get("review_pass_fast", True))
              and remaining >= 2
+             and not v2.get("unstructured")          # 空转票不是 PASS，别借快速道把审校关掉
              and v2.get("verdict") in ("PASS", "PASS_WITH_NOTES")
              and not (v2.get("summary") or {}).get("fail")
              and not v2.get("blocking"))
@@ -2064,6 +2093,13 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         except Exception:
             pass
     merged = merge_review_votes(parsed_list) if len(parsed_list) > 1 else parsed_list[0]
+    if merged is not None and parsed_list and all(v.get("unstructured") for v in parsed_list):
+        # 全部票都没产出协议段 ⇒ 「未审」，不是「没问题」。verdict 清空交上层按失败处理，
+        # 绝不允许留成 PASS（v7_long13 的 11/11 空转就是这样被静默吞掉的）。
+        merged = dict(merged)
+        merged["unreviewed"] = True
+        merged["verdict"] = ""
+        merged["unstructured_votes"] = len(parsed_list)
     ctx.review_raw = raws[0] if raws else ""
     # A2 双轨裁决：【世界书修正】条目（正文自洽而世界书条目疑过时）→ 登记修正提案
     try:
@@ -2192,6 +2228,15 @@ def _chapter_review(ctx, num: int, prose: str, votes: int = None,
         ctx.log("warn", f"第 {num} 章 6 维审校调用失败（不阻断）：{e}")
         return [], [], ""
     ctx.review_v2 = v2   # 根因溯源复用验真后的 items，不重解析原始输出
+    if v2.get("unreviewed"):
+        # 审校没按协议产出（网关吞格式/整章回声/旗标改动）——留名字，不许静默当"无问题"
+        ctx.log("warn", f"第 {num} 章 6 维审校未产出协议段（{v2.get('unstructured_votes')} 票空转）"
+                        f"→ 本章标记需人工，不按审校通过处理")
+        try:
+            st.mark_chapter_need_human(proj, st.load_state(proj), num)
+        except Exception:
+            pass
+        return [], [], ""
     if v2["verdict"]:
         # 落盘 v2 结果
         try:

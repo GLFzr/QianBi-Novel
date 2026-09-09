@@ -445,13 +445,37 @@ def build_issues_brief(issues):
 
 
 REVIEW_STATIC_MARKER = "裁决优先级（与下方「世界书对账·双轨裁决」一致，不得反过来）："
+# 输出协议起点：这一段**必须留在近场用户轮**，不能进 system。
+# 2026-09-09 实测教训（v7_long13）：V1-③ 把整条尾段 5,060/5,456 字搬进 system 后，
+# 审校轮只剩 394 字、零协议标记 ⇒ 11/11 整章回声、parse_final_review_v2 得 0 findings、
+# verdict 恒 PASS、修复环全跑 0 次——审校静默空转，且成本数字也因此失真。
+REVIEW_PROTOCOL_MARKER = "## 评审输出格式"
+
+
+def review_instruction_tail() -> str:
+    """审校静态指令尾段全貌（rubric + 输出协议），零占位符。
+
+    拆给两个函数用；单测钉 `review_static_tail() + review_output_protocol() == 本函数`，
+    防止切分时悄悄吞掉一段文字。"""
+    i = FINAL_REVIEW_PROMPT.find(REVIEW_STATIC_MARKER)
+    return FINAL_REVIEW_PROMPT[i:] if i >= 0 else ""
 
 
 def review_static_tail() -> str:
-    """审校静态指令尾段（裁决优先级+六维 checklist+输出契约，零占位符）。
+    """可进 system 的那半：裁决优先级 + 六维 checklist + 硬纪律（**不含输出协议**）。
 
-    V1-③（writing.review_in_system，缺省关）：卷会话模式下这段在会话创建时
-    一次性进 system——旧路径它随每章审校轮重发、在历史里逐章累积（T 轮实测
-    审校轮指令体 4.6k chars/章）。单轮路径不使用本函数（字节不变）。"""
-    i = FINAL_REVIEW_PROMPT.find(REVIEW_STATIC_MARKER)
-    return FINAL_REVIEW_PROMPT[i:] if i >= 0 else ""
+    V1-③（writing.review_in_system，缺省关）：卷会话模式下在会话创建时一次性进
+    system——旧路径它随每章审校轮重发、在历史里逐章累积（T 轮实测 4.6k chars/章）。
+    单轮路径不使用本函数（字节不变）。"""
+    full = review_instruction_tail()
+    j = full.find(REVIEW_PROTOCOL_MARKER)
+    return full[:j] if j > 0 else full
+
+
+def review_output_protocol() -> str:
+    """必须近场的那半：输出格式 + 缺字段视为无效 + 总评门禁 + VERDICT/ITEMS 协议。
+
+    这一段进 system 会让模型近场看不到"要输出什么结构"，实测直接把审校变成整章回声。"""
+    full = review_instruction_tail()
+    j = full.find(REVIEW_PROTOCOL_MARKER)
+    return full[j:] if j > 0 else ""
