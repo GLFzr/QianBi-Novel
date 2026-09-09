@@ -47,14 +47,45 @@ def _hit_miss(usage: dict) -> tuple:
     return tin, hit, miss
 
 
+def _est_tokens(t: str) -> int:
+    """仓库 han 口径估算：汉字×0.6（TOKENS_PER_HAN），其余字符×0.3。
+    绝对精度不要求——命中分析以 API 实报 prompt_tokens 为准。"""
+    text = t or ""
+    han = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    return int(han * 0.6 + (len(text) - han) * 0.3 + 0.5)
+
+
+def _truncate_by_tokens(msgs: list, budget: int) -> list:
+    """按 token 预算取消息前缀：整条装得下就整条，最后一条按比例截断到预算。"""
+    out = []
+    used = 0
+    for m in msgs:
+        est = _est_tokens(m["content"])
+        if used + est <= budget:
+            out.append(m)
+            used += est
+            continue
+        remaining = budget - used
+        if remaining > 64 and est > 0:
+            cut = max(1, int(len(m["content"]) * remaining / est))
+            out.append({"role": m["role"], "content": m["content"][:cut]})
+        break
+    if not out:
+        raise SystemExit("预算 %d tok 太小，切不出前缀" % budget)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="同字节重放：分辨抖动/参数键/请求形状")
     ap.add_argument("--home", required=True, help="tests_output/bench 下的变体名（取其会话栈）")
     ap.add_argument("--proj", default="", help="工程目录（缺省 <home>/bench/种子书）")
     ap.add_argument("--volume", default="", help="卷文件名（缺省取最大卷号）")
     ap.add_argument("--slice", type=int, default=136, help="取前 N 条消息作请求（含 system）")
+    ap.add_argument("--truncate-tok", type=int, default=0,
+                    help="E0：按 token 预算截前缀（仓库 han 口径估算，取前 N tok；"
+                         "设置后覆盖 --slice，0=不截）。命中分析以 API 实报 prompt_tokens 为准")
     ap.add_argument("--conn", default="tr-dsv4f")
-    ap.add_argument("--reps", type=int, default=1, help="每种形状重复次数")
+    ap.add_argument("--reps", type=int, default=1, help="每种参数形状重复次数")
     ap.add_argument("--model", default="", help="显式覆盖模型名（缺省按 --conn 解析）")
     a = ap.parse_args()
 
@@ -74,6 +105,8 @@ def main() -> None:
     req = msgs[:a.slice]
     if len(req) < a.slice:
         raise SystemExit("栈只有 %d 条，切不到 %d" % (len(req), a.slice))
+    if a.truncate_tok:
+        req = _truncate_by_tokens(req, a.truncate_tok)
     chars = sum(len(m["content"]) for m in req)
     print("栈 %s 共 %d 条，取前 %d 条（%s 字）重放"
           % (fn, len(msgs), len(req), format(chars, ",")))
