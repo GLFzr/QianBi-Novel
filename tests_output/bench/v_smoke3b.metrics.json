@@ -1,0 +1,196 @@
+{
+ "variant": "v_smoke3b",
+ "calls": 28,
+ "input_tok": 1077125,
+ "hit_tok": 964608,
+ "miss_tok": 112517,
+ "hit_pct": 89.6,
+ "out_tok": 58132,
+ "reasoning_tok": 23557,
+ "cost_usd": 0.0699,
+ "cost_cny": 0.503,
+ "llm_seconds": 593.7,
+ "wall_seconds": 690.0,
+ "per_tier": {
+  "flash": {
+   "calls": 28,
+   "hit": 964608,
+   "miss": 112517,
+   "out": 58132,
+   "cost_usd": 0.0699
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "out": 0,
+   "cost_usd": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 41472,
+   "miss": 43293,
+   "out": 18011,
+   "reasoning": 14012,
+   "lat": 209.77999999999997,
+   "tier_tok": {
+    "flash": {
+     "hit": 41472,
+     "miss": 43293,
+     "out": 18011
+    }
+   },
+   "cost_usd": 0.0217,
+   "hit_pct": 48.9,
+   "avg_lat": 69.9
+  },
+  "deslop": {
+   "calls": 3,
+   "hit": 77824,
+   "miss": 13144,
+   "out": 4454,
+   "reasoning": 0,
+   "lat": 38.92,
+   "tier_tok": {
+    "flash": {
+     "hit": 77824,
+     "miss": 13144,
+     "out": 4454
+    }
+   },
+   "cost_usd": 0.0064,
+   "hit_pct": 85.6,
+   "avg_lat": 13.0
+  },
+  "review": {
+   "calls": 9,
+   "hit": 325120,
+   "miss": 10970,
+   "out": 13425,
+   "reasoning": 0,
+   "lat": 115.94,
+   "tier_tok": {
+    "flash": {
+     "hit": 325120,
+     "miss": 10970,
+     "out": 13425
+    }
+   },
+   "cost_usd": 0.0135,
+   "hit_pct": 96.7,
+   "avg_lat": 12.9
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 111104,
+   "miss": 13700,
+   "out": 6272,
+   "reasoning": 0,
+   "lat": 58.68,
+   "tier_tok": {
+    "flash": {
+     "hit": 111104,
+     "miss": 13700,
+     "out": 6272
+    }
+   },
+   "cost_usd": 0.0079,
+   "hit_pct": 89.0,
+   "avg_lat": 19.6
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 123392,
+   "miss": 8090,
+   "out": 268,
+   "reasoning": 0,
+   "lat": 7.550000000000001,
+   "tier_tok": {
+    "flash": {
+     "hit": 123392,
+     "miss": 8090,
+     "out": 268
+    }
+   },
+   "cost_usd": 0.0028,
+   "hit_pct": 93.8,
+   "avg_lat": 2.5
+  },
+  "global_summary": {
+   "calls": 3,
+   "hit": 130048,
+   "miss": 3199,
+   "out": 1460,
+   "reasoning": 0,
+   "lat": 18.85,
+   "tier_tok": {
+    "flash": {
+     "hit": 130048,
+     "miss": 3199,
+     "out": 1460
+    }
+   },
+   "cost_usd": 0.0026,
+   "hit_pct": 97.6,
+   "avg_lat": 6.3
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 132096,
+   "miss": 12404,
+   "out": 12547,
+   "reasoning": 9545,
+   "lat": 125.87,
+   "tier_tok": {
+    "flash": {
+     "hit": 132096,
+     "miss": 12404,
+     "out": 12547
+    }
+   },
+   "cost_usd": 0.0119,
+   "hit_pct": 91.4,
+   "avg_lat": 42.0
+  },
+  "enrich": {
+   "calls": 1,
+   "hit": 23552,
+   "miss": 7717,
+   "out": 1695,
+   "reasoning": 0,
+   "lat": 18.12,
+   "tier_tok": {
+    "flash": {
+     "hit": 23552,
+     "miss": 7717,
+     "out": 1695
+    }
+   },
+   "cost_usd": 0.003,
+   "hit_pct": 75.3,
+   "avg_lat": 18.1
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 1888,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "账不是命运收的",
+   "words": 2404,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "第一次落墨",
+   "words": 1819,
+   "review_blocking": 0
+  }
+ ]
+}
