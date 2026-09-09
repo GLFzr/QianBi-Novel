@@ -57,6 +57,9 @@ TEMP_LOCKED_PHASES = frozenset({"review"})
 _UNSUPPORTED = {}
 _UNSUPPORTED_HINT_KEYS = STAGE_PARAM_KEYS[1:] + ("thinking", "reasoning_effort", "stream_options")
 
+# W-7：「配了 effort 却没开思考」的告警去重（进程内；组合级，换相位/档位会再提示一次）
+_EFFORT_DROPPED_WARNED = set()
+
 
 def _cache_split(usage: dict, tin: int) -> tuple:
     """一次响应的 usage → (hit, miss)。W-5 口径：**"报了 0"与"没报"不是同一件事**。
@@ -325,6 +328,16 @@ class LLMClient:
                 # DeepSeek V4 顶层参数：思考强度 low/high/max（参考 DeepSeek 官方 Thinking Mode
                 # 文档与 opencode-go provider 的 effort 映射；max 为最高档）
                 payload["reasoning_effort"] = effort
+            elif effort:
+                # W-7：effort 只在思考模式下生效——配了档却没开思考＝整条配置空转
+                # （过去完全静默；产品连接不设 thinking 时尤其容易踩）。同一组合只提示一次。
+                _key = (self.model, phase or "", thinking, str(effort))
+                if _key not in _EFFORT_DROPPED_WARNED:
+                    _EFFORT_DROPPED_WARNED.add(_key)
+                    logger.warning(
+                        "相位 %s 配了 reasoning_effort=%s 但 thinking=%s：该参数不会随请求下发"
+                        "（DeepSeek 仅思考模式接受）。要真正降档请改 thinking 本身。",
+                        phase or "(无相位名)", effort, thinking)
         payload = self._apply_capability(payload)
         # 备忘录剥掉的参数不登记：快照要记「真正会下发的」，而不是「我以为下发了的」
         self.last_sampling = {k: payload[k] for k in SAMPLING_TRACE_KEYS if k in payload}

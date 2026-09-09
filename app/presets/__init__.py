@@ -235,6 +235,8 @@ STAGE_PARAM_PHASES = [
     ("chapter_summary", "章节摘要"),
     ("global_summary", "全局摘要"),
     ("canon_audit", "设定清算"),
+    # W-7：级联终审判此前不在相位表里 ⇒ 预设点不到、档位只能写死（97.3% 思考无从降档）
+    ("canon_audit_review", "清算终审判"),
 ]
 
 # (键, 中文说明, 下限, 上限, 取整)；slot 只用于选客户端，不进 HTTP 请求体
