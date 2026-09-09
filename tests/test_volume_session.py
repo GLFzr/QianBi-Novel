@@ -982,3 +982,23 @@ def test_vote_fingerprints_written_per_vote(tmp_path):
     assert [r["i"] for r in rows] == [1, 2, 3] and all(r["ch"] == 1 for r in rows)
     assert all(r["unstructured"] for r in rows), "假回复没有协议段，指纹必须如实记空转"
     assert len({r["sha1"] for r in rows}) == 1
+
+
+def test_turn_cleaning_is_instrumented_not_changed(tmp_path):
+    """W-8 诊断：postprocess 改动字节 ⇒ 落 turn_cleaned 事件；固化的仍是清洗后的文本
+
+    动机（外部方案的一手依据）：DeepSeek 的缓存单元在「模型输出末端」落盘，命中要求
+    逐字节完整匹配整个单元——我们存的是清洗后字节，若与服务商缓存的原始字节不同，
+    章界固定 miss 就有了机制解释。**先量不改行为**，改法要等这个数出来再决定。"""
+    c = FakeClient(["```markdown\n正文\n```\n"])
+    s = VolumeSession(c, SYS, volume=1, proj=str(tmp_path))
+    out = s.ask("写第1章", phase="prose", postprocess=lambda t: t.strip())
+    assert out == "```markdown\n正文\n```"                  # 行为不变：仍按 postprocess 的结果
+    ev = _session_events(tmp_path)
+    hits = [e for e in ev if e["event"] == "turn_cleaned"]
+    assert len(hits) == 1 and hits[0]["phase"] == "prose"
+    assert hits[0]["raw_sha"] != hits[0]["kept_sha"] and hits[0]["chapter"] == 0
+    # 没改动就不该有事件
+    s2 = VolumeSession(FakeClient(["正文"]), SYS, volume=1, proj=str(tmp_path))
+    s2.ask("写", phase="prose", postprocess=lambda t: t.strip())
+    assert not [e for e in _session_events(tmp_path) if e["event"] == "turn_cleaned"][1:]

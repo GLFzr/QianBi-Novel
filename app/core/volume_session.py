@@ -378,6 +378,26 @@ class VolumeSession(ChapterSession):
 
     # ---- 轮次固化（覆盖：开幕轮/种子并入下一轮；其余语义与章会话一致）----
 
+    def _note_cleaned(self, raw: str, kept: str, phase: str) -> None:
+        """W-8 诊断（**零行为改动**）：postprocess 改动了字节就留一条现场。
+
+        DeepSeek 的缓存单元在「模型输出末端」落盘，且命中要求**逐字节完整匹配**某个
+        已落盘单元（官方 kv_cache 文档）。我们往栈里固化的是 `clean_llm_output` 之后的
+        文本（strip + 剥代码围栏）——若与服务商那侧缓存的原始字节不同，从该单元起
+        之后的位置都可能不吃缓存：这是「每章章界固定 ~32k tok 被按未命中重计价」目前
+        最像解释的假设。先量出来再决定要不要改成「固化原始字节、清洗只用于工作副本」。"""
+        try:
+            if raw == kept:
+                return
+            import hashlib
+            record_event(self._proj, "turn_cleaned", vol=self._volume, gen=self._gen,
+                         chapter=self._current_chapter, phase=phase or "",
+                         delta=len(raw) - len(kept),
+                         raw_sha=hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12],
+                         kept_sha=hashlib.sha1(kept.encode("utf-8")).hexdigest()[:12])
+        except Exception:  # noqa: BLE001
+            pass
+
     def ask(self, user_text: str, *, on_chunk=None, on_reasoning=None,
             phase: str = "", temperature=None, abort=None,
             client=None, postprocess=None) -> str:
@@ -401,7 +421,9 @@ class VolumeSession(ChapterSession):
             on_chunk=on_chunk, on_reasoning=on_reasoning, phase=phase,
             temperature=temperature, abort=abort)
         if postprocess:
+            _raw = reply
             reply = postprocess(reply)
+            self._note_cleaned(_raw, reply, phase)
         self._messages.append({"role": "user", "content": content})
         self._messages.append({"role": "assistant", "content": reply})
         self._pending_prose = None
