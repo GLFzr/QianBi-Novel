@@ -1096,7 +1096,30 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 缺省无会话：纯单轮路径（旧客户端/配置全关），后续 _session_usable(None) 兜底
     session = None
     _comp_preface = ""
-    if _w_cfg.get("volume_session", False):
+    # L4（writing.head_rebuild，缺省关，深化计划 v2 §1）：每章重建——system=冻结
+    # 稳定头（volume_system_text：全书前缀+PROSE 指令库，卷内逐字节一致→按 E0 实测
+    # 连续命中），只挂本章轮次，跨章历史不入栈（有界上下文）。E0 判据：hit 随前缀
+    # 长度连续增长、无 32k 台阶（看板 2026-09-10 00:30 条）。每章 fresh 实例 +
+    # persist=False（不落盘；W-8 turn_cleaned 事件仪器仍工作）。优先级高于
+    # volume_session/chapter_session；compaction 在此模式下无意义（栈不过章）。
+    if _w_cfg.get("head_rebuild", False):
+        try:
+            probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+            if callable(getattr(probe, "chat_turn", None)):
+                from .volume_session import VolumeSession, volume_system_text
+                from .volume_session import resolve_volume_number as _rvn
+                _head = volume_system_text(proj)
+                if bool(_w_cfg.get("review_in_system", False)):
+                    _head += "\n\n" + prompts.review_static_tail()
+                session = VolumeSession(probe, system_text=_head,
+                                        volume=_rvn(proj, num), proj=proj,
+                                        persist=False,
+                                        commit_raw=bool(_w_cfg.get("commit_raw", False)))
+                ctx.log("info", f"第 {num} 章 L4 每章重建：system=冻结稳定头"
+                                f"（{len(_head)} chars），跨章历史不入栈")
+        except Exception:
+            session = None
+    elif _w_cfg.get("volume_session", False):
         session = _acquire_volume_session(ctx, proj, num, static_freeze=_s4_freeze,
                                           compaction=_compaction)
         if _compaction and session is not None:
@@ -1232,7 +1255,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             # S1 卷会话：本轮同时是「本章开幕轮」——开幕声明 + 章头并入同一
             # user 轮（system 只含全书冻结前缀；章头逐卷只 miss 一次，此后
             # 永久命中）。开幕声明显式锚定「本章正文以本次回复为准」。
-            if _s4_freeze and hasattr(session, "open_chapter"):
+            if (_s4_freeze or _w_cfg.get("head_rebuild", False)) \
+                    and hasattr(session, "open_chapter"):
+                # head_rebuild：指令库已在冻结头里（获取分支构造），开幕同样走
+                # S4 组合（动态值 + 八节），否则指令体会双重出现。
                 # S4（v3 §3 指令库前置）：PROSE 指令体已模板化冻结进卷会话
                 # system（volume_system_text），开幕轮只带本章共享上下文
                 # （volume_mode 八节去三节，S4-b）+ 逐章动态值 + 一行指令库
@@ -1246,7 +1272,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     author_note=prose_kw["author_note"],
                     tic_blacklist=prose_kw["tic_blacklist"]) + _prose_directives
                 turn_text = session.open_chapter(
-                    chapter_header(proj, num, volume_mode=True), turn_text,
+                    chapter_header(proj, num,
+                                   volume_mode=not _w_cfg.get("head_rebuild", False)),
+                    turn_text,
                     chapter_num=num, preface=_comp_preface)
             else:
                 turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
@@ -2667,7 +2695,9 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
     if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
         _s4_freeze = bool(((ctx.cfg or {}).get("writing", {}) or {})
-                          .get("s4_static_freeze", False))
+                          .get("s4_static_freeze", False)) \
+            or bool(((ctx.cfg or {}).get("writing", {}) or {})
+                    .get("head_rebuild", False))
         if _s4_freeze and hasattr(session, "open_chapter"):
             # S4-c（卷会话）：{character_state}/{foreshadow_table}/{timeline}/
             # {old_context}/{worldbook} 五节与本章开幕轮/会话历史逐字重复 →

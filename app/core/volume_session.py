@@ -290,11 +290,14 @@ class VolumeSession(ChapterSession):
     """
 
     def __init__(self, client, system_text: str, *, volume: int = 1,
-                 proj: str = "", enabled: bool = True, gen: int = 0):
+                 proj: str = "", enabled: bool = True, gen: int = 0,
+                 persist: bool = True, commit_raw: bool = False):
         super().__init__(client, system_text, enabled=enabled)
         self._volume = int(volume)
         self._gen = int(gen)
         self._proj = proj
+        self._persist = bool(persist)  # L4 head_rebuild：每章重建不落盘（有界上下文）
+        self._commit_raw = bool(commit_raw)  # L3：清洗改字节时固化原始字节（缓存对齐）
         self._path = volume_messages_path(proj, self._volume, self._gen) if proj else ""
         self._saved_len = 0          # 已落盘的前导消息条数（append-only 游标）
         self._pending_opening = None  # open_chapter 合成的开幕轮：随下一次 ask 固化
@@ -424,8 +427,14 @@ class VolumeSession(ChapterSession):
             _raw = reply
             reply = postprocess(reply)
             self._note_cleaned(_raw, reply, phase)
+        # L3（writing.commit_raw，缺省关，深化计划 v2 §1-L3）：栈里固化**原始字节**
+        # （缓存对齐——DeepSeek 单元落在模型输出末端且要求逐字节匹配），清洗稿仍返回
+        # 给调用方做解析/落盘（工作副本语义分离）。`_note_cleaned` 已记录差异现场。
+        _stored = reply
+        if postprocess and self._commit_raw and _raw != reply:
+            _stored = _raw
         self._messages.append({"role": "user", "content": content})
-        self._messages.append({"role": "assistant", "content": reply})
+        self._messages.append({"role": "assistant", "content": _stored})
         self._pending_prose = None
         self._pending_opening = None
         self._turns += 1
@@ -478,8 +487,8 @@ class VolumeSession(ChapterSession):
         服务端前缀缓存按位置匹配不受影响）。重写走 tmp+os.replace **原子替换**：
         1.5MB 整文写到一半被 kill 会把整卷历史换成半文件（W-3 前是非原子 open("w")）。
         """
-        if not self._path:
-            return ""
+        if not self._path or not self._persist:
+            return ""   # L4 head_rebuild：每章重建不落盘（有界上下文，事件仪器仍工作）
         n = len(self._messages)
         if n == self._saved_len:
             return self._path
