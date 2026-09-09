@@ -3,10 +3,10 @@
  "name": "E1.2 prose-thinkbudget（正文思考软预算）",
  "version": 2,
  "description": "成本实验台预设：prose.think_budget=N tok 软预算（直接给成稿），不动采样档位（测试方案 v2 E1.2 / O2）",
- "_note": "think_budget 为占位值，待 E0.1 基线的 prose reasoning 均值出来后按 60% 回填",
+ "_note": "2026-09-09 回填（原为占位 40000、从未跑过）。依据＝129 次 prose 调用的逐章重建：reasoning 中位 959、p90 12,721、max 32,770——67% 的章 <2k 而 26% 的长尾吃掉 83% 思考量，是**长尾不是斜率**。cap=6000 约触达 6/27 章、省 prose 输出 35% ⇒ 整跑约 -7.7%（E2）。关键否证：逐章 reasoning 对盲评 total/D2/D4 的 Spearman 仅 -0.11/-0.23/-0.10（n=20）——**长思考买到的是字数，不是分数**，且 out-reasoning 均值 1,032 tok 说明成稿与思考已解耦。故质量风险集中在 D2/D4，验收必须带双评委盲评闸门（D2、D4 单维跌幅 ≤0.5 且 Δ总分 ≥-0.5），不得只看 tok 与字数。",
  "stage_params": {
   "prose": {
-   "think_budget": 40000
+   "think_budget": 6000
   }
  }
 }
