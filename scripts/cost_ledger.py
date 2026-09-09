@@ -137,6 +137,8 @@ def _cost(rows) -> dict:
         reas += r.get("reasoning") or 0
     usd_book = usd_real = 0.0
     hit = miss = blind = in_total = 0
+    retry_calls = 0
+    retry_usd = 0.0
     for t, d in out_tier.items():
         p = PRICE[t]
         usd_book += d["hit"] * p["hit"] + (d["miss"] + d["blind"]) * p["miss"] \
@@ -148,6 +150,13 @@ def _cost(rows) -> dict:
         miss += d["miss"]
         blind += d["blind"]
         in_total += d["hit"] + d["miss"] + d["blind"]
+    for r in rows:
+        # W-4：白付行——没产出可用正文却花了钱的一发（重试/空流/中止），单独列账
+        if str(r.get("st") or "").strip():
+            p = PRICE[_tier(r.get("model", ""))]
+            h, m, b = cache_caliber(r)
+            retry_calls += 1
+            retry_usd += h * p["hit"] + (m + b) * p["miss"] + (r.get("out") or 0) * p["out"]
     known = hit + miss
     return {
         "calls": len(rows),
@@ -161,6 +170,8 @@ def _cost(rows) -> dict:
         "cny": round(usd_book * USD_CNY, 3),
         "usd_real": round(usd_real, 4),
         "cny_real": round(usd_real * USD_CNY, 3),
+        "retry_calls": retry_calls,
+        "retry_cny": round(retry_usd * USD_CNY, 3),
         "models": {t: d["calls"] for t, d in sorted(out_tier.items())},
     }
 
@@ -269,9 +280,15 @@ def main():
                         m.get("cny_real", m["cny"]), models))
         if note:
             lines.append("  ^ ^ %s" % note)
+    total_retry_calls = sum(m.get("retry_calls", 0) for _c, _n, _s, m in ledger)
+    total_retry_cny = sum(m.get("retry_cny", 0.0) for _c, _n, _s, m in ledger)
     lines.append("")
     lines.append("**合计**：%d 笔真机调用，约 **¥%.2f**（账面）／**¥%.2f**（真实）"
                  "（全部实验 + 验收 + 探针）。" % (total_calls, total_cny, total_real))
+    if total_retry_calls:
+        lines.append("")
+        lines.append("　其中**白付**（重试/空流/中止，`st` 标记）**%d 笔／¥%.2f**——"
+                     "W-4 之前这些发在账上恒等于 0。" % (total_retry_calls, total_retry_cny))
     if total_blind:
         lines.append("")
         lines.append("　两口径差额 ¥%.2f 全部来自 **%s tok 盲区**（网关没回 "

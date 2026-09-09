@@ -141,8 +141,12 @@ class LLMClient:
             user_id=conn.get("user_id", ""),
         )
 
-    def _record_usage(self, usage: dict, latency: float, phase: str = ""):
-        """token 用量统计埋点（插件）：本地 jsonl + 内存聚合，失败不影响调用"""
+    def _record_usage(self, usage: dict, latency: float, phase: str = "",
+                      status: str = ""):
+        """token 用量统计埋点（插件）：本地 jsonl + 内存聚合，失败不影响调用
+
+        status 非空＝这一发**没产出可用正文却可能已经花钱**（"empty"/"abort"），
+        落到用量行的 `st` 字段，台账据此分列 retry_spend（W-4）。"""
         try:
             tin = int(usage.get("prompt_tokens", 0) or 0)
             tout = int(usage.get("completion_tokens", 0) or 0)
@@ -159,9 +163,39 @@ class LLMClient:
             from .. import usage as _usage
             _usage.record(None, self.model, self.slot, tin, tout, latency,
                           hit=hit, miss=miss, phase=phase, reasoning=reasoning,
-                          sent=getattr(self, "last_sampling", None) or None)
+                          sent=getattr(self, "last_sampling", None) or None,
+                          status=status)
         except Exception as e:  # noqa: BLE001
             logger.debug("用量埋点失败（忽略）: %s", e)
+
+    def _retry_wait(self, attempt: int, abort=None, reason=None) -> bool:
+        """重试前的统一指数退避（W-4）。返回 False＝等待期间被中止，调用方应 break。
+
+        过去只有「抛异常」那条路径会睡，429/5xx 与空内容两条 `continue` 直接绕过退避
+        立刻重发同一份几百 k 的深栈——TR 的 503 SERVICE_BUSY 三连就是这么把整跑打死的。"""
+        delay = self.backoff_base * (2 ** attempt)
+        logger.warning("LLM retry %s/%s after %.1fs: %s",
+                       attempt + 1, self.max_retries, delay, reason)
+        if abort is None:
+            time.sleep(delay)
+            return True
+        _end = time.monotonic() + delay
+        while time.monotonic() < _end:      # 退避也要可中断：否则点停止后还要白等数秒
+            if abort():
+                self.last_aborted = True
+                return False
+            time.sleep(0.1)
+        return True
+
+    def _charge_failed_attempt(self, usage, t0: float, phase: str, status: str) -> None:
+        """没走到「成功记账」就要退出的一发：网关回了 usage 就如实记账（打 status），
+        没回就不编数字——白付至少记到「这笔存在」的粒度，账上不再恒等于 0。"""
+        if not usage:
+            return
+        try:
+            self._record_usage(usage, time.monotonic() - t0, phase=phase, status=status)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _chat_url(self) -> str:
         if "/v1" in self.base_url:
@@ -348,6 +382,8 @@ class LLMClient:
                             pass
                         last_err = LLMError(
                             f"模型返回空内容 (finish_reason={finish})", retryable=True)
+                        # W-4：这一发的 token 是真花了的（usage 已在响应里），先记账
+                        self._charge_failed_attempt(data.get("usage"), t0, phase, "empty")
                         if payload.get("thinking") and not self.last_degraded:
                             # thinking 模式偶发"只思考不输出"：本次调用内关闭 thinking 重发
                             # （退化标记至多触发一次，不再递归重开一整轮重试预算）
@@ -359,6 +395,7 @@ class LLMClient:
                                 temperature=temperature, thinking="", reasoning_effort="")
                             continue
                         if attempt < self.max_retries:
+                            self._retry_wait(attempt, None, last_err)
                             continue
                         raise last_err
                     usage = data.get("usage") or {}
@@ -468,6 +505,12 @@ class LLMClient:
                                     self.last_latency = time.monotonic() - t0
                                     raise err
                                 payload = fixed
+                                continue   # 换参数重发（网关点名不支持），不是限流 → 立刻发
+                            # W-4：429/5xx 也要退避。过去这条 continue 绕过退避睡眠，
+                            # 同一份几百 k 的深栈当场再打一遍——TR 的 503 三连就是这么打死整跑的
+                            if attempt < self.max_retries and not self._retry_wait(
+                                    attempt, abort, err):
+                                break
                             continue
                         for line in resp.iter_lines():
                             if abort is not None and abort():
@@ -500,10 +543,15 @@ class LLMClient:
                 if self.last_aborted:
                     # 中断优先于空内容判定：否则「点停止时还没吐字」会掉进下面的
                     # 空内容分支 continue 重开连接，把重试预算烧光。
+                    # W-4：中止≠免费——末块 usage 已到就如实记一发（没到就不编）。
+                    self._charge_failed_attempt(stream_usage, t0, phase, "abort")
+                    stream_usage = None
                     break
                 if not "".join(parts).strip():
                     # 全程无内容（或只有空白）：thinking 模式先退化重发，否则记入可重试错误
                     last_err = LLMError("模型返回空内容 (stream)", retryable=True)
+                    self._charge_failed_attempt(stream_usage, t0, phase, "empty")
+                    stream_usage = None
                     if payload.get("thinking") and not self.last_degraded:
                         # thinking 偶发"只思考不输出"（reasoning_content 有流、content 全空）：
                         # 本次调用内关闭 thinking 重发（退化标记至多一次，不再递归重开重试预算）
@@ -514,6 +562,8 @@ class LLMClient:
                             thinking="", reasoning_effort="")
                         continue
                     if attempt < self.max_retries:
+                        if not self._retry_wait(attempt, abort, last_err):
+                            break
                         continue
                     self.last_error = str(last_err)
                     raise last_err
@@ -535,22 +585,16 @@ class LLMClient:
                 # 显示重复尾巴，最终落盘内容以本函数返回值为准（正确）。
                 last_err = LLMError(f"流式读取中断: {e}", retryable=True)
             if self.last_aborted:
-                break   # 用户主动中断：不再消耗重试预算
+                # 用户主动中断：不再消耗重试预算（W-4：已到手的 usage 照样记账）
+                self._charge_failed_attempt(stream_usage, t0, phase, "abort")
+                stream_usage = None
+                break
             if attempt < self.max_retries:
-                delay = self.backoff_base * (2 ** attempt)
-                logger.warning("LLM stream retry %s/%s after %.1fs: %s",
-                               attempt + 1, self.max_retries, delay, last_err)
-                if abort is None:
-                    time.sleep(delay)
-                else:   # 退避等待也要可中断：否则点停止后还要白等数秒
-                    _end = time.monotonic() + delay
-                    while time.monotonic() < _end:
-                        if abort():
-                            self.last_aborted = True
-                            break
-                        time.sleep(0.1)
-                    if self.last_aborted:
-                        break
+                # 网络/流中断：退避后重发（W-4 统一到 _retry_wait）
+                self._charge_failed_attempt(stream_usage, t0, phase, "retry")
+                stream_usage = None
+                if not self._retry_wait(attempt, abort, last_err):
+                    break
         content = "".join(parts).strip()
         self.last_latency = time.monotonic() - t0
         if self.last_aborted:

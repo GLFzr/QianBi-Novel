@@ -112,3 +112,27 @@ def test_blind_input_is_not_free_any_more(tmp_path):
     assert c["blind_tok"] == 500 and c["hit_pct"] == 0.0
     assert c["cny"] > 0                        # 账面：500 tok 按 miss 价
     assert c["cny"] == c["cny_real"]           # 全盲时无从摊派，两口径重合
+
+
+def test_wasted_spend_is_split_out(tmp_path):
+    """W-4：带 st 标记（重试/空流/中止）的行必须能从总账里单独看出来——此前它们在账上为 0"""
+    def big(r):
+        r = dict(r)
+        for k in ("in", "out", "hit", "miss"):
+            r[k] = int(r.get(k) or 0) * 1000
+        return r
+    rows = [big(ROWS[0]), dict(big(ROWS[1]), st="retry"),
+            dict(big(ROWS[2]), st="abort")]
+    home = str(tmp_path)
+    d = os.path.join(home, ".qianbi_novel", "usage")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "usage.jsonl"), "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    m = cb._metrics(home, "waste", [], 0.0)
+    c = _cost(rows)
+    assert m["retry_calls"] == c["retry_calls"] == 2
+    assert m["retry_spend_cny"] == pytest.approx(c["retry_cny"], abs=0.002)
+    assert 0 < m["retry_spend_cny"] < m["cost_cny"]
+    # 白付照旧计入总账（钱真花了），只是多给一格可分列的数
+    assert m["calls"] == 3

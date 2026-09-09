@@ -532,6 +532,8 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
     # 相反——三工具现在同源 app.usage.cache_caliber。
     cost_usd = 0.0
     blind_total = 0
+    retry_calls = 0
+    retry_usd = 0.0     # W-4：白付（带 st 的行）单独列账，不再让重试预算成为账面黑洞
     per_tier = {"flash": {"calls": 0, "hit": 0, "miss": 0, "blind": 0, "out": 0,
                           "cost_usd": 0.0},
                 "pro": {"calls": 0, "hit": 0, "miss": 0, "blind": 0, "out": 0,
@@ -545,6 +547,9 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
         o = r.get("out") or 0
         c = h * pr["hit"] + (m + b) * pr["miss"] + o * pr["out"]
         cost_usd += c
+        if str(r.get("st") or "").strip():
+            retry_calls += 1
+            retry_usd += c
         pt = per_tier[tier]
         pt["calls"] += 1
         pt["hit"] += h
@@ -596,6 +601,8 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
         "cost_cny": round(cost_usd * USD_CNY, 3),
         "cost_usd_real": round(cost_real, 4),
         "cost_cny_real": round(cost_real * USD_CNY, 3),
+        "retry_calls": retry_calls,
+        "retry_spend_cny": round(retry_usd * USD_CNY, 3),
         "llm_seconds": round(sum(r.get("latency") or 0 for r in rows), 1),
         "wall_seconds": round(wall, 1),
         "per_tier": per_tier,

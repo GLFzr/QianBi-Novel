@@ -156,7 +156,7 @@ def set_chapter(num: int) -> None:
 
 def record(cfg: dict, model: str, slot: str, tin: int, tout: int, latency: float = 0.0,
            hit: int = 0, miss: int = 0, phase: str = "", reasoning: int = 0,
-           sent: dict = None):
+           sent: dict = None, status: str = ""):
     """记录一次 LLM 调用（工作线程安全）。tin/tout 为该次响应的 usage 计数
 
     hit/miss 为 DeepSeek prompt_cache_hit_tokens / prompt_cache_miss_tokens（缺省 0）；
@@ -177,6 +177,10 @@ def record(cfg: dict, model: str, slot: str, tin: int, tout: int, latency: float
         # 只记**真正随请求下发**的参数（网关剥参、thinking 未设导致 effort 被丢，
         # 都只有这一格能看出来）；未设置时不落空字段，保持旧行形状
         rec["sent"] = {str(k): sent.get(k) for k in sorted(sent)}
+    if status:
+        # W-4：白付标记（"empty"=200 但没吐出可用内容、"abort"=用户中止）——
+        # 这些发没走成功记账分支，钱却真花了。不分列出来，重试预算就是计费黑洞。
+        rec["st"] = str(status)[:16]
     with _lock:
         day = _ensure_today()   # 先加载历史（含跨天切分），再落盘本条，避免双计
         try:
