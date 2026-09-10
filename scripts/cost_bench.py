@@ -312,6 +312,13 @@ def _ensure_outline(proj: str, n: int, orch) -> bool:
     from app.core import stages as st_mod
     if os.path.isfile(project.get_outline_path(proj, n)):
         return False
+    # v13（writing.outline_in_session）：细纲生成挂进本章会话骑冻结头——
+    # 这里必须让路（独立单发每章全额 miss + 全额输出，正是要省的那笔）。
+    try:
+        if bool(((orch.cfg or {}).get("writing", {}) or {}).get("outline_in_session", False)):
+            return False
+    except AttributeError:
+        pass
     _mark("第%d章 细纲缺失，现场生成…" % n)
     state = st.load_state(proj)
     state["stage"] = st.STAGE_CH_OUTLINE
