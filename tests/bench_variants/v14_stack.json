@@ -1,0 +1,17 @@
+{
+  "_note": "V14 = V13 + 95% 迭代：① outline length_budget 1200 字（in-session 细纲输出上限，v13 实测 13.7k tok/章）；② vote_replicas 副本票持久化窗 12s（首票回复写缓存后再发副本，砍 review miss）；③ corpus_mode 章头瘦身（上一章结尾→引用行，语料库已含全文；文风样本保留）。95% 数学：语料头随卷界增长（ch39 冻结 1-38 章 → 头 ~370k chars ≈ 280k tok → H ≈ 3M+），X（miss+out）需 ≤ H/19 ≈ 160k——v13 部分实测 X=201k，本预计减 ~20-30k，其余靠头部增长摊薄。预注册判据：13 章窗口综合 ≥95%（不足则如实报告差距）。",
+  "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+              "session_pace_seconds": 45,
+              "pace_boundaries": {"prose_tail": 45, "deslop_review": 45, "review_audit": 45,
+                                  "vote_replicas": 12},
+              "tracking_delta": true, "review_in_system": true,
+              "enrich_tail": true, "summary_every": 2, "commit_raw": true,
+              "instruction_in_head": true, "audit_effort_low": true,
+              "review_compact": true, "deslop_pinned": true,
+              "corpus_head": true, "outline_in_session": true},
+  "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                   "canon_audit": {"in_session": true, "early_stop": true, "max_tokens": 4000},
+                   "review": {"max_tokens": 900},
+                   "outline": {"length_budget": 1200}},
+  "gates": {"review_confidence_vote": true}
+}

@@ -56,7 +56,8 @@ def project_header(proj: str) -> str:
     return _header_cached(proj, _fingerprint(proj))
 
 
-def chapter_header(proj: str, num: int, volume_mode: bool = False) -> str:
+def chapter_header(proj: str, num: int, volume_mode: bool = False,
+                   corpus_mode: bool = False) -> str:
     """章级共享段（v0.19 八节终态）：同章所有调用间逐字节一致的内容。
 
     组成：本章细纲（含冻结表）+ 全局摘要 + 近章摘要 + 角色状态 + 时间线
@@ -69,6 +70,10 @@ def chapter_header(proj: str, num: int, volume_mode: bool = False) -> str:
     摘要」「上一章结尾」「上一章开头」三节——正文与摘要本身就在卷会话历史里，
     逐字重发与历史逐字重复，纯烧 miss；其余五节保留（角色状态重述是
     recitation，防注意力衰减）。默认 False：单轮/章会话路径字节不变。
+
+    corpus_mode（v14，writing.corpus_head 门控）：语料头已含已锁章节全文时，
+    「上一章结尾」整段退化为引用行（权威基准在系统语料库，近场只留衔接指令）；
+    「上一章开头」文风样本保留——风格锚定需要贴近写作任务。默认 False 字节不变。
     """
     from . import memory
     parts = [f"【第 {num} 章共享上下文（同章所有步骤使用同一份，前后引用以此为准）】"]
@@ -93,7 +98,10 @@ def chapter_header(proj: str, num: int, volume_mode: bool = False) -> str:
         parts.append("## 待回收/推进伏笔" + chr(10) + body.strip())
     if not volume_mode:
         prev_text, prev_style = memory.prev_chapter_pack(proj, num, tail=800)
-        if prev_text:
+        if corpus_mode:
+            parts.append("## 上一章结尾（衔接用）\n上一章全文已在系统「已锁章节原文"
+                         "（卷首冻结）」中——直接以该章末段为衔接基准，此处不重复原文。")
+        elif prev_text:
             parts.append("## 上一章结尾（直接衔接用）" + chr(10) + prev_text)
         if prev_style:
             parts.append("## 上一章开头（文风锚定样本：延续它的语感、句长密度与叙述温度，不要模仿其内容）"

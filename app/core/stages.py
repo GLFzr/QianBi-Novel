@@ -469,6 +469,19 @@ def _stage_param_override(ctx, phase: str, **kv):
         sp[phase] = restored
 
 
+def _chap_cm(ctx) -> bool:
+    """v14：corpus_mode 生效条件——corpus_head 与 head_rebuild 同时开启（语料库在
+    系统里是引用行的前提）。任一未开则章头保持原字节。"""
+    w = ((getattr(ctx, "cfg", None) or {}).get("writing", {}) or {})
+    return bool(w.get("corpus_head", False)) and bool(w.get("head_rebuild", False))
+
+
+def _chap_header(ctx, proj: str, num: int, volume_mode: bool = False) -> str:
+    """chapter_header 的 ctx 感知封装：corpus_head+head_rebuild 时章头退化为
+    引用行版（corpus_mode），否则逐字节走原路径。"""
+    return chapter_header(proj, num, volume_mode=volume_mode, corpus_mode=_chap_cm(ctx))
+
+
 def _pace_seconds(cfgw: dict, boundary: str = "", default_seconds: int = 0) -> int:
     """节拍时长解析（纯函数）：pace_boundaries[boundary] ＞ session_pace_seconds ＞ default。"""
     seconds = default_seconds
@@ -1150,7 +1163,7 @@ def _ensure_outline_in_session(ctx, session, num: int) -> bool:
             worldbook_block=mats["wb_block"],
             regex_block=mats["rg_block"],
             user_directive=ctx.consume_gate_idea() or "（无）",
-        )
+        ) + _dyn_directives(ctx, PHASE_OUTLINE)   # v14：length_budget 上限同样作用于会话内细纲
         turn = ("（作用域：仅依据系统设定基准与本会话历史生成本章细纲；"
                 "全书前缀/卷纲/细纲快照已在系统与历史中，不重复注入。）\n\n" + prompt.strip())
         ctx.last_prompt = turn
@@ -1463,7 +1476,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             if callable(getattr(probe, "chat_turn", None)):
                 from .chapter_session import ChapterSession
                 session = ChapterSession(
-                    probe, system_text=f"{project_header(proj)}\n\n{chapter_header(proj, num)}")
+                    probe, system_text=f"{project_header(proj)}\n\n{_chap_header(ctx, proj, num)}")
                 ctx.log("info", f"第 {num} 章 章会话已启用（同章阶段共享前缀与正文历史）")
         except Exception:
             session = None
@@ -1582,7 +1595,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             "tic_blacklist": _tic_blacklist(proj),
             "used_setpieces": _used_setpieces(proj),
             "project_header": project_header(proj),
-            "chapter_header": chapter_header(proj, num),
+            "chapter_header": _chap_header(ctx, proj, num),
             "style_discipline": prompts.STYLE_DISCIPLINE,
             "worldbook_block": wb_block,
             "regex_block": rg_block,
@@ -1613,14 +1626,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     tic_blacklist=prose_kw["tic_blacklist"]) + _prose_directives
                 turn_text = session.open_chapter(
                     chapter_header(proj, num,
-                                   volume_mode=not _w_cfg.get("head_rebuild", False)),
+                                   volume_mode=not _w_cfg.get("head_rebuild", False),
+                                   corpus_mode=_chap_cm(ctx)),
                     turn_text,
                     chapter_num=num, preface=_comp_preface)
             else:
                 turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
                     + _prose_directives
                 if hasattr(session, "open_chapter"):
-                    turn_text = session.open_chapter(chapter_header(proj, num), turn_text,
+                    turn_text = session.open_chapter(_chap_header(ctx, proj, num), turn_text,
                                                      chapter_num=num,
                                                      preface=_comp_preface)
             ctx.last_prompt = turn_text
@@ -1661,7 +1675,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                ending=prose[-400:],
                                tic_blacklist=_tic_blacklist(proj),
                                must_block=_must_block(proj, ctx.cfg),
-                               chapter_header=chapter_header(proj, num),
+                               chapter_header=_chap_header(ctx, proj, num),
                                project_header=project_header(proj))
                 _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or cfg_mod.SLOT_WRITING
                 req = prompts.ENRICH_TAIL_PROMPT.format(**tail_kw)
@@ -1684,7 +1698,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                           target=chapter_words, prose=prose,
                                           tic_blacklist=_tic_blacklist(proj),
                                           must_block=_must_block(proj, ctx.cfg),
-                                          chapter_header=chapter_header(proj, num),
+                                          chapter_header=_chap_header(ctx, proj, num),
                                           project_header=project_header(proj))
                     rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_ENRICH,
                                                prompts.ENRICH_PROMPT, enrich_full_kw,
@@ -1698,7 +1712,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                              target=chapter_words, prose=prose,
                              tic_blacklist=_tic_blacklist(proj),
                              must_block=_must_block(proj, ctx.cfg),
-                             chapter_header=chapter_header(proj, num),
+                             chapter_header=_chap_header(ctx, proj, num),
                              project_header=project_header(proj))
             rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_ENRICH,
                                        prompts.ENRICH_PROMPT, enrich_kw, prose=prose,
@@ -1722,7 +1736,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                            cut_pct=cut_pct, prose=prose,
                            tic_blacklist=_tic_blacklist(proj),
                            must_block=_must_block(proj, ctx.cfg),
-                           chapter_header=chapter_header(proj, num),
+                           chapter_header=_chap_header(ctx, proj, num),
                            project_header=project_header(proj))
             prose = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_TRIM,
                                    prompts.TRIM_PROMPT, trim_kw, prose=prose,
@@ -1795,7 +1809,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             deslop_kw = dict(findings=findings_text, prose=prose,
                              tic_blacklist=_tic_blacklist(proj),
                              must_block=_must_block(proj, ctx.cfg),
-                             chapter_header=chapter_header(proj, num),
+                             chapter_header=_chap_header(ctx, proj, num),
                              project_header=project_header(proj))
             rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_DESLOP,
                                        prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=prose,
@@ -1937,7 +1951,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             # 普通修改（v1 REVIEW_FIX_PROMPT + worst_segment_quotes）
             fix_kwargs = dict(chapter_num=num, findings="\n".join(blocking_review), prose=prose,
                               project_header=project_header(proj),
-                              chapter_header=chapter_header(proj, num))
+                              chapter_header=_chap_header(ctx, proj, num))
             t_fix = session.turn_count() if _session_usable(session) else 0
             rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_REVIEW, PHASE_REVIEW_FIX,
                                        prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
@@ -2052,14 +2066,14 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
             chapter_num=num, title=title or f"第{num}章",
             prose_excerpt=excerpt, project_header=project_header(proj),
-            chapter_header=chapter_header(proj, num))
+            chapter_header=_chap_header(ctx, proj, num))
         ctx.last_prompt = summary_prompt
         if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
             _session_seed(session, prose)
             turn_text = prompts.session_turn_text(
                 prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
                 chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
-                project_header=project_header(proj), chapter_header=chapter_header(proj, num))
+                project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
             ctx.last_prompt = turn_text
             chapter_summary = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
                                            phase=PHASE_CH_SUMMARY, stream=False
@@ -2081,7 +2095,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
                     old_summary=old_global or "（全书刚开始）",
                     chapter_num=num, chapter_summary=chapter_summary,
-                    chapter_header=chapter_header(proj, num),
+                    chapter_header=_chap_header(ctx, proj, num),
                     project_header=project_header(proj))
                 ctx.last_prompt = global_prompt
                 if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_G_SUMMARY):
@@ -2096,7 +2110,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
                         old_summary=_old_g,
                         chapter_num=num, chapter_summary=chapter_summary,
-                        chapter_header=chapter_header(proj, num), project_header=project_header(proj))
+                        chapter_header=_chap_header(ctx, proj, num), project_header=project_header(proj))
                     ctx.last_prompt = turn_text
                     new_global = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
                                               phase=PHASE_G_SUMMARY, stream=False)
@@ -2188,11 +2202,14 @@ def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str,
     template（调整四）：传 prompts.FINAL_REVIEW_COMPACT 走紧凑票协议，注入项相同。
     """
     wb_block, rg_block, _meta = _wb_rg_blocks(proj, cfg, num)
+    # corpus_mode（v14）：本函数无 ctx，直接从 cfg 读门控（corpus_head+head_rebuild）
+    _w = (cfg or {}).get("writing", {}) or {}
+    _cm = bool(_w.get("corpus_head", False)) and bool(_w.get("head_rebuild", False))
     # 上下文事实（核心设定/全局摘要/角色状态/伏笔/时间线/细纲）由双层前缀统一承载，
     # 此处只注入审校专属的激活条目/正则/题材专项/本地预检/正文
     return (template or prompts.FINAL_REVIEW_PROMPT).format(
         project_header=project_header(proj),
-        chapter_header=chapter_header(proj, num),
+        chapter_header=chapter_header(proj, num, corpus_mode=_cm),
         prose=prose[:6000],
         worldbook_block=wb_block,
         regex_block=rg_block,
@@ -2410,7 +2427,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     wb_block, rg_block, _wbmeta = _wb_rg_blocks(ctx.proj, ctx.cfg, num)
     kw = dict(
         project_header=project_header(ctx.proj),
-        chapter_header=chapter_header(ctx.proj, num),
+        chapter_header=_chap_header(ctx, ctx.proj, num),
         prose=prose,
         worldbook_block=wb_block,
         regex_block=rg_block,
@@ -2584,6 +2601,10 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         except Exception:
             pass
     else:
+        # 调整二（pace_boundaries["vote_replicas"]）：首票回复的缓存单元需要注册
+        # 窗口——副本票立即发车会把首票输出整体按 miss 重读（v12/v13 review miss
+        # 的主要成分）。缺省 0 不改变既有行为。
+        _pace_after_long_call(ctx, cfg_mod, session, boundary="vote_replicas")
         _collect(remaining - 1)
     if vote_saver:
         try:
@@ -2676,7 +2697,7 @@ def _author_review_entry(ctx, num: int, prose: str, *,
         t_fix = session.turn_count() if _session_usable(session) else 0
         fix_kwargs = dict(chapter_num=num, findings=chr(10).join(lines), prose=prose,
                           project_header=project_header(proj),
-                          chapter_header=chapter_header(proj, num))
+                          chapter_header=_chap_header(ctx, proj, num))
         rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_REVIEW, PHASE_REVIEW_FIX,
                                    prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
                                    label=f"人工审校修复 第{manual_rounds}轮")
@@ -3180,7 +3201,7 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
         or "（尚无写作上下文）",
         worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
         project_header=project_header(proj),
-        chapter_header=chapter_header(proj, num),
+        chapter_header=_chap_header(ctx, proj, num),
     )
     ctx.last_prompt = prompt
     if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
@@ -3203,7 +3224,7 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
                 old_context=TRACKING_SESSION_REF,
                 worldbook=TRACKING_SESSION_REF,
                 project_header=project_header(proj),
-                chapter_header=chapter_header(proj, num))
+                chapter_header=_chap_header(ctx, proj, num))
         else:
             turn_text = prompts.session_turn_text(prompts.TRACKING_UPDATE_PROMPT).format(
                 chapter_num=num,
@@ -3215,7 +3236,7 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
                 or "（尚无写作上下文）",
                 worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
                 project_header=project_header(proj),
-                chapter_header=chapter_header(proj, num))
+                chapter_header=_chap_header(ctx, proj, num))
         ctx.last_prompt = turn_text
         result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
                               phase=PHASE_TRACKING, stream=False)
@@ -3346,7 +3367,7 @@ def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
         worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
         roster=_roster(proj),
         project_header=project_header(proj),
-        chapter_header=chapter_header(proj, num),
+        chapter_header=_chap_header(ctx, proj, num),
     )
     if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
