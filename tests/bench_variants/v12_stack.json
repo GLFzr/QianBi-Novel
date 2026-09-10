@@ -1,0 +1,13 @@
+{
+  "_note": "V12 = V11 + 动作甲（corpus_head：卷语料库——卷首已存在的全部细纲 + 已锁章节原文以命中价常驻冻结头，滞后一卷语义）。v12 终验跑法：--seed-home v11_long13 --start 14（卷二，头携带卷一 13 章正文）——预注册判据（工作指南 v3 §14.4）：综合 ≥90%、¥/章 ≤0.15、13/13 完成、逐章 prose in 平坦、盲评 D2/D4 ≥ -0.5。",
+  "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+              "session_pace_seconds": 45, "tracking_delta": true, "review_in_system": true,
+              "enrich_tail": true, "summary_every": 2, "commit_raw": true,
+              "instruction_in_head": true, "audit_effort_low": true,
+              "review_compact": true, "deslop_pinned": true,
+              "corpus_head": true},
+  "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                   "canon_audit": {"in_session": true, "early_stop": true},
+                   "review": {"max_tokens": 900}},
+  "gates": {"review_confidence_vote": true}
+}

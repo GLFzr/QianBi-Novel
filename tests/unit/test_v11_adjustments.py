@@ -299,6 +299,51 @@ def test_stage_param_override_sets_and_restores():
     assert sp["review"]["max_tokens"] == 900
 
 
+# ==================== 调整七/动作甲：卷语料库（corpus_head） ====================
+
+def test_corpus_snapshot_assembles_outlines_and_prose(tmp_path):
+    from app.core.volume_session import build_corpus_snapshot, corpus_snapshot_path
+    proj = tmp_path / "cp"
+    (proj / "大纲").mkdir(parents=True)
+    (proj / "正文").mkdir()
+    (proj / "大纲" / "细纲_第001章.md").write_text("第1章细纲：开局", encoding="utf-8")
+    (proj / "大纲" / "细纲_第002章.md").write_text("第2章细纲：承接", encoding="utf-8")
+    (proj / "正文" / "第001章_开局.md").write_text("# 第1章 开局\n正文全文A", encoding="utf-8")
+    (proj / "大纲" / "大纲.md").write_text("卷纲不应入语料库", encoding="utf-8")
+    corpus = build_corpus_snapshot(str(proj), 2)
+    assert "细纲 · 第1章" in corpus and "第1章细纲：开局" in corpus
+    assert "第2章细纲：承接" in corpus
+    assert "正文全文A" in corpus and "### 第1章" in corpus, "正文按章号+全文收录"
+    assert "卷纲不应入语料库" not in corpus, "语料库只收细纲与正文，不收卷纲"
+    # 冻结：装配后新文件不影响既有快照（滞后一卷语义）
+    (proj / "正文" / "第002章_新章.md").write_text("# 第2章 新章\n卷内新写的", encoding="utf-8")
+    again = build_corpus_snapshot(str(proj), 2)
+    assert again == corpus and "卷内新写的" not in again
+    # 快照文件落盘且二次读取一致
+    assert corpus_snapshot_path(str(proj), 2).endswith("冻结语料快照_卷2.md")
+    with open(corpus_snapshot_path(str(proj), 2), encoding="utf-8") as f:
+        assert f.read() == corpus
+
+
+def test_corpus_head_flag_extends_head_and_off_is_noop(tmp_path):
+    proj = _mk_proj(tmp_path)
+    (tmp_path / "p" / "大纲" / "细纲_第001章.md").write_text("细纲快照体", encoding="utf-8")
+    kw = dict(review_in_system=True, review_tail=prompts.review_static_tail(),
+              instruction_in_head=True)
+    base = head_rebuild_system_text(proj, 1, **kw)
+    with_corpus = head_rebuild_system_text(proj, 1, corpus_head=True, **kw)
+    prefix = head_rebuild_system_text(proj, 1)   # 卷系统+快照（语料库之前的稳定前缀）
+    assert "本卷细纲快照" not in base
+    assert "本卷细纲快照" in with_corpus and "细纲快照体" in with_corpus
+    assert with_corpus.startswith(prefix)
+    assert with_corpus.index("本卷细纲快照") < with_corpus.index("设定清算指令")
+    # 语料库位于快照之后、指令库之前（指南 §5.1 排列：稳定语料在前，指令库其后）
+    again = head_rebuild_system_text(proj, 1, corpus_head=True, **kw)
+    assert again == with_corpus
+
+
+
+
 # ==================== 调整五：deslop 定点修复 ====================
 
 class _F:

@@ -1341,7 +1341,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     proj, _rvn(proj, num),
                     review_in_system=bool(_w_cfg.get("review_in_system", False)),
                     review_tail=prompts.review_static_tail(),
-                    instruction_in_head=bool(_w_cfg.get("instruction_in_head", False)))
+                    instruction_in_head=bool(_w_cfg.get("instruction_in_head", False)),
+                    corpus_head=bool(_w_cfg.get("corpus_head", False)))
                 session = VolumeSession(probe, system_text=_head,
                                         volume=_rvn(proj, num), proj=proj,
                                         persist=False,

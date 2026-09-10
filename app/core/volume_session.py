@@ -637,19 +637,30 @@ def build_head_snapshot(proj: str, volume: int) -> str:
 def head_rebuild_system_text(proj: str, volume: int, *,
                              review_in_system: bool = False,
                              review_tail: str = "",
-                             instruction_in_head: bool = False) -> str:
+                             instruction_in_head: bool = False,
+                             corpus_head: bool = False) -> str:
     """L4 冻结头 v2：卷系统（前缀+PROSE 指令库）+ 卷首冻结快照（设定/世界书/卷纲）
-    [+ 清算/追踪/去味静态指令库（调整一）][+ 审校静态尾段]。组装一次、卷内逐字节复用。
+    [+ 卷语料库（调整七/动作甲）][+ 清算/追踪/去味静态指令库（调整一）][+ 审校静态尾段]。
+    组装一次、卷内逐字节复用。
 
     instruction_in_head（writing.instruction_in_head，缺省关）：把清算任务/schema、
     追踪补丁协议、去味改写原则三段静态指令并入头（头 25k→~32k tok）——它们此前
     随每章轮次重发、在历史里逐章累积。指令段来自代码常量（卷内天然稳定），故
     不进快照文件、每次构建时追加；代码升级导致的头变化由既有 load 拒绝机制兜底。
+
+    corpus_head（writing.corpus_head，缺省关）：卷语料库——把「跨章历史」从逐章
+    追加的累积栈改为卷界冻结的只读语料（卷首已存在的全部细纲 + 已锁章节原文）。
+    同样的字节、同样的命中价，位置从「无限增长的尾」变为「固定大小的头」。
+    滞后一卷语义：卷 N 的语料 = 卷首时刻已存在的章节（卷 N-1 全文），卷内不增。
     """
     parts = [volume_system_text(proj)]
     snap = build_head_snapshot(proj, volume)
     if snap.strip():
         parts.append(snap)
+    if corpus_head:
+        corpus = build_corpus_snapshot(proj, volume)
+        if corpus.strip():
+            parts.append(corpus)
     if instruction_in_head:
         from .canon_audit import audit_instruction_head, audit_instruction_tail
         parts.append("## 设定清算指令（卷级冻结——清算轮只带材料，不重复本段）\n\n"
@@ -662,3 +673,68 @@ def head_rebuild_system_text(proj: str, volume: int, *,
     if review_in_system and review_tail.strip():
         parts.append(review_tail)
     return "\n\n".join(p for p in parts if p.strip())
+
+
+def corpus_snapshot_path(proj: str, volume: int) -> str:
+    return os.path.join(proj, "追踪", "冻结语料快照_卷%d.md" % int(volume))
+
+
+def build_corpus_snapshot(proj: str, volume: int) -> str:
+    """卷语料库快照（一次装配，逐字节复用）：卷首已存在的全部细纲 + 已锁章节原文。
+
+    「卷首已存在」是唯一准入条件——装配后即冻结，卷内新写章节一律不入
+    （滞后一卷语义；卷界才滚动）。卷 1 新书卷首无正文 → 语料库只有细纲。
+    """
+    path = corpus_snapshot_path(proj, volume)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    from .. import project as pj
+    parts = []
+
+    outlines = []
+    odir = os.path.join(proj, "大纲")
+    if os.path.isdir(odir):
+        for fn in sorted(os.listdir(odir)):
+            m = re.match(r"细纲_第(\d+)章\.md$", fn)
+            if not m:
+                continue
+            try:
+                with open(os.path.join(odir, fn), encoding="utf-8") as f:
+                    txt = f.read().strip()
+            except OSError:
+                continue
+            if txt:
+                outlines.append((int(m.group(1)), txt))
+    if outlines:
+        body = "\n\n".join("### 细纲 · 第%d章\n\n%s" % (n, t) for n, t in outlines)
+        parts.append("## 本卷细纲快照（卷首冻结——逐章开幕轮只带本章细纲的不在此重复）\n\n"
+                     + body)
+
+    chapters = []
+    try:
+        chapters = pj.list_chapters(proj)
+    except Exception:  # noqa: BLE001
+        chapters = []
+    prose_parts = []
+    for n, name, path_ch in chapters:
+        try:
+            txt = pj.read_file(path_ch).strip()
+        except Exception:  # noqa: BLE001
+            continue
+        if txt:
+            title = str(name or "").strip()
+            if title.lower().endswith(".md"):
+                title = title[:-3]
+            prose_parts.append("### 第%d章 %s\n\n%s" % (n, title, txt))
+    if prose_parts:
+        parts.append("## 已锁章节原文（卷首冻结——上一卷全文以命中价常驻，"
+                     "本章前情的权威基准；各章开头的「上一章结尾」仅为近场衔接摘要）\n\n"
+                     + "\n\n".join(prose_parts))
+
+    text = "\n\n".join(parts)
+    if text.strip():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+    return text
