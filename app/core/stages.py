@@ -1764,6 +1764,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # ---- 设定清算（方案 D1）：本章自创设定三分类对账（不阻断，产物落追踪/）----
     try:
         from .canon_audit import audit_chapter
+        # v10 audit 鲸鱼修复（深化计划 §8）：审校票的缓存单元注册需要写延迟窗——
+        # 13/13 章实测清算首笔在审校末票（hit 99%）后 2-5 秒只记到头部（-65~-81pp）。
+        # 复用 S5 节拍窗（session_pace_seconds），缺省 0 不改变既有行为。
+        _pace_after_long_call(ctx, cfg_mod, session)
         audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router, session=session)
         v = audit.get("violations") or []
         hard = [x for x in v if x.get("severity") == "硬伤"]
