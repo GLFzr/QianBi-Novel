@@ -30,6 +30,7 @@ import os
 import re
 
 from .chapter_session import ChapterSession
+from ..prompts import tracking_patch_static_head, deslop_static_rules
 
 # 开幕声明（本会话语义锚点）：卷栈跨章后 session_turn_text 的 {prose} 引用行
 # 写的是「最近一条完整的章正文消息」，开幕轮用它把「本章正文」显式指到本章首轮回复。
@@ -635,13 +636,29 @@ def build_head_snapshot(proj: str, volume: int) -> str:
 
 def head_rebuild_system_text(proj: str, volume: int, *,
                              review_in_system: bool = False,
-                             review_tail: str = "") -> str:
+                             review_tail: str = "",
+                             instruction_in_head: bool = False) -> str:
     """L4 冻结头 v2：卷系统（前缀+PROSE 指令库）+ 卷首冻结快照（设定/世界书/卷纲）
-    [+ 审校静态尾段]。组装一次、快照落盘，卷内逐字节复用。"""
+    [+ 清算/追踪/去味静态指令库（调整一）][+ 审校静态尾段]。组装一次、卷内逐字节复用。
+
+    instruction_in_head（writing.instruction_in_head，缺省关）：把清算任务/schema、
+    追踪补丁协议、去味改写原则三段静态指令并入头（头 25k→~32k tok）——它们此前
+    随每章轮次重发、在历史里逐章累积。指令段来自代码常量（卷内天然稳定），故
+    不进快照文件、每次构建时追加；代码升级导致的头变化由既有 load 拒绝机制兜底。
+    """
     parts = [volume_system_text(proj)]
     snap = build_head_snapshot(proj, volume)
     if snap.strip():
         parts.append(snap)
+    if instruction_in_head:
+        from .canon_audit import audit_instruction_head, audit_instruction_tail
+        parts.append("## 设定清算指令（卷级冻结——清算轮只带材料，不重复本段）\n\n"
+                     + audit_instruction_head() + "\n\n" + audit_instruction_tail())
+        parts.append("## 追踪补丁协议（卷级冻结——追踪轮只带材料，不重复本段）\n\n"
+                     + tracking_patch_static_head())
+        rules = deslop_static_rules()
+        if rules.strip():
+            parts.append("## 去味改写规则（卷级冻结——去味轮不重复本段）\n\n" + rules)
     if review_in_system and review_tail.strip():
         parts.append(review_tail)
     return "\n\n".join(p for p in parts if p.strip())
