@@ -1,0 +1,341 @@
+{
+ "variant": "v12_long13",
+ "calls": 149,
+ "input_tok": 15496594,
+ "hit_tok": 13794678,
+ "miss_tok": 1701916,
+ "blind_tok": 0,
+ "blind_pct": 0.0,
+ "hit_pct": 89.0,
+ "out_tok": 452400,
+ "reasoning_tok": 261681,
+ "cost_usd": 0.7696,
+ "cost_cny": 5.541,
+ "cost_usd_real": 0.7696,
+ "cost_cny_real": 5.541,
+ "retry_calls": 18,
+ "retry_spend_cny": 0.764,
+ "llm_seconds": 3058.6,
+ "wall_seconds": 3472.2,
+ "per_tier": {
+  "flash": {
+   "calls": 149,
+   "hit": 13794678,
+   "miss": 1701916,
+   "blind": 0,
+   "out": 452400,
+   "cost_usd": 0.7696,
+   "cost_usd_real": 0.7696
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "blind": 0,
+   "out": 0,
+   "cost_usd": 0.0,
+   "cost_usd_real": 0.0
+  }
+ },
+ "per_phase": {
+  "outline": {
+   "calls": 13,
+   "hit": 106112,
+   "miss": 100605,
+   "out": 109943,
+   "reasoning": 67317,
+   "lat": 627.41,
+   "tier_tok": {
+    "flash": {
+     "hit": 106112,
+     "miss": 100605,
+     "out": 109943
+    }
+   },
+   "cost_usd": 0.0954,
+   "hit_pct": 51.3,
+   "avg_lat": 48.3
+  },
+  "prose": {
+   "calls": 13,
+   "hit": 1220224,
+   "miss": 375656,
+   "out": 34805,
+   "reasoning": 16682,
+   "lat": 200.48999999999998,
+   "tier_tok": {
+    "flash": {
+     "hit": 1220224,
+     "miss": 375656,
+     "out": 34805
+    }
+   },
+   "cost_usd": 0.1142,
+   "hit_pct": 76.5,
+   "avg_lat": 15.4
+  },
+  "deslop": {
+   "calls": 11,
+   "hit": 1101312,
+   "miss": 205857,
+   "out": 15044,
+   "reasoning": 0,
+   "lat": 61.22,
+   "tier_tok": {
+    "flash": {
+     "hit": 1101312,
+     "miss": 205857,
+     "out": 15044
+    }
+   },
+   "cost_usd": 0.0629,
+   "hit_pct": 84.3,
+   "avg_lat": 5.6
+  },
+  "review": {
+   "calls": 40,
+   "hit": 4984822,
+   "miss": 257036,
+   "out": 15882,
+   "reasoning": 0,
+   "lat": 109.02999999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 4984822,
+     "miss": 257036,
+     "out": 15882
+    }
+   },
+   "cost_usd": 0.1019,
+   "hit_pct": 95.1,
+   "avg_lat": 2.7
+  },
+  "tracking": {
+   "calls": 14,
+   "hit": 1881344,
+   "miss": 76500,
+   "out": 67739,
+   "reasoning": 0,
+   "lat": 273.18,
+   "tier_tok": {
+    "flash": {
+     "hit": 1881344,
+     "miss": 76500,
+     "out": 67739
+    }
+   },
+   "cost_usd": 0.0747,
+   "hit_pct": 96.1,
+   "avg_lat": 19.5
+  },
+  "chapter_summary": {
+   "calls": 13,
+   "hit": 1831936,
+   "miss": 11730,
+   "out": 1023,
+   "reasoning": 0,
+   "lat": 20.16,
+   "tier_tok": {
+    "flash": {
+     "hit": 1831936,
+     "miss": 11730,
+     "out": 1023
+    }
+   },
+   "cost_usd": 0.0161,
+   "hit_pct": 99.4,
+   "avg_lat": 1.6
+  },
+  "canon_audit": {
+   "calls": 31,
+   "hit": 1692672,
+   "miss": 339737,
+   "out": 188201,
+   "reasoning": 174357,
+   "lat": 1671.49,
+   "tier_tok": {
+    "flash": {
+     "hit": 1692672,
+     "miss": 339737,
+     "out": 188201
+    }
+   },
+   "cost_usd": 0.2108,
+   "hit_pct": 83.3,
+   "avg_lat": 53.9
+  },
+  "trim": {
+   "calls": 2,
+   "hit": 92288,
+   "miss": 117766,
+   "out": 3741,
+   "reasoning": 675,
+   "lat": 18.09,
+   "tier_tok": {
+    "flash": {
+     "hit": 92288,
+     "miss": 117766,
+     "out": 3741
+    }
+   },
+   "cost_usd": 0.029,
+   "hit_pct": 43.9,
+   "avg_lat": 9.0
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 866048,
+   "miss": 1978,
+   "out": 8928,
+   "reasoning": 0,
+   "lat": 37.5,
+   "tier_tok": {
+    "flash": {
+     "hit": 866048,
+     "miss": 1978,
+     "out": 8928
+    }
+   },
+   "cost_usd": 0.0124,
+   "hit_pct": 99.8,
+   "avg_lat": 6.2
+  },
+  "enrich": {
+   "calls": 5,
+   "hit": 7168,
+   "miss": 54108,
+   "out": 2931,
+   "reasoning": 0,
+   "lat": 23.29,
+   "tier_tok": {
+    "flash": {
+     "hit": 7168,
+     "miss": 54108,
+     "out": 2931
+    }
+   },
+   "cost_usd": 0.0139,
+   "hit_pct": 11.7,
+   "avg_lat": 4.7
+  },
+  "review_fix": {
+   "calls": 1,
+   "hit": 10752,
+   "miss": 160943,
+   "out": 4163,
+   "reasoning": 2650,
+   "lat": 16.75,
+   "tier_tok": {
+    "flash": {
+     "hit": 10752,
+     "miss": 160943,
+     "out": 4163
+    }
+   },
+   "cost_usd": 0.0382,
+   "hit_pct": 6.3,
+   "avg_lat": 16.8
+  }
+ },
+ "chapters": [
+  {
+   "num": 17,
+   "title": "当场结清",
+   "words": 2074,
+   "review_blocking": 0
+  },
+  {
+   "num": 18,
+   "title": "蓝黑墨渍",
+   "words": 2044,
+   "review_blocking": 0
+  },
+  {
+   "num": 19,
+   "title": "盲区",
+   "words": 2084,
+   "review_blocking": 0
+  },
+  {
+   "num": 20,
+   "title": "烟纸背面",
+   "words": 2023,
+   "review_blocking": 0
+  },
+  {
+   "num": 21,
+   "title": "半笔",
+   "words": 2432,
+   "review_blocking": 0
+  },
+  {
+   "num": 22,
+   "title": "名单上的名字",
+   "words": 2300,
+   "review_blocking": 0
+  },
+  {
+   "num": 23,
+   "title": "定损人",
+   "words": 2428,
+   "review_blocking": 0
+  },
+  {
+   "num": 24,
+   "title": "看窗台",
+   "words": 2569,
+   "review_blocking": 0
+  },
+  {
+   "num": 25,
+   "title": "取表的人",
+   "words": 1884,
+   "review_blocking": 0
+  },
+  {
+   "num": 26,
+   "title": "夜档",
+   "words": 2083,
+   "review_blocking": 0
+  },
+  {
+   "num": 27,
+   "title": "后视镜里的绳结",
+   "words": 2333,
+   "review_blocking": 0
+  },
+  {
+   "num": 28,
+   "title": "别进来",
+   "words": 1910,
+   "review_blocking": 0
+  },
+  {
+   "num": 29,
+   "title": "叠字",
+   "words": 2001,
+   "review_blocking": 0
+  }
+ ],
+ "span_stats": {
+  "deslop": {
+   "pinned": 3
+  }
+ },
+ "session_events": {
+  "turn_cleaned": {
+   "n": 59,
+   "turns": 0,
+   "tok": 0,
+   "cost": 0.0
+  }
+ },
+ "vote_iso": {
+  "chapters": 29,
+  "pairs": 96,
+  "identical_bytes": 0,
+  "identical_levels": 60,
+  "iso_pct": 62.5,
+  "echo_votes": 0
+ }
+}

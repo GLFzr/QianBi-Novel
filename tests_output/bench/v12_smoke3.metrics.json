@@ -1,0 +1,263 @@
+{
+ "variant": "v12_smoke3",
+ "calls": 32,
+ "input_tok": 3185228,
+ "hit_tok": 2667264,
+ "miss_tok": 517964,
+ "blind_tok": 0,
+ "blind_pct": 0.0,
+ "hit_pct": 83.7,
+ "out_tok": 72420,
+ "reasoning_tok": 26359,
+ "cost_usd": 0.1804,
+ "cost_cny": 1.299,
+ "cost_usd_real": 0.1804,
+ "cost_cny_real": 1.299,
+ "retry_calls": 0,
+ "retry_spend_cny": 0.0,
+ "llm_seconds": 378.2,
+ "wall_seconds": 640.9,
+ "per_tier": {
+  "flash": {
+   "calls": 32,
+   "hit": 2667264,
+   "miss": 517964,
+   "blind": 0,
+   "out": 72420,
+   "cost_usd": 0.1804,
+   "cost_usd_real": 0.1804
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "blind": 0,
+   "out": 0,
+   "cost_usd": 0.0,
+   "cost_usd_real": 0.0
+  }
+ },
+ "per_phase": {
+  "outline": {
+   "calls": 3,
+   "hit": 17280,
+   "miss": 33683,
+   "out": 19117,
+   "reasoning": 10100,
+   "lat": 113.42000000000002,
+   "tier_tok": {
+    "flash": {
+     "hit": 17280,
+     "miss": 33683,
+     "out": 19117
+    }
+   },
+   "cost_usd": 0.0201,
+   "hit_pct": 33.9,
+   "avg_lat": 37.8
+  },
+  "prose": {
+   "calls": 3,
+   "hit": 194560,
+   "miss": 115233,
+   "out": 14723,
+   "reasoning": 10473,
+   "lat": 82.97999999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 194560,
+     "miss": 115233,
+     "out": 14723
+    }
+   },
+   "cost_usd": 0.0364,
+   "hit_pct": 62.8,
+   "avg_lat": 27.7
+  },
+  "enrich": {
+   "calls": 2,
+   "hit": 1792,
+   "miss": 23903,
+   "out": 1259,
+   "reasoning": 0,
+   "lat": 10.34,
+   "tier_tok": {
+    "flash": {
+     "hit": 1792,
+     "miss": 23903,
+     "out": 1259
+    }
+   },
+   "cost_usd": 0.0061,
+   "hit_pct": 7.0,
+   "avg_lat": 5.2
+  },
+  "deslop": {
+   "calls": 3,
+   "hit": 194560,
+   "miss": 128132,
+   "out": 5400,
+   "reasoning": 0,
+   "lat": 22.38,
+   "tier_tok": {
+    "flash": {
+     "hit": 194560,
+     "miss": 128132,
+     "out": 5400
+    }
+   },
+   "cost_usd": 0.0331,
+   "hit_pct": 60.3,
+   "avg_lat": 7.5
+  },
+  "review": {
+   "calls": 9,
+   "hit": 1000448,
+   "miss": 10333,
+   "out": 3614,
+   "reasoning": 0,
+   "lat": 23.63,
+   "tier_tok": {
+    "flash": {
+     "hit": 1000448,
+     "miss": 10333,
+     "out": 3614
+    }
+   },
+   "cost_usd": 0.0117,
+   "hit_pct": 99.0,
+   "avg_lat": 2.6
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 337920,
+   "miss": 18322,
+   "out": 14178,
+   "reasoning": 0,
+   "lat": 55.0,
+   "tier_tok": {
+    "flash": {
+     "hit": 337920,
+     "miss": 18322,
+     "out": 14178
+    }
+   },
+   "cost_usd": 0.0158,
+   "hit_pct": 94.9,
+   "avg_lat": 18.3
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 364416,
+   "miss": 6409,
+   "out": 219,
+   "reasoning": 0,
+   "lat": 3.71,
+   "tier_tok": {
+    "flash": {
+     "hit": 364416,
+     "miss": 6409,
+     "out": 219
+    }
+   },
+   "cost_usd": 0.0041,
+   "hit_pct": 98.3,
+   "avg_lat": 1.2
+  },
+  "global_summary": {
+   "calls": 2,
+   "hit": 246656,
+   "miss": 545,
+   "out": 3860,
+   "reasoning": 0,
+   "lat": 16.77,
+   "tier_tok": {
+    "flash": {
+     "hit": 246656,
+     "miss": 545,
+     "out": 3860
+    }
+   },
+   "cost_usd": 0.0044,
+   "hit_pct": 99.8,
+   "avg_lat": 8.4
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 309632,
+   "miss": 75680,
+   "out": 7897,
+   "reasoning": 5253,
+   "lat": 39.88,
+   "tier_tok": {
+    "flash": {
+     "hit": 309632,
+     "miss": 75680,
+     "out": 7897
+    }
+   },
+   "cost_usd": 0.024,
+   "hit_pct": 80.4,
+   "avg_lat": 13.3
+  },
+  "trim": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 105724,
+   "out": 2153,
+   "reasoning": 533,
+   "lat": 10.09,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 105724,
+     "out": 2153
+    }
+   },
+   "cost_usd": 0.0247,
+   "hit_pct": 0.0,
+   "avg_lat": 10.1
+  }
+ },
+ "chapters": [
+  {
+   "num": 14,
+   "title": "0316",
+   "words": 2376,
+   "review_blocking": 0
+  },
+  {
+   "num": 15,
+   "title": "代驾找老赵",
+   "words": 2736,
+   "review_blocking": 0
+  },
+  {
+   "num": 16,
+   "title": "不用笔",
+   "words": 2205,
+   "review_blocking": 0
+  }
+ ],
+ "span_stats": {
+  "deslop": {
+   "pinned": 1
+  }
+ },
+ "session_events": {
+  "turn_cleaned": {
+   "n": 33,
+   "turns": 0,
+   "tok": 0,
+   "cost": 0.0
+  }
+ },
+ "vote_iso": {
+  "chapters": 16,
+  "pairs": 54,
+  "identical_bytes": 0,
+  "identical_levels": 33,
+  "iso_pct": 61.1,
+  "echo_votes": 0
+ }
+}
