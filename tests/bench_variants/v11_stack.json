@@ -1,0 +1,12 @@
+{
+  "_note": "V11 = V9 头 v2 + 调整一（instruction_in_head：清算/追踪/去味静态指令库并入冻结头，头 25k→~32k）+ 调整三（audit_effort_low：清算预扫 effort 降档）+ 调整四（review_compact：审校票紧凑 JSON + max_tokens 900，解析失败回退长文 1400 重投）+ 调整五（deslop_pinned：去味命中段 ≤2 处走定点修复）。质量闸门（预注册，工作指南 v3 §14）：R-v11b 综合 ≥85%、¥/章 ≤0.20；盲评 D2/D4 ≥ -0.5。",
+  "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+              "session_pace_seconds": 45, "tracking_delta": true, "review_in_system": true,
+              "enrich_tail": true, "summary_every": 2, "commit_raw": true,
+              "instruction_in_head": true, "audit_effort_low": true,
+              "review_compact": true, "deslop_pinned": true},
+  "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                   "canon_audit": {"in_session": true, "early_stop": true},
+                   "review": {"max_tokens": 900}},
+  "gates": {"review_confidence_vote": true}
+}
