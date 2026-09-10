@@ -1,0 +1,341 @@
+{
+ "variant": "v11_long13",
+ "calls": 121,
+ "input_tok": 4162040,
+ "hit_tok": 3283200,
+ "miss_tok": 878840,
+ "blind_tok": 0,
+ "blind_pct": 0.0,
+ "hit_pct": 78.9,
+ "out_tok": 251766,
+ "reasoning_tok": 114589,
+ "cost_usd": 0.3825,
+ "cost_cny": 2.754,
+ "cost_usd_real": 0.3825,
+ "cost_cny_real": 2.754,
+ "retry_calls": 0,
+ "retry_spend_cny": 0.0,
+ "llm_seconds": 1303.3,
+ "wall_seconds": 2446.0,
+ "per_tier": {
+  "flash": {
+   "calls": 121,
+   "hit": 3283200,
+   "miss": 878840,
+   "blind": 0,
+   "out": 251766,
+   "cost_usd": 0.3825,
+   "cost_usd_real": 0.3825
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "blind": 0,
+   "out": 0,
+   "cost_usd": 0.0,
+   "cost_usd_real": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 13,
+   "hit": 224256,
+   "miss": 137504,
+   "out": 62920,
+   "reasoning": 45058,
+   "lat": 337.09999999999997,
+   "tier_tok": {
+    "flash": {
+     "hit": 224256,
+     "miss": 137504,
+     "out": 62920
+    }
+   },
+   "cost_usd": 0.0733,
+   "hit_pct": 62.0,
+   "avg_lat": 25.9
+  },
+  "review": {
+   "calls": 41,
+   "hit": 1231360,
+   "miss": 177273,
+   "out": 16481,
+   "reasoning": 0,
+   "lat": 98.30999999999999,
+   "tier_tok": {
+    "flash": {
+     "hit": 1231360,
+     "miss": 177273,
+     "out": 16481
+    }
+   },
+   "cost_usd": 0.0585,
+   "hit_pct": 87.4,
+   "avg_lat": 2.4
+  },
+  "tracking": {
+   "calls": 13,
+   "hit": 456192,
+   "miss": 57045,
+   "out": 40776,
+   "reasoning": 0,
+   "lat": 173.71000000000004,
+   "tier_tok": {
+    "flash": {
+     "hit": 456192,
+     "miss": 57045,
+     "out": 40776
+    }
+   },
+   "cost_usd": 0.0427,
+   "hit_pct": 88.9,
+   "avg_lat": 13.4
+  },
+  "chapter_summary": {
+   "calls": 13,
+   "hit": 548608,
+   "miss": 7157,
+   "out": 971,
+   "reasoning": 0,
+   "lat": 17.919999999999998,
+   "tier_tok": {
+    "flash": {
+     "hit": 548608,
+     "miss": 7157,
+     "out": 971
+    }
+   },
+   "cost_usd": 0.0061,
+   "hit_pct": 98.7,
+   "avg_lat": 1.4
+  },
+  "canon_audit": {
+   "calls": 14,
+   "hit": 360832,
+   "miss": 253211,
+   "out": 47537,
+   "reasoning": 35146,
+   "lat": 234.89000000000001,
+   "tier_tok": {
+    "flash": {
+     "hit": 360832,
+     "miss": 253211,
+     "out": 47537
+    }
+   },
+   "cost_usd": 0.0896,
+   "hit_pct": 58.8,
+   "avg_lat": 16.8
+  },
+  "enrich": {
+   "calls": 6,
+   "hit": 8960,
+   "miss": 62962,
+   "out": 4564,
+   "reasoning": 0,
+   "lat": 36.1,
+   "tier_tok": {
+    "flash": {
+     "hit": 8960,
+     "miss": 62962,
+     "out": 4564
+    }
+   },
+   "cost_usd": 0.0169,
+   "hit_pct": 12.5,
+   "avg_lat": 6.0
+  },
+  "deslop": {
+   "calls": 4,
+   "hit": 74240,
+   "miss": 50720,
+   "out": 5675,
+   "reasoning": 0,
+   "lat": 22.07,
+   "tier_tok": {
+    "flash": {
+     "hit": 74240,
+     "miss": 50720,
+     "out": 5675
+    }
+   },
+   "cost_usd": 0.0154,
+   "hit_pct": 59.4,
+   "avg_lat": 5.5
+  },
+  "global_summary": {
+   "calls": 6,
+   "hit": 258048,
+   "miss": 2115,
+   "out": 7587,
+   "reasoning": 0,
+   "lat": 33.94,
+   "tier_tok": {
+    "flash": {
+     "hit": 258048,
+     "miss": 2115,
+     "out": 7587
+    }
+   },
+   "cost_usd": 0.0073,
+   "hit_pct": 99.2,
+   "avg_lat": 5.7
+  },
+  "trim": {
+   "calls": 2,
+   "hit": 18688,
+   "miss": 42206,
+   "out": 5176,
+   "reasoning": 2019,
+   "lat": 18.93,
+   "tier_tok": {
+    "flash": {
+     "hit": 18688,
+     "miss": 42206,
+     "out": 5176
+    }
+   },
+   "cost_usd": 0.0128,
+   "hit_pct": 30.7,
+   "avg_lat": 9.5
+  },
+  "outline": {
+   "calls": 7,
+   "hit": 51712,
+   "miss": 62788,
+   "out": 54773,
+   "reasoning": 30306,
+   "lat": 309.9,
+   "tier_tok": {
+    "flash": {
+     "hit": 51712,
+     "miss": 62788,
+     "out": 54773
+    }
+   },
+   "cost_usd": 0.0503,
+   "hit_pct": 45.2,
+   "avg_lat": 44.3
+  },
+  "review_fix": {
+   "calls": 2,
+   "hit": 50304,
+   "miss": 25859,
+   "out": 5306,
+   "reasoning": 2060,
+   "lat": 20.44,
+   "tier_tok": {
+    "flash": {
+     "hit": 50304,
+     "miss": 25859,
+     "out": 5306
+    }
+   },
+   "cost_usd": 0.0095,
+   "hit_pct": 66.0,
+   "avg_lat": 10.2
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "种子书",
+   "words": 1981,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "汤渍",
+   "words": 2452,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 2124,
+   "review_blocking": 0
+  },
+  {
+   "num": 4,
+   "title": "踩点",
+   "words": 1881,
+   "review_blocking": 0
+  },
+  {
+   "num": 5,
+   "title": "替人挡",
+   "words": 2132,
+   "review_blocking": 0
+  },
+  {
+   "num": 6,
+   "title": "空痕",
+   "words": 2077,
+   "review_blocking": 0
+  },
+  {
+   "num": 7,
+   "title": "第二人",
+   "words": 2662,
+   "review_blocking": 0
+  },
+  {
+   "num": 8,
+   "title": "血偿",
+   "words": 2699,
+   "review_blocking": 0
+  },
+  {
+   "num": 9,
+   "title": "三十七条命",
+   "words": 2141,
+   "review_blocking": 0
+  },
+  {
+   "num": 10,
+   "title": "第三十八页",
+   "words": 2231,
+   "review_blocking": 0
+  },
+  {
+   "num": 11,
+   "title": "电梯门合拢",
+   "words": 3113,
+   "review_blocking": 0
+  },
+  {
+   "num": 12,
+   "title": "撕页",
+   "words": 1825,
+   "review_blocking": 0
+  },
+  {
+   "num": 13,
+   "title": "账期已满",
+   "words": 2699,
+   "review_blocking": 0
+  }
+ ],
+ "span_stats": {
+  "deslop": {
+   "pinned": 1
+  }
+ },
+ "session_events": {
+  "turn_cleaned": {
+   "n": 27,
+   "turns": 0,
+   "tok": 0,
+   "cost": 0.0
+  }
+ },
+ "vote_iso": {
+  "chapters": 13,
+  "pairs": 45,
+  "identical_bytes": 0,
+  "identical_levels": 26,
+  "iso_pct": 57.8,
+  "echo_votes": 0
+ }
+}

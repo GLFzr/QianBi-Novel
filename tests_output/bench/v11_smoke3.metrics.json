@@ -1,0 +1,227 @@
+{
+ "variant": "v11_smoke3",
+ "calls": 25,
+ "input_tok": 748104,
+ "hit_tok": 608252,
+ "miss_tok": 139852,
+ "blind_tok": 0,
+ "blind_pct": 0.0,
+ "hit_pct": 81.3,
+ "out_tok": 34265,
+ "reasoning_tok": 15915,
+ "cost_usd": 0.0576,
+ "cost_cny": 0.415,
+ "cost_usd_real": 0.0576,
+ "cost_cny_real": 0.415,
+ "retry_calls": 0,
+ "retry_spend_cny": 0.0,
+ "llm_seconds": 180.9,
+ "wall_seconds": 444.5,
+ "per_tier": {
+  "flash": {
+   "calls": 25,
+   "hit": 608252,
+   "miss": 139852,
+   "blind": 0,
+   "out": 34265,
+   "cost_usd": 0.0576,
+   "cost_usd_real": 0.0576
+  },
+  "pro": {
+   "calls": 0,
+   "hit": 0,
+   "miss": 0,
+   "blind": 0,
+   "out": 0,
+   "cost_usd": 0.0,
+   "cost_usd_real": 0.0
+  }
+ },
+ "per_phase": {
+  "prose": {
+   "calls": 3,
+   "hit": 37376,
+   "miss": 36054,
+   "out": 14340,
+   "reasoning": 10261,
+   "lat": 77.92,
+   "tier_tok": {
+    "flash": {
+     "hit": 37376,
+     "miss": 36054,
+     "out": 14340
+    }
+   },
+   "cost_usd": 0.0177,
+   "hit_pct": 50.9,
+   "avg_lat": 26.0
+  },
+  "review": {
+   "calls": 9,
+   "hit": 235132,
+   "miss": 31193,
+   "out": 3948,
+   "reasoning": 0,
+   "lat": 22.53,
+   "tier_tok": {
+    "flash": {
+     "hit": 235132,
+     "miss": 31193,
+     "out": 3948
+    }
+   },
+   "cost_usd": 0.0111,
+   "hit_pct": 88.3,
+   "avg_lat": 2.5
+  },
+  "tracking": {
+   "calls": 3,
+   "hit": 89600,
+   "miss": 6473,
+   "out": 5051,
+   "reasoning": 0,
+   "lat": 21.89,
+   "tier_tok": {
+    "flash": {
+     "hit": 89600,
+     "miss": 6473,
+     "out": 5051
+    }
+   },
+   "cost_usd": 0.0054,
+   "hit_pct": 93.3,
+   "avg_lat": 7.3
+  },
+  "chapter_summary": {
+   "calls": 3,
+   "hit": 100096,
+   "miss": 1434,
+   "out": 244,
+   "reasoning": 0,
+   "lat": 3.99,
+   "tier_tok": {
+    "flash": {
+     "hit": 100096,
+     "miss": 1434,
+     "out": 244
+    }
+   },
+   "cost_usd": 0.0012,
+   "hit_pct": 98.6,
+   "avg_lat": 1.3
+  },
+  "canon_audit": {
+   "calls": 3,
+   "hit": 73216,
+   "miss": 37234,
+   "out": 8158,
+   "reasoning": 5654,
+   "lat": 40.4,
+   "tier_tok": {
+    "flash": {
+     "hit": 73216,
+     "miss": 37234,
+     "out": 8158
+    }
+   },
+   "cost_usd": 0.0141,
+   "hit_pct": 66.3,
+   "avg_lat": 13.5
+  },
+  "enrich": {
+   "calls": 1,
+   "hit": 0,
+   "miss": 7348,
+   "out": 374,
+   "reasoning": 0,
+   "lat": 3.3,
+   "tier_tok": {
+    "flash": {
+     "hit": 0,
+     "miss": 7348,
+     "out": 374
+    }
+   },
+   "cost_usd": 0.0019,
+   "hit_pct": 0.0,
+   "avg_lat": 3.3
+  },
+  "deslop": {
+   "calls": 2,
+   "hit": 37120,
+   "miss": 19852,
+   "out": 1668,
+   "reasoning": 0,
+   "lat": 7.74,
+   "tier_tok": {
+    "flash": {
+     "hit": 37120,
+     "miss": 19852,
+     "out": 1668
+    }
+   },
+   "cost_usd": 0.0057,
+   "hit_pct": 65.2,
+   "avg_lat": 3.9
+  },
+  "global_summary": {
+   "calls": 1,
+   "hit": 35712,
+   "miss": 264,
+   "out": 482,
+   "reasoning": 0,
+   "lat": 3.12,
+   "tier_tok": {
+    "flash": {
+     "hit": 35712,
+     "miss": 264,
+     "out": 482
+    }
+   },
+   "cost_usd": 0.0006,
+   "hit_pct": 99.3,
+   "avg_lat": 3.1
+  }
+ },
+ "chapters": [
+  {
+   "num": 1,
+   "title": "案：0317",
+   "words": 1810,
+   "review_blocking": 0
+  },
+  {
+   "num": 2,
+   "title": "半句话",
+   "words": 2262,
+   "review_blocking": 0
+  },
+  {
+   "num": 3,
+   "title": "水渍在延伸",
+   "words": 1926,
+   "review_blocking": 0
+  }
+ ],
+ "span_stats": {
+  "deslop": {
+   "pinned": 1
+  }
+ },
+ "session_events": {
+  "turn_cleaned": {
+   "n": 6,
+   "turns": 0,
+   "tok": 0,
+   "cost": 0.0
+  }
+ },
+ "vote_iso": {
+  "chapters": 3,
+  "pairs": 9,
+  "identical_bytes": 0,
+  "identical_levels": 2,
+  "iso_pct": 22.2,
+  "echo_votes": 0
+ }
+}
