@@ -1106,11 +1106,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         try:
             probe = ctx.router.client(cfg_mod.SLOT_HELPER)
             if callable(getattr(probe, "chat_turn", None)):
-                from .volume_session import VolumeSession, volume_system_text
-                from .volume_session import resolve_volume_number as _rvn
-                _head = volume_system_text(proj)
-                if bool(_w_cfg.get("review_in_system", False)):
-                    _head += "\n\n" + prompts.review_static_tail()
+                from .volume_session import (VolumeSession, volume_system_text,
+                                             head_rebuild_system_text,
+                                             resolve_volume_number as _rvn)
+                # 头 v2（深化计划 §1-L4）：卷首冻结快照（设定底册/世界书/卷纲）并入
+                # 稳定头——头越大，综合命中率越高（每章 ~9 次调用全部命中头）。
+                _head = head_rebuild_system_text(
+                    proj, _rvn(proj, num),
+                    review_in_system=bool(_w_cfg.get("review_in_system", False)),
+                    review_tail=prompts.review_static_tail())
                 session = VolumeSession(probe, system_text=_head,
                                         volume=_rvn(proj, num), proj=proj,
                                         persist=False,

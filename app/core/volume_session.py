@@ -594,3 +594,54 @@ def new_volume_session(client, system_text: str, *, proj: str, num: int,
     return VolumeSession(client, system_text,
                          volume=resolve_volume_number(proj, num), proj=proj,
                          enabled=enabled)
+
+
+# ==================== L4 头 v2：卷级冻结快照（深化计划 §1-L4） ====================
+# 目标：稳定头从 ~8.9k tok 扩到 ~25k tok（头越大，综合命中率越高——每章 ~9 次调用
+# 全部命中头，新料只占尾）。关键纪律：**头字节卷内必须逐字节稳定**——任何成分中途
+# 变化都会从变化点起作废全部缓存。因此世界书/设定用「卷首快照」而不是活文件，
+# 陈旧性由每章开幕轮的追踪现状（V2.1 sidecar 派生视图）补偿。
+
+def head_snapshot_path(proj: str, volume: int) -> str:
+    return os.path.join(proj, "追踪", "冻结头快照_卷%d.md" % int(volume))
+
+
+def build_head_snapshot(proj: str, volume: int) -> str:
+    """卷首冻结快照（一次装配，之后逐字节复用）：设定底册 + 世界书 + 卷纲。
+    快照文件存在即直接返回（卷内稳定纪律）；不存在才装配并落盘。"""
+    path = head_snapshot_path(proj, volume)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    from .. import project as pj
+    parts = []
+    for rel in ("设定/题材定位.md", "设定/世界书.md", "大纲/大纲.md"):
+        try:
+            with open(os.path.join(proj, rel), encoding="utf-8") as f:
+                txt = f.read().strip()
+        except OSError:
+            continue
+        if txt:
+            title = {"设定/题材定位.md": "## 设定底册（卷首冻结）",
+                     "设定/世界书.md": "## 世界书（卷首冻结——增量见各章追踪）",
+                     "大纲/大纲.md": "## 卷纲（卷首冻结）"}.get(rel, "## " + rel)
+            parts.append(title + "\n\n" + txt)
+    text = "\n\n".join(parts)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    return text
+
+
+def head_rebuild_system_text(proj: str, volume: int, *,
+                             review_in_system: bool = False,
+                             review_tail: str = "") -> str:
+    """L4 冻结头 v2：卷系统（前缀+PROSE 指令库）+ 卷首冻结快照（设定/世界书/卷纲）
+    [+ 审校静态尾段]。组装一次、快照落盘，卷内逐字节复用。"""
+    parts = [volume_system_text(proj)]
+    snap = build_head_snapshot(proj, volume)
+    if snap.strip():
+        parts.append(snap)
+    if review_in_system and review_tail.strip():
+        parts.append(review_tail)
+    return "\n\n".join(p for p in parts if p.strip())

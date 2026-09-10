@@ -1,0 +1,9 @@
+{
+ "_note": "V9 = V8 头 v2（25k 冻结快照头：设定底册/世界书/卷纲入头，卷内逐字节稳定）+ 输出侧控制（prose reasoning_effort=low + think_budget 软预算——deepseek-flash 思考量 66% 占输出的治理）。质量闸门：effort 降档须盲评 D2/D4 确认后才可转正（预注册）。",
+ "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+             "session_pace_seconds": 45, "tracking_delta": true, "review_in_system": true,
+             "enrich_tail": true, "summary_every": 2, "commit_raw": true},
+ "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                  "canon_audit": {"in_session": true, "early_stop": true}},
+ "gates": {"review_confidence_vote": true}
+}
