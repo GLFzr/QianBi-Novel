@@ -18,11 +18,11 @@ def _c(cid):
 
 
 FULL = [_c("cap-flash"), _c("ocgo-omen"), _c("bailian-flash"),
-        _c("ds-v41-flash"), _c("tr-dsv4f")]
+        _c("ds-official-flash"), _c("tr-dsv4f")]
 
 
 def test_priority_chain_constant_order():
-    assert TEST_CONN_PRIORITY == ["ocgo-omen", "bailian-flash", "ds-v41-flash", "tr-dsv4f"]
+    assert TEST_CONN_PRIORITY == ["ocgo-omen", "bailian-flash", "ds-official-flash", "tr-dsv4f"]
 
 
 def test_picks_omen_first_when_all_present():
@@ -33,13 +33,13 @@ def test_picks_omen_first_when_all_present():
 
 def test_falls_to_bailian_when_omen_missing():
     conn, _ = _pick_flash_conn([_c("cap-flash"), _c("bailian-flash"),
-                                _c("ds-v41-flash"), _c("tr-dsv4f")])
+                                _c("ds-official-flash"), _c("tr-dsv4f")])
     assert conn["id"] == "bailian-flash"
 
 
 def test_falls_to_ds_v41_when_omen_and_bailian_missing():
-    conn, _ = _pick_flash_conn([_c("cap-flash"), _c("ds-v41-flash"), _c("tr-dsv4f")])
-    assert conn["id"] == "ds-v41-flash"
+    conn, _ = _pick_flash_conn([_c("cap-flash"), _c("ds-official-flash"), _c("tr-dsv4f")])
+    assert conn["id"] == "ds-official-flash"
 
 
 def test_falls_to_tr_when_chain_above_missing():
@@ -67,6 +67,6 @@ def test_pin_missing_raises_with_available_list():
 
 def test_conn_without_key_is_skipped():
     nokey = dict(_c("ocgo-omen"), api_key="")
-    rest = [_c("cap-flash"), _c("bailian-flash"), _c("ds-v41-flash")]
+    rest = [_c("cap-flash"), _c("bailian-flash"), _c("ds-official-flash")]
     conn, _ = _pick_flash_conn([nokey] + rest)
     assert conn["id"] == "bailian-flash"   # 无 Key 的首选连接跳过，落第二条

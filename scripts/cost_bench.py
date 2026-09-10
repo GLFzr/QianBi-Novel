@@ -50,7 +50,8 @@ logging.basicConfig(level=logging.INFO,
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 # W-5：盲区 token 口径三工具同源（metrics / chapter_curve / cost_ledger）
-from app.usage import blind_spread, cache_caliber  # noqa: E402
+# ⚠️ 此处禁止模块级 import app.usage：会在 USERPROFILE 重定向前把
+# 真机 usage 路径焊进模块常量（2026-09-10 V8 冒烟事故）。用函数内延迟导入。
 
 BENCH = os.path.join(ROOT, "tests_output", "bench")
 REAL_HOME = os.path.expanduser("~")   # 模块加载时记下真实家目录（后续会被重定向）
@@ -85,10 +86,10 @@ def _mark(msg):
     print("[%s] %s" % (time.strftime("%H:%M:%S"), msg), flush=True)
 
 
-# 测试渠道优先级（用户裁决 2026-09-09）：omen → 百炼 → DS 官方 v4.1-flash（0910 期限）；
+# 测试渠道优先级（用户裁决 2026-09-10）：omen → 百炼 → DS 官方 deepseek-flash；
 # TR 余额耗尽（402）殿后。
 # 渠道 = 缓存域（N2）：切换会使 hit% 断裂，只在整卷边界切，且日志/晨报必须标注切换点。
-TEST_CONN_PRIORITY = ["ocgo-omen", "bailian-flash", "ds-v41-flash", "tr-dsv4f"]
+TEST_CONN_PRIORITY = ["ocgo-omen", "bailian-flash", "ds-official-flash", "tr-dsv4f"]
 
 
 def _pick_flash_conn(conns: list, prefer_id: str = ""):
@@ -554,6 +555,7 @@ def _agg_vote_iso(path: str) -> dict:
 
 
 def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
+    from app.usage import blind_spread, cache_caliber  # 延迟导入：见模块级注释
     p = os.path.join(home, ".qianbi_novel", "usage", "usage.jsonl")
     rows = []
     if os.path.isfile(p):

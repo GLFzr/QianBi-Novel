@@ -1,0 +1,8 @@
+{
+ "_note": "V8 输入结构组合（深化计划 v2）：V7 全栈 + L4 head_rebuild（每章重建：system=冻结稳定头，跨章历史不入栈，E0 判据存活）+ L3 commit_raw（清洗改字节时固化原始字节，缓存对齐；启停以 session_events.turn_cleaned.n 定）。对照 v7_long13（每章 ¥0.289）与 v_full20 前段。",
+ "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+             "session_pace_seconds": 45, "tracking_delta": true, "review_in_system": true,
+             "enrich_tail": true, "summary_every": 2, "commit_raw": true},
+ "stage_params": {"canon_audit": {"in_session": true, "early_stop": true}},
+ "gates": {"review_confidence_vote": true}
+}
