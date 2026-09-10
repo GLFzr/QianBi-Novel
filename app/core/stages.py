@@ -11,9 +11,11 @@ ctx 约定属性：
   checkpoint(): 暂停/停止检查点（在每次 LLM 调用前后调用）
 """
 import hashlib
+import json
 import logging
 import os
 import re
+from contextlib import contextmanager as _contextmanager
 
 from .. import config as cfg_mod
 from .. import project, prompts, deslop, mustscan, wb
@@ -437,6 +439,36 @@ def _phase_param(ctx, phase: str, key: str, default=None):
     return (sp.get(phase) or {}).get(key, default)
 
 
+_MISSING = object()
+
+
+@_contextmanager
+def _stage_param_override(ctx, phase: str, **kv):
+    """临时覆盖 router.stage_params[phase] 的若干键（退出恢复原值）。
+
+    用途：调整四的紧凑票回退重投（max_tokens 1400）。router 的 stage_params 是
+    与全部客户端共享的同一 dict——原位改键客户端立即看到；仅在单线程窗口内使用
+    （副本票并发开始前），退出时逐键恢复。"""
+    sp = getattr(getattr(ctx, "router", None), "stage_params", None)
+    if not isinstance(sp, dict) or not kv:
+        yield
+        return
+    layer = dict(sp.get(phase) or {})
+    saved = {k: layer.get(k, _MISSING) for k in kv}
+    layer.update(kv)
+    sp[phase] = layer
+    try:
+        yield
+    finally:
+        restored = dict(sp.get(phase) or {})
+        for k, v in saved.items():
+            if v is _MISSING:
+                restored.pop(k, None)
+            else:
+                restored[k] = v
+        sp[phase] = restored
+
+
 def _pace_after_long_call(ctx, cfg_mod, session, default_seconds: int = 0):
     """S5：长生成后的注册窗口节拍——给服务端缓存单元注册留时间。
 
@@ -456,6 +488,69 @@ def _pace_after_long_call(ctx, cfg_mod, session, default_seconds: int = 0):
         if bool(getattr(ctx, "stopped", False)):
             return
         _time.sleep(0.5)
+
+
+def _merge_audit_effort_low(stage_params) -> bool:
+    """调整三（writing.audit_effort_low）：canon_audit 层原位合并 reasoning_effort=low。
+
+    客户端与 router 共享同一 stage_params dict——原位改键当章即生效；pro 终审
+    自建显式档位（canon_audit_review）不受影响。已 low 则幂等返回 False；
+    thinking 未显式配置时补 enabled（effort 仅思考模式生效，W-7）。"""
+    if not isinstance(stage_params, dict):
+        return False
+    if (stage_params.get("canon_audit") or {}).get("reasoning_effort") == "low":
+        return False
+    layer = dict(stage_params.get("canon_audit") or {})
+    layer.setdefault("thinking", "enabled")
+    layer["reasoning_effort"] = "low"
+    stage_params["canon_audit"] = layer
+    return True
+
+
+def _apply_volume_effort(ctx, proj: str, num: int) -> None:
+    """调整三：卷内 reasoning_effort 统一（writing.volume_effort，缺省空=关闭）。
+
+    - 设了档位 → 写入三个会话槽位客户端的实例 effort（最弱层：显式实参/预设
+      stage_params 仍可按相位覆盖——机械相位的显式降档不受影响）；
+    - 档位与卷号钉进 pipeline_state：同卷内改档 → 拒绝并沿用钉住值（Think Max
+      的 system 前端注入会打死冻结头，卷界才允许切换）；
+    - 关闭（空串）时零动作——请求体与改造前逐字节一致。
+    """
+    try:
+        effort = str(((ctx.cfg or {}).get("writing", {}) or {})
+                     .get("volume_effort", "") or "").strip().lower()
+    except AttributeError:
+        effort = ""
+    if effort not in ("low", "high", "max"):
+        if effort:
+            ctx.log("warn", f"volume_effort={effort!r} 非法（仅 low/high/max），忽略")
+        return
+    volume = 0
+    try:
+        from .volume_session import resolve_volume_number
+        volume = resolve_volume_number(proj, num)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        state = st.load_state(proj)
+        pinned = str(state.get("volume_effort", "") or "")
+        pinned_vol = int(state.get("volume_effort_vol", 0) or 0)
+        if pinned and pinned_vol == volume and pinned != effort:
+            ctx.log("warn", f"卷 {volume} effort 已钉住 {pinned}，拒绝中途改为 {effort}"
+                            f"（卷内统一纪律，卷界才可切换）")
+            effort = pinned
+        for slot in (cfg_mod.SLOT_WRITING, cfg_mod.SLOT_REVIEW, cfg_mod.SLOT_HELPER):
+            try:
+                ctx.router.client(slot).reasoning_effort = effort
+            except Exception:  # noqa: BLE001
+                continue
+        if pinned != effort or pinned_vol != volume:
+            state["volume_effort"] = effort
+            state["volume_effort_vol"] = volume
+            st.save_state(proj, state)
+        ctx.log("info", f"第 {num} 章 卷 effort 统一为 {effort}（volume_effort，卷 {volume}）")
+    except Exception as e:  # noqa: BLE001
+        ctx.log("warn", f"volume_effort 应用失败（不阻断）：{e}")
 
 
 # ============ S4 指令库前置（成本优化方案 v3 §3/S4；仅卷会话模式触达）============
@@ -539,8 +634,13 @@ def _use_session(ctx, session, slot: str, phase: str) -> bool:
 
 def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
                    *, prose: str, label: str = "", stream: bool = True,
-                   temperature=None) -> str:
+                   temperature=None, strip_static: str = "",
+                   strip_replacement: str = "") -> str:
     """修订类相位统一入口（deslop/trim/enrich/review_fix 四相位共用）。
+
+    strip_static（调整一，instruction_in_head）：静态指令段已在卷级冻结头时，
+    会话轮剥掉同段换一行指针——会话/单轮路径不受影响（单轮路径没有冻结头）。
+    剥不干净（模板版式变了）出声告警并保留全文——静默重复计价比报错更糟。
 
     stage_params[phase].output_mode == "span" 时先走 span 路径：
       标注正文 → 模型回 JSON 编辑列表 → apply_spans 合并 → 会话内固化合成轮
@@ -608,6 +708,12 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
     if use_sess:
         _session_seed(session, prose)
         turn_text = prompts.session_turn_text(template).format(**kw)
+        if strip_static:
+            if strip_static in turn_text:
+                turn_text = turn_text.replace(
+                    strip_static, strip_replacement or "（本段规则见系统卷级冻结指令，不重复）", 1)
+            else:
+                ctx.log("warn", f"{label or phase} 会话轮未匹配到静态指令段（模板变了？），本轮保留全文指令")
         ctx.last_prompt = turn_text
         return _session_ask(ctx, session, slot, turn_text, label=label,
                             phase=phase, stream=stream, temperature=temperature)
@@ -615,6 +721,117 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
 
 
 # ============ 阶段①：核心设定 ============
+
+# ---- 调整五：deslop 定点修复（writing.deslop_pinned，缺省关）----
+DESLOP_PINNED_MAX_PARAS = 2      # 命中段上限：超过即回退整章重写
+DESLOP_PINNED_MAX_GROW = 0.25    # 替换后全文长度变化上限，超过即回退
+
+_PINNED_LINE_RE = re.compile(r"^\s*⟦P(\d{1,4})⟧\s*(.+)$", re.M)
+
+
+def _findings_para_map(prose: str, findings: list) -> dict:
+    """finding（带 start/end 偏移）→ 段号映射（段号口径与 span_edit.annotate 一致：
+    非空行按出现顺序从 1 编号）。偏移越界/缺 start 的 finding 忽略。"""
+    lines = (prose or "").split("\n")
+    starts, off, k, line_para = [], 0, 0, []
+    for ln in lines:
+        starts.append(off)
+        off += len(ln) + 1
+        if ln.strip():
+            k += 1
+        line_para.append(k)
+    out = {}
+    for f in findings:
+        s = getattr(f, "start", None)
+        if not isinstance(s, int) or s < 0 or s >= len(prose):
+            continue
+        lo, hi = 0, len(starts) - 1
+        while lo < hi:   # 二分：最后一个 start <= s 的行
+            mid = (lo + hi + 1) // 2
+            if starts[mid] <= s:
+                lo = mid
+            else:
+                hi = mid - 1
+        para = line_para[lo]
+        if para:
+            out.setdefault(para, []).append(f)
+    return out
+
+
+def _parse_pinned_output(raw: str) -> list:
+    """定点修复回复 → span 编辑列表（⟦Pnn⟧ 替换段全文）；同段多行取最后一行"""
+    spans = {}
+    for m in _PINNED_LINE_RE.finditer(raw or ""):
+        spans[int(m.group(1))] = m.group(2).strip()
+    return [{"op": "replace", "para": p, "text": t} for p, t in spans.items()]
+
+
+def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
+                           advisory: list, num: int) -> str:
+    """命中段 ≤DESLOP_PINNED_MAX_PARAS 处时只让模型输出替换段全文，本地按段号拼回。
+
+    与 E11/T4b 失败版 span 模式的差异：输入只带命中段（不带整章）、输出是纯文本
+    替换对（无 JSON 编辑列表与推理膨胀）。返回新 prose；不适定/失败返回 ""
+    （调用方回退整章重写），失败轮一律 rollback 不留史。"""
+    from . import span_edit
+    if not _session_usable(session):
+        return ""
+    para_map = _findings_para_map(prose, list(blocking) + list(advisory))
+    paras = sorted(para_map)
+    if not paras or len(paras) > DESLOP_PINNED_MAX_PARAS:
+        return ""
+    para_text, k = {}, 0
+    for ln in prose.split("\n"):
+        if ln.strip():
+            k += 1
+            para_text[k] = ln
+    findings_lines, para_block = [], []
+    for p in paras:
+        para_block.append("⟦P%02d⟧ %s" % (p, para_text.get(p, "")))
+        for f in para_map[p]:
+            findings_lines.append("- [%s] %s（命中：%s）"
+                                  % (getattr(f, "level", "?"), getattr(f, "message", ""),
+                                     str(getattr(f, "text", ""))[:40]))
+    kw = dict(findings="\n".join(findings_lines) or "（见各段行首标记）",
+              para_block="\n".join(para_block),
+              tic_blacklist=_tic_blacklist(ctx.proj),
+              must_block=_must_block(ctx.proj, ctx.cfg))
+    req = ("（作用域：仅依据系统设定基准与本会话中的章正文消息执行本步；"
+           "本步为定点修复，只处理下方点名的段落。）\n\n" +
+           prompts.DESLOP_PINNED_PROMPT.format(**kw))
+    t_before = session.turn_count()
+    try:
+        ctx.last_prompt = req
+        raw = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, req,
+                           label=f"去味定点修复 第{num}章", phase=PHASE_DESLOP, stream=True)
+        spans = _parse_pinned_output(raw)
+        if not spans:
+            span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", "no_spans")
+            session.rollback_to(t_before)
+            return ""
+        merged = span_edit.apply_spans(prose, spans)
+        if not merged.strip() or merged == prose:
+            span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", "empty_merge")
+            session.rollback_to(t_before)
+            return ""
+        if abs(len(merged) - len(prose)) > DESLOP_PINNED_MAX_GROW * max(len(prose), 1):
+            span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", "grow_over_25pct")
+            session.rollback_to(t_before)
+            return ""
+        session.commit_turn(req, merged)   # 固化合成轮：「最近一条章正文消息」仍指向最新正文
+        span_edit.record_event(ctx.proj, "deslop", "pinned", "paras=%s" % paras)
+        return merged
+    except PipelineStopped:
+        raise
+    except Exception as e:  # noqa: BLE001
+        try:
+            session.rollback_to(t_before)
+        except Exception:  # noqa: BLE001
+            pass
+        span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", str(e)[:120])
+        ctx.log("warn", f"去味定点修复失败（{e}），回退整章重写")
+        return ""
+
 
 def stage_core_setting(ctx) -> str:
     ctx.log("info", "阶段① 生成核心设定…")
@@ -1096,6 +1313,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 缺省无会话：纯单轮路径（旧客户端/配置全关），后续 _session_usable(None) 兜底
     session = None
     _comp_preface = ""
+    # 调整三（writing.audit_effort_low，缺省关）：清算属对照检查任务（V4 报告
+    # High/Max 差距只在 HLE/Apex 难题），预扫降 effort=low 砍推理输出。
+    if bool(_w_cfg.get("audit_effort_low", False)):
+        if _merge_audit_effort_low(getattr(getattr(ctx, "router", None), "stage_params", None)):
+            ctx.log("info", f"第 {num} 章 清算降档：canon_audit effort=low（audit_effort_low）")
+    # 调整三（writing.volume_effort，缺省空=关）：卷内 effort 统一——防 Think Max
+    # 档的 system 前端注入打死冻结头。落到连接实例层（最弱层，显式 stage_params
+    # 仍可按相位覆盖）；档位写入 state，同卷内拒绝变更（卷界才允许切换）。
+    _apply_volume_effort(ctx, proj, num)
     # L4（writing.head_rebuild，缺省关，深化计划 v2 §1）：每章重建——system=冻结
     # 稳定头（volume_system_text：全书前缀+PROSE 指令库，卷内逐字节一致→按 E0 实测
     # 连续命中），只挂本章轮次，跨章历史不入栈（有界上下文）。E0 判据：hit 随前缀
@@ -1114,7 +1340,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 _head = head_rebuild_system_text(
                     proj, _rvn(proj, num),
                     review_in_system=bool(_w_cfg.get("review_in_system", False)),
-                    review_tail=prompts.review_static_tail())
+                    review_tail=prompts.review_static_tail(),
+                    instruction_in_head=bool(_w_cfg.get("instruction_in_head", False)))
                 session = VolumeSession(probe, system_text=_head,
                                         volume=_rvn(proj, num), proj=proj,
                                         persist=False,
@@ -1438,21 +1665,35 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     pre_deslop_prose = prose   # G7 回退还原点
     pre_deslop_turns = session.turn_count() if _session_usable(session) else 0
     rounds = 0
+    # 调整五（writing.deslop_pinned，缺省关）：命中段 ≤2 处走定点修复——只输出
+    # 替换段全文（无 JSON 编辑列表），本地拼回；不适定自动回退整章重写。
+    _deslop_pinned_on = bool(_w_cfg.get("deslop_pinned", False))
+    # 调整一（writing.instruction_in_head）：去味改写原则段已在卷级冻结头时，
+    # 整章重写轮剥掉同段（定点修复模板自身不带该段，无需瘦身）。
+    _deslop_strip = prompts.deslop_static_rules() \
+        if (bool(_w_cfg.get("instruction_in_head", False)) and not _deslop_pinned_on) else ""
     while blocking and rounds < max_deslop_rounds:
         rounds += 1
         ctx.step(num, st.STEP_DESLOP)
         ctx.log("warn", f"第 {num} 章 阻断 {len(blocking)} 处 → 去味改写（第 {rounds} 轮）…")
         ctx.checkpoint()
-        findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
-        t_round = session.turn_count() if _session_usable(session) else 0
-        deslop_kw = dict(findings=findings_text, prose=prose,
-                         tic_blacklist=_tic_blacklist(proj),
-                         must_block=_must_block(proj, ctx.cfg),
-                         chapter_header=chapter_header(proj, num),
-                         project_header=project_header(proj))
-        rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_DESLOP,
-                                   prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=prose,
-                                   label=f"去味改写 第{rounds}轮")
+        rewritten = ""
+        if _deslop_pinned_on:
+            rewritten = _deslop_pinned_rewrite(ctx, session, prose, blocking, advisory, num)
+        if not rewritten:
+            findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
+            t_round = session.turn_count() if _session_usable(session) else 0
+            deslop_kw = dict(findings=findings_text, prose=prose,
+                             tic_blacklist=_tic_blacklist(proj),
+                             must_block=_must_block(proj, ctx.cfg),
+                             chapter_header=chapter_header(proj, num),
+                             project_header=project_header(proj))
+            rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_DESLOP,
+                                       prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=prose,
+                                       label=f"去味改写 第{rounds}轮",
+                                       strip_static=_deslop_strip,
+                                       strip_replacement="（改写原则见系统「去味改写规则」"
+                                                         "（卷级冻结），本步照常执行。）")
         if rewritten.strip():
             prose = rewritten
         elif _session_usable(session):
@@ -1829,16 +2070,18 @@ def review_l0_block(proj: str, num: int, prose: str) -> str:
     return block
 
 
-def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str) -> str:
+def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str,
+                              template: str = None) -> str:
     """组装 6 维终审 prompt（**唯一装配点**：流水线/共写查验/复审共用）
 
     共写侧原先自带一份同构 .format，两处的 budget/anchors 传参极易漂移；
     收敛后新增注入项只需改这里（回归由 tests/probe_prompt_baseline.py 兜底）。
+    template（调整四）：传 prompts.FINAL_REVIEW_COMPACT 走紧凑票协议，注入项相同。
     """
     wb_block, rg_block, _meta = _wb_rg_blocks(proj, cfg, num)
     # 上下文事实（核心设定/全局摘要/角色状态/伏笔/时间线/细纲）由双层前缀统一承载，
     # 此处只注入审校专属的激活条目/正则/题材专项/本地预检/正文
-    return prompts.FINAL_REVIEW_PROMPT.format(
+    return (template or prompts.FINAL_REVIEW_PROMPT).format(
         project_header=project_header(proj),
         chapter_header=chapter_header(proj, num),
         prose=prose[:6000],
@@ -2065,14 +2308,20 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         genre_review_extra=_genre_review_extra(ctx.proj),
         l0_findings=review_l0_block(ctx.proj, num, prose),
     )
-    prompt = _build_final_review_prompt(ctx, num, prose)
-    turn_text = prompts.session_turn_text(prompts.FINAL_REVIEW_PROMPT).format(**kw) if use_sess else ""
+    # 调整四（writing.review_compact，缺省关）：票输出走紧凑 JSON 协议——
+    # rubric 前缀与长文版逐字节共用，只换输出协议；解析失败自动回退长文重投。
+    _compact_on = bool((ctx.cfg or {}).get("writing", {}).get("review_compact", False))
+    _review_template = prompts.FINAL_REVIEW_COMPACT if _compact_on else prompts.FINAL_REVIEW_PROMPT
+    prompt = _build_final_review_prompt(ctx, num, prose) if not _compact_on \
+        else build_final_review_prompt(ctx.proj, ctx.cfg, num, prose, template=_review_template)
+    turn_text = prompts.session_turn_text(_review_template).format(**kw) if use_sess else ""
     if use_sess and bool((ctx.cfg or {}).get("writing", {}).get("review_in_system", False)):
         # V1-③：rubric 已随会话 system 载入（_acquire_volume_session），审校轮剥掉它；
         # **输出协议必须留在近场**——2026-09-09 v7_long13 实测：整条尾段一起搬进 system 后
         # 审校轮只剩 394 字、零协议标记，11/11 整章回声 → 0 findings → verdict 恒 PASS。
         _rubric = prompts.review_static_tail()
-        _proto = prompts.review_output_protocol()
+        _proto = prompts.review_compact_protocol() if _compact_on \
+            else prompts.review_output_protocol()
         _full = _rubric + _proto
         if _full and turn_text.endswith(_full):
             turn_text = (turn_text[:-len(_full)].rstrip("\n")
@@ -2105,6 +2354,11 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
             + "、".join(order) + "）")
 
     def _parse(raw: str) -> dict:
+        parsed = parse_compact_review_json(raw, prose) if _compact_on else None
+        if parsed is not None:
+            v2 = verify_review_quotes(prose, parsed)
+            v2["unstructured"] = False
+            return v2
         v2 = verify_review_quotes(prose, parse_final_review_v2(raw))
         if not v2["verdict"]:   # v1 兜底
             fb, fa = parse_review_findings(raw)
@@ -2124,17 +2378,19 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
                        "===A_GOLDEN_OPEN=== … ===F_HOOK=== 六段，再输出 ===VERDICT===/===ITEMS===/===END===，"
                        "不得复述正文。）")
 
-    def _cast_solo(extra: str = "") -> tuple:
-        """首票：单发流式（写前缀缓存 / 会话固化首票轮）"""
-        text = (turn_text if use_sess else prompt) + _vote_extra(1) + extra
+    def _cast_solo(extra: str = "", *, text: str = None) -> tuple:
+        """首票：单发流式（写前缀缓存 / 会话固化首票轮）；text 可覆写轮文本
+        （调整四：紧凑票失败回退长文格式重投时传入长文版轮文本）"""
+        body = (turn_text if use_sess else prompt) if text is None else text
+        body = body + _vote_extra(1) + extra
         if use_sess:
-            raw = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, text,
+            raw = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, body,
                                label=f"审校投票 第{num}章", phase=PHASE_REVIEW,
                                temperature=temp)
         else:
             client = ctx.router.client(_review_slot)
             raw = clean_llm_output(client.chat_stream(
-                text, on_chunk=ctx.stream_chunk, temperature=temp, phase=PHASE_REVIEW))
+                body, on_chunk=ctx.stream_chunk, temperature=temp, phase=PHASE_REVIEW))
         return raw, _parse(raw)
 
     def _cast_replica(vote_idx: int = 2) -> tuple:
@@ -2174,11 +2430,24 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
 
     raw, v2 = _cast_solo()
     if v2.get("unstructured"):
-        # 空转票重投一次（带协议重申）。不重投就等于把"模型没按格式答"当成"这章没问题"。
-        ctx.log("warn", f"第 {num} 章 审校首票未产出协议段（疑似整章回声）→ 重申格式重投…")
-        raw, v2 = _cast_solo(_RETRY_PROTOCOL)
-        if v2.get("unstructured"):
-            ctx.log("warn", f"第 {num} 章 审校重投后仍无协议段：本章按「未审」处理，不放行 PASS")
+        if _compact_on:
+            # 调整四回退：紧凑票没按协议产出 → 长文格式重投一次（max_tokens 1400，
+            # 会话轮同步换回长文版——协议段在近场才有效，V1-③ 教训）。仍失败走
+            # 下方既有「未审」分支，绝不静默当 PASS。
+            ctx.log("warn", f"第 {num} 章 紧凑票未按 JSON 协议产出 → 回退长文格式重投…")
+            _long_prompt = build_final_review_prompt(ctx.proj, ctx.cfg, num, prose)
+            with _stage_param_override(ctx, PHASE_REVIEW, max_tokens=1400):
+                raw, v2 = _cast_solo(
+                    text=(prompts.session_turn_text(prompts.FINAL_REVIEW_PROMPT).format(**kw)
+                          if use_sess else _long_prompt))
+            if v2.get("unstructured"):
+                ctx.log("warn", f"第 {num} 章 长文重投后仍无协议段：本章按「未审」处理，不放行 PASS")
+        else:
+            # 空转票重投一次（带协议重申）。不重投就等于把"模型没按格式答"当成"这章没问题"。
+            ctx.log("warn", f"第 {num} 章 审校首票未产出协议段（疑似整章回声）→ 重申格式重投…")
+            raw, v2 = _cast_solo(_RETRY_PROTOCOL)
+            if v2.get("unstructured"):
+                ctx.log("warn", f"第 {num} 章 审校重投后仍无协议段：本章按「未审」处理，不放行 PASS")
     raws.append(raw)
     parsed_list.append(v2)
     if vote_saver:
@@ -2475,6 +2744,108 @@ def verify_review_quotes(prose: str, parsed: dict) -> dict:
         # 原判决基于假引证，丢弃显式声明按计数门禁重算
         parsed["verdict"] = compute_verdict(summary, parsed.get("items", []), "")
     return parsed
+
+
+# ---- 调整四：紧凑票解析（writing.review_compact，缺省关）----
+
+_QUOTE_REF_RE = re.compile(r"^段(\d{1,4})句(\d{1,4})$")
+_SENT_SPLIT_RE = re.compile(r"(?<=[。！？；])")
+
+
+def resolve_quote_ref(prose: str, quote_ref: str) -> str:
+    """「段N句M」→ 原文片段（段号口径与 span_edit.annotate 一致：非空行含标题行）。
+
+    定位不到（段/句越界、格式不符）返回空串——由 verify_review_quotes 的既有
+    纪律接管（空引证不作废条目，但 fail 失去逐字证据）。"""
+    m = _QUOTE_REF_RE.match(str(quote_ref or "").strip())
+    if not m:
+        return ""
+    n, k = int(m.group(1)), int(m.group(2))
+    paras = [ln.strip() for ln in (prose or "").split("\n") if ln.strip()]
+    if not (1 <= n <= len(paras)):
+        return ""
+    sents = [s.strip() for s in _SENT_SPLIT_RE.split(paras[n - 1]) if s.strip()]
+    if not (1 <= k <= len(sents)):
+        return ""
+    return sents[k - 1]
+
+
+_COMPACT_VALID_LEVELS = ("pass", "marginal", "fail")
+_COMPACT_ROOTS_OK = ("ROOT_CORE", "ROOT_GLOBAL_SUMMARY", "ROOT_OUTLINE",
+                     "ROOT_OUTLINE_UNIT", "ROOT_WORLDBOOK", "ROOT_REGEX", "ROOT_PROSE")
+
+
+def parse_compact_review_json(raw: str, prose: str) -> dict | None:
+    """紧凑票 JSON → 既有 v2 结构（字段映射，验真/聚合/修复环零改动）。
+
+    非 JSON / 六维不全 / 维度名或 score 非法 / 缺 verdict → None（调用方回退
+    长文解析并触发长文格式重投——schema 过刚时的软着陆）。"""
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    l, r = text.find("{"), text.rfind("}")
+    if l < 0 or r <= l:
+        return None
+    try:
+        data = json.loads(text[l:r + 1])
+    except ValueError:
+        return None
+    dims = data.get("dimensions") if isinstance(data, dict) else None
+    if not isinstance(dims, list) or not dims:
+        return None
+    dim_names = set(_DIM_MAP.values())
+    items, blocking, advisory = [], [], []
+    summary = {"pass": 0, "marginal": 0, "fail": 0}
+    seen = set()
+    for d in dims:
+        if not isinstance(d, dict):
+            return None
+        name = str(d.get("dim", "")).strip().upper()
+        level = str(d.get("score", "")).strip().lower()
+        if name not in dim_names or level not in _COMPACT_VALID_LEVELS or name in seen:
+            return None
+        seen.add(name)
+        root = str(d.get("root", "")).strip().upper()
+        text_one = str(d.get("one_line", "")).strip()
+        quote = resolve_quote_ref(prose, d.get("quote_ref"))
+        items.append({
+            "dim": name, "level": level, "text": text_one,
+            "quote": quote, "quote_ref": str(d.get("quote_ref", "")).strip(),
+            "quote_unresolved": not quote and bool(str(d.get("quote_ref", "")).strip()),
+            "root_layer": root if root in _COMPACT_ROOTS_OK
+                          else ("ROOT_PROSE" if level == "fail" else ""),
+            "line": "",
+        })
+        if level == "fail":
+            blocking.append(text_one)
+            summary["fail"] += 1
+        elif level == "marginal":
+            advisory.append(text_one)
+            summary["marginal"] += 1
+        else:
+            summary["pass"] += 1
+    if seen != dim_names:
+        return None   # 协议：六维缺一视为评审无效 → 回退长文重投
+    declared = str(data.get("verdict", "")).strip().upper()
+    if declared not in ("PASS", "PASS_WITH_NOTES", "REJECT", "REJECT-HARD"):
+        return None
+    confidence = str(data.get("confidence", "")).strip().lower()
+    if confidence not in ("high", "medium", "low"):
+        confidence = ""
+    return {
+        "verdict": compute_verdict(summary, items, declared),
+        "items": items,
+        "blocking": blocking,
+        "advisory": advisory,
+        "summary": summary,
+        "confidence": confidence,
+        "compact": True,
+    }
 
 
 def parse_final_review_v2(text: str) -> dict:
@@ -2868,6 +3239,17 @@ def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
     if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
         turn_text = prompts.session_turn_text(prompts.TRACKING_PATCH_PROMPT).format(**kw)
+        # 调整一（writing.instruction_in_head）：输出 schema 与硬规则已在卷级冻结头
+        # （通用措辞版），会话轮从协议标记处截断只留材料槽——剥不到则保留全文。
+        if bool(((ctx.cfg or {}).get("writing", {}) or {}).get("instruction_in_head", False)):
+            _i = turn_text.find(prompts.TRACKING_OUTPUT_MARKER)
+            if _i > 0:
+                turn_text = (turn_text[:_i].rstrip("\n") + "\n\n"
+                             "（输出 JSON schema 与硬规则见系统「追踪补丁协议」"
+                             "（卷级冻结）；本步照常执行，仍严格输出唯一一个 json 代码块。）")
+            else:
+                logging.getLogger("qianbi.stages").warning(
+                    "第 %s 章追踪轮未匹配到输出协议标记（模板变了？），本轮保留全文指令", num)
         ctx.last_prompt = turn_text
         result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
                               phase=PHASE_TRACKING, stream=False)
