@@ -234,7 +234,11 @@ def _verdict(chs: list, price_name: str) -> list:
     rolls = [chs[i] for i in range(1, len(chs))
              if chs[i].get("vol", 0) and chs[i]["vol"] != chs[i - 1].get("vol", 0)]
     for r in rolls:
-        prev = chs[r["num"] - 2]
+        # 续跑章号（--start>1）不从 1 起：按位置找前一章，不能用 num-2 当下标
+        i = chs.index(r)
+        prev = chs[i - 1] if i > 0 else None
+        if prev is None:
+            continue
         # 真换栈的指纹＝输入断崖（历史不跟随）；没跌下来说明跑次当时并未换栈
         # （W-1 前的卷号解析把区间末章号当章数 ⇒ 卷界形同虚设），别把税算在它头上
         no_reset = ("｜⚠ 未见栈重置（该卷界在跑次当时并未换栈——卷号解析 bug 或渠道沿用旧栈）"

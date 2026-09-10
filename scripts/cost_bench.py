@@ -658,6 +658,14 @@ def _print_metrics(m: dict) -> None:
           % (m["calls"], f"{m['input_tok']:,}", m["hit_pct"],
              f"{m.get('blind_tok', 0):,}", m.get("blind_pct", 0.0),
              f"{m['out_tok']:,}", f"{m['reasoning_tok']:,}"))
+    # 爆炸章护栏（v12 教训）：清算输出/章超 8k = 难对账章的思考失控信号，出声不静默
+    chs_n = len(m.get("chapters") or []) or 1
+    for ph, b in (m.get("per_phase") or {}).items():
+        out_per_ch = (b.get("out") or 0) / chs_n
+        if out_per_ch > 8000:
+            print("⚠️ %s 输出 %s tok/章（>%s/章×8k 阈值）——难对账/难生成章的思考失控信号，"
+                  "查 metrics.json per_phase 与该章清算/细纲产物"
+                  % (ph, f"{int(out_per_ch):,}", f"{chs_n}"))
     pt = m.get("per_tier") or {}
     if pt.get("pro", {}).get("calls"):
         print("分档：flash %d 笔 $%s | pro %d 笔 $%s"

@@ -1,0 +1,15 @@
+{
+  "_note": "V13 = V12 + 输出侧治理（v12 教训：miss 131k+out 34.8k，90% 缺口全在输出与写延迟）：① pace_boundaries 推广写延迟窗（deslop_review=45 新增，prose_tail/review_audit 显式化）；② audit 会话轮材料引用化（corpus_head 门控自动生效）+ pro 终审 flagged 上限 8；③ outline_in_session 细纲生成骑冻结头；④ audit max_tokens 4000（指南 §5.2 动作乙预注册项）。预注册判据（R-v13）：综合 ≥90%、13/13 完成、盲区 ≤1%；盲评 D2/D4 ≥ -0.5。",
+  "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+              "session_pace_seconds": 45,
+              "pace_boundaries": {"prose_tail": 45, "deslop_review": 45, "review_audit": 45},
+              "tracking_delta": true, "review_in_system": true,
+              "enrich_tail": true, "summary_every": 2, "commit_raw": true,
+              "instruction_in_head": true, "audit_effort_low": true,
+              "review_compact": true, "deslop_pinned": true,
+              "corpus_head": true, "outline_in_session": true},
+  "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                   "canon_audit": {"in_session": true, "early_stop": true, "max_tokens": 4000},
+                   "review": {"max_tokens": 900}},
+  "gates": {"review_confidence_vote": true}
+}

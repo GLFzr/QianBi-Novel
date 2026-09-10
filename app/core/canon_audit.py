@@ -121,6 +121,18 @@ violations 与 cross_issues 只收录 suspect、unsure 条目展开后成立的�
 """
 
 
+# 爆炸护栏上限（v12 教训）：pro 终审单章最多复核的硬伤候选数
+REVIEW_FLAGGED_CAP = 8
+
+
+def _cap_flagged(flagged: list, limit: int = REVIEW_FLAGGED_CAP) -> tuple:
+    """硬伤候选截断（纯函数）：返回 (前 limit 条, 溢出数)。按 prescan 顺序=正文顺序，
+    覆盖面优先；溢出数由调用方落盘观测。"""
+    if len(flagged) <= limit:
+        return flagged, 0
+    return list(flagged[:limit]), len(flagged) - limit
+
+
 def _phase_flags(cfg: dict, proj: str, phase: str = "canon_audit",
                  builtin: dict = None) -> dict:
     """本相位的合并参数档（genre 显式配置压过内置机械相位表——与 stages.preset_param_layers
@@ -218,6 +230,11 @@ def _pro_review_flagged(cfg: dict, proj: str, num: int, prose: str, prescan_prom
     for c in (prescan.get("cross_issues") or []):
         flagged.append({"quote": c.get("quote", ""), "why": c.get("why", ""),
                         "canon_ref": "跨章矛盾", "severity": "硬伤"})
+    # 爆炸护栏（v12 教训）：难对账章的硬伤候选可达两位数，fragments 逐条开窗会让
+    # 终审输入与轮次无界膨胀——只带前 8 条（按 prescan 顺序=正文顺序，覆盖面优先）。
+    flagged, overflow = _cap_flagged(flagged)
+    if overflow:
+        prescan["review_dropped_overflow"] = overflow
     if not flagged:
         return None
     fl = chr(10).join("%d. [%s] 引文：%s | 疑点：%s | 依据：%s"
@@ -420,8 +437,30 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
                                 prev_ending=prev_ending,
                                 next_opening=next_opening,
                                 prose=prose[:6000])
+    # 调整二延伸（writing.corpus_head）：语料头模式下，约束条款/授权清单（设定底册）、
+    # 本章细纲（细纲快照）、上一章结尾/下一章开头（已锁章节原文）都已在冻结头里——
+    # 会话轮改引用行，材料从「逐笔 miss 重贴」变「头部命中价复读」。独立单发回退
+    # 路径与 pro 终审仍用全量 prompt（它们没有会话前缀，引用行会让模型无处对照）。
+    _slim_prompt = ""
+    if bool((cfg.get("writing", {}) or {}).get("corpus_head", False)):
+        _slim_prompt = AUDIT_PROMPT.format(
+            num=num, names=names or "（无）",
+            project_header=project_header(proj),
+            authorized="【＝系统「设定底册（卷首冻结）」的授权自创清单（历史已载）——"
+                       "直接对照执行；正文新出场者仍须逐条收录进 adoptions】",
+            constraints_block="【＝系统「设定底册（卷首冻结）」的核心设定约束条款"
+                              "（金手指限制/消耗/反噬/触发条件与全局红线，历史已载）——"
+                              "直接对照执行，违反即 violations】",
+            ledger_block=ledger_block(proj),
+            outline_brief="【＝系统「本卷细纲快照（卷首冻结）」中第 %d 章细纲（历史已载）——"
+                          "拍点契约照常执行，缺失/漂移/自造记入 violations】" % num,
+            prev_ending="【＝系统「已锁章节原文（卷首冻结）」中上一章结尾（历史已载）】",
+            next_opening="【＝系统「已锁章节原文（卷首冻结）」中下一章开头（历史已载；无则为空）】",
+            prose=prose[:6000])
     if early_stop:
         prompt += EARLY_STOP_DIRECTIVE
+        if _slim_prompt:
+            _slim_prompt += EARLY_STOP_DIRECTIVE
 
     client = _client_for(cfg, router)
 
@@ -439,7 +478,7 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
                 # （S2 首跑实测：只剥 header 不剥 prose → 7.0k miss/笔，93.5% 原地踏步）
                 prose_ref = ("【＝本会话中最近一条完整的章正文消息（历史已载），"
                              "直接对它执行对账，不要要求重复输出】")
-                body_prompt = prompt.replace(prose[:6000], prose_ref, 1)
+                body_prompt = (_slim_prompt or prompt).replace(prose[:6000], prose_ref, 1)
                 # V1-④（T 轮报告 §9-F）：整段剥离渲染后的 project_header。旧写法
                 # split("\n\n", 1) 只剥掉 36 字标题行——header 首个空行在标题行后，
                 # 余下 ~3.0k 字符在会话轮里每章重复计价。会话 system 已含同一

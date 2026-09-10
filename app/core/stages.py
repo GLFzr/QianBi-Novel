@@ -469,17 +469,37 @@ def _stage_param_override(ctx, phase: str, **kv):
         sp[phase] = restored
 
 
-def _pace_after_long_call(ctx, cfg_mod, session, default_seconds: int = 0):
-    """S5：长生成后的注册窗口节拍——给服务端缓存单元注册留时间。
+def _pace_seconds(cfgw: dict, boundary: str = "", default_seconds: int = 0) -> int:
+    """节拍时长解析（纯函数）：pace_boundaries[boundary] ＞ session_pace_seconds ＞ default。"""
+    seconds = default_seconds
+    g = (cfgw or {}).get("session_pace_seconds")
+    if g is not None:
+        try:
+            seconds = int(g)
+        except (TypeError, ValueError):
+            pass
+    if boundary:
+        b = ((cfgw or {}).get("pace_boundaries") or {}).get(boundary)
+        if b is not None:
+            try:
+                seconds = int(b)
+            except (TypeError, ValueError):
+                pass
+    return max(0, seconds)
 
-    `writing.session_pace_seconds` 控制时长，**默认 0（关闭）**——由实验预设/用户
-    设置显式开启（如 s3_pace 的 45s）。仅会话启用时生效；休眠可被 ctx.stopped 打断。
+
+def _pace_after_long_call(ctx, cfg_mod, session, default_seconds: int = 0,
+                          boundary: str = "") -> None:
+    """S5/调整二：长生成后的注册窗口节拍——给服务端缓存单元注册留时间。
+
+    时长取 `_pace_seconds`（边界细粒度＞全局＞缺省）。缺省全空＝0（关闭），
+    既有配置行为不变；仅会话启用时生效；休眠可被 ctx.stopped 打断。
     """
     try:
-        seconds = int((ctx.cfg.get("writing", {}) or {}).get("session_pace_seconds",
-                                                             default_seconds))
-    except (TypeError, ValueError):
-        seconds = default_seconds
+        cfgw = (ctx.cfg.get("writing", {}) or {})
+    except AttributeError:
+        cfgw = {}
+    seconds = _pace_seconds(cfgw, boundary, default_seconds)
     if seconds <= 0 or not _session_usable(session):
         return
     import time as _time
@@ -1071,6 +1091,87 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         return left + right
 
 
+def _outline_materials(ctx, num: int) -> dict:
+    """outline_in_session 用：单章细纲批材料装配（与 stage_chapter_outlines 同源口径，
+    不改动其既有路径——那里服务 orchestrator/prepare 的批量生成）。"""
+    chapter_words = ctx.cfg.get("writing", {}).get("chapter_word_target", 3000)
+    wb_block, rg_block, wb_meta = _worldbook_regex_blocks(ctx, num)
+    _record_worldbook(ctx, PHASE_OUTLINE, wb_meta)
+    core_setting = project.read_file(os.path.join(ctx.proj, "设定", "题材定位.md"))
+    if not core_setting:
+        parts = []
+        for sub in ["关系.md", "题材定位.md"]:
+            c = project.read_file(os.path.join(ctx.proj, "设定", sub))
+            if c:
+                parts.append(c)
+        core_setting = "\n\n".join(parts)[:3000] or "（未提供）"
+    volume_outline = project.read_file(os.path.join(ctx.proj, "大纲", "大纲.md"))[:4000] or "（未提供）"
+    if not volume_outline.strip() or volume_outline == "（未提供）":
+        raise StageError("缺少全书大纲（大纲/大纲.md）")
+    nearby = []
+    for n, p in project.list_outlines(ctx.proj):
+        if num - 2 <= n <= num + 2:
+            nearby.append(project.read_file(p)[:800])
+    nearby_text = "\n\n".join(nearby) if nearby else "（无相邻细纲）"
+    prev_ending_text, _style = prev_chapter_pack(ctx.proj, num, tail=500)
+    previous_ending = prev_ending_text or "（本章为第一章，无上一章结尾）"
+    foreshadows = memory.unfished_foreshadows(ctx.proj) or "（暂无待回收伏笔）"
+    return dict(chapter_words=chapter_words, core_setting=core_setting,
+                volume_outline=volume_outline, nearby_text=nearby_text,
+                previous_ending=previous_ending, foreshadows=foreshadows,
+                wb_block=wb_block, rg_block=rg_block)
+
+
+def _ensure_outline_in_session(ctx, session, num: int) -> bool:
+    """调整三延伸（writing.outline_in_session，缺省关）：本章细纲缺失时把生成轮
+    挂进本章会话（pre-opening）——细纲调用从「独立单发全额 miss」变为骑冻结头
+    （头部命中价复读），且细纲文本进入会话历史供后续相位引用。成功返回 True。"""
+    try:
+        mats = _outline_materials(ctx, num)
+        prompt = prompts.CHAPTER_OUTLINE_PROMPT.format(
+            project_header="",
+            volume_outline=mats["volume_outline"],
+            nearby_outlines=mats["nearby_text"],
+            core_setting_brief=mats["core_setting"][:2500],
+            global_summary=memory.read_global_summary(ctx.proj) or "（全书尚未开始）",
+            recent_summaries=_sanitize_chapter_refs(
+                memory.read_recent_summaries(ctx.proj, num, n=3)) or "（无更前章节摘要）",
+            character_states=project.read_file(
+                project.get_tracking_path(ctx.proj, "角色状态"))[:1500] or "（暂无）",
+            start_chapter=num,
+            end_chapter=num,
+            count=1,
+            chapter_words=mats["chapter_words"],
+            chapter_words_max=int(mats["chapter_words"] * 1.1),
+            previous_ending=mats["previous_ending"] or "（无）",
+            foreshadows=mats["foreshadows"] or "（无）",
+            unit_contract=_unit_contract(ctx.proj, num),
+            genre_block=_genre_block(ctx.proj, "unit_outline"),
+            worldbook_block=mats["wb_block"],
+            regex_block=mats["rg_block"],
+            user_directive=ctx.consume_gate_idea() or "（无）",
+        )
+        turn = ("（作用域：仅依据系统设定基准与本会话历史生成本章细纲；"
+                "全书前缀/卷纲/细纲快照已在系统与历史中，不重复注入。）\n\n" + prompt.strip())
+        ctx.last_prompt = turn
+        ctx.checkpoint()
+        result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn,
+                              label=f"细纲 第{num}章（会话内）", phase=PHASE_OUTLINE)
+        outlines = [o for o in parse_outlines(result) if o[0] == num]
+        if not outlines:
+            ctx.log("warn", f"第 {num} 章会话内细纲解析失败，回退独立生成")
+            return False
+        _num, _title, content = outlines[0]
+        project.write_file(project.get_outline_path(ctx.proj, num), content)
+        ctx.log("ok", f"第 {num} 章细纲已在会话内生成（骑冻结头，miss 仅材料）")
+        return True
+    except PipelineStopped:
+        raise
+    except Exception as e:  # noqa: BLE001
+        ctx.log("warn", f"第 {num} 章会话内细纲失败（回退独立路径）：{e}")
+        return False
+
+
 def parse_outlines(text: str) -> list:
     """按 ===第N章=== 分隔符解析细纲；兼容带空格/变体分隔符与 markdown 标题格式"""
     result = []
@@ -1375,6 +1476,13 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 断点在草稿之后时，后续步骤（去味/审校）仍需要的材料本地重读（零成本）；
     # 同时细纲内容是指纹——细纲重生成后旧断点作废
     outline = _sanitize_chapter_refs(project.read_file(project.get_outline_path(proj, num)))
+    # 调整三延伸（writing.outline_in_session，缺省关）：细纲缺失且语料头会话可用时，
+    # 生成轮挂进本章会话（pre-opening）骑冻结头——独立单发每章全额 miss 的出路。
+    if not (outline or "").strip() and bool(_w_cfg.get("outline_in_session", False)) \
+            and bool(_w_cfg.get("head_rebuild", False)) and _session_usable(session):
+        if _ensure_outline_in_session(ctx, session, num):
+            outline = _sanitize_chapter_refs(
+                project.read_file(project.get_outline_path(proj, num)))
     outline_fp = hashlib.sha1((outline or "").encode("utf-8")).hexdigest()[:12]
     saved_cs = st.get_chapter_step(proj)
     resume_at = ""
@@ -1534,7 +1642,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         # S5 注册窗口节拍：正文是长生成（130s+），紧随其后的快调用会在前轮输出单元
         # 注册完成前发车，吃全价 miss（S1 实测 enrich 12.7k miss/笔）。在会话模式下
         # 等一个注册窗口再发（本地扫描/断点保存已消耗一部分窗口）。
-        _pace_after_long_call(ctx, cfg_mod, session)
+        _pace_after_long_call(ctx, cfg_mod, session, boundary="prose_tail")
         enrich_rounds = 0
         _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
         while not low_ok and enrich_rounds < max_enrich_rounds:
@@ -2008,8 +2116,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         from .canon_audit import audit_chapter
         # v10 audit 鲸鱼修复（深化计划 §8）：审校票的缓存单元注册需要写延迟窗——
         # 13/13 章实测清算首笔在审校末票（hit 99%）后 2-5 秒只记到头部（-65~-81pp）。
-        # 复用 S5 节拍窗（session_pace_seconds），缺省 0 不改变既有行为。
-        _pace_after_long_call(ctx, cfg_mod, session)
+        # 调整二：迁移为 pace_boundaries 边界配置（review_audit），未配置回退全局值。
+        _pace_after_long_call(ctx, cfg_mod, session, boundary="review_audit")
         audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router, session=session)
         v = audit.get("violations") or []
         hard = [x for x in v if x.get("severity") == "硬伤"]
@@ -2601,6 +2709,9 @@ def _chapter_review(ctx, num: int, prose: str, votes: int = None,
     v1 fallback: 若 LLM 没按 v2 格式输出（含 ===VERDICT=== 段）→ 自动回退 v1 解析
     """
     proj = ctx.proj
+    # 调整二（pace_boundaries["deslop_review"]）：去味/扩写轮刚写入的缓存单元在
+    # 首票发车前需要注册窗口——v12 实测 review miss/章 19.8k 中相当部分是写延迟。
+    _pace_after_long_call(ctx, cfg_mod, session, boundary="deslop_review")
     # 字数预检（本地，零 LLM）：短章直接 REJECT，不花审校调用
     wc_items, wc_blocking, wc_verdict = gates.word_count_precheck(proj, num, prose, ctx.cfg)
     if wc_verdict:
