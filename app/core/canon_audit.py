@@ -24,11 +24,12 @@ from .shared_prefix import constraints_block, project_header
 
 logger = logging.getLogger("qianbi.canon")
 
-AUDIT_PROMPT = """{project_header}
-
-你是网文世界观的合规审校。下面是一部小说的【设定底册条目名】【全书连续性台账】
-【核心设定约束条款】与【第 {num} 章正文】。
-找出正文中的世界观问题，每条独立说明，禁止复用同一句评语：
+# ---- 调整一（工作指南 v3）：静态指令段抽离 ----
+# 任务定义 + 输出 schema 全静态（零占位符），以双花括号转义嵌回模板——.format 渲染
+# 后逐字还原，writing.instruction_in_head 关闭时请求体与改造前逐字节一致。
+# 旗标开启时这两段由 audit_instruction_head()/audit_instruction_tail() 取出进
+# 卷级冻结头（head_rebuild_system_text），清算会话轮剥掉同段只带材料槽。
+AUDIT_INSTRUCTIONS = """找出正文中的世界观问题，每条独立说明，禁止复用同一句评语：
 1. violations：与底册冲突的陈述，或底册无依据的自创体系/机构/货币/职业/丹药名；
    或违反【核心设定约束条款】的行为（如金手指越过限制/消耗/触发条款）；
    或章内自相矛盾（同一物象/事实在章内前后两处描述不一致——逐处对表自查）；
@@ -44,39 +45,62 @@ AUDIT_PROMPT = """{project_header}
    人物（出场者及其本章末状态）、物件（新物证/关键道具及其位置与状态）、
    制度（本章援引或新立的规矩）、时间（本章故事内日期/时段；若正文出现「三日后」「初五」等历法表述，必须原样写进时间字段）。
 没有问题就返回空数组。只输出紧凑 JSON（结论即全部内容，不要输出推理过程——推理放在思考通道）：
-{{"violations": [{{"quote":"","why":"","canon_ref":"","severity":""}}],
-  "adoptions": [{{"name":"","cat":"","desc":""}}],
-  "ledger_updates": {{"人物": [{{"name":"","state":""}}], "物件": [{{"name":"","state":""}}],
-                      "制度": [{{"name":"","state":""}}], "时间": ""}},
-  "beat_check": {{"total": <细纲情节点总数>, "verified": [<已落地的情节点编号>], "missing": [<未落地的情节点编号>]}}}}
+{"violations": [{"quote":"","why":"","canon_ref":"","severity":""}],
+  "adoptions": [{"name":"","cat":"","desc":""}],
+  "ledger_updates": {"人物": [{"name":"","state":""}], "物件": [{"name":"","state":""}],
+                      "制度": [{"name":"","state":""}], "时间": ""},
+  "beat_check": {"total": <细纲情节点总数>, "verified": [<已落地的情节点编号>], "missing": [<未落地的情节点编号>]}}"""
 
-【核心设定约束条款】（金手指限制/消耗/反噬/触发条件与全局红线——违反即 violations）
-{constraints_block}
-
-【授权自创清单】（核心设定明文授权的自创专名——下列条目为合法设定，
-不得记为违反；正文新出场的人物/机构/地点在 adoptions 中必须收录，不许遗漏）
-{authorized}
-
-【全书连续性台账】（跨章事实基准：本章与之冲突即 violations；同时按本章事实更新台账）
-{ledger_block}
-
-【上一章结尾】（前情衔接基准）
-{prev_ending}
-
-【下一章开头】（后文衔接基准）
-{next_opening}
-
-【本章细纲】（拍点契约：正文的每个情节点/冻结表条目/命名拍必须在此有对应——
-缺失、漂移、自造都记入 violations，quote 填正文原句，canon_ref 填「细纲情节点N」）
-{outline_brief}
-
-【第 {num} 章正文】
-{prose}
-
-除 violations/adoptions/ledger_updates 外，追加第四段 cross_issues：本章正文与上一章结尾、
+AUDIT_CROSS_DIRECTIVE = """除 violations/adoptions/ledger_updates 外，追加第四段 cross_issues：本章正文与上一章结尾、
 下一章开头之间的**硬矛盾**（物证位置/藏物方式/时间线/人物在场/门锁门闩等不可并存的细节）。
-每条：{{"quote":"本章原句", "against":"邻章原句", "why":"矛盾说明"}}。没有就返回空数组。
-"""
+每条：{"quote":"本章原句", "against":"邻章原句", "why":"矛盾说明"}。没有就返回空数组。"""
+
+
+def _esc(t: str) -> str:
+    """静态段嵌入 .format 模板前的花括号转义（渲染后逐字还原）"""
+    return t.replace("{", "{{").replace("}", "}}")
+
+
+def audit_instruction_head() -> str:
+    """清算静态指令头段（任务三分类定义 + 输出 schema），零占位符，可进冻结头"""
+    return AUDIT_INSTRUCTIONS
+
+
+def audit_instruction_tail() -> str:
+    """清算静态指令尾段（cross_issues 输出要求），零占位符，可进冻结头"""
+    return AUDIT_CROSS_DIRECTIVE
+
+
+AUDIT_PROMPT = ("{project_header}\n"
+                "\n"
+                "你是网文世界观的合规审校。下面是一部小说的【设定底册条目名】【全书连续性台账】\n"
+                "【核心设定约束条款】与【第 {num} 章正文】。\n"
+                + _esc(AUDIT_INSTRUCTIONS) + "\n"
+                "\n"
+                "【核心设定约束条款】（金手指限制/消耗/反噬/触发条件与全局红线——违反即 violations）\n"
+                "{constraints_block}\n"
+                "\n"
+                "【授权自创清单】（核心设定明文授权的自创专名——下列条目为合法设定，\n"
+                "不得记为违反；正文新出场的人物/机构/地点在 adoptions 中必须收录，不许遗漏）\n"
+                "{authorized}\n"
+                "\n"
+                "【全书连续性台账】（跨章事实基准：本章与之冲突即 violations；同时按本章事实更新台账）\n"
+                "{ledger_block}\n"
+                "\n"
+                "【上一章结尾】（前情衔接基准）\n"
+                "{prev_ending}\n"
+                "\n"
+                "【下一章开头】（后文衔接基准）\n"
+                "{next_opening}\n"
+                "\n"
+                "【本章细纲】（拍点契约：正文的每个情节点/冻结表条目/命名拍必须在此有对应——\n"
+                "缺失、漂移、自造都记入 violations，quote 填正文原句，canon_ref 填「细纲情节点N」）\n"
+                "{outline_brief}\n"
+                "\n"
+                "【第 {num} 章正文】\n"
+                "{prose}\n"
+                "\n"
+                + _esc(AUDIT_CROSS_DIRECTIVE) + "\n")
 
 EXPECTED_CATEGORIES = ("体系规则", "地理", "势力", "人物", "物品", "异火", "丹药", "斗技", "历史", "经济")
 
@@ -430,6 +454,21 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
                     # 静默多花钱比报错更糟，这里出声
                     logger.warning("清算会话轮未匹配到 project_header 整块（模板版式变了？），"
                                    "本轮将重复注入约 %d 字前缀", len(_hdr))
+                # 调整一（writing.instruction_in_head）：任务定义/schema/cross_issues
+                # 已在卷级冻结头里，会话轮剥掉同段只留材料槽——指令体从「每章轮次
+                # 重发」变为「卷首一次计价」。剥不干净则保留全文（fail-open + 出声）。
+                if bool((cfg.get("writing", {}) or {}).get("instruction_in_head", False)):
+                    _ptr = ("（任务定义、violations/adoptions/ledger_updates 三分类要求、"
+                            "输出 JSON schema 与 cross_issues 定义见系统「设定清算指令」"
+                            "（卷级冻结）；本步照常执行，输出结构不变。）")
+                    if AUDIT_INSTRUCTIONS in body_prompt:
+                        body_prompt = body_prompt.replace(AUDIT_INSTRUCTIONS, _ptr, 1)
+                    else:
+                        logger.warning("清算会话轮未匹配到静态指令段（模板变了？），本轮保留全文指令")
+                    if AUDIT_CROSS_DIRECTIVE in body_prompt:
+                        body_prompt = body_prompt.replace(AUDIT_CROSS_DIRECTIVE, "", 1).rstrip() + "\n"
+                    else:
+                        logger.warning("清算会话轮未匹配到 cross_issues 尾段（模板变了？），本轮保留全文指令")
                 body = body_prompt
                 from .chapter_session import ChapterSession
                 turn_text = ChapterSession.SCOPE_LINE + "\n\n" + body
