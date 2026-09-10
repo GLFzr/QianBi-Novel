@@ -202,6 +202,44 @@ DESLOP_REWRITE_PROMPT = """{project_header}
 直接输出改写后的完整正文（含标题行），不要解释。"""
 
 
+# ---- 调整一/调整五（工作指南 v3）：去味静态规则段 + 定点修复模板 ----
+# 「## 改写原则」小节零占位符（黑名单/正则契约是逐书材料，留在轮次），可进卷级冻结头；
+# 轮次瘦身在 _rewrite_phase（strip_static 参数，deslop 调用点传入）。
+DESLOP_RULES_MARKER = "## 改写原则"
+DESLOP_RULES_END_MARKER = "## 本书正则契约"
+
+
+def deslop_static_rules() -> str:
+    """去味静态规则段（改写原则 1-10），零占位符，可进卷级冻结头"""
+    i = DESLOP_REWRITE_PROMPT.find(DESLOP_RULES_MARKER)
+    j = DESLOP_REWRITE_PROMPT.find(DESLOP_RULES_END_MARKER)
+    return DESLOP_REWRITE_PROMPT[i:j] if 0 <= i < j else ""
+
+
+# 定点修复（writing.deslop_pinned，缺省关）：命中段 ≤2 处时只输出替换段全文
+# （纯文本 + 段落编号标记，无 JSON 编辑列表——T4b/E11 实证 JSON 列表使输出膨胀 5 倍）。
+# 仅会话模式使用（前缀已在栈里，故不带 project_header/chapter_header）；
+# 解析/合并失败由调用方回退整章重写（DESLOP_REWRITE_PROMPT 既有路径）。
+DESLOP_PINNED_PROMPT = """你是文字编辑。本会话中的章正文有以下段落被本地扫描器检出 AI 味句式问题，请逐段定点改写。
+
+## 检出的问题（仅涉下列段落）
+{findings}
+
+## 待改写段落（行首 ⟦Pnn⟧ 是段落编号标记）
+{para_block}
+
+## 改写纪律
+1. 只改命中问题的句子，该段其余句子逐字保留——你输出的是替换后的**完整段落**
+2. "不是A，而是B"→直接写 B；"他知道/她明白"→用行为展示；模板微表情（眼中闪过/嘴角勾起/心中涌起）→可拍摄的动作或物件反应
+3. 同一替换写法不得反复出现；保持与前后段的衔接；段内字数变化 ≤10%
+4. 专属口头禅黑名单（改写中同样禁用）：{tic_blacklist}
+5. 本书正则契约（must 级）：{must_block}
+
+## 输出格式（严格遵守）
+对每个待改写段落各输出一行，格式：⟦Pnn⟧ 替换后的完整段落全文
+- 段落编号必须与上方标记一致；除这些行外不输出任何解释、编号、围栏或未点名段落"""
+
+
 # ========== 局部改写（用户选中文本 + 想法）==========
 
 SELECTION_REWRITE_PROMPT = """你是网络小说编辑。用户选中了章节中的一段文字，并提出了修改想法。请只改写选中段落，其余内容一律不动。

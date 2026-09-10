@@ -473,3 +473,53 @@ def review_output_protocol() -> str:
     full = review_instruction_tail()
     j = full.find(REVIEW_PROTOCOL_MARKER)
     return full[j:] if j > 0 else ""
+
+
+# ---- 调整四（工作指南 v3）：审校票紧凑 JSON 协议 ----
+# rubric 前缀（裁决优先级+六维 checklist+硬纪律）与长文版逐字节共用；只换输出协议段。
+# schema 过刚会把模型推离自然分布反而变差 → 不用硬约束解码，用「提示词 schema +
+# stage_params.review.max_tokens 硬上限 + 解析失败回退长文重投」三层软硬结合。
+REVIEW_COMPACT_PROTOCOL = """## 评审输出格式（紧凑 JSON 协议，严格遵守，缺字段视为评审无效）
+
+只输出一个 ```json 代码块（禁止输出正文、禁止六维长文分析）：
+```json
+{
+  "dimensions": [
+    {"dim": "A_GOLDEN_OPEN", "score": "pass|marginal|fail", "quote_ref": "段N句M", "one_line": "≤40字理由", "root": "ROOT_*（仅 fail/marginal 必填）"},
+    {"dim": "B_PAYOFF", "score": "…", "quote_ref": "…", "one_line": "…", "root": "…"},
+    {"dim": "C_FINGER", "score": "…", "quote_ref": "…", "one_line": "…", "root": "…"},
+    {"dim": "D_PLOT", "score": "…", "quote_ref": "…", "one_line": "…", "root": "…"},
+    {"dim": "E_CHARACTER", "score": "…", "quote_ref": "…", "one_line": "…", "root": "…"},
+    {"dim": "F_HOOK", "score": "…", "quote_ref": "…", "one_line": "…", "root": "…"}
+  ],
+  "verdict": "PASS|PASS_WITH_NOTES|REJECT|REJECT-HARD",
+  "confidence": "high|medium|low"
+}
+```
+
+字段纪律（六维缺一或缺 verdict/缺 confidence 视为评审无效）：
+- score 三选一：pass/marginal/fail；不打太极纪律照旧（每维明确等级，禁模糊词）
+- quote_ref 定位格式「段N句M」：N=正文第 N 段（按出现顺序计数，标题行算第 1 段），M=该段第 M 句（以。！？；分句）。程序据此回原文**逐字验真**——定位不到原文 = 该条作废降级，宁可少引不可假引
+- one_line ≤40 字：写具体问题，禁止复述正文；每次评审至少指出 2 个具体问题（反聚拢反向指令照旧）
+- 维度独立判定、题材纯度、先扫节奏指纹再评级（维 F 第三条）等硬纪律全部照旧适用
+- verdict 门禁：fail=0 且 marginal≤1→PASS；fail=1 或 marginal≥3→PASS_WITH_NOTES；fail≥2→REJECT；任一 fail 涉及设定硬伤/金手指越界/因果空悬→REJECT-HARD
+- confidence：每条 fail 都核到真实原文引证才给 high；拿不准的判据较多给 low
+- root 根因等级七选一：ROOT_CORE / ROOT_GLOBAL_SUMMARY / ROOT_OUTLINE / ROOT_OUTLINE_UNIT / ROOT_WORLDBOOK / ROOT_REGEX / ROOT_PROSE（能定 UNIT 不升 OUTLINE；不为了凑数强行溯源）
+
+记住：你不是为了证明这章好——你是在替老板抓出这章不能发的原因。不抓出来=你失职。"""
+
+
+def review_compact_protocol() -> str:
+    """紧凑票输出协议段（必须近场，同 review_output_protocol 的回声教训）"""
+    return REVIEW_COMPACT_PROTOCOL
+
+
+def _esc(t: str) -> str:
+    """静态段嵌入 .format 模板前的花括号转义（渲染后逐字还原）"""
+    return t.replace("{", "{{").replace("}", "}}")
+
+
+# FINAL_REVIEW_COMPACT = 长文模板的 rubric 前缀（逐字节共用）+ 紧凑协议段。
+# 前缀派生保证 rubric 单源：改 FINAL_REVIEW_PROMPT 的 checklist 时紧凑版自动跟随。
+FINAL_REVIEW_COMPACT = FINAL_REVIEW_PROMPT[:FINAL_REVIEW_PROMPT.find(REVIEW_PROTOCOL_MARKER)] \
+    + _esc(REVIEW_COMPACT_PROTOCOL)

@@ -12,6 +12,8 @@ from .writing import (
     ENRICH_PROMPT,
     ENRICH_TAIL_PROMPT,
     DESLOP_REWRITE_PROMPT,
+    DESLOP_PINNED_PROMPT,     # 调整五：deslop 定点修复（≤2 段，纯文本替换对）
+    deslop_static_rules,      # 调整一：去味改写原则静态段（进卷级冻结头）
     TRIM_PROMPT,
     SELECTION_REWRITE_PROMPT,
     SELECTION_CORE_SETTING_BLOCK,
@@ -20,6 +22,8 @@ from .memory import (
     TRACKING_UPDATE_PROMPT,
     TRACKING_DELTA_PROMPT,
     TRACKING_PATCH_PROMPT,
+    TRACKING_OUTPUT_MARKER,        # 调整一：追踪轮瘦身切点
+    tracking_patch_static_head,    # 调整一：追踪补丁协议静态段（进卷级冻结头）
     CHAPTER_SUMMARY_PROMPT,
     GLOBAL_SUMMARY_PROMPT,
     MEMORY_BACKFLOW_PROMPT,
@@ -29,6 +33,8 @@ from .review import (
     REVIEW_PROMPT,            # v1: 一致性审校
     REVIEW_FIX_PROMPT,
     FINAL_REVIEW_PROMPT,      # v2: 6 维最终审核
+    FINAL_REVIEW_COMPACT,     # 调整四：紧凑票模板（rubric 前缀派生自长文版）
+    review_compact_protocol,  # 调整四：紧凑票输出协议（必须近场）
     ROOT_CAUSE_PROMPT,        # v2: 根因溯源
     REVISION_TARGETS_PROMPT,  # v2: 定向改稿
     build_upstream_anchors,   # 辅助：行号锚定块
@@ -84,11 +90,15 @@ __all__ = [
     "CORE_SETTING_PROMPT", "VOLUME_OUTLINE_PROMPT", "CHAPTER_OUTLINE_PROMPT",
     "IDEA_EXPAND_PROMPT", "BLURB_AND_TAGS_PROMPT",
     "PROSE_WRITING_PROMPT", "ENRICH_PROMPT", "ENRICH_TAIL_PROMPT", "DESLOP_REWRITE_PROMPT", "TRIM_PROMPT",
+    "DESLOP_PINNED_PROMPT", "deslop_static_rules",
     "SELECTION_REWRITE_PROMPT", "SELECTION_CORE_SETTING_BLOCK",
-    "TRACKING_UPDATE_PROMPT", "TRACKING_DELTA_PROMPT", "TRACKING_PATCH_PROMPT", "CHAPTER_SUMMARY_PROMPT", "GLOBAL_SUMMARY_PROMPT",
+    "TRACKING_UPDATE_PROMPT", "TRACKING_DELTA_PROMPT", "TRACKING_PATCH_PROMPT",
+    "TRACKING_OUTPUT_MARKER", "tracking_patch_static_head",
+    "CHAPTER_SUMMARY_PROMPT", "GLOBAL_SUMMARY_PROMPT",
     "MEMORY_BACKFLOW_PROMPT", "WORLDBOOK_GEN_PROMPT",
     "REVIEW_PROMPT", "REVIEW_FIX_PROMPT",
-    "FINAL_REVIEW_PROMPT", "ROOT_CAUSE_PROMPT", "REVISION_TARGETS_PROMPT",
+    "FINAL_REVIEW_PROMPT", "FINAL_REVIEW_COMPACT", "review_compact_protocol",
+    "ROOT_CAUSE_PROMPT", "REVISION_TARGETS_PROMPT",
     "build_upstream_anchors", "build_issues_brief",
     "CO_ROLES", "CO_DIALOGUE_PROMPT", "CO_SUMMARIZE_PROMPT",
     "CO_PRODUCT_STRUCTURES", "HANDOFF_MARKER",
