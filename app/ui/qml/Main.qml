@@ -57,6 +57,7 @@ ApplicationWindow {
         { "label": "设置", "icon": "settings", "key": "settings" }
     ]
     property string activePanel: "shelf"
+    onActivePanelChanged: bridge.demoNotifyPanel(activePanel)
     property bool logVisible: false
     property int selStart: -1            // 局部改写：选中区间
     property int selEnd: -1
@@ -203,6 +204,10 @@ ApplicationWindow {
         if (bridge.hasRecoverableDraft) Qt.callLater(function () { recoverDialog.open() })
         // 首启向导（T3.5）：未完成过引导 → 自动弹出
         if (!bridge.onboarded) Qt.callLater(function () { wizardDialog.open() })
+        // 演示引导（0.20.0）：把主窗口挂给导演（逐步截图用）
+        bridge.demoAttach(mainWindow)
+        // 自动演示（自测/截图扫描）：跳过入口直接开跑
+        if (bridge.demoAuto) Qt.callLater(function () { bridge.demoStart() })
         // 开机检查更新：要不要联网、离上次多久了，全在 Python 侧 should_auto_check 判
         Qt.callLater(function () { bridge.checkForUpdates(false) })
         // 窗口位置超出屏幕可视区时重置居中（防窗口被拖出屏幕导致内容"被挡住"）
@@ -257,6 +262,7 @@ ApplicationWindow {
                     delegate: Item {
                         required property var modelData
                         required property int index
+                        objectName: "nav_" + modelData.key
                         Layout.alignment: Qt.AlignHCenter
                         width: 36; height: 36
                         enabled: modelData.key !== "shelf" ? bridge.hasProject : true
@@ -696,6 +702,7 @@ ApplicationWindow {
 
                 TextArea {
                     id: editor
+                    objectName: "mainEditor"
                     text: bridge.isStreaming ? (mainWindow.edPrefs.streamSmooth ? mainWindow.streamShown : bridge.liveDraftText) : bridge.chapterText
                     readOnly: bridge.isStreaming || (bridge.cwMode === "cw" && bridge.chapterLocked)
                     color: Theme.textPrimary
@@ -1593,8 +1600,78 @@ ApplicationWindow {
         }
     }
 
+    // ---- 演示引导（0.20.0）----
+    CoachOverlay { id: demoCoachOverlay; parent: mainWindow.Overlay.overlay }
+
+    function demoFindIn(root, name) {
+        if (!root) return null
+        if (root.objectName === name) return root
+        for (var i = 0; i < root.children.length; i++) {
+            var f = demoFindIn(root.children[i], name)
+            if (f) return f
+        }
+        return null
+    }
+    function demoFind(name) {
+        return demoFindIn(mainWindow.contentItem, name)
+             || demoFindIn(mainWindow.Overlay.overlay, name)
+    }
+    function demoClick(name) {
+        if (name.indexOf("nav_") === 0) { mainWindow.activePanel = name.slice(4); return }
+        var it = demoFind(name)
+        if (it && it.clicked !== undefined) it.clicked()
+    }
+    property var _demoTypeState: null
+    Timer {
+        id: demoTypeTimer
+        interval: 16
+        repeat: true
+        onTriggered: {
+            var st = mainWindow._demoTypeState
+            if (!st) { stop(); return }
+            st.pos += 3
+            st.item.text = st.text.slice(0, st.pos)
+            if (st.pos >= st.text.length) { stop(); mainWindow._demoTypeState = null; st.done() }
+        }
+    }
+    function demoType(item, text, done) {
+        if (bridge.demoAuto) { item.text = text; done(); return }
+        _demoTypeState = { "item": item, "text": text, "pos": 0, "done": done }
+        demoTypeTimer.restart()
+    }
+    function demoFillSeq(fills) {
+        var i = 0
+        function nextField() {
+            if (i >= fills.length) { bridge.demoStepDone("fill_seq_done"); return }
+            var f = fills[i++]
+            var it = demoFind(f.target)
+            if (!it) { nextField(); return }
+            if (f.target === "newPresetCombo") {
+                var m = it.model, n = m ? (m.length || m.count || 0) : 0
+                for (var k = 0; k < n; k++) {
+                    var row = m.get ? m.get(k) : m[k]
+                    if (row && (row.id === f.value || row.name === f.value)) { it.currentIndex = k; break }
+                }
+                nextField()
+            } else if (typeof f.value === "number" && it.value !== undefined) {
+                it.value = f.value
+                nextField()
+            } else {
+                demoType(it, String(f.value), nextField)
+            }
+        }
+        nextField()
+    }
+
     Connections {
         target: bridge
+        function onDemoNav(panel) { mainWindow.activePanel = panel }
+        function onDemoAction(json) {
+            var a = JSON.parse(json)
+            if (a.action === "fill_seq") demoFillSeq(a.arg)
+            else if (a.action === "click") demoClick(a.arg)
+            else if (a.action === "nav") mainWindow.activePanel = a.arg
+        }
         function onToast(level, msg) { toastBar.showToast(level, msg) }
         function onProjectOpened() {
             mainWindow.activePanel = "pipeline"

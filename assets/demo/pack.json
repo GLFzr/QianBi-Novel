@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "source": "bench v_full20（真实 API 生成 · 13 章 · 盲评过磅）",
+  "book": {
+    "name": "种子书",
+    "genre": "都市悬疑",
+    "platform": "番茄",
+    "preset_id": "urban_destiny",
+    "total_wan": 10,
+    "idea": "主角能用一支笔改写命运的笔记"
+  },
+  "budget_s": {
+    "create": 60,
+    "pipeline": 150,
+    "cw": 75,
+    "finish": 30
+  }
+}

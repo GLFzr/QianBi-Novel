@@ -162,6 +162,13 @@ Item {
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.fsTiny
                 }
+                AppButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "▶ 先看 5 分钟演示（无需 Key）"
+                    kind: "primary"
+                    visible: bridge.demoAvailable
+                    onClicked: bridge.demoStart()
+                }
             }
         }
 
@@ -181,6 +188,8 @@ Item {
                     onClicked: openFolderDialog.open()
                 }
                 AppButton {
+                    id: newProjectButton
+                    objectName: "newProjectButton"
                     text: "新建项目"
                     kind: "primary"
                     Layout.fillWidth: true
@@ -202,7 +211,10 @@ Item {
         parent: Overlay.overlay
         title: "新建项目"
         modal: true
-        onOpened: newPresetCombo.model = bridge.genrePresets()   // 新导入/固化的预设不必重启应用
+        onOpened: {
+            newPresetCombo.model = bridge.genrePresets()   // 新导入/固化的预设不必重启应用
+            if (bridge.demoActive) bridge.demoStepDone("click_new_project")
+        }
         width: 440
         padding: 18
         x: parent ? Math.round((parent.width - width) / 2) : 0
@@ -234,11 +246,11 @@ Item {
                     onClicked: locationDialog.open()
                 }
             }
-            AppField { id: nameField; width: parent.width; label: "书名"; placeholder: "如：诡异复苏：我的笔记能改命" }
+            AppField { id: nameField; objectName: "nameField"; width: parent.width; label: "书名"; placeholder: "如：诡异复苏：我的笔记能改命" }
             Row {
                 spacing: 8
                 width: parent.width
-                AppField { id: genreField; width: parent.width / 2 - 4; label: "题材"; placeholder: "如：悬疑脑洞" }
+                AppField { id: genreField; objectName: "genreField"; width: parent.width / 2 - 4; label: "题材"; placeholder: "如：悬疑脑洞" }
                 Column {
                     spacing: 6
                     width: parent.width / 2 - 4
@@ -256,6 +268,7 @@ Item {
                 Text { text: "题材预设（题材专项约束注入正文/细纲/审校，写作中可随时切换）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                 AppSelect {
                     id: newPresetCombo
+                    objectName: "newPresetCombo"
                     width: parent.width
                     model: bridge.genrePresets()
                     textRole: "name"
@@ -266,7 +279,7 @@ Item {
                 spacing: 6
                 width: parent.width
                 Text { text: "预计总字数（万字）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
-                AppSpinBox { id: totalWanSpin; width: parent.width; from: 20; to: 2000; stepSize: 10; value: 100 }
+                AppSpinBox { id: totalWanSpin; objectName: "totalWanSpin"; width: parent.width; from: 20; to: 2000; stepSize: 10; value: 100 }
             }
             Column {
                 spacing: 6
@@ -274,6 +287,7 @@ Item {
                 Text { text: "一句话灵感"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny; font.family: Theme.uiFont }
                 TextArea {
                     id: ideaArea
+                    objectName: "ideaArea"
                     width: parent.width
                     height: 60
                     placeholderText: "主角 + 核心设定 + 爽点方向…"
@@ -320,6 +334,7 @@ Item {
                 anchors.right: parent.right
                 AppButton { text: "取消"; onClicked: newProjectDialog.close() }
                 AppButton {
+                    objectName: "createProjectButton"
                     text: "创建并进入"
                     kind: "primary"
                     onClicked: {

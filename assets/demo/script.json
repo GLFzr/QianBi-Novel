@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "welcome",
+      "mode": "button_next",
+      "target": "",
+      "panel": "shelf",
+      "text": "欢迎！接下来约 5 分钟，我带你零输入跑完一遍完整的 AI 写作流程——你只需要点高亮的地方，其余都帮你准备好了。"
+    },
+    {
+      "id": "click_new_project",
+      "mode": "user_click",
+      "target": "newProjectButton",
+      "panel": "shelf",
+      "text": "点「新建项目」——我们现场真实创建一本演示书《种子书》（一本真实测过的都市悬疑）。"
+    },
+    {
+      "id": "fill_form",
+      "mode": "fill_seq",
+      "target": "nameField",
+      "container": "newProjectDialog",
+      "panel": "shelf",
+      "text": "表单正在自动填写。真实使用时，这里写你自己的书名、题材和一句话灵感。",
+      "fills": [
+        {
+          "target": "nameField",
+          "value": "种子书"
+        },
+        {
+          "target": "genreField",
+          "value": "都市悬疑"
+        },
+        {
+          "target": "newPresetCombo",
+          "value": "urban_destiny"
+        },
+        {
+          "target": "totalWanSpin",
+          "value": 10
+        },
+        {
+          "target": "ideaArea",
+          "value": "主角能用一支笔改写命运的笔记"
+        }
+      ]
+    },
+    {
+      "id": "click_create",
+      "mode": "user_click",
+      "target": "createProjectButton",
+      "container": "newProjectDialog",
+      "text": "点「创建并进入」——这和你以后自己建书是完全相同的真实流程。"
+    },
+    {
+      "id": "pipeline_intro",
+      "mode": "button_next",
+      "target": "startButton",
+      "panel": "pipeline",
+      "text": "这是流水线驾驶舱：四张卡片就是四步（核心设定 → 全书大纲 → 章节细纲 → 正文）。平时点「开始」就会真跑；演示里我用真实测试的记录加速回放给你看。"
+    },
+    {
+      "id": "rp_setting",
+      "mode": "replay",
+      "replay": "setting",
+      "text": "第①步 核心设定：AI 根据题材与灵感生成题材定位 + 世界书，直接落盘到 设定/。",
+      "target": "stageCard_setting",
+      "dim": false
+    },
+    {
+      "id": "rp_outline",
+      "mode": "replay",
+      "replay": "outline",
+      "text": "第②步 全书大纲：先定全书走向与卷结构（真实生成会逐字流出，这里加速播放）。",
+      "target": "stageCard_outline",
+      "dim": false
+    },
+    {
+      "id": "rp_choutline",
+      "mode": "replay",
+      "replay": "ch_outline",
+      "text": "第③步 章节细纲：第 1 章拆成 4 个节点，疏密节奏都规划好了。",
+      "target": "stageCard_ch_outline",
+      "dim": false
+    },
+    {
+      "id": "rp_prose",
+      "mode": "replay",
+      "replay": "prose",
+      "text": "第④步 正文：真实生成就是这样逐字流出的（演示约加速 20 倍）。每章微循环：上下文 → 草稿 → 扫描 → 去味 → 审校 → 定稿。",
+      "target": "mainEditor",
+      "dim": false
+    },
+    {
+      "id": "rp_deslop",
+      "mode": "replay",
+      "replay": "deslop",
+      "text": "草稿完成后 AI 味扫描发现 1 处阻断 → 自动去味改写，复扫通过（日志里是真实前后对照）。",
+      "target": "stepPills",
+      "dim": false
+    },
+    {
+      "id": "rp_review",
+      "mode": "replay",
+      "replay": "review",
+      "text": "审校：三张独立票复核，全部 PASS——若发现阻断会自动进修复环再重审。",
+      "target": "stepPills",
+      "dim": false
+    },
+    {
+      "id": "rp_tracking",
+      "mode": "replay",
+      "replay": "tracking",
+      "text": "定稿落库：追踪台账（角色/伏笔/时间线）自动更新，设定清算对账 0 硬伤。第 1 章完成 ✍",
+      "target": "stageCard_prose",
+      "dim": false
+    },
+    {
+      "id": "cw_intro",
+      "mode": "button_next",
+      "target": "modeChip",
+      "panel": "pipeline",
+      "text": "写作不止全自动一种姿势。右上角这个档位条负责切换运行模式——下一步我们切「共写」：你和 AI 一句一句聊着写。"
+    },
+    {
+      "id": "cw_switch",
+      "mode": "user_click_cw",
+      "target": "modeChip",
+      "text": "点档位条循环切换运行模式，切到「共写」为止。"
+    },
+    {
+      "id": "cw_fill",
+      "mode": "fill_seq",
+      "target": "cwInput",
+      "text": "共写对话区出现在右侧：想对 AI 说什么直接打字。演示我帮你填了一句真实测试用过的指令。",
+      "fills": [
+        {
+          "target": "cwInput",
+          "value": "「种子书」的规则再收紧一点：写下的预言必须付出等价代价，父亲当年用过吗？"
+        }
+      ]
+    },
+    {
+      "id": "cw_send",
+      "mode": "user_click",
+      "target": "cwSendButton",
+      "text": "点「发送」。"
+    },
+    {
+      "id": "cw_write_fill",
+      "mode": "fill_seq",
+      "target": "cwInput",
+      "text": "再来一轮：这次让 AI 直接产出正文草稿（撰写）。",
+      "fills": [
+        {
+          "target": "cwInput",
+          "value": "按这个思路写第 2 章开头，直接出正文。"
+        }
+      ]
+    },
+    {
+      "id": "cw_write_send",
+      "mode": "user_click",
+      "target": "cwSendButton",
+      "text": "点「发送」——撰写模式下 AI 直接写正文。"
+    },
+    {
+      "id": "cw_confirm",
+      "mode": "user_click",
+      "target": "cwConfirmButton",
+      "text": "满意就点「✓ 确定」：AI 总结定稿本阶段，进入下一阶段。"
+    },
+    {
+      "id": "finish_nav",
+      "mode": "user_click",
+      "target": "nav_settings",
+      "text": "演示到此结束！最后一步：点左侧「设置」，在「连接与模型」里贴上你的 API Key。"
+    },
+    {
+      "id": "done",
+      "mode": "finish",
+      "panel": "settings",
+      "text": "完成 🎉 贴好 Key 后回到流水线点「开始」，《种子书》就归你了——AI 会接着真的写。配置连接只要四步：选服务商 → 粘贴 Key → 选模型 → 测试连接。"
+    }
+  ]
+}

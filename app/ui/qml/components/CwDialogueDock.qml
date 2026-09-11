@@ -85,6 +85,7 @@ Rectangle {
                 anchors.rightMargin: 10
                 spacing: 6
                 AppButton {
+                    objectName: "cwConfirmButton"
                     text: bridge.cwStageKey === "cw_unit" ? "✓ 确定细纲" : "✓ 确定"
                     kind: "primary"
                     height: 28
@@ -685,6 +686,7 @@ Rectangle {
                 spacing: 4
                 Layout.alignment: Qt.AlignBottom
                 AppButton {
+                    objectName: "cwSendButton"
                     text: "发送"
                     kind: "primary"
                     height: 30
