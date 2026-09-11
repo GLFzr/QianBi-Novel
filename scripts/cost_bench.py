@@ -431,7 +431,7 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
         _pregen_end = int((cfg.get("writing", {}) or {}).get("outline_pregen_end", 36) or 36)
         _mark("细纲预生成：第 1-%d 章（冻结纪律：运行中不改已冻结细纲）…" % _pregen_end)
         from app.core import stages as _st_mod
-        st.save_state(proj, {"stage": _st_mod.STAGE_CH_OUTLINE})
+        st.save_state(proj, {"stage": st.STAGE_CH_OUTLINE})
         _st_mod.stage_chapter_outlines(orch, 1, _pregen_end)
 
     def _seed_chapter(n: int):
