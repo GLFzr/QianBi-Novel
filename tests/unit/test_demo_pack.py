@@ -123,14 +123,20 @@ def test_streaming_duration_within_budget():
     # 从导演源码里抠出各阶段 stream(text, chars, ms) 参数，按 pack 里的真实文本长度算时长
     budget = (pack.pack.get("budget_s") or {}).get("pipeline", 150)
     total = 0.0
+    # prose 阶段走 ch1["rel"]（0.19.7 章名自适应），其余阶段仍为固定 rel
     for phase, rel in [("setting", "设定/题材定位.md"), ("outline", "大纲/大纲.md"),
-                       ("ch_outline", "大纲/细纲_第001章.md"), ("prose", "正文/第001章_撕纸角.md")]:
+                       ("ch_outline", "大纲/细纲_第001章.md")]:
         m = re.search(r'phase == "%s".*?op_stream\(P\.book_file\("([^"]+)"\), (\d+), (\d+)\)' % phase,
                       src_dir, re.S)
         assert m, f"导演里找不到 {phase} 阶段的流式参数"
         assert m.group(1) == rel, f"{phase} 阶段流式文本与预期不符"
         chars, ms = int(m.group(2)), int(m.group(3))
         total += len(pack.book_file(rel)) / chars * (ms / 1000.0)
+    m = re.search(r'phase == "prose".*?op_stream\(P\.book_file\(P\.ch1\["rel"\]\), (\d+), (\d+)\)',
+                  src_dir, re.S)
+    assert m, "导演里找不到 prose 阶段的流式参数（应使用 ch1 自适应路径）"
+    chars, ms = int(m.group(1)), int(m.group(2))
+    total += len(pack.book_file(pack.ch1["rel"])) / chars * (ms / 1000.0)
     assert total < budget * 0.8, f"流水线流式总时长 {total:.0f}s 已逼近/超出预算 {budget}s"
 
 

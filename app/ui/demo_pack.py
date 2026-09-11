@@ -62,6 +62,25 @@ class DemoPack:
         return self.pack.get("book") or {}
 
     @property
+    def ch1(self) -> dict:
+        """第 1 章元数据 {rel, file, title, words}——章名自适应（0.19.7）：
+        演示书可整体替换，不再硬编码 0.19.6 时代《撕纸角》文件名。"""
+        import re as _re
+        d = os.path.join(self.base, "book", "正文")
+        fn = ""
+        if os.path.isdir(d):
+            for x in sorted(os.listdir(d)):
+                if _re.match(r"^第001章_.+\.md$", x):
+                    fn = x
+                    break
+        text = self._text(os.path.join("book", "正文", fn)) if fn else ""
+        m = _re.search(r"#\s*第1章\s*(\S+)", text)
+        title = m.group(1) if m else "种子书"
+        words = sum(1 for c in text if "一" <= c <= "鿿")
+        return {"rel": os.path.join("正文", fn), "file": fn,
+                "title": title, "words": words}
+
+    @property
     def steps(self) -> list:
         return (self.script or {}).get("steps") or []
 
@@ -96,10 +115,11 @@ class DemoPack:
             if s.get("mode") not in ("user_click", "user_click_cw", "button_next",
                                      "auto", "fill_seq", "replay", "finish"):
                 probs.append(f"步骤 {s.get('id')} 未知 mode")
-        for rel in ["设定/题材定位.md", "大纲/大纲.md", "大纲/细纲_第001章.md",
-                    "正文/第001章_撕纸角.md"]:
+        for rel in ["设定/题材定位.md", "大纲/大纲.md", "大纲/细纲_第001章.md"]:
             if not self.book_has(rel):
                 probs.append(f"book/ 缺 {rel}")
+        if not self.book_has(self.ch1["rel"]):
+            probs.append("book/ 缺 第1章正文（正文/第001章_*.md）")
         if not self.deslop or not self.deslop.get("before"):
             probs.append("replay/deslop.json 缺对照内容")
         if not self.cw:

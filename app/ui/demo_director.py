@@ -357,7 +357,7 @@ class DemoDirector(QObject):
                    r.op_step("draft"),
                    r.op_call(lambda: b._on_stream_stage("正文草稿 · 第 1 章")),
                    r.op_wait(400)]
-            stream_ops = r.op_stream(P.book_file("正文/第001章_撕纸角.md"), 12, 110)
+            stream_ops = r.op_stream(P.book_file(P.ch1["rel"]), 12, 110)
             # 中段抽帧：验证流式视觉（编辑器逐字增长、光标跟随）
             n = len(stream_ops)
             stream_ops.insert(n // 3, (0, lambda: self._shot("prose_p33")))
@@ -389,17 +389,18 @@ class DemoDirector(QObject):
         elif phase == "tracking":
             def finalize():
                 # 正文落盘 + 章记录进 history（与真实流水线同构，全部 UI 由真实数据驱动）
-                w_book("正文/第001章_撕纸角.md")()
+                ch1 = P.ch1
+                w_book(ch1["rel"])()
                 state = st.load_state(proj)
                 state["stage"] = st.STAGE_PROSE
                 state["current_chapter"] = 1
                 hist = state.setdefault("history", [])
                 hist[:] = [h for h in hist if h.get("num") != 1]
-                hist.append({"num": 1, "title": "撕纸角", "words": 2078,
+                hist.append({"num": 1, "title": ch1["title"], "words": ch1["words"],
                              "deslop_blocking": 0, "review_blocking": 0,
                              "deslop_advisory": 1})
                 st.save_state(proj, state)
-                b._on_chapter_done({"num": 1, "title": "撕纸角", "words": 2078,
+                b._on_chapter_done({"num": 1, "title": ch1["title"], "words": ch1["words"],
                                     "deslop_blocking": 0, "review_blocking": 0,
                                     "deslop_advisory": 1})
 

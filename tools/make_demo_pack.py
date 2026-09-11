@@ -48,16 +48,52 @@ def write(path: str, text: str):
         f.write(text)
 
 
+def _chapter_file(src: str, num: int) -> str:
+    """按章号发现正文文件（兼容任意章名后缀；.drafts/.versions 不参与）"""
+    d = os.path.join(src, "正文")
+    for fn in sorted(os.listdir(d)):
+        if re.match(r"^第%03d章_.+\.md$" % num, fn):
+            return os.path.join(d, fn)
+    return ""
+
+
+def _deslop_pair(src: str, num: int) -> tuple:
+    """从 .drafts 草稿 vs 终稿提取真实去味前后对照（v15 pinned 定点修复路径）：
+    找草稿中有、终稿中无、且长度适中的句，取终稿同序位句为改后文本。"""
+    draft = os.path.join(src, "正文", ".drafts", "第%03d.md" % num)
+    final = _chapter_file(src, num)
+    if not (os.path.isfile(draft) and final):
+        return "", ""
+    v1, v2 = read(draft), read(final)
+    s1 = [x for x in re.split(r"(?<=[。！？])", v1) if len(x.strip()) > 12]
+    s2 = [x for x in re.split(r"(?<=[。！？])", v2) if len(x.strip()) > 12]
+    for a in s1:
+        if a not in v2 and len(a) < 120:
+            idx = s1.index(a)
+            if idx < len(s2) and s2[idx] != a:
+                return a.strip(), s2[idx].strip()
+    return "", ""
+
+
 def main(home: str, queue_log: str):
     src = home
     if os.path.isdir(os.path.join(src, "设定")) is False:
         sys.exit(f"不是项目目录：{src}")
+    # script.json 是人工维护的 21 步引导脚本，不随素材重生成——重建前保存、之后原样放回
+    script_backup = None
+    script_path = os.path.join(OUT, "script.json")
+    if os.path.isfile(script_path):
+        script_backup = read(script_path)
     shutil.rmtree(OUT, ignore_errors=True)
 
+    ch1 = _chapter_file(src, 1)
+    if not ch1:
+        sys.exit("正文缺少第 1 章")
     # ---- book/：逐阶段落盘的真实产物 ----
     for rel in ["设定/题材定位.md", "设定/世界书.md", "大纲/大纲.md",
-                "大纲/细纲_第001章.md", "正文/第001章_撕纸角.md"]:
+                "大纲/细纲_第001章.md"]:
         write(os.path.join(OUT, "book", rel), read(os.path.join(src, rel)))
+    write(os.path.join(OUT, "book", "正文", os.path.basename(ch1)), read(ch1))
     for name in TRACK_MD:
         p = os.path.join(src, "追踪", name)
         if os.path.isfile(p):
@@ -67,11 +103,17 @@ def main(home: str, queue_log: str):
         if os.path.isfile(p):
             shutil.copy2(p, os.path.join(OUT, "book", "追踪", name))
 
-    # 共写「撰写」演示体：第 2 章真实正文的前 3 段
-    ch2 = read(os.path.join(src, "正文", "第002章_半句话.md"))
-    paras = [p for p in ch2.split("\n\n") if p.strip()][:3]
-    write(os.path.join(OUT, "book", "正文", "第002章_开头.md"),
-          "# 第2章 半句话（开头试写）\n\n" + "\n\n".join(paras) + "\n")
+    # 共写「撰写」演示体：第 2 章真实正文的前 3 段（章名自适应）
+    ch2_path = _chapter_file(src, 2)
+    ch2_title = "单号"
+    if ch2_path:
+        ch2 = read(ch2_path)
+        m_t = re.match(r"#\s*第2章\s*(\S+)", ch2)
+        if m_t:
+            ch2_title = m_t.group(1)
+        paras = [p for p in ch2.split("\n\n") if p.strip()][:3]
+        write(os.path.join(OUT, "book", "正文", "第002章_开头.md"),
+              f"# 第2章 {ch2_title}（开头试写）\n\n" + "\n\n".join(paras) + "\n")
 
     # ---- replay/run_log.txt：真实日志行（第 1 章全流程 + 阶段行）----
     log_lines = []
@@ -85,24 +127,15 @@ def main(home: str, queue_log: str):
             break
     write(os.path.join(OUT, "replay", "run_log.txt"), "\n".join(log_lines) + "\n")
 
-    # ---- replay/deslop.json：草稿 v1 → 去味后 的真实对照段 ----
-    msgs = []
-    with open(os.path.join(src, "会话", "卷1_messages.jsonl"), encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                msgs.append(json.loads(line))
-    v1 = msgs[2]["content"]          # 开幕轮草稿
-    v2 = msgs[4]["content"]          # 去味后
+    # ---- replay/deslop.json：草稿 → 去味后 的真实对照段 ----
+    # v15 head_rebuild（persist=False）无会话文件可读——改从 .drafts 草稿 vs 终稿
+    # 提取；从后往前扫（后章定稿更近、pinned 去味集中在前 30 章尾部），要求
+    # 前后句有实质差异（滤掉仅引号级微差），找不到留空说明。
     before = after = ""
-    s1 = [s for s in re.split(r"(?<=[。！？])", v1) if len(s.strip()) > 12]
-    s2 = [s for s in re.split(r"(?<=[。！？])", v2) if len(s.strip()) > 12]
-    for a in s1:
-        if a not in v2 and len(a) < 120:
-            # 在 v2 里找同位置最像的替代句
-            idx = s1.index(a)
-            if idx < len(s2) and s2[idx] != a:
-                before, after = a.strip(), s2[idx].strip()
-                break
+    for _n in range(30, 0, -1):
+        before, after = _deslop_pair(src, _n)
+        if before and after and before.rstrip("。") != after.rstrip("。"):
+            break
     write(os.path.join(OUT, "replay", "deslop.json"), json.dumps(
         {"before": before, "after": after,
          "note": "AI 味扫描阻断 1 处 → 去味改写，复扫通过（真实对照）"},
@@ -118,13 +151,15 @@ def main(home: str, queue_log: str):
           json.dumps(CW_DIALOGUE, ensure_ascii=False, indent=2) + "\n")
 
     # ---- pack.json ----
+    if script_backup is not None:
+        write(script_path, script_backup)   # 引导脚本原样放回（人工维护件）
     idea = "主角能用一支笔改写命运的笔记"
     m = re.search(r"灵感：(.+)", read(os.path.join(src, "设定", "选题信息.md")))
     if m:
         idea = m.group(1).strip()
     write(os.path.join(OUT, "pack.json"), json.dumps({
         "version": 1,
-        "source": "bench v_full20（真实 API 生成 · 13 章 · 盲评过磅）",
+        "source": "bench v15_fresh（真实 API 生成 · 30 章长跑 · 30 章累计综合命中率 85.3%）",
         "book": {"name": "种子书", "genre": "都市悬疑", "platform": "番茄",
                  "preset_id": "urban_destiny", "total_wan": 10, "idea": idea},
         "budget_s": {"create": 60, "pipeline": 150, "cw": 75, "finish": 30},
