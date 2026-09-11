@@ -1540,12 +1540,14 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         # 已统一收敛到 chapter_header（八节，两层前缀的第二层），不再散装注入——
         # 截断取各消费方上限最大值，信息只增不减。
         ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））")
-        # 决策门 G4：素材组装后（软门：默认轻提示）
-        g4_idea = ctx.gate("G4", f"材料就绪：细纲 + 章级共享段（摘要/状态/伏笔/上一章锚点）（草稿目标 {chapter_words} 字）",
+        # 决策门 G4：素材组装后（软门：默认轻提示）；outline_pregen 冻结期改话术
+        _g4_freeze = bool(_w_cfg.get("outline_pregen", False))
+        g4_idea = ctx.gate("G4", f"材料就绪：细纲 + 章级共享段（摘要/状态/伏笔/上一章锚点）（草稿目标 {chapter_words} 字）"
+                           + ("【细纲已预生成冻结：运行中不改细纲，修改留到卷界检查点】" if _g4_freeze else ""),
                            chapter=num)
         if g4_idea is None:
             g4_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
-            ctx.log("warn", "G4 回退：重新组装（可趁隙修改设定/细纲/追踪文件）")
+            ctx.log("warn", "G4 回退：重新组装（" + ("细纲已冻结，仅重读" if _g4_freeze else "可趁隙修改设定/细纲/追踪文件") + "）")
             continue
         if g4_idea:
             draft_extra_ideas.append(g4_idea)   # 带想法继续 → 注入草稿 user_ideas
@@ -2146,6 +2148,21 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             ctx.log("ok", f"第 {num} 章 设定清算：无越界")
     except Exception as e:
         ctx.log("warn", f"设定清算失败（不阻断）：{e}")
+
+    # ---- v15（writing.corpus_roll）：章末滚动语料快照（追加式+前缀守卫）----
+    # 本章正文+摘要行追加进当前卷语料快照，下一章头部构建自然读到——头部从
+    # 第 2 章起每章增长（不再等卷界）。摘要行随滚（方向 B2）。
+    if bool(_w_cfg.get("corpus_roll", False)) and prose.strip():
+        try:
+            from .volume_session import roll_corpus_snapshot, resolve_volume_number as _rvn2
+            _summ = memory.read_recent_summaries(proj, num + 1, n=1)
+            rolled = roll_corpus_snapshot(proj, _rvn2(proj, num), num,
+                                          title or f"第{num}章", prose, _summ)
+            if not rolled:
+                ctx.log("warn", f"第 {num} 章 语料滚动被前缀守卫拒绝（violated），"
+                                f"下一章头部退化为上次快照")
+        except Exception as e:  # noqa: BLE001
+            ctx.log("warn", f"语料滚动失败（不阻断）：{e}")
 
     # 断点收尾（方案 H）：本章全流程完成，清除章内断点
     st.clear_chapter_step(proj)

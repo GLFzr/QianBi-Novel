@@ -1,0 +1,19 @@
+{
+  "_note": "V15 = 95%在30章内（研究文档 §5 推荐组合）：①corpus_roll 每章滚动语料快照（追加式+sha256 前缀守卫，摘要链同滚）②outline_pregen 开书前批量预生成卷一至卷三细纲入头（outline_pregen_end=36，冻结纪律 G4 话术条件化）③audit max_tokens 4000→5000（C3：消 ch31 型截顶重试）④v13/v14 全部既有项照常。预注册判据（R-v15）：口径甲=存在 n≤30 综合≥95% 且其后无连续 2 章<94%；口径乙=累计≥94% 如实报告；质量门=ch1-13 双评委盲评 D2/D4≥-0.5；机制=corpus_rolled≥29 且 violated=0、细纲零现场生成、盲区≤1%。预算 ¥8 熔断 ¥7.8。",
+  "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+              "session_pace_seconds": 45,
+              "pace_boundaries": {"prose_tail": 45, "deslop_review": 45, "review_audit": 45,
+                                  "vote_replicas": 12},
+              "tracking_delta": true, "review_in_system": true,
+              "enrich_tail": true, "summary_every": 2, "commit_raw": true,
+              "instruction_in_head": true, "audit_effort_low": true,
+              "review_compact": true, "deslop_pinned": true,
+              "corpus_head": true, "outline_in_session": true,
+              "corpus_roll": true,
+              "outline_pregen": true, "outline_pregen_end": 36},
+  "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                   "canon_audit": {"in_session": true, "early_stop": true, "max_tokens": 5000},
+                   "review": {"max_tokens": 900},
+                   "outline": {"length_budget": 1200}},
+  "gates": {"review_confidence_vote": true}
+}

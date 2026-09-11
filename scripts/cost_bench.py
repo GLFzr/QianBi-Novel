@@ -423,6 +423,17 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
             _mark("题材预设名沿用种子「%s」（进 system 前缀，换名会退回空栈）" % label)
         st.save_state(proj, {"genre_preset": pid})
 
+    # v15（writing.outline_pregen）：开书前批量预生成细纲并冻结——细纲是头部
+    # 最大合法成分（v13 实测占语料头 53%），从「逐章 miss+out」变「ch1 起全员命中」。
+    # 预生成走既有 stage_chapter_outlines 批量路径（失败拆半递归已有）；
+    # 运行中禁止重写已冻结细纲（改头=全头作废），G4 话术在流水线内条件化。
+    if ((cfg.get("writing", {}) or {}).get("outline_pregen", False)):
+        _pregen_end = int((cfg.get("writing", {}) or {}).get("outline_pregen_end", 36) or 36)
+        _mark("细纲预生成：第 1-%d 章（冻结纪律：运行中不改已冻结细纲）…" % _pregen_end)
+        from app.core import stages as _st_mod
+        st.save_state(proj, {"stage": _st_mod.STAGE_CH_OUTLINE})
+        _st_mod.stage_chapter_outlines(orch, 1, _pregen_end)
+
     def _seed_chapter(n: int):
         """确定性审计对比：单槽断点必须在每章微循环前注入对应章
         （chapter_step 全项目只有一槽，预先循环写入会被自己的后章覆盖）"""

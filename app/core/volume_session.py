@@ -634,6 +634,39 @@ def build_head_snapshot(proj: str, volume: int) -> str:
     return text
 
 
+def roll_corpus_snapshot(proj: str, volume: int, num: int, title: str,
+                         prose: str, summary: str) -> bool:
+    """v15（writing.corpus_roll）：章末把本章正文块+摘要行**追加**进当前卷语料快照。
+
+    追加式纪律（本方向生死线）：只允许文件尾 append，禁止重排/重写已有字节；
+    写前校验「旧文件字节是新内容的严格前缀」，违例拒绝滚动并落
+    session_events: corpus_rolled{violated:true}。摘要行随正文块同滚（方向 B2）——
+    与开幕轮「最近章节摘要」的 2 条重叠为已知可接受项（~270 tok/章 miss）。
+    快照文件不存在（卷语料库未建）时先按现状装配。返回是否成功滚动。
+    """
+    path = corpus_snapshot_path(proj, volume)
+    if not os.path.exists(path):
+        build_corpus_snapshot(proj, volume)
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = f.read()
+    except OSError:
+        old = ""
+    block = ("\n\n### 第%d章 %s\n\n%s\n\n> 摘要：%s"
+             % (int(num), str(title or ("第%d章" % int(num))),
+                (prose or "").strip(), (summary or "").strip()))
+    new = (old.rstrip("\n") + "\n" if old.strip() else "") + block + "\n"
+    if not new.startswith(old):
+        record_event(proj, "corpus_rolled", vol=int(volume), ch=int(num), violated=1)
+        return False
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(new[len(old):])
+    record_event(proj, "corpus_rolled", vol=int(volume), ch=int(num),
+                 appended=len(new) - len(old))
+    return True
+
+
 def head_rebuild_system_text(proj: str, volume: int, *,
                              review_in_system: bool = False,
                              review_tail: str = "",
