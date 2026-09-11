@@ -137,9 +137,9 @@ Item {
 
     // ---------- 气泡（与 DialogBg 同语言：bgCard 主体 + borderStrong 发丝线 + 三层柔影） ----------
     Rectangle { x: bubble.x - 4;  y: bubble.y - 2;  width: bubble.width + 8;  height: bubble.height + 5
-                radius: Theme.rCard + 3; color: "#2E000000"; visible: coach.visible; z: -1 }
+                radius: Theme.rCard + 3; color: Qt.rgba(0, 0, 0, 0.18); visible: coach.visible; z: -1 }
     Rectangle { x: bubble.x - 10; y: bubble.y - 6;  width: bubble.width + 20; height: bubble.height + 13
-                radius: Theme.rCard + 6; color: "#24000000"; visible: coach.visible; z: -2 }
+                radius: Theme.rCard + 6; color: Qt.rgba(0, 0, 0, 0.14); visible: coach.visible; z: -2 }
     Rectangle {
         id: bubble
         visible: coach.visible
