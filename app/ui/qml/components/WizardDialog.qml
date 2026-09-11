@@ -77,6 +77,16 @@ Dialog {
                 wrapMode: Text.Wrap
             }
             AppButton {
+                text: "▶ 看 5 分钟演示（无需 Key）"
+                kind: "primary"
+                visible: bridge.demoAvailable
+                onClicked: {
+                    wizard.close()
+                    bridge.setOnboarded()
+                    bridge.demoStart()
+                }
+            }
+            AppButton {
                 text: "打开连接设置"
                 onClicked: {
                     mainWindow.activePanel = "settings"

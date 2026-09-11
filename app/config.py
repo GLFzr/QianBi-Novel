@@ -96,7 +96,8 @@ DEFAULT_CONFIG = {
                 "chapter_session": True},       # 章会话消息栈：同章阶段共享前缀（关闭回退单轮）
     "last_project": "",
     "recent_projects": [],
-    "general": {"onboarded": False},          # 首启向导（T3.5）
+    "general": {"onboarded": False,
+                "demo_done": False},           # 首启向导（T3.5）+ 演示引导已看过（0.20.0）
     "telemetry": {"enabled": False},           # 遥测 opt-in（D6：默认关，本地落点）
     "updates": {"manifest_url": "https://raw.githubusercontent.com/GLFzr/QianBi-Novel/main/latest.json",
                 # v0.18 起默认开：不自动查，「有新版时出现图标、点一下就能更新」这条链就名不副实。

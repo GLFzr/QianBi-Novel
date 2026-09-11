@@ -44,6 +44,7 @@ Item {
         function onLastRecordChanged() { pipeline.refresh() }
         function onRunningChanged() { pipeline.refresh() }
         function onProjectOpened() { pipeline.refresh() }
+        function onCwModeChanged() { modeChip.syncFromBridge() }
         function onBlurbGenerated(ok, text) {
             pipeline.blurbBusy = false
             if (ok) pipeline.blurb = text
@@ -90,6 +91,12 @@ Item {
                 // 运行模式切换（全自动 / 边界确认 / 逐步确认 / 共写）——有项目即常显
                 Rectangle {
                     id: modeChip
+                    objectName: "modeChip"
+                    function syncFromBridge() {
+                        var m = bridge.runMode()
+                        var i = modes.indexOf(m)
+                        if (i >= 0) modeIdx = i
+                    }
                     visible: bridge.hasProject
                     width: 132; height: 26; radius: 13
                     color: Theme.bgHover
@@ -177,7 +184,9 @@ Item {
                     Repeater {
                         model: pipeline.cards
                         delegate: Rectangle {
+                            id: stageCard
                             required property var modelData
+                            objectName: "stageCard_" + modelData.key
                             Layout.fillWidth: true
                             height: 92
                             radius: Theme.rCard
@@ -212,10 +221,44 @@ Item {
                                         Layout.fillWidth: true
                                     }
                                     AppBadge {
-                                        text: modelData.status === "active" ? "进行中"
-                                             : modelData.status === "done" ? "完成" : "待开始"
-                                        tint: modelData.status === "active" ? Theme.accent
-                                             : modelData.status === "done" ? Theme.success : Theme.muted
+                                        visible: modelData.status !== "active"
+                                        text: modelData.status === "done" ? "完成" : "待开始"
+                                        tint: modelData.status === "done" ? Theme.success : Theme.muted
+                                    }
+                                    // 待机圈：该阶段已进入但未完成——旋转圆点绕暗环（全自动档/演示档通用）
+                                    Row {
+                                        visible: modelData.status === "active"
+                                        spacing: 5
+                                        Item {
+                                            width: 13; height: 13
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            Rectangle {
+                                                anchors.fill: parent; radius: 6.5; color: "transparent"
+                                                border.width: 2
+                                                border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
+                                            }
+                                            Item {
+                                                id: stageOrbit
+                                                anchors.fill: parent
+                                                Rectangle {
+                                                    width: 5; height: 5; radius: 2.5
+                                                    color: Theme.accent
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    anchors.top: parent.top; anchors.topMargin: -1
+                                                }
+                                                RotationAnimation on rotation {
+                                                    from: 0; to: 360; duration: 850; loops: Animation.Infinite
+                                                    running: modelData.status === "active"
+                                                }
+                                            }
+                                        }
+                                        Text {
+                                            text: "进行中"
+                                            color: Theme.accent
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.fsMicro
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
                                     }
                                 }
                                 Text {
@@ -302,6 +345,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: 8
                     AppButton {
+                        objectName: "startButton"
                         visible: !bridge.isRunning
                         text: "开始"
                         kind: "primary"
@@ -332,6 +376,7 @@ Item {
                 }
 
                 StepPills {
+                    objectName: "stepPills"
                     currentStep: bridge.currentStepKey
                     running: bridge.isRunning && !bridge.isPaused
                 }

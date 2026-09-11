@@ -6,13 +6,16 @@
 - 防多开写坏 config.json / pipeline_state.json（真机双实例写花配置事故）
 """
 import logging
+import os
 
 from PySide6.QtCore import QObject
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 logger = logging.getLogger("qianbi.singleinstance")
 
-LOCK_NAME = "QianBiNovel.lock"
+# QIANBI_INSTANCE 后缀：同一台机器并排跑正式版/开发版互不抢锁（演示开发与隔离测试用）
+LOCK_NAME = "QianBiNovel%s.lock" % (
+    "_" + os.environ["QIANBI_INSTANCE"] if os.environ.get("QIANBI_INSTANCE") else "")
 
 
 class SingleInstance(QObject):

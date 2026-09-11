@@ -11,6 +11,7 @@ import time
 
 from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
                             Property, Signal, Slot, QThread, QTimer, QProcess)
+from PySide6.QtQuick import QQuickWindow  # noqa: F401  # 必须先于引擎加载导入：注册 QtQuick 类型系统，否则 QML 传来的窗口会被包成 QWindow 基类
 
 from .. import config as cfg_mod
 from .. import mustscan, project, deslop, prompts, secrets
@@ -940,6 +941,11 @@ class Bridge(QObject):
     # 事件信号
     projectOpened = Signal()
     toast = Signal(str, str)                    # level, msg
+    # 演示引导（0.20.0）：Python→QML 的三条单向通道，载荷均为 JSON 字符串
+    demoCoach = Signal(str)                     # 引导气泡 {step,total,text,target,container,mode}
+    demoAction = Signal(str)                    # 动作请求 {action,arg}
+    demoNav = Signal(str)                       # 面板导航请求
+    demoActiveChanged = Signal()
     connTestResult = Signal(str, bool, str)     # cid, ok, msg
     modelsFetched = Signal(str, list)           # cid, models
     ideaExpanded = Signal(bool, str)            # ok, result_or_error
@@ -1051,6 +1057,12 @@ class Bridge(QObject):
         last = self.cfg.get("last_project", "")
         if last and project.is_project(last):
             self._open_project(last, silent=True)
+        # 演示导演（0.20.0）：pack 在 demoStart 时才加载；接线只做一次
+        from .demo_director import DemoDirector
+        self._demo = DemoDirector(self)
+        self.projectOpened.connect(
+            lambda: self._demo.step_done("click_create"))
+        self.cwModeChanged.connect(self._demo.on_cw_mode_changed)
 
     # ============ 属性 ============
 
@@ -1309,6 +1321,9 @@ class Bridge(QObject):
     @Slot()
     def startPipeline(self):
         logger.info("[dbg] startPipeline invoked, proj=%s running=%s", self.proj, self._running)
+        if self._demo.active:
+            self.toast.emit("warn", "演示模式不调用真实 API——点「跳过演示」后再开始写作")
+            return
         if not self.proj:
             self.toast.emit("warn", "请先打开或新建项目")
             return
@@ -1513,6 +1528,62 @@ class Bridge(QObject):
         cfg.setdefault("general", {})["onboarded"] = True
         cfg_mod.save_config(cfg)
         self.generalChanged.emit()
+
+    # ---- 演示引导（0.20.0）----
+
+    @Property(bool, notify=demoActiveChanged)
+    def demoActive(self) -> bool:
+        return self._demo.active
+
+    @Property(bool, constant=True)
+    def demoAvailable(self) -> bool:
+        """内容包可用才在向导/书架露出演示入口"""
+        from .demo_pack import DemoPack
+        return DemoPack.load() is not None
+
+    @Property(bool, constant=True)
+    def demoAuto(self) -> bool:
+        return self._demo.auto_mode
+
+    @Slot(result=bool)
+    def demoStart(self) -> bool:
+        if self._running:
+            self.toast.emit("warn", "流水线运行中，先停止再进演示")
+            return False
+        if not self._demo.start():
+            return False
+        self.demoActiveChanged.emit()
+        return True
+
+    @Slot()
+    def demoSkip(self):
+        self._demo.skip()
+        self.demoActiveChanged.emit()
+
+    @Slot()
+    def demoNext(self):
+        self._demo.next()
+
+    @Slot(str)
+    def demoStepDone(self, step_id: str):
+        self._demo.step_done(step_id)
+
+    @Slot(str)
+    def demoNotifyPanel(self, panel: str):
+        self._demo.notify_panel(panel)
+
+    @Slot("QVariant")
+    def demoAttach(self, win):
+        """Main.qml 把主窗口挂进来，供逐步截图（QIANBI_DEMO_SHOT_DIR）
+
+        QML 侧传来的引用是基类 QWindow 包装，grabWindow 在 QQuickWindow 上，
+        用 shiboken 按指针重新包一层。"""
+        try:
+            from PySide6.QtQuick import QQuickWindow
+            from shiboken6 import getCppPointer, wrapInstance
+            self._demo._win = wrapInstance(getCppPointer(win)[0], QQuickWindow)
+        except Exception:  # noqa: BLE001  # 截图是诊断设施，挂载失败不挡演示
+            self._demo._win = win
 
     # ---- 遥测开关（T4.3，默认关）----
     @Property(bool, notify=generalChanged)
@@ -2994,7 +3065,9 @@ class Bridge(QObject):
         outline_ok = os.path.isfile(os.path.join(self.proj, "大纲", "大纲.md"))
         total = state.get("total_chapters", 0) or len(chapters)
         stage = state.get("stage", st.STAGE_INIT)
-        cur = self._cur_num if self._running else 0
+        # 演示回放也算「在跑」：阶段卡随之亮起 待机圈/完成，与真实流水线同语言
+        _running = self._running or self._demo.active
+        cur = self._cur_num if _running else 0
 
         def st_of(done, active_key, active):
             if active:
@@ -3005,15 +3078,15 @@ class Bridge(QObject):
 
         return [
             {"key": "setting", "label": "核心设定", "icon": "✦",
-             "status": st_of(setting_ok, st.STAGE_SETTING, self._running and stage == st.STAGE_SETTING),
+             "status": st_of(setting_ok, st.STAGE_SETTING, _running and stage == st.STAGE_SETTING),
              "detail": "设定/题材定位.md",
              "done": setting_ok, "file": "设定/题材定位.md" if setting_ok else ""},
             {"key": "outline", "label": "全书大纲", "icon": "❖",
-             "status": st_of(outline_ok, st.STAGE_OUTLINE, self._running and stage == st.STAGE_OUTLINE),
+             "status": st_of(outline_ok, st.STAGE_OUTLINE, _running and stage == st.STAGE_OUTLINE),
              "detail": "大纲/大纲.md",
              "done": outline_ok, "file": "大纲/大纲.md" if outline_ok else ""},
             {"key": "ch_outline", "label": "章节细纲", "icon": "☰",
-             "status": st_of(bool(outlines), st.STAGE_CH_OUTLINE, self._running and stage == st.STAGE_CH_OUTLINE),
+             "status": st_of(bool(outlines), st.STAGE_CH_OUTLINE, _running and stage == st.STAGE_CH_OUTLINE),
              "detail": f"{len(outlines)} 章细纲",
              "done": bool(outlines), "count": len(outlines), "file": ""},
             {"key": "prose", "label": "正文写作", "icon": "✍",
@@ -3355,6 +3428,8 @@ class Bridge(QObject):
         if not text:
             self.toast.emit("warn", "输入不能为空")
             return
+        if self._demo.cw_submit(text, mode):
+            return
         # Agent 操作指令（v0.18.6）：/ 前缀强制；讨论模式下含明确指令动词的自然语言也解析——
         # 命中即执行真实应用操作并回显，不进讨论 LLM（这就是「跟 Agent 说，它去操作应用」）
         from ..core import agent_tools
@@ -3538,6 +3613,8 @@ class Bridge(QObject):
             return
         if self._cw_busy or self._cw_confirming:
             self.toast.emit("warn", "上一个操作还没完成，稍后再点「确定」")
+            return
+        if self._demo.cw_confirm():
             return
         self._cw_confirming = True
         try:

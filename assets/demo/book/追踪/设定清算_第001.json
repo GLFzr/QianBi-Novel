@@ -1,0 +1,124 @@
+{
+  "num": 1,
+  "chars": 2134,
+  "failed": false,
+  "cascade": {
+    "mode": "prescan",
+    "pro_review": false,
+    "in_session": true
+  },
+  "early_stop": true,
+  "triage": [
+    {
+      "item": "拍点1林兰交接钥匙",
+      "verdict": "clean"
+    },
+    {
+      "item": "拍点2进屋分类遗物",
+      "verdict": "clean"
+    },
+    {
+      "item": "拍点3床头柜底翻出笔记本",
+      "verdict": "clean"
+    },
+    {
+      "item": "拍点4判分类别&外卖员单票",
+      "verdict": "clean"
+    },
+    {
+      "item": "章首钩子蓝色尼龙绳",
+      "verdict": "clean"
+    },
+    {
+      "item": "爽点账目判断力",
+      "verdict": "clean"
+    },
+    {
+      "item": "禁提前释放条款",
+      "verdict": "clean"
+    },
+    {
+      "item": "细纲'电瓶车卖掉'细节",
+      "verdict": "suspect"
+    }
+  ],
+  "beat_check": {
+    "total": 4,
+    "verified": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "missing": []
+  },
+  "calendar_drift": [],
+  "violations": [],
+  "adoptions": [
+    {
+      "name": "林兰",
+      "cat": "人物",
+      "desc": "陈默父亲老屋邻居，花白头发，掌握半句未交付的遗言"
+    },
+    {
+      "name": "林果果",
+      "cat": "人物",
+      "desc": "林兰之女，五六岁，随母在楼下交接钥匙时在场"
+    },
+    {
+      "name": "小周（外卖员）",
+      "cat": "人物",
+      "desc": "戴黄色头盔的外卖员，问路3门317，单票尾号0317"
+    },
+    {
+      "name": "种子书",
+      "cat": "物件/道具",
+      "desc": "陈默父亲留下的旧笔记本，封面内页手书'种子书'，斜角'不可贪'，页角编号'案：0317'"
+    },
+    {
+      "name": "旧手表",
+      "cat": "物件/物证",
+      "desc": "陈默离开老屋后背包外兜凭空出现的旧表，表针停在22:47，背面刻'0317'"
+    },
+    {
+      "name": "'陈默'纸条",
+      "cat": "物件/物证",
+      "desc": "窗台花盆下父亲笔迹纸条，仅两字，下半截被水渍咬断"
+    }
+  ],
+  "pattern_hits": [],
+  "cross_issues": [],
+  "ledger_updates": {
+    "人物": [
+      {
+        "name": "陈默",
+        "state": "收走种子书与纸条，离开老屋，背包外兜出现旧手表"
+      },
+      {
+        "name": "林兰",
+        "state": "交付钥匙后离开，未说全遗言"
+      },
+      {
+        "name": "林果果",
+        "state": "在场，随母离开"
+      }
+    ],
+    "物件": [
+      {
+        "name": "种子书",
+        "state": "在陈默背包夹层"
+      },
+      {
+        "name": "'陈默'纸条",
+        "state": "用旧塑封袋收好，压回花盆底下"
+      },
+      {
+        "name": "旧手表",
+        "state": "在陈默背包外兜"
+      }
+    ],
+    "制度": [],
+    "时间": "周六下午两点半"
+  },
+  "error": ""
+}
