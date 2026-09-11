@@ -1,29 +1,29 @@
 {
-  "version": "0.19.0",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.0",
-  "notes": "0.19.0 公测版（成本架构升级 + Agent 操作层）：\n· 清算级联：flash 预扫→干净直接采信、有硬伤才升 pro 只复核疑点——清算成本 -82%，质量终审仍在环\n· 审校思考档重置：埋雷测试证明关思考召回更高、成本 -88%、延迟 -93%（默认已切换）\n· 人工审校模式：作者在门里填阻断问题、AI 只负责修复——审校模型调用归零\n· Agent 操作层：共写对话里说「回退到去味之前」「重写第2章」等指令，Agent 真的去操作应用\n· 审校 PASS 快速道默认开：干净章 3 票→1 票；细纲思考降档：单笔输出 -85%\n· 离峰挂机：高价时段自动等待、半价时段自动续跑（设置面板开启）\n· 公测继续：「关于」对话框可导出匿名数据包（不含书稿正文、提示词、API Key）",
-  "sha256": "d44810ecf9dd0b7e0d7a402f5b2a97cf91d2cd9b59a3a095f62d079d88195599",
-  "published": "2026-09-06",
+  "version": "0.19.6",
+  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.6",
+  "notes": "0.19.6 公测版（新用户演示引导 · 零输入看完整流程）：\n· 首启向导/书架空态新增「▶ 看 5 分钟演示（无需 Key）」：21 步带你看完 创建书目 → AI 流水线写作 → 共写对话\n· 演示用真实测试产物加速回放：设定/大纲/细纲逐字流式、正文约 20 倍速、去味真实对照、审校三票、追踪清算\n· 阶段卡新增待机圈：进入未完成的阶段显示旋转动画（自动档通用）\n· 回放与原生 UI 联动高亮：回放哪一步就环住对应卡片/编辑器，完成后再跳下一步\n· 演示书即真实项目：看完填上 Key 点「开始」就能接着写；演示模式硬隔离，绝不调真实 API\n· 全自动档之外：共写档对话式写作一并演示\n· 上游 0.19.5 全部特性继承（卷级会话/命中率战役/增量台账）",
+  "sha256": "5c2a083e433d272551edfb3e799b3517cee4e9858f1753bbe80036e1b724e9f8",
+  "published": "2026-09-12",
   "assets": {
     "setup": {
-      "name": "QianBi-Novel-v0.19.0-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
-      "sha256": "d44810ecf9dd0b7e0d7a402f5b2a97cf91d2cd9b59a3a095f62d079d88195599",
-      "size": 53620493,
+      "name": "QianBi-Novel-v0.19.6-setup.exe",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-setup.exe",
+      "sha256": "5c2a083e433d272551edfb3e799b3517cee4e9858f1753bbe80036e1b724e9f8",
+      "size": 53765950,
       "mirrors": [
-        "https://gh-proxy.com/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
-        "https://ghfast.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
-        "https://ghproxy.net/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
-        "https://gh.zwy.one/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe",
-        "https://ghproxy.cxkpro.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-setup.exe"
+        "https://gh-proxy.com/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-setup.exe",
+        "https://ghfast.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-setup.exe",
+        "https://ghproxy.net/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-setup.exe",
+        "https://gh.zwy.one/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-setup.exe",
+        "https://ghproxy.cxkpro.top/https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-setup.exe"
       ]
     },
     "portable": {
-      "name": "QianBi-Novel-v0.19.0-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.0/QianBi-Novel-v0.19.0-portable.zip",
-      "sha256": "417f09236c251fa0571a2d7f9481dc48e21dfaf4f23b0861c35e59926f8fd908",
-      "size": 79016591
+      "name": "QianBi-Novel-v0.19.6-portable.zip",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.6/QianBi-Novel-v0.19.6-portable.zip",
+      "sha256": "0c6e977094a97e7fb20b866f0c742a7be53a5296e50e1aefb5998c9023fb160f",
+      "size": 79188086
     }
   },
-  "sig": "yKtyLKtWqrx2MQ0CR1vb4rhhD/B7GGlfaegySHFT/HD3FhRnPe1xhL9CLyarb5+XKPPjvagfwhD1sVvS9g3GCg=="
+  "sig": "/aHX6tf/tenBDI/34tmRNygb2DNjXtpX9GaF2VggedAkSgAWK3F0T5eGVrSDe2woG/v5/Cw7ZOy0kMU70EiUBw=="
 }
