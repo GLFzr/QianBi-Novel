@@ -100,7 +100,7 @@ def chapter_header(proj: str, num: int, volume_mode: bool = False,
         prev_text, prev_style = memory.prev_chapter_pack(proj, num, tail=800)
         if corpus_mode:
             parts.append("## 上一章结尾（衔接用）\n上一章全文已在系统「已锁章节原文"
-                         "（卷首冻结）」中——直接以该章末段为衔接基准，此处不重复原文。")
+                         "（冻结）」中——直接以该章末段为衔接基准，此处不重复原文。")
         elif prev_text:
             parts.append("## 上一章结尾（直接衔接用）" + chr(10) + prev_text)
         if prev_style:

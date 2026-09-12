@@ -671,7 +671,8 @@ def head_rebuild_system_text(proj: str, volume: int, *,
                              review_in_system: bool = False,
                              review_tail: str = "",
                              instruction_in_head: bool = False,
-                             corpus_head: bool = False) -> str:
+                             corpus_head: bool = False,
+                             book_stream: bool = False) -> str:
     """L4 冻结头 v2：卷系统（前缀+PROSE 指令库）+ 卷首冻结快照（设定/世界书/卷纲）
     [+ 卷语料库（调整七/动作甲）][+ 清算/追踪/去味静态指令库（调整一）][+ 审校静态尾段]。
     组装一次、卷内逐字节复用。
@@ -685,7 +686,31 @@ def head_rebuild_system_text(proj: str, volume: int, *,
     追加的累积栈改为卷界冻结的只读语料（卷首已存在的全部细纲 + 已锁章节原文）。
     同样的字节、同样的命中价，位置从「无限增长的尾」变为「固定大小的头」。
     滞后一卷语义：卷 N 的语料 = 卷首时刻已存在的章节（卷 N-1 全文），卷内不增。
+
+    book_stream（writing.book_stream，缺省关；v16 A2 书级单一追加流）：替代
+    卷首快照+卷语料库二件套——书级冻结只收真静态（设定底册+卷纲流+细纲+已锁
+    章节原文，write-once 追加式），世界书不入头（5.4 定稿：近场单副本消双写）。
+    **语料流放在 system 最末位且只增不改 ⇒ system(卷N+1) = system(卷N) + 追加
+    字节**，前缀缓存逐字节连续，卷界零塌陷（A2 结构保证，单测钉 startswith）。
     """
+    if book_stream:
+        parts = [volume_system_text(proj)]
+        if instruction_in_head:
+            from .canon_audit import audit_instruction_head, audit_instruction_tail
+            parts.append("## 设定清算指令（卷级冻结——清算轮只带材料，不重复本段）\n\n"
+                         + audit_instruction_head() + "\n\n" + audit_instruction_tail())
+            parts.append("## 追踪补丁协议（卷级冻结——追踪轮只带材料，不重复本段）\n\n"
+                         + tracking_patch_static_head())
+            rules = deslop_static_rules()
+            if rules.strip():
+                parts.append("## 去味改写规则（卷级冻结——去味轮不重复本段）\n\n" + rules)
+        if review_in_system and review_tail.strip():
+            parts.append(review_tail)
+        stream = build_book_stream(proj, volume)
+        if stream.strip():
+            parts.append(stream)      # 最末位：追加发生在尾部，保住 system 前缀
+        return "\n\n".join(p for p in parts if p.strip())
+
     parts = [volume_system_text(proj)]
     snap = build_head_snapshot(proj, volume)
     if snap.strip():
@@ -771,3 +796,174 @@ def build_corpus_snapshot(proj: str, volume: int) -> str:
         with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
     return text
+
+
+# ==================== v16 A2：书级单一追加流 ====================
+# 卷界塌陷根因（v16 总案 A2）：头部按卷拼接——卷界时①卷首快照重冻结（世界书卷内
+# 反哺使字节必变）→ 从变化点起全灭；②语料快照换新文件 → 全部首贴 miss（每卷
+# 2 章 X=224.6k vs 稳态 98.7k）。定稿（5.4）：书级冻结只收真静态三段——题材定位
+# 底册 + 卷纲（开卷追加）+ 语料流（细纲/已锁章节全文/摘要链，write-once 追加式）；
+# **世界书不入书级头**（动态文件，近场单副本，消双写歧义）。
+# 结构保证：语料流是 system 的**最后一个**成分且只增不改 ⇒ system(卷N+1) =
+# system(卷N) + 追加字节——前缀缓存逐字节连续，卷界零塌陷。
+
+def book_stream_path(proj: str) -> str:
+    return os.path.join(proj, "追踪", "书级语料流.md")
+
+
+def book_stream_meta_path(proj: str) -> str:
+    return os.path.join(proj, "追踪", "书级语料流.meta.json")
+
+
+def _read_or(path: str, default: str = "") -> str:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return default
+
+
+def build_book_stream(proj: str, volume: int) -> str:
+    """书级单一追加流（一次装配，之后只追加）：设定底册 + 卷纲流 + 细纲 + 已锁章节。
+
+    已存在则 ensure 卷纲追加后原样返回（字节冻结纪律）。已有书首次切换装配一次
+    （一次性 ~150k miss，迁移成本；此后卷界零事件）。世界书永不入流（5.4 定稿）。
+    """
+    path = book_stream_path(proj)
+    if os.path.exists(path):
+        _ensure_book_stream_volume_outline(proj, int(volume))
+        return _read_or(path)
+    from .. import project as pj
+    parts = []
+    dingce = _read_or(os.path.join(proj, "设定", "题材定位.md")).strip()
+    if dingce:
+        parts.append("## 设定底册（冻结）\n\n" + dingce)
+    outline = _read_or(os.path.join(proj, "大纲", "大纲.md")).strip()
+    if outline:
+        parts.append("## 卷纲流（冻结——开卷追加，卷内不变）\n\n"
+                     + _volume_outline_section(int(volume), outline))
+    outlines = []
+    odir = os.path.join(proj, "大纲")
+    if os.path.isdir(odir):
+        for fn in sorted(os.listdir(odir)):
+            m = re.match(r"细纲_第(\d+)章\.md$", fn)
+            if not m:
+                continue
+            txt = _read_or(os.path.join(odir, fn)).strip()
+            if txt:
+                outlines.append((int(m.group(1)), txt))
+    if outlines:
+        body = "\n\n".join("### 细纲 · 第%d章\n\n%s" % (n, t) for n, t in outlines)
+        parts.append("## 细纲快照（冻结——逐章开幕轮只带本章细纲，不在此重复）\n\n" + body)
+    prose_parts = []
+    try:
+        chapters = pj.list_chapters(proj)
+    except Exception:  # noqa: BLE001
+        chapters = []
+    for n, name, path_ch in chapters:
+        txt = pj.read_file(path_ch).strip() if os.path.exists(path_ch) else ""
+        if txt:
+            title = str(name or "").strip()
+            if title.lower().endswith(".md"):
+                title = title[:-3]
+            prose_parts.append("### 第%d章 %s\n\n%s" % (n, title, txt))
+    if prose_parts:
+        parts.append("## 已锁章节原文（冻结——前情权威基准以命中价常驻；"
+                     "各章开头的「上一章结尾」仅为近场衔接摘要）\n\n"
+                     + "\n\n".join(prose_parts))
+    text = "\n\n".join(parts)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    _save_book_stream_meta(proj, {"schema": 1, "volumes": [int(volume)]})
+    return text
+
+
+def _volume_outline_section(volume: int, outline: str) -> str:
+    return "### 卷纲 · 卷%d（开卷冻结）\n\n%s" % (int(volume), outline)
+
+
+def _load_book_stream_meta(proj: str) -> dict:
+    data = _read_or(book_stream_meta_path(proj))
+    try:
+        meta = json.loads(data)
+        if isinstance(meta, dict) and isinstance(meta.get("volumes"), list):
+            return meta
+    except ValueError:
+        pass
+    return {"schema": 1, "volumes": []}
+
+
+def _save_book_stream_meta(proj: str, meta: dict) -> None:
+    os.makedirs(os.path.dirname(book_stream_meta_path(proj)), exist_ok=True)
+    _atomic_write(book_stream_meta_path(proj),
+                  json.dumps(meta, ensure_ascii=False, indent=1, sort_keys=True))
+
+
+def _ensure_book_stream_volume_outline(proj: str, volume: int) -> bool:
+    """卷界懒追加：卷 N 的卷纲未入流时把当前 大纲/大纲.md 追加到流尾。
+
+    只在卷号前进时追加（卷内稳定纪律：卷内改纲不入流）；前缀守卫同 roll。
+    返回是否追加了字节。
+    """
+    path = book_stream_path(proj)
+    if not os.path.exists(path):
+        return False
+    meta = _load_book_stream_meta(proj)
+    if int(volume) in meta["volumes"]:
+        return False
+    outline = _read_or(os.path.join(proj, "大纲", "大纲.md")).strip()
+    if not outline:
+        meta["volumes"].append(int(volume))
+        _save_book_stream_meta(proj, meta)
+        return False
+    old = _read_or(path)
+    block = "\n\n" + _volume_outline_section(int(volume), outline) + "\n"
+    new = (old.rstrip("\n") + "\n" if old.strip() else "") + block
+    if not new.startswith(old):
+        record_event(proj, "book_stream_outline", vol=int(volume), violated=1)
+        return False
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(new[len(old):])
+    meta["volumes"].append(int(volume))
+    _save_book_stream_meta(proj, meta)
+    record_event(proj, "book_stream_outline", vol=int(volume),
+                 appended=len(new) - len(old))
+    return True
+
+
+def roll_book_stream_chapter(proj: str, num: int, title: str,
+                             prose: str, summary: str) -> bool:
+    """章末把本章正文块+摘要行追加进书级语料流（book_stream 模式的 corpus_roll）。
+
+    块格式与 v15 卷语料滚动逐字相同（### 第N章 …/摘要行）；只允许文件尾 append，
+    写前校验旧字节是严格前缀，违例拒绝滚动并落 session_events:
+    corpus_rolled{violated:1}（事件名沿用，机制判据口径不变）。
+    """
+    path = book_stream_path(proj)
+    if not os.path.exists(path):
+        from .. import project as _pj
+        vol = 1
+        try:
+            vol = resolve_volume_number(proj, num)
+        except Exception:  # noqa: BLE001
+            pass
+        build_book_stream(proj, vol)
+    try:
+        with open(path, encoding="utf-8") as f:
+            old = f.read()
+    except OSError:
+        old = ""
+    block = ("\n\n### 第%d章 %s\n\n%s\n\n> 摘要：%s"
+             % (int(num), str(title or ("第%d章" % int(num))),
+                (prose or "").strip(), (summary or "").strip()))
+    new = (old.rstrip("\n") + "\n" if old.strip() else "") + block + "\n"
+    if not new.startswith(old):
+        record_event(proj, "corpus_rolled", vol=0, ch=int(num), violated=1)
+        return False
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="\n") as f:
+        f.write(new[len(old):])
+    record_event(proj, "corpus_rolled", vol=0, ch=int(num),
+                 appended=len(new) - len(old))
+    return True

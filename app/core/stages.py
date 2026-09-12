@@ -1451,12 +1451,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                              resolve_volume_number as _rvn)
                 # 头 v2（深化计划 §1-L4）：卷首冻结快照（设定底册/世界书/卷纲）并入
                 # 稳定头——头越大，综合命中率越高（每章 ~9 次调用全部命中头）。
+                # v16 A2 book_stream：书级单一追加流替代卷首快照+卷语料库二件套
+                # （世界书不入头；语料流居 system 末位，卷界零塌陷）。
                 _head = head_rebuild_system_text(
                     proj, _rvn(proj, num),
                     review_in_system=bool(_w_cfg.get("review_in_system", False)),
                     review_tail=prompts.review_static_tail(),
                     instruction_in_head=bool(_w_cfg.get("instruction_in_head", False)),
-                    corpus_head=bool(_w_cfg.get("corpus_head", False)))
+                    corpus_head=bool(_w_cfg.get("corpus_head", False)),
+                    book_stream=bool(_w_cfg.get("book_stream", False)))
                 session = VolumeSession(probe, system_text=_head,
                                         volume=_rvn(proj, num), proj=proj,
                                         persist=False,
@@ -2150,14 +2153,21 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         ctx.log("warn", f"设定清算失败（不阻断）：{e}")
 
     # ---- v15（writing.corpus_roll）：章末滚动语料快照（追加式+前缀守卫）----
-    # 本章正文+摘要行追加进当前卷语料快照，下一章头部构建自然读到——头部从
+    # 本章正文+摘要行追加进语料快照，下一章头部构建自然读到——头部从
     # 第 2 章起每章增长（不再等卷界）。摘要行随滚（方向 B2）。
+    # v16 A2：book_stream 开启时追加进书级语料流（跨卷同一文件）。
     if bool(_w_cfg.get("corpus_roll", False)) and prose.strip():
         try:
-            from .volume_session import roll_corpus_snapshot, resolve_volume_number as _rvn2
             _summ = memory.read_recent_summaries(proj, num + 1, n=1)
-            rolled = roll_corpus_snapshot(proj, _rvn2(proj, num), num,
-                                          title or f"第{num}章", prose, _summ)
+            if bool(_w_cfg.get("book_stream", False)):
+                from .volume_session import roll_book_stream_chapter
+                rolled = roll_book_stream_chapter(proj, num, title or f"第{num}章",
+                                                  prose, _summ)
+            else:
+                from .volume_session import roll_corpus_snapshot, \
+                    resolve_volume_number as _rvn2
+                rolled = roll_corpus_snapshot(proj, _rvn2(proj, num), num,
+                                              title or f"第{num}章", prose, _summ)
             if not rolled:
                 ctx.log("warn", f"第 {num} 章 语料滚动被前缀守卫拒绝（violated），"
                                 f"下一章头部退化为上次快照")

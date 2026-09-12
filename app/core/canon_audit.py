@@ -439,25 +439,27 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
                                 prev_ending=prev_ending,
                                 next_opening=next_opening,
                                 prose=prose[:6000])
-    # 调整二延伸（writing.corpus_head）：语料头模式下，约束条款/授权清单（设定底册）、
-    # 本章细纲（细纲快照）、上一章结尾/下一章开头（已锁章节原文）都已在冻结头里——
-    # 会话轮改引用行，材料从「逐笔 miss 重贴」变「头部命中价复读」。独立单发回退
-    # 路径与 pro 终审仍用全量 prompt（它们没有会话前缀，引用行会让模型无处对照）。
+    # 调整二延伸（writing.corpus_head / v16 A2 writing.book_stream）：语料头模式下，
+    # 约束条款/授权清单（设定底册）、本章细纲（细纲快照）、上一章结尾/下一章开头
+    # （已锁章节原文）都已在冻结头里——会话轮改引用行，材料从「逐笔 miss 重贴」
+    # 变「头部命中价复读」。独立单发回退路径与 pro 终审仍用全量 prompt（它们没有
+    # 会话前缀，引用行会让模型无处对照）。
     _slim_prompt = ""
-    if bool((cfg.get("writing", {}) or {}).get("corpus_head", False)):
+    if bool((cfg.get("writing", {}) or {}).get("corpus_head", False)
+            or (cfg.get("writing", {}) or {}).get("book_stream", False)):
         _slim_prompt = AUDIT_PROMPT.format(
             num=num, names=names or "（无）",
             project_header=project_header(proj),
-            authorized="【＝系统「设定底册（卷首冻结）」的授权自创清单（历史已载）——"
+            authorized="【＝系统「设定底册（冻结）」的授权自创清单（历史已载）——"
                        "直接对照执行；正文新出场者仍须逐条收录进 adoptions】",
-            constraints_block="【＝系统「设定底册（卷首冻结）」的核心设定约束条款"
+            constraints_block="【＝系统「设定底册（冻结）」的核心设定约束条款"
                               "（金手指限制/消耗/反噬/触发条件与全局红线，历史已载）——"
                               "直接对照执行，违反即 violations】",
             ledger_block=ledger_block(proj),
-            outline_brief="【＝系统「本卷细纲快照（卷首冻结）」中第 %d 章细纲（历史已载）——"
+            outline_brief="【＝系统「细纲快照（冻结）」中第 %d 章细纲（历史已载）——"
                           "拍点契约照常执行，缺失/漂移/自造记入 violations】" % num,
-            prev_ending="【＝系统「已锁章节原文（卷首冻结）」中上一章结尾（历史已载）】",
-            next_opening="【＝系统「已锁章节原文（卷首冻结）」中下一章开头（历史已载；无则为空）】",
+            prev_ending="【＝系统「已锁章节原文（冻结）」中上一章结尾（历史已载）】",
+            next_opening="【＝系统「已锁章节原文（冻结）」中下一章开头（历史已载；无则为空）】",
             prose=prose[:6000])
     if early_stop:
         prompt += EARLY_STOP_DIRECTIVE
