@@ -92,9 +92,12 @@ def test_repo_queue_json_validates_offline():
     assert set(validated["_channels"]) == {"review", "audit"}
     assert [s["name"] for s in validated["scenarios"]] == \
         ["gate_think_disabled", "control_think_on"]
-    # 生产档必须钉 thinking disabled（P1 前置条件：量具先于改动存在）
+    # 生产档必须钉 thinking disabled（P1 前置条件：量具先于改动存在）；
+    # C7 裁定后走 overrides_by_channel——只关 audit，review 不连坐
     gate_scene = validated["scenarios"][0]
-    assert gate_scene["overrides"].get("thinking") == "disabled"
+    assert gate_scene["overrides_by_channel"]["audit"].get("thinking") == "disabled"
+    assert "review" not in gate_scene["overrides_by_channel"]
+    assert not (gate_scene.get("overrides") or {})
 
 
 def test_validate_queue_rejects_unknown_defect():

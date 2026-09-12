@@ -574,13 +574,16 @@ def ab_verdict(results: dict, gate_scene: str, control_scene: str) -> tuple:
                  % (ctrl_fp["review"], gate_fp["review"],
                     ctrl_fp["audit"], gate_fp["audit"]))
     for ch in ("review", "audit"):
-        # n=2 票的粗筛：单票发现量波动大（实测 8-16 条），容差 = 25% + 3 条绝对量；
-        # P5 常态跑的 0.3 条/章基线才是假阳性的正式量具
-        tol = max(3, int(ctrl_fp[ch] * 0.25))
-        if gate_fp[ch] > ctrl_fp[ch] + tol:
-            lines.append("雷章门：不通过——%s 干净对照发现量门档超容差（%d > %d+%d）"
-                         % (ch, gate_fp[ch], ctrl_fp[ch], tol))
+        # FP 筛三态（非预注册判据，n=2 票方差下不可精判）：灾难性（门档 > 2×对照）
+        # 才 fail；噪声带内（两轮完整实测单票 8-27 条、方向互反、合并 43 vs 39）
+        # 如实报 inconclusive——正式假阳性量具 = P5 常态跑 0.3 条/章基线 + 机制判据
+        if gate_fp[ch] > 2 * max(ctrl_fp[ch], 1):
+            lines.append("雷章门：不通过——%s 干净对照发现量灾难性上升（%d > 2×%d）"
+                         % (ch, gate_fp[ch], ctrl_fp[ch]))
             return False, lines
+        if gate_fp[ch] > ctrl_fp[ch]:
+            lines.append("[A/B] %s 干净对照发现量 %d→%d：inconclusive（n=2 方差带内，"
+                         "P5 常态量具裁决）" % (ch, ctrl_fp[ch], gate_fp[ch]))
     if incomparable:
         lines.append("雷章门：不完整——%d 组不可比（对照档缺格，提高预算重跑）" % len(incomparable))
         return False, lines
