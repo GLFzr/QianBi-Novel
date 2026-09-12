@@ -115,17 +115,18 @@ def _pick_flash_conn(conns: list, prefer_id: str = ""):
                  and "flash" in str(c.get("model", ""))), None), "兜底 DS 官方 flash"
 
 
-def _load_key(prefer_id: str = "", pro_conn: str = ""):
+def _load_key(prefer_id: str = "", pro_conn: str = "", real_home: str = ""):
     """Key 在凭据管理器：secrets.hydrate 按连接 id 领养。**必须读真机配置**——
-    REAL_HOME 在模块加载时钉住；env 重定向到 fake home 后 load_config 只会给出
-    出厂连接表，用户自建连接（ds-official-flash 等）不在其中，hydrate 无从领养
-    （2026-09-12 P4a 发车失败定案：fake home 下 pinned 连接报「不存在或无 Key」）。
-    凭据库（keyring）本身与 home 无关，hydrate 在真机配置 dict 上照常工作。
+    real_home 缺省取模块加载时钉住的 REAL_HOME（cost_bench 直跑时=进程启动 env，
+    真）；**被其他脚本懒导入时（如 mine_replay 子进程已先切 fake home env）必须
+    显式传调用方在自己模块级钉住的真 home**，否则 expanduser 已被重定向（P4a
+    第二次发车失败定案）。凭据库（keyring）本身与 home 无关。
     flash：_pick_flash_conn 优先级链（tr-dsv4f → bailian-flash → ocgo-omen）；
     pro：**缺省不挂**（全线去 Pro，用户裁决 2026-09-07），仅 --pro-conn <id> 显式
     钉定（audit 严格档 F1 设计：flash 首判不过升 pro）。"""
     from app import secrets
-    real_cfg = os.path.join(REAL_HOME, ".qianbi_novel", "config.json")
+    home = real_home or REAL_HOME
+    real_cfg = os.path.join(home, ".qianbi_novel", "config.json")
     try:
         with open(real_cfg, encoding="utf-8") as f:
             cfg = json.load(f)

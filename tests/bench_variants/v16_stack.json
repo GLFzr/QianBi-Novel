@@ -14,7 +14,7 @@
               "outline_pregen": true, "outline_pregen_end": 36},
   "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
                    "canon_audit": {"in_session": true, "early_stop": true, "max_tokens": 5000},
-                   "review": {"max_tokens": 900},
+                   "review": {"thinking": "enabled", "reasoning_effort": "low", "max_tokens": 900},
                    "outline": {"length_budget": 1200}},
   "gates": {"review_confidence_vote": true, "review_pass_fast": true}
 }

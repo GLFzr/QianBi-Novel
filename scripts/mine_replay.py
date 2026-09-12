@@ -62,8 +62,11 @@ BENCH = os.path.join(ROOT, "tests_output", "bench")
 BASE_BOOK = os.path.join(BENCH, "bench_base")
 BOOK = "种子书"
 OUT_DIR = os.path.join(BENCH, "mine_replay")
-# 模块导入时（env 尚未篡改）绑定真机台账路径——子进程里也如此，安全网才成立
-REAL_USAGE = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "usage", "usage.jsonl")
+# 模块导入时（env 尚未篡改）绑定真机台账路径与真 home——子进程里也如此，安全网
+# 与 _load_key(real_home=...) 的注入源都靠它（懒导入 cost_bench 时其 REAL_HOME 已
+# 被fake env 污染，必须显式传：P4a 第二次发车失败定案）
+REAL_HOME = os.path.expanduser("~")
+REAL_USAGE = os.path.join(REAL_HOME, ".qianbi_novel", "usage", "usage.jsonl")
 
 GATE_DEFECTS = ["B01", "B02", "C01", "D01"]   # legacy 召回门四雷（工作指南 v3）
 CHANNELS = ("review", "audit")
@@ -291,7 +294,8 @@ RUNNERS = {"review": run_review, "audit": run_audit}
 def _build_cfg(queue: dict):
     """cfg 构造与 cost_bench 同源（_mk_cfg），叠加 queue.preset 的 writing/gates。"""
     from scripts.cost_bench import _load_key, _mk_cfg, load_preset_spec
-    flash, _pro = _load_key(prefer_id=queue.get("flash_conn", ""))
+    # real_home 注入：本模块级 REAL_HOME 在进程启动（env 干净时）绑定
+    flash, _pro = _load_key(prefer_id=queue.get("flash_conn", ""), real_home=REAL_HOME)
     cfg = _mk_cfg(flash)
     preset = queue.get("preset") or ""
     if preset:
@@ -329,6 +333,7 @@ def cmd_scene(queue_path: str, scene_name: str, out_dir: str, budget_cny: float)
     votes = scene.get("votes") or queue["_votes"]
     overrides = scene.get("overrides") or {}
     home = os.path.join(out_dir, "home_" + scene_name)
+    shutil.rmtree(home, ignore_errors=True)   # fresh home 纪律：残留目录（如上轮失败）必清
     os.makedirs(home)
     os.environ["USERPROFILE"] = home
     os.environ["HOME"] = home
@@ -349,7 +354,9 @@ def cmd_scene(queue_path: str, scene_name: str, out_dir: str, budget_cny: float)
         if spent > budget_cny:
             fragment["aborted"] = True
             return
-        rec = runners[ch](proj, cfg, n, prose, overrides, marks)
+        # 通道级覆盖优先（P1 决策只涉 audit 时不得连 review 一起改），回退场景平铺覆盖
+        ov = (scene.get("overrides_by_channel") or {}).get(ch) or overrides
+        rec = runners[ch](proj, cfg, n, prose, ov, marks)
         u = rec.pop("usage")
         spent += u["cost_cny"]
         entry = dict(scenario=scene_name, kind=kind, defect=d_id, chapter=n,
@@ -520,28 +527,64 @@ def ab_regressions(results: dict, gate_scene: str, control_scene: str) -> list:
                             scenario_results(results, control_scene))
 
 
+def _clean_counts(results: dict, scene: str) -> dict:
+    """逐通道干净对照发现量（review fail 数 / audit violations 数，跨票求和）。"""
+    out = {"review": 0, "audit": 0}
+    for c in results.get("calls", []):
+        if c.get("kind") == "clean" and c.get("scenario") == scene:
+            if c.get("channel") == "review":
+                out["review"] += int(c.get("n_fail") or 0)
+            else:
+                out["audit"] += int(c.get("n_violations") or 0)
+    return out
+
+
 def ab_verdict(results: dict, gate_scene: str, control_scene: str) -> tuple:
-    """同跑 A/B 判定 → (通过, 摘要行列表)。空表＝结构失败（假绿防线：首轮发车
-    连接失配零调用时曾误判「通过」——静默失效类事故防线，空表一律 fail）。"""
+    """同跑 A/B 判定 → (通过, 摘要行列表)。
+
+    - 召回：逐 (雷,通道) 门档 ≥ 对照档；对照档缺格（预算截断等）＝不可比行——
+      存在不可比行时整体判「不完整」（宁缺毋假，不产出绿色结论）。
+    - 假阳性：**相对口径**——独立脚手架里 bench_base 设定底册不含源跑次累积的
+      收编/台账，干净章在两档都会出同量级 findings（实测 audit 11-16 条）；
+      门只有在不相称地**高于**对照档时才失败。
+    - 空表＝结构失败（假绿防线：零调用不许判通过）。"""
     t_gate = recall_table(scenario_results(results, gate_scene))
     t_ctrl = recall_table(scenario_results(results, control_scene))
     lines = []
     if not t_gate or not t_ctrl:
         return False, ["[结构失败] 门档或对照档零有效调用（gate=%d control=%d 组）；"
                        "不许判通过" % (len(t_gate), len(t_ctrl))]
-    regs = ab_regressions(results, gate_scene, control_scene)
+    regs = [r for r in ab_regressions(results, gate_scene, control_scene)
+            if r.get("old") != "（基线无）"]   # 缺格行走「不可比」分支，不算回归
+    incomparable = sorted(set(t_gate) - set(t_ctrl))
     for key in sorted(set(t_gate) | set(t_ctrl)):
+        if key in incomparable:
+            lines.append("[A/B] %-12s 对照档=缺格 门档=%.2f（不可比）"
+                         % (key, t_gate[key][0]))
+            continue
         lines.append("[A/B] %-12s 对照档=%.2f 门档=%.2f%s"
-                     % (key, t_ctrl.get(key, (0.0, {}))[0], t_gate.get(key, (0.0, {}))[0],
+                     % (key, t_ctrl[key][0], t_gate[key][0],
                         "  [回归]" if any(r["defect_channel"] == key for r in regs) else ""))
     if regs:
         lines.append("雷章门（同跑 A/B）：不通过——召回回归 %d 项" % len(regs))
         return False, lines
-    fps = clean_fp_table(results)
-    if fps:
-        lines.append("雷章门：不通过——干净对照假阳性 %d 笔" % len(fps))
+    gate_fp = _clean_counts(results, gate_scene)
+    ctrl_fp = _clean_counts(results, control_scene)
+    lines.append("[A/B] 干净对照发现量（脚手架语境噪声，相对口径+容差）review %d→%d / audit %d→%d"
+                 % (ctrl_fp["review"], gate_fp["review"],
+                    ctrl_fp["audit"], gate_fp["audit"]))
+    for ch in ("review", "audit"):
+        # n=2 票的粗筛：单票发现量波动大（实测 8-16 条），容差 = 25% + 3 条绝对量；
+        # P5 常态跑的 0.3 条/章基线才是假阳性的正式量具
+        tol = max(3, int(ctrl_fp[ch] * 0.25))
+        if gate_fp[ch] > ctrl_fp[ch] + tol:
+            lines.append("雷章门：不通过——%s 干净对照发现量门档超容差（%d > %d+%d）"
+                         % (ch, gate_fp[ch], ctrl_fp[ch], tol))
+            return False, lines
+    if incomparable:
+        lines.append("雷章门：不完整——%d 组不可比（对照档缺格，提高预算重跑）" % len(incomparable))
         return False, lines
-    lines.append("雷章门（同跑 A/B）：通过——召回不降 + 零假阳性")
+    lines.append("雷章门（同跑 A/B）：通过——召回不降 + 假阳性不增")
     return True, lines
 
 
