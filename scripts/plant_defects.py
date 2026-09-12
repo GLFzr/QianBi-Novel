@@ -148,6 +148,22 @@ _INJECTORS = {
 }
 
 
+def apply_defect(content: str, defect: dict):
+    """对单章内容字符串注入单颗雷（内存版：不落盘、不动 manifest）。
+
+    返回 (新内容, 注入串, 被替换原文或 None)。replace_regex 锚点未命中抛
+    ValueError——召回量具把植入失败计为该雷失败（量具的量具失灵必须可见，
+    不许静默跳过）。
+    """
+    inj = defect["inject"]
+    mode, text = inj["mode"], inj["text"]
+    if mode == "replace_regex":
+        new, added, replaced = _inject_replace_regex(content, inj["anchor"], text)
+        return new, added, replaced
+    new, added = _INJECTORS[mode](content, text)
+    return new, added, None
+
+
 # ---------- --apply ----------
 
 def cmd_apply(drafts_dir, defects, seed, all_ids):

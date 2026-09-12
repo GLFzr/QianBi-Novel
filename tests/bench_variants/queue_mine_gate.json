@@ -1,0 +1,16 @@
+{
+  "_note": "v16 P0 雷章召回量具队列（C1 资产化，配套 scripts/mine_replay.py）。场景 gate_think_disabled = P1 落地后的生产档（清算预扫 thinking disabled）——A1 的 thinking-disabled 没过本量具不许落地；场景 control_think_on = 同跑次对照档（同跑 A/B 消跨跑漂移）。defects 默认 = legacy 召回门四雷 B01/B02/C01/D01（工作指南 v3：任何影响审校/清算的改动必须过；B02 为 v2 集内同维加固）。章源 = v15 正式跑第 2 章草稿（干净生产稿，2548 字 < audit 预扫 6000 上限；14 个标记串已验证零天然污染）。audit 通道在量具中走独立单发全量 prompt（无会话前缀）——对召回是最保守形态；P2 落地后可加 in_session 场景复测。votes=2 看单档稳定性（v1 探针同款）。预算 ¥1.5 熔断；发车纪律：离峰、发车后 60 秒查 fake home usage 增长 + 真机台账 338 行不变。",
+  "id": "mine_gate_v16",
+  "source_drafts": "tests_output/bench/v15_fresh/bench/种子书/正文/.drafts",
+  "chapter_nums": [2],
+  "preset": "tests/bench_variants/v15_stack.json",
+  "flash_conn": "ds-official-flash",
+  "votes": 2,
+  "channels": ["review", "audit"],
+  "defects": ["B01", "B02", "C01", "D01"],
+  "budget_cny_max": 1.5,
+  "scenarios": [
+    {"name": "gate_think_disabled", "overrides": {"thinking": "disabled"}},
+    {"name": "control_think_on", "overrides": {"thinking": "enabled", "reasoning_effort": "high"}}
+  ]
+}
