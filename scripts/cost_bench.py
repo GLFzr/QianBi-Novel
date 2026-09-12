@@ -142,6 +142,17 @@ def _load_key(prefer_id: str = "", pro_conn: str = ""):
              if pro else None))
 
 
+def _state_mutate(proj: str, **kv) -> None:
+    """pipeline_state 单键更新（load→mutate→save）。v16 5.1 A1 事故定案：save_state
+    是**整文件覆盖**——传 {"genre_preset": pid} 会抹掉 state 里其余全部键，_phase_flags
+    读空 → 清算 in_session 等旗标静默失效（v15 30 章 173 笔独立单发的真凶）。
+    任何「只改一个键」的写入必须走本函数，禁止手写 save_state(proj, {单键 dict})。"""
+    from app.core import state as _st
+    state = _st.load_state(proj)
+    state.update(kv)
+    _st.save_state(proj, state)
+
+
 def _qt():
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QGuiApplication
@@ -421,7 +432,7 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
         _mark("变量预设 %s 生效档：%s" % (pid, json.dumps(sp, ensure_ascii=False)))
         if seed_home:
             _mark("题材预设名沿用种子「%s」（进 system 前缀，换名会退回空栈）" % label)
-        st.save_state(proj, {"genre_preset": pid})
+        _state_mutate(proj, genre_preset=pid)
 
     def _seed_chapter(n: int):
         """确定性审计对比：单槽断点必须在每章微循环前注入对应章
@@ -459,7 +470,7 @@ def cmd_run(variant: str, chapters: int, preset_params: dict | None,
         _pregen_end = int((cfg.get("writing", {}) or {}).get("outline_pregen_end", 36) or 36)
         _mark("细纲预生成：第 1-%d 章（冻结纪律：运行中不改已冻结细纲）…" % _pregen_end)
         from app.core import stages as _st_mod
-        st.save_state(proj, {"stage": st.STAGE_CH_OUTLINE})
+        _state_mutate(proj, stage=st.STAGE_CH_OUTLINE)
         _st_mod.stage_chapter_outlines(orch, 1, _pregen_end)
 
     if outlines_only:

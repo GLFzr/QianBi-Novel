@@ -403,6 +403,8 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
     N2 红线——异构网关入会话=整栈缓存清零）时，预扫作为**会话追加轮**执行：system
     前缀与全部历史命中，miss 只剩增量（E0.1 实测独立单发 4.7k miss/笔 → 会话内 ~3k）。
     解析失败/退化即回退独立单发路径（F1 质量上限保留），失败轮不留在会话历史里。
+    S1b（v16 5.3）：S2 未启用时的重试轮同域骑会话+废轮回滚（回滚后历史与本轮调用前
+    一致，无上下文污染）；S2 试过后的回退轮与 pro 升级轮维持独立单发。
     """
     authorized = [a for a in authorized_inventions(proj) if a]
     ledger_path = os.path.join(proj, "追踪", "拆解清单.json")
@@ -466,8 +468,10 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
 
     # ---- S2：预扫入会话（追加轮）——成功则跳过独立单发循环；任何失败回退原路径 ----
     s2_in_session = False
+    s2_attempted = False   # S2 试过（废轮回退）→ 回退轮保持独立单发（F1 路径多样性：
     if session is not None and getattr(session, "enabled", False) \
             and bool(flags.get("in_session")):
+        s2_attempted = True
         try:
             base = getattr(session, "_client", None)
             same_domain = base is not None and \
@@ -534,17 +538,38 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
 
     if not s2_in_session:
         data, last_err = None, ""
+
+    def _retry_rides_session() -> bool:
+        """S1b（v16 总案 5.3 收窄，N2 红线）：重试仅在「会话可用、当前客户端与会话
+        基座同域（base_url+model 一致，即 flash）、且 S2 未试过」时骑会话——
+        pro 异构入会话=整栈前缀清零，严禁（pro 升级后本判定自动转假）；S2 预扫已
+        试过并废轮时，回退轮走独立单发（与改造前一致，保留第二条独立路径）。"""
+        base = getattr(session, "_client", None)
+        return (not s2_attempted
+                and session is not None and getattr(session, "enabled", False)
+                and base is not None
+                and (getattr(base, "base_url", ""), getattr(base, "model", ""))
+                == (getattr(client, "base_url", ""), getattr(client, "model", "")))
+
     # 级联（v0.19，E9 实测）：flash+low 全文预扫 → 干净采信（省掉 pro 全量）；有硬伤/
     # 跨章矛盾才升 pro **只复核 flagged 项**（输入=清单+定位片段，输出=裁决，双缩水）；
     # 预扫解析失败/退化 → pro 全量兜底（保留 F1 质量上限）。thinking 模式下 temperature
     # 静默失效（官方文档），重试改用措辞扰动而非换温。
     for attempt in range(0 if s2_in_session else 2):
+        turn_before = session.turn_count() if _retry_rides_session() else None
         try:
-            parts = []
             retry_prompt = prompt if attempt == 0 else prompt + \
                 "\n\n（重试：请逐项重新核对，勿沿用上一次的判断思路，直接输出结论。）"
-            client.chat_stream(retry_prompt, temperature=0.2, phase="canon_audit",
-                               on_chunk=parts.append)
+            parts = []
+            if turn_before is not None:
+                # 同域重试骑会话：前缀命中价重发；废轮回滚后历史与本轮调用前一致
+                # （无上下文污染——单测钉 rollback 后 turn_count 复位）
+                from .chapter_session import ChapterSession
+                session.ask(ChapterSession.SCOPE_LINE + "\n\n" + retry_prompt,
+                            client=client, phase="canon_audit", on_chunk=parts.append)
+            else:
+                client.chat_stream(retry_prompt, temperature=0.2, phase="canon_audit",
+                                   on_chunk=parts.append)
             out = "".join(parts)
             m = re.search(r"\{.*\}", out, re.S)
             data = json.loads(m.group(0) if m else out)
@@ -554,6 +579,12 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
         violations = (data or {}).get("violations") if isinstance(data, dict) else None
         if violations is not None and not _degenerate(violations):
             break
+        # 废轮（解析失败/退化）不留史：回滚到本轮调用前，下一轮重试所见历史不变
+        if turn_before is not None:
+            try:
+                session.rollback_to(turn_before)
+            except Exception:  # noqa: BLE001
+                pass
         # 退化/解析失败 → 升 pro 再试一次（F1：严格判定不许 flash 单飞）；
         # 显式传思考档（from_connection 不吃 preset 档，模型默认 enabled+high 恰为严格档所需）。
         # 无 pro 连接（--no-pro / 用户未配严格档）：保持 flash 客户端做措辞扰动重试，

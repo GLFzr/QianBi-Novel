@@ -176,7 +176,11 @@ def test_empty_content_degrades_in_one_call(http):
     assert c.thinking == "enabled" and c.reasoning_effort == "high"   # 实例字段未被改写
     assert c.last_degraded is True
     assert len(recorder.calls) == 2
-    assert "thinking" in recorder.calls[0] and "thinking" not in recorder.calls[1]
+    assert "thinking" in recorder.calls[0]
+    # v16 5.1：降级重发必须显式 disabled——空串会让 thinking 键整体不下发（模型默认
+    # 思考开），降级成为空操作（v15 每章 6 笔空流×3 全额思考输出的真凶）
+    assert recorder.calls[1]["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in recorder.calls[1]
 
 
 def test_empty_stream_degrades_in_one_call(http):
@@ -188,7 +192,7 @@ def test_empty_stream_degrades_in_one_call(http):
     assert c.thinking == "enabled"
     assert c.last_degraded is True
     assert len(recorder.calls) == 2
-    assert "thinking" not in recorder.calls[1]
+    assert recorder.calls[1]["thinking"] == {"type": "disabled"}
 
 
 def test_degrade_triggers_at_most_once(http):
@@ -199,7 +203,7 @@ def test_degrade_triggers_at_most_once(http):
     with pytest.raises(lc.LLMError):
         c.chat("p")
     assert len(recorder.calls) == 3
-    assert all("thinking" not in body for body in recorder.calls[1:])
+    assert all(body.get("thinking") == {"type": "disabled"} for body in recorder.calls[1:])
 
 
 def test_last_degraded_resets_per_call(http):

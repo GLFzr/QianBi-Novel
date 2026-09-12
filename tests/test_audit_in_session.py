@@ -5,7 +5,8 @@
   前缀、带 SCOPE_LINE；JSON 解析成功 → 跳过独立单发循环、cascade.in_session=True
 - 解析失败/退化：回退独立单发，且废轮被 rollback（会话栈回到调用前）
 - 客户端异构（N2）：不走会话，直接独立单发
-- 旗标关（默认）：行为与改造前一致（不碰会话）
+- 旗标关（默认）：S2 跳过；S1b（v16 5.3）同域重试轮骑会话+废轮回滚，
+  cascade.in_session 仍为 False（它只标 S2 通道）
 无真实 API：monkeypatch canon_audit._client_for 注入假客户端，会话用假替身。
 """
 import json
@@ -164,7 +165,9 @@ def test_cross_provider_client_skips_session(tmp_path, monkeypatch):
     assert rep["cascade"]["in_session"] is False
 
 
-def test_flag_off_untouched(tmp_path, monkeypatch):
+def test_flag_off_retry_rides_session(tmp_path, monkeypatch):
+    """旗标关（S2 跳过）：预扫不作为 S2 会话轮；但 S1b（v16 5.3）——同域重试轮
+    骑会话（cascade.in_session 仍为 False，它只标 S2 通道）。"""
     proj = _proj(str(tmp_path))
     _flags_via_preset(proj, False)
     solo = FakeClient(output=VALID)
@@ -172,6 +175,7 @@ def test_flag_off_untouched(tmp_path, monkeypatch):
     monkeypatch.setattr(ca, "_client_for", lambda cfg, router=None, strict=False: solo)
     rep = audit_chapter(proj, 1, "他推开了西角的铁门，门后有风。", {"gates": {}, "writing": {}},
                         router=None, session=s)
-    assert s.asked == []
+    assert len(s.asked) == 1                    # 重试轮骑会话
+    assert solo.calls == []                     # 没有独立单发
     assert rep["cascade"]["in_session"] is False
     assert rep["violations"]

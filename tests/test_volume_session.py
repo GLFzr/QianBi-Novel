@@ -158,6 +158,34 @@ class _FakeRouter:
         return self._client
 
 
+class _AuditSoloClient:
+    """审计单发旁路客户端：异域 base_url（S1b 同域判定不成立 → 审计不骑卷会话，
+    走单发 chat_stream 旁路）——供卷栈单调性结构测试保持原始主题。"""
+
+    base_url = "https://audit-solo.invalid"
+    model = "deepseek-v4-flash"
+
+    def __init__(self):
+        self.stream_prompts = []
+
+    def chat_stream(self, prompt, on_chunk=None, phase="", **kw):
+        self.stream_prompts.append(prompt)
+        if on_chunk:
+            on_chunk("（清算输出非 JSON）")
+        return "（清算输出非 JSON）"
+
+
+class _SplitRouter(_FakeRouter):
+    """review 槽（审计）走独立旁路客户端，其余槽位仍是主客户端"""
+
+    def __init__(self, client):
+        super().__init__(client)
+        self._solo = _AuditSoloClient()
+
+    def client(self, slot):
+        return self._solo if slot == "review" else self._client
+
+
 SYS = "全书前缀P"     # 卷会话 system：只含 project_header（替身语境）
 
 
@@ -623,10 +651,12 @@ def _make_proj(tmp_path):
     return proj
 
 
-def _run_microcycle(proj, cfg, client, num, ctx=None):
+def _run_microcycle(proj, cfg, client, num, ctx=None, router=None):
     from app.core import stages
     if ctx is None:
         ctx = CycleCtx(proj, cfg, client)
+    if router is not None:
+        ctx.router = router
     record = stages.chapter_microcycle(ctx, num)
     return ctx, record
 
@@ -681,7 +711,10 @@ def test_flag_on_system_project_header_only_header_in_opening_turn(tmp_path):
     assert 1 in ctx.volume_sessions
     sess = ctx.volume_sessions[1]
     assert isinstance(sess, VolumeSession)
-    assert sess.current_chapter == 1 and sess.turn_count() == len(client.turn_calls)
+    # S1b（v16 5.3）：清算重试同域骑会话 ×2，回非 JSON 废轮已回滚——
+    # 活动轮仍是草稿/追踪/章摘要/全局摘要 4 轮；client 侧记录含 2 笔废轮
+    assert sess.current_chapter == 1 and sess.turn_count() == 4
+    assert len(client.turn_calls) == 6
 
 
 def test_in_chapter_checkpoints_persist_stack_before_finalize(tmp_path, monkeypatch):
@@ -719,11 +752,11 @@ def test_two_chapters_share_volume_stack_and_persist_per_chapter(tmp_path):
                        "chapter_word_target": 60},
            "gates": {"review_enabled": False}}
     client = CycleClient()
-    ctx, _r1 = _run_microcycle(proj, cfg, client, 1)
+    ctx, _r1 = _run_microcycle(proj, cfg, client, 1, router=_SplitRouter(client))
     path = volume_messages_path(proj, 1)
     assert os.path.exists(path)                          # 逐章落盘
     lines_after_ch1 = open(path, "r", encoding="utf-8").read().splitlines()
-    assert len(client.turn_calls) == 4                   # 草稿/追踪/章摘要/全局摘要
+    assert len(client.turn_calls) == 4                   # 草稿/追踪/章摘要/全局摘要（审计走单发旁路）
     ch_header2 = chapter_header(proj, 2)     # 第 1 章产物已落盘；第 2 章开跑前取样
 
     ctx, _r2 = _run_microcycle(proj, cfg, client, 2, ctx=ctx)   # 同一 run：同 ctx 续跑
@@ -763,7 +796,7 @@ def test_volume_resume_seeds_draft_into_session(tmp_path):
                        "chapter_word_target": 60},
            "gates": {"review_enabled": False}}
     client = CycleClient()
-    _run_microcycle(proj, cfg, client, 1)                # 第 1 章完整跑完并落盘
+    _run_microcycle(proj, cfg, client, 1, router=_SplitRouter(client))   # 第 1 章完整跑完并落盘
     # 模拟第 2 章崩在中途：草稿在盘、章内断点登记（卷栈只到第 1 章末尾）
     draft = _prose_fixture(2, 60)
     pj.write_file(pj.chapter_draft_path(proj, 2), draft)
@@ -774,7 +807,7 @@ def test_volume_resume_seeds_draft_into_session(tmp_path):
                          votes=[], outline_fp=fp)
     # 新"进程"：全新 ctx/缓存，卷栈从 jsonl 恢复
     client2 = CycleClient()
-    ctx2, record = _run_microcycle(proj, cfg, client2, 2)
+    ctx2, record = _run_microcycle(proj, cfg, client2, 2, router=_SplitRouter(client2))
     assert record["num"] == 2
     sess = ctx2.volume_sessions[1]
     assert len(client2.turn_calls) == 3                  # 草稿跳过：追踪/两段摘要

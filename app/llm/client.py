@@ -399,13 +399,17 @@ class LLMClient:
                         self._charge_failed_attempt(data.get("usage"), t0, phase, "empty")
                         if payload.get("thinking") and not self.last_degraded:
                             # thinking 模式偶发"只思考不输出"：本次调用内关闭 thinking 重发
-                            # （退化标记至多触发一次，不再递归重开一整轮重试预算）
+                            # （退化标记至多触发一次，不再递归重开一整轮重试预算）。
+                            # v16 5.1：必须显式 disabled——传空串 thinking 键整体不下发，
+                            # 模型默认思考开，降级重发等于空操作（v15 每章 6 笔空流×3 的真凶）
                             logger.warning(
-                                "模型返回空内容(finish_reason=%s)，降级重发（关闭 thinking）", finish)
+                                "模型返回空内容(finish_reason=%s)，降级重发（thinking=disabled）",
+                                finish)
                             self.last_degraded = True
                             payload = self._build_payload(
                                 messages, stream=False, phase=phase,
-                                temperature=temperature, thinking="", reasoning_effort="")
+                                temperature=temperature, thinking="disabled",
+                                reasoning_effort="")
                             continue
                         if attempt < self.max_retries:
                             self._retry_wait(attempt, None, last_err)
@@ -567,12 +571,13 @@ class LLMClient:
                     stream_usage = None
                     if payload.get("thinking") and not self.last_degraded:
                         # thinking 偶发"只思考不输出"（reasoning_content 有流、content 全空）：
-                        # 本次调用内关闭 thinking 重发（退化标记至多一次，不再递归重开重试预算）
-                        logger.warning("流式返回空内容，降级重发（关闭 thinking）")
+                        # 本次调用内关闭 thinking 重发（退化标记至多一次，不再递归重开重试
+                        # 预算）。v16 5.1：显式 disabled，空串=键不下发=空操作
+                        logger.warning("流式返回空内容，降级重发（thinking=disabled）")
                         self.last_degraded = True
                         payload = self._build_payload(
                             messages, stream=True, phase=phase, temperature=temperature,
-                            thinking="", reasoning_effort="")
+                            thinking="disabled", reasoning_effort="")
                         continue
                     if attempt < self.max_retries:
                         if not self._retry_wait(attempt, abort, last_err):
