@@ -229,3 +229,62 @@ def test_clean_fp_rule_matches_channel_semantics():
     assert _clean_fp("review", {"n_fail": 0, "n_items": 3}) is False
     assert _clean_fp("audit", {"n_violations": 2}) is True
     assert _clean_fp("audit", {"n_violations": 0, "n_pattern": 1}) is False
+
+
+# ---------- 同跑 A/B 判定（v16 P4 主判定路径） ----------
+
+def test_ab_regressions_compares_scenarios_within_one_run():
+    from scripts.mine_replay import ab_regressions
+    results = {"calls": [
+        _call("planted", "B01", "review", ["改日再算"], scenario="control_think_on", vote=0),
+        _call("planted", "B01", "review", ["改日再算"], scenario="control_think_on", vote=1),
+        _call("planted", "B01", "review", ["改日再算"], scenario="gate_think_disabled", vote=0),
+        _call("planted", "B01", "review", ["改日再算"], scenario="gate_think_disabled", vote=1),
+    ]}
+    assert ab_regressions(results, "gate_think_disabled", "control_think_on") == []
+    worse = {"calls": [dict(c, caught=[]) if c["scenario"] == "gate_think_disabled"
+                       and c["vote"] == 1 else c for c in results["calls"]]}
+    regs = ab_regressions(worse, "gate_think_disabled", "control_think_on")
+    assert regs and regs[0]["defect_channel"] == "B01/review"
+
+
+def test_ab_verdict_fails_closed_on_empty_tables():
+    """假绿防线：门档/对照档零调用（发车失败等）必须判不通过，不许空表对比出「通过」。"""
+    from scripts.mine_replay import ab_verdict
+    ok, lines = ab_verdict({"calls": []}, "gate_think_disabled", "control_think_on")
+    assert ok is False
+    assert any("结构失败" in ln for ln in lines)
+
+
+def test_ab_verdict_passes_with_full_recall_and_no_fp():
+    from scripts.mine_replay import ab_verdict
+    calls = []
+    for scene in ("control_think_on", "gate_think_disabled"):
+        for v in (0, 1):
+            calls.append(_call("planted", "B01", "review", ["改日再算"], scenario=scene, vote=v))
+            calls.append(_call("clean", "", "review", [], scenario=scene, vote=v))
+    ok, lines = ab_verdict({"calls": calls}, "gate_think_disabled", "control_think_on")
+    assert ok is True and any("通过" in ln for ln in lines)
+
+
+def test_load_key_reads_real_home_config(tmp_path, monkeypatch):
+    """P4a 发车失败定案回归钉：_load_key 读 REAL_HOME 真机配置（凭据库与 home 无关），
+    不受 fake home 出厂连接表限制。"""
+    import json
+    import scripts.cost_bench as cb
+    real_home = tmp_path / "realhome"
+    (real_home / ".qianbi_novel").mkdir(parents=True)
+    cfg = {"connections": [
+        {"id": "ds-official-flash", "model": "deepseek-flash",
+         "base_url": "https://api.deepseek.com", "api_key": "", "key_ref": "keyring"},
+        {"id": "nokey", "model": "m", "base_url": "https://x.invalid"},
+    ]}
+    (real_home / ".qianbi_novel" / "config.json").write_text(
+        json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(cb, "REAL_HOME", str(real_home))
+    import app.secrets as secrets_mod
+    monkeypatch.setattr(secrets_mod, "get_secret",
+                        lambda cid: "sk-test-123" if cid == "ds-official-flash" else "")
+    flash, pro = cb._load_key(prefer_id="ds-official-flash")
+    assert flash["key"] == "sk-test-123" and flash["model"] == "deepseek-flash"
+    assert pro is None

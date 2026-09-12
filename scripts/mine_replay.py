@@ -459,9 +459,20 @@ def cmd_run(queue_path: str, gate: bool, baseline_path: str) -> int:
         return 2
     if results["plant_failures"]:
         return 1
+    # 同跑 A/B（v16 P4 雷章门主判定）：队列同时含门档与对照档场景时自动判定——
+    # gate 场景（thinking disabled）召回 ≥ control 场景（thinking on）。
+    scene_names = [s["name"] for s in queue["scenarios"]]
+    gate_scene = next((n for n in scene_names if n.startswith("gate")), "")
+    control_scene = next((n for n in scene_names if n.startswith("control")), "")
+    ab_fail = False
+    if gate_scene and control_scene and not gate:
+        ok, lines = ab_verdict(results, gate_scene, control_scene)
+        for ln in lines:
+            _mark("  " + ln)
+        ab_fail = not ok
     if gate:
         return cmd_gate(out_path, baseline_path)
-    return 0
+    return 1 if ab_fail else 0
 
 
 # ---------- 判定与汇总 ----------
@@ -495,6 +506,43 @@ def gate_regressions(new: dict, old: dict) -> list:
             if new_t[key][0] < old_t[key][0]] + \
            [{"defect_channel": key, "old": "（基线无）", "new": new_t[key][0]}
             for key in sorted(set(new_t) - set(old_t))]
+
+
+def scenario_results(results: dict, name: str) -> dict:
+    """抽取单场景的子结果（同跑 A/B 判定用）。"""
+    return {"calls": [c for c in results.get("calls", []) if c.get("scenario") == name]}
+
+
+def ab_regressions(results: dict, gate_scene: str, control_scene: str) -> list:
+    """同跑 A/B：gate 场景（如 thinking disabled）召回不得低于 control 场景。
+    消跨跑漂移——两场景同一次发车、同一天同一节点池。"""
+    return gate_regressions(scenario_results(results, gate_scene),
+                            scenario_results(results, control_scene))
+
+
+def ab_verdict(results: dict, gate_scene: str, control_scene: str) -> tuple:
+    """同跑 A/B 判定 → (通过, 摘要行列表)。空表＝结构失败（假绿防线：首轮发车
+    连接失配零调用时曾误判「通过」——静默失效类事故防线，空表一律 fail）。"""
+    t_gate = recall_table(scenario_results(results, gate_scene))
+    t_ctrl = recall_table(scenario_results(results, control_scene))
+    lines = []
+    if not t_gate or not t_ctrl:
+        return False, ["[结构失败] 门档或对照档零有效调用（gate=%d control=%d 组）；"
+                       "不许判通过" % (len(t_gate), len(t_ctrl))]
+    regs = ab_regressions(results, gate_scene, control_scene)
+    for key in sorted(set(t_gate) | set(t_ctrl)):
+        lines.append("[A/B] %-12s 对照档=%.2f 门档=%.2f%s"
+                     % (key, t_ctrl.get(key, (0.0, {}))[0], t_gate.get(key, (0.0, {}))[0],
+                        "  [回归]" if any(r["defect_channel"] == key for r in regs) else ""))
+    if regs:
+        lines.append("雷章门（同跑 A/B）：不通过——召回回归 %d 项" % len(regs))
+        return False, lines
+    fps = clean_fp_table(results)
+    if fps:
+        lines.append("雷章门：不通过——干净对照假阳性 %d 笔" % len(fps))
+        return False, lines
+    lines.append("雷章门（同跑 A/B）：通过——召回不降 + 零假阳性")
+    return True, lines
 
 
 def cmd_gate(results_path: str, baseline_path: str) -> int:
