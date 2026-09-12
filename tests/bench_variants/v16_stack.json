@@ -1,0 +1,20 @@
+{
+  "_note": "V16 = 登记册 A 类全量落地（P1-P3 修复批次）。相对 v15 的增量：①book_stream 书级单一追加流（三段真静态+世界书不入头+语料流居 system 末位——卷界零塌陷，替代 corpus_head）②review_pass_fast 显式开（v15 bench 被 _mk_cfg 关掉=满投 3 票的真因，5.2 定案）③summary_merged 章摘要+全局摘要一次调用（A11，-1 次大请求/章）④tracking_delta/deslop_pinned/review_compact/instruction_in_head/audit_effort_low 沿用 ⑤canon_audit in_session+early_stop+max_tokens 5000——P1 修复后旗标真正生效（pregen state 覆盖已灭）。思考治理（canon_audit thinking disabled）待 P4 雷章门召回数据裁定后才进 stack（本 stack 保持 enabled+low）。预注册（v16 3.2/5.5）：稳态窗 ≥19/20 章综合 ≥95% 且塌陷=0；机制判据 audit ≤1.5 笔/章、快速道触发率 ≥50%、corpus_rolled 零违例、细纲现场调用=0、盲区 ≤1%；质量门盲评 D2/D4≥-0.5+雷章召回不降一票否决；预算带 ¥8-9 熔断 ¥10。",
+  "writing": {"volume_session": false, "head_rebuild": true, "s4_static_freeze": true,
+              "session_pace_seconds": 45,
+              "pace_boundaries": {"prose_tail": 45, "deslop_review": 45, "review_audit": 45,
+                                  "vote_replicas": 12},
+              "tracking_delta": true, "review_in_system": true,
+              "enrich_tail": true, "summary_every": 2, "summary_merged": true,
+              "commit_raw": true,
+              "instruction_in_head": true, "audit_effort_low": true,
+              "review_compact": true, "deslop_pinned": true,
+              "book_stream": true, "corpus_roll": true,
+              "outline_in_session": true,
+              "outline_pregen": true, "outline_pregen_end": 36},
+  "stage_params": {"prose": {"reasoning_effort": "low", "think_budget": 4000},
+                   "canon_audit": {"in_session": true, "early_stop": true, "max_tokens": 5000},
+                   "review": {"max_tokens": 900},
+                   "outline": {"length_budget": 1200}},
+  "gates": {"review_confidence_vote": true, "review_pass_fast": true}
+}

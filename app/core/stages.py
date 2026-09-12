@@ -409,6 +409,60 @@ def _session_seed(session, prose_text: str):
     return session
 
 
+def _split_merged_summary(raw: str) -> tuple:
+    """A11 合并摘要解析：按【章摘要】/【全局摘要】标记切分。章摘要取标记间的
+    第一个非空行；任一节缺失/顺序颠倒返回空串（调用方回退旧路径或沿用旧值）。"""
+    text = (raw or "").strip()
+    m_ch = text.find("【章摘要】")
+    m_g = text.find("【全局摘要】")
+    if m_ch == -1 or m_g == -1 or m_g < m_ch:
+        return "", ""
+    ch_lines = [ln.strip() for ln in
+                text[m_ch + len("【章摘要】"):m_g].strip().splitlines() if ln.strip()]
+    ch = ch_lines[0] if ch_lines else ""
+    g = text[m_g + len("【全局摘要】"):].strip()
+    return ch, g
+
+
+def _merge_context_delta(existing: str, patch: dict) -> str | None:
+    """A10 上下文增量合并（纯函数）：context_adds 追加去重、context_updates 按
+    match 片段定位整行替换（首行标题不参与）；无增量字段返回 None（调用方回退
+    旧版 context 全量替换路径）。既有行一律不丢。"""
+    adds = [str(x).strip() for x in (patch.get("context_adds") or []) if str(x).strip()]
+    updates = [u for u in (patch.get("context_updates") or [])
+               if isinstance(u, dict) and str(u.get("match") or "").strip()
+               and str(u.get("new_line") or "").strip()]
+    if not adds and not updates:
+        return None
+    lines = (existing or "").splitlines()
+    n_upd = 0
+    for u in updates:
+        match = str(u.get("match")).strip()
+        for i, ln in enumerate(lines):
+            if i > 0 and match in ln:
+                lines[i] = str(u.get("new_line")).strip()
+                n_upd += 1
+                break
+    n_add = 0
+    for add in adds:
+        if add not in lines:
+            lines.append(add)
+            n_add += 1
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _review_fast_path_eligible(gates: dict, remaining: int, v2: dict) -> bool:
+    """PASS 快速道判据（纯函数，A6 生效断言的单测面）：首票全维 pass 且零阻塞、
+    非空转票、副本票余量 ≥2 → 免投副本票。gates.review_pass_fast 缺省开（产品）；
+    bench 侧 _mk_cfg 曾显式关（--fast-path 才开），v16 stack gates 显式 true。"""
+    return (bool((gates or {}).get("review_pass_fast", True))
+            and remaining >= 2
+            and not v2.get("unstructured")          # 空转票不是 PASS，别借快速道把审校关掉
+            and v2.get("verdict") in ("PASS", "PASS_WITH_NOTES")
+            and not (v2.get("summary") or {}).get("fail")
+            and not v2.get("blocking"))
+
+
 def _session_ask(ctx, session, slot: str, prompt: str, label: str = "", *,
                  phase: str = "", temperature=None, stream=True):
     """章会话追加轮调用：镜像 _stream 的槽位路由/阶段标签/流式回显/中止语义。"""
@@ -1685,13 +1739,25 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or cfg_mod.SLOT_WRITING
                 req = prompts.ENRICH_TAIL_PROMPT.format(**tail_kw)
                 ctx.last_prompt = req
-                cont = clean_llm_output(ctx.router.client(_slot).chat(
-                    req, phase=PHASE_ENRICH))
+                # A4（v16 总案 5.3 定案）：tail 分支原设计单发直调（12 笔 in 中位 9k
+                # 独立单发签名）——补齐接线：会话可用时补尾作为会话追加轮（前缀命中
+                # 价），成功后废轮回滚、固化合并稿轮（「最近一条章正文消息」语义不变，
+                # 免正文双份）。会话不可用回退独立单发（原路径）。
+                t_tail = session.turn_count() if _session_usable(session) else None
+                if t_tail is not None:
+                    cont = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, req,
+                                        label=f"字数补尾（会话轮）第 {enrich_rounds} 轮",
+                                        phase=PHASE_ENRICH)
+                else:
+                    cont = clean_llm_output(ctx.router.client(_slot).chat(
+                        req, phase=PHASE_ENRICH))
                 cont = (cont or "").strip()
                 if cont and len(cont) >= gap * 0.35:
                     prose = prose.rstrip("\n") + "\n\n" + cont
                     if _session_usable(session):
                         try:
+                            if t_tail is not None:
+                                session.rollback_to(t_tail)   # 补尾轮由合并稿轮替代
                             session.commit_turn(
                                 f"（字数补尾第 {enrich_rounds} 轮已并入，以下为并入后的完整本章正文）",
                                 prose)
@@ -1730,9 +1796,15 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             ctx.log("ok" if low_ok else "warn",
                     f"扩写后 {actual} 字" + ("，达标" if low_ok
                                             else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
-        elif not high_ok:
+        # A13（v16 总案 5.3）：超标通道不再被扩写轮豁免——ch26 实测 enrich 后 3291 字
+        # （超标 65%）无 trim 直进审校。trim 后仍超 ≥15% 允许一次二次压缩；仍不达
+        # 打标观测（A9：trim ≥2 次的章是细纲预算行质量的观测样本）。
+        trim_rounds = 0
+        while not high_ok and trim_rounds < 2:
+            trim_rounds += 1
             ctx.step(num, st.STEP_ENRICH)
-            ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），自动压缩…")
+            ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），"
+                            + ("二次压缩…" if trim_rounds == 2 else "自动压缩…"))
             ctx.checkpoint()
             pre_prose, pre_actual = prose, actual
             cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
@@ -1745,7 +1817,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                            project_header=project_header(proj))
             prose = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_TRIM,
                                    prompts.TRIM_PROMPT, trim_kw, prose=prose,
-                                   label="压缩")
+                                   label="压缩" if trim_rounds == 1 else "压缩(二次)")
             low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
             if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
                 # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
@@ -1753,9 +1825,16 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 if _session_usable(session):
                     session.rollback_to(t_trim)   # 压缩稿被否决 → 历史截断回压缩前
                 ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
+                break   # 回退后再压只会重蹈：结束压缩循环，打标交人工/观测
+            if high_ok:
+                ctx.log("ok", f"压缩后 {actual} 字，达标")
             else:
-                ctx.log("ok" if high_ok else "warn",
-                        f"压缩后 {actual} 字" + ("，达标" if high_ok else "，仍超标，标记不阻断"))
+                try:
+                    from .volume_session import record_event as _rec
+                    _rec(proj, "trim_over", ch=int(num), actual=int(actual))
+                except Exception:  # noqa: BLE001
+                    pass
+                ctx.log("warn", f"压缩 {trim_rounds} 轮后仍超标（{actual} 字），打标观测（trim_over）")
 
     # 断点保存（方案 H）：草稿即文件——此后扫描/去味/审校/定稿任何位置停止，
     # 重启都从盘上这份草稿继续，不再整章重写
@@ -2068,32 +2147,72 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             excerpt = prose[:2000] + "\n…（中段省略）…\n" + prose[-800:]
         else:
             excerpt = prose[:3000]
-        summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
-            chapter_num=num, title=title or f"第{num}章",
-            prose_excerpt=excerpt, project_header=project_header(proj),
-            chapter_header=_chap_header(ctx, proj, num))
-        ctx.last_prompt = summary_prompt
-        if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
-            _session_seed(session, prose)
-            turn_text = prompts.session_turn_text(
-                prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
-                chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
-                project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
-            ctx.last_prompt = turn_text
-            chapter_summary = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
-                                           phase=PHASE_CH_SUMMARY, stream=False
-                                           ).splitlines()[0].strip()
-        else:
-            chapter_summary = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
-                summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
+        _every = max(1, int(((ctx.cfg or {}).get("writing", {}) or {})
+                            .get("summary_every", 1)))
+        _global_due = not (_every > 1 and num % _every != 0)
+        _merged = (bool(((ctx.cfg or {}).get("writing", {}) or {}).get("summary_merged", False))
+                   and _global_due)
+        new_global = ""
+        if _merged:
+            # A11（v16 总案）：章摘要+全局摘要一次调用——少一次大请求＝少一次冷击
+            # 抽奖。会话轮剥 prose 换历史引用（prose_sentinel）；【全局摘要】节缺失
+            # 或解析失败回退两段式旧路径（fail-open）。
+            old_global = memory.read_global_summary(proj)
+            merged_kw = dict(chapter_num=num, title=title or f"第{num}章",
+                             prose_excerpt=excerpt,
+                             old_summary=old_global or "（全书刚开始）",
+                             project_header=project_header(proj),
+                             chapter_header=_chap_header(ctx, proj, num))
+            merged_prompt = prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT.format(**merged_kw)
+            ctx.last_prompt = merged_prompt
+            if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
+                _session_seed(session, prose)
+                turn_text = prompts.session_turn_text(
+                    prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT,
+                    prose_sentinel="{prose_excerpt}").format(**merged_kw)
+                ctx.last_prompt = turn_text
+                _raw_m = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                                      phase=PHASE_CH_SUMMARY, stream=False)
+            else:
+                _raw_m = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+                    merged_prompt, phase=PHASE_CH_SUMMARY))
+            chapter_summary, new_global = _split_merged_summary(_raw_m)
+            if not chapter_summary:
+                new_global = ""
+                ctx.log("warn", f"第 {num} 章 合并摘要解析失败，回退两段式旧路径")
+        if not _merged or not chapter_summary:
+            summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
+                chapter_num=num, title=title or f"第{num}章",
+                prose_excerpt=excerpt, project_header=project_header(proj),
+                chapter_header=_chap_header(ctx, proj, num))
+            ctx.last_prompt = summary_prompt
+            if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
+                _session_seed(session, prose)
+                turn_text = prompts.session_turn_text(
+                    prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
+                    chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
+                    project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
+                ctx.last_prompt = turn_text
+                chapter_summary = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                                               phase=PHASE_CH_SUMMARY, stream=False
+                                               ).splitlines()[0].strip()
+            else:
+                chapter_summary = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+                    summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
         if chapter_summary:
             memory.append_chapter_summary(proj, num, title or f"第{num}章", chapter_summary)
             # V7（writing.summary_every，缺省 1=每章重算）：全局摘要降频——非重算章
             # 沿用旧摘要（滞后至多 N-1 章，消费方为章头快照，可容忍）。
-            _every = max(1, int(((ctx.cfg or {}).get("writing", {}) or {})
-                                .get("summary_every", 1)))
-            if _every > 1 and num % _every != 0:
+            if not _global_due:
                 ctx.log("info", f"第 {num} 章 全局摘要降频跳过（每 {_every} 章重算一次）")
+            elif _merged:
+                # A11 合并路径：全局摘要已随上一次调用产出
+                if new_global.strip():
+                    memory.write_global_summary(proj, new_global)
+                    ctx.log("ok", f"摘要链已更新（合并调用：章 {len(chapter_summary)} 字 + "
+                                  f"全局 {len(new_global)} 字）")
+                else:
+                    ctx.log("warn", f"第 {num} 章 合并调用缺【全局摘要】节，本章全局摘要沿用旧值")
             else:
                 old_global = memory.read_global_summary(proj)
                 ctx.checkpoint()
@@ -2616,12 +2735,9 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     # PASS 快速道（gates.review_pass_fast，v0.19 默认开）：首票全维 pass 且零
     # 阻塞 → 免投副本票（省 2/3 审校输出）。与 P5 合并语义兼容：quorum 只对
     # fail 收紧（不足票数的 fail 降级），单票 PASS 在合并函数里本就成立。
-    _fast = (bool((ctx.cfg.get("gates") or {}).get("review_pass_fast", True))
-             and remaining >= 2
-             and not v2.get("unstructured")          # 空转票不是 PASS，别借快速道把审校关掉
-             and v2.get("verdict") in ("PASS", "PASS_WITH_NOTES")
-             and not (v2.get("summary") or {}).get("fail")
-             and not v2.get("blocking"))
+    # A6（v16 总案 5.2）：判据抽纯函数 _review_fast_path_eligible——v15 bench
+    # 满投 3 票是 _mk_cfg 把旗标显式关了（误诊），判据链本身逻辑正确。
+    _fast = _review_fast_path_eligible(ctx.cfg.get("gates") or {}, remaining, v2)
     if _fast:
         try:
             ctx.log("info", f"第 {num} 章 PASS 快速道：首票全维通过零阻塞，免投 {remaining - 1} 张副本票")
@@ -3445,11 +3561,19 @@ def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
         merged, _ch = merge_table_rows(existing, delta_md, key_col=-1)
         project.write_file(project.get_tracking_path(proj, "时间线"), merged)
         applied.append("时间线(%d)" % len(tl_rows))
-    ctx_text = str(patch.get("context") or "").strip()
-    if ctx_text:
-        project.write_file(project.get_tracking_path(proj, "上下文"),
-                           f"# 写作上下文\n\n{ctx_text}\n")
-        applied.append("上下文")
+    # A10（v16 总案）：上下文增量合并——context_adds/context_updates 只写本章变化，
+    # 不再让模型全量复述上下文文件（实测 4.9k out/章的大头）；模型若仍输出旧版
+    # context 全文字段则按旧路径全量替换（向后兼容）。
+    _ctx_path = project.get_tracking_path(proj, "上下文")
+    _ctx_merged = _merge_context_delta(project.read_file(_ctx_path), patch)
+    if _ctx_merged is not None:
+        project.write_file(_ctx_path, _ctx_merged)
+        applied.append("上下文(增量)")
+    else:
+        ctx_text = str(patch.get("context") or "").strip()
+        if ctx_text:
+            project.write_file(_ctx_path, f"# 写作上下文\n\n{ctx_text}\n")
+            applied.append("上下文")
 
     # ---- 世界书反哺（JSON 数组适配旧解析器，零新增 LLM）----
     wb = patch.get("worldbook") or {}

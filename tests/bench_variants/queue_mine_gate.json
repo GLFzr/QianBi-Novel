@@ -3,7 +3,7 @@
   "id": "mine_gate_v16",
   "source_drafts": "tests_output/bench/v15_fresh/bench/种子书/正文/.drafts",
   "chapter_nums": [2],
-  "preset": "tests/bench_variants/v15_stack.json",
+  "preset": "tests/bench_variants/v16_stack.json",
   "flash_conn": "ds-official-flash",
   "votes": 2,
   "channels": ["review", "audit"],
