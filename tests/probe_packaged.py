@@ -121,10 +121,14 @@ def find_window() -> int:
 
 
 def smoke_boot(gate: Gate, exe: str) -> bool:
-    """原 T1.3 冒烟：窗口出现 + 存活 5s"""
+    """原 T1.3 冒烟：窗口出现 + 存活 5s
+
+    窗口等待 150s：全新构建的首启会触发杀软对整棵 onedir（千级文件）的实时扫描，
+    冷扫拖过 60s 是已复现的假失败（二次启动同一构建 2s 出窗）——门禁要的是
+    「能出窗且活着」，不是「快过杀软」。"""
     proc = subprocess.Popen([exe], cwd=os.path.dirname(exe))
     try:
-        deadline, hwnd = time.time() + 60, 0
+        deadline, hwnd = time.time() + 150, 0
         while time.time() < deadline:
             hwnd = find_window()
             if hwnd:
