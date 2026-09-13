@@ -621,7 +621,9 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
                 "pro": {"calls": 0, "hit": 0, "miss": 0, "blind": 0, "out": 0,
                         "cost_usd": 0.0}}
     per = {}
+    ch_calls = {}
     for r in rows:
+        ch_calls[r.get("ch") or 0] = ch_calls.get(r.get("ch") or 0, 0) + 1
         tier = _tier_of(r.get("model", ""))
         pr = TIER_PRICE[tier]
         h, m, b = cache_caliber(r)
@@ -685,6 +687,7 @@ def _metrics(home: str, variant: str, chapters: list, wall: float) -> dict:
         "cost_cny_real": round(cost_real * USD_CNY, 3),
         "retry_calls": retry_calls,
         "retry_spend_cny": round(retry_usd * USD_CNY, 3),
+        "per_ch_calls": ch_calls,
         "llm_seconds": round(sum(r.get("latency") or 0 for r in rows), 1),
         "wall_seconds": round(wall, 1),
         "per_tier": per_tier,
@@ -712,6 +715,16 @@ def _print_metrics(m: dict) -> None:
         print("分档：flash %d 笔 $%s | pro %d 笔 $%s"
               % (pt["flash"]["calls"], pt["flash"]["cost_usd"],
                  pt["pro"]["calls"], pt["pro"]["cost_usd"]))
+    # 空转遥测（v17 前期成本研究·分量 7）：st 标记行 = 空内容尝试（思考吃满
+    # max_tokens 等），每章 ≥1 笔即配置信号而非修复环
+    if m.get("retry_calls"):
+        print("⚠️ 空内容重试 %d 笔（¥%.3f）——max_tokens 被思考吃满的配置信号，"
+              "查 st 行分布与该相位预算" % (m["retry_calls"], m["retry_spend_cny"]))
+    # 调用数通胀护栏（v17 前期成本研究）：>9 笔/章 = 修复环失守或回退生成
+    hot = {c: n for c, n in (m.get("per_ch_calls") or {}).items()
+           if c and n > 9}
+    if hot:
+        print("⚠️ 调用数超 9 笔/章：%s——修复环失守/回退生成信号" % hot)
     print("费用（账面）$%s ≈ ¥%s | （真实，盲区按本档命中率摊派）$%s ≈ ¥%s"
           " | LLM %ss / 墙钟 %ss"
           % (m["cost_usd"], m["cost_cny"], m.get("cost_usd_real", m["cost_usd"]),
