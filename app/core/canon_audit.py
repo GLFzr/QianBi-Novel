@@ -704,7 +704,15 @@ def audit_chapter(proj: str, num: int, prose: str, cfg: dict, router=None,
 
 
 def _strict_conn(cfg: dict) -> dict:
-    """严格档连接：任一 model 以 pro 结尾的行（官方全家桶下即 V4 Pro）；找不到回退空"""
+    """严格档连接：任一 model 以 pro 结尾的行（官方全家桶下即 V4 Pro）；找不到回退空。
+
+    A14 总开关（用户裁决 2026-09-13）：gates.audit_strict_tier 缺省**关**——关态本函数
+    恒返回空，清算的 Pro 全量兜底与 flagged 终审两条自动升级路径全部留在 flash 通道
+    （零 Pro 保证，连接清单里躺着 pro 连接也不会被扫中）；只有显式开启才允许升级。
+    边界：设置页「严格审校」策略或手动把槽位指到 pro 连接是用户显式配置，不归本开关。
+    """
+    if not bool((cfg.get("gates", {}) or {}).get("audit_strict_tier", False)):
+        return {}
     pro = next((c for c in cfg.get("connections", [])
                 if str(c.get("model", "")).endswith("pro")), None)
     return pro or {}

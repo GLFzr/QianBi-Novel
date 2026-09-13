@@ -215,7 +215,9 @@ def _mk_cfg(flash, fast_path=False, pro=None, user_id: str = "", ext: dict | Non
                   "word_tolerance": 0.1, "word_enrich_rounds": 2,
                   "review_enabled": True, "review_max_rounds": 1,
                   "review_votes": 3, "review_votes_recheck": 1,
-                  "review_pass_fast": bool(fast_path)},
+                  "review_pass_fast": bool(fast_path),
+                  # A14 总开关：--pro-conn 显式挂严格档 = 测它的意图；缺省零 Pro
+                  "audit_strict_tier": bool(pro)},
         "llm": {"max_retries": 2, "backoff_base": 2.0},
         "writing": {"chapter_word_target": CHAPTER_WORDS, "chapter_session": True,
                     "auto_gate": True, "default_genre": "", "default_platform": "番茄",
