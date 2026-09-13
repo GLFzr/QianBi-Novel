@@ -1138,6 +1138,25 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
             raise StageError(
                 f"细纲解析失败：模型输出 {len(result)} 字，无法按格式解析出目标章"
                 f"（已解析 {[o[0] for o in outlines]}，待生成 {todo}）")
+        covered = {o[0] for o in valid}
+        missing = [n for n in todo if n not in covered]
+        if missing:
+            # 部分返回治理（v17 前期成本研究·分量 3）：大批次下模型「合法但只回
+            # 一部分」（P5 实测 24 章只回 14）不抛异常，原逻辑静默接受 → 缺失章
+            # 在跑次尾段回退更贵的会话内生成。对缺失子集拆半递归补齐；递归天然
+            # 有界（缺失集严格缩小，单章失败走上方 warn+跳过）。
+            ctx.log("warn", f"细纲批仅返回 {len(valid)}/{len(todo)} 章"
+                            f"（缺 {missing[0]}-{missing[-1]}），拆半补齐缺失章…")
+            extra = _generate_outline_batch(ctx, missing, chapter_words,
+                                            core_setting, volume_outline,
+                                            nearby_text, previous_ending,
+                                            foreshadows, wb_block_text,
+                                            rg_block_text)
+            seen = covered
+            for o in extra:
+                if o[0] not in seen:
+                    valid.append(o)
+                    seen.add(o[0])
         return valid
     except PipelineStopped:
         raise   # 用户点停止 ≠ 批次失败：吞掉它就会报红 + 落一份假的失败现场
