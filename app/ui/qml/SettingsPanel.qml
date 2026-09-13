@@ -675,37 +675,8 @@ Item {
                         }
                     }
 
-                    // 逐步确认默认模式
-                    Rectangle {
-                        Layout.fillWidth: true
-                        radius: Theme.rCard
-                        color: Theme.bgCard
-                        border.width: 1
-                        border.color: Theme.border
-                        implicitHeight: modeCol.implicitHeight + 24
-                        ColumnLayout {
-                            id: modeCol
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.margins: 12
-                            spacing: 4
-                            Text { text: "默认运行模式"; color: Theme.textSecondary; font.family: Theme.uiFont; font.pixelSize: Theme.fsSmall; font.bold: true }
-                            Text { text: "逐步确认：每章定稿后暂停等你确认；自动续写：一口气写到底（运行中也可在驾驶舱切换）"; color: Theme.textTertiary; font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Item { Layout.fillWidth: true }
-                                AppCheck {
-                                    id: stepSwitch
-                                    checked: settings.wp.stepConfirm === true
-                                    text: checked ? "逐步确认" : "自动续写"
-                                    font.pixelSize: Theme.fsSmall
-                                    palette.text: Theme.textPrimary
-                                    onCheckedChanged: if (activeFocus) bridge.setStepConfirm(checked)
-                                }
-                            }
-                        }
-                    }
+                    // v1.2 两档制：旧「默认运行模式」开关已删——与驾驶舱档位 chip 双活打架
+                    // （核实 #17）；档位在流水线面板切换，决策门在流水线下方两按钮设置。
 
                     // 「正则」语义（共写档世界书阶段产物；默认逻辑约束规则集）
                     Rectangle {

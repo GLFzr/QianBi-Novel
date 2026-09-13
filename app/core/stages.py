@@ -940,6 +940,10 @@ def stage_core_setting(ctx) -> str:
     canon = project.canon_digest(ctx.proj, 800)
     if canon:
         prompt += "\n\n" + canon + "\n（核心设定不得与上述禁则冲突。）"
+    # G1 门携带的想法（带想法继续/回退重拟）注入（v1.2 接线）
+    g1_carry = ctx.consume_gate_idea()
+    if g1_carry:
+        prompt += f"\n\n作者对核心设定的想法（务必吸收）：\n{g1_carry}"
     ctx.last_prompt = prompt
     result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="核心设定",
                      phase=PHASE_CORE_SETTING)

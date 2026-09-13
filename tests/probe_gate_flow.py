@@ -26,14 +26,13 @@ project.write_file(chapter_path, "# 第1章 开场\n\n正文内容。")
 results = []
 
 def case_auto_skip():
-    cfg = {"writing": {"run_mode": "auto", "gate_hard": ["G2", "G5L", "G9"],
-                       "gate_soft": ["G1", "G3", "G4", "G6", "G7", "G8"]}}
+    cfg = {"writing": {"gate_preset": "off", "gate_list": ["G2", "G5L", "G9", "G1", "G3", "G4", "G6", "G7", "G8"]}}
     o = orch.Orchestrator(proj, cfg)
     r = o.gate("G2", "大纲已生成")
     return r == ""  # 禁用 → 不阻塞直接返回空
 
 def case_next_with_idea():
-    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G2"], "gate_soft": []}}
+    cfg = {"writing": {"gate_preset": "border", "gate_list": ["G2"]}}
     o = orch.Orchestrator(proj, cfg)
     got = {}
     threading.Timer(0.3, lambda: got.update(ok=o.resolve_gate("next", "多加雨夜氛围"))).start()
@@ -41,7 +40,7 @@ def case_next_with_idea():
     return r == "多加雨夜氛围" and got.get("ok") is True
 
 def case_return_archives_and_carries():
-    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G9"], "gate_soft": []}}
+    cfg = {"writing": {"gate_preset": "border", "gate_list": ["G9"]}}
     o = orch.Orchestrator(proj, cfg)
     threading.Timer(0.3, lambda: o.resolve_gate("return", "重写本章")).start()
     r = o.gate("G9", "第 1 章已定稿", 1)
@@ -53,7 +52,7 @@ def case_return_archives_and_carries():
     return r is None and chapter_gone and archived and carry == "重写本章"
 
 def case_soft_gate_blocks_in_border():
-    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G9"], "gate_soft": ["G3"]}}
+    cfg = {"writing": {"gate_preset": "border", "gate_list": ["G9", "G3"]}}
     o = orch.Orchestrator(proj, cfg)
     threading.Timer(0.3, lambda: o.resolve_gate("next", "")).start()
     r = o.gate("G3", "细纲批完成", 1)
@@ -62,7 +61,7 @@ def case_soft_gate_blocks_in_border():
 def case_inner_gate_return_keeps_products():
     """T4.1 内侧门回退：不删任何产物（微循环内保留原稿），想法进 carry 由微循环消费"""
     project.write_file(chapter_path, "# 第1章 开场\n\n正文内容。")   # 前序 G9 用例已删章，恢复
-    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G7"], "gate_soft": []}}
+    cfg = {"writing": {"gate_preset": "border", "gate_list": ["G7"]}}
     o = orch.Orchestrator(proj, cfg)
     threading.Timer(0.3, lambda: o.resolve_gate("return", "去味改坏了，保留原稿")).start()
     r = o.gate("G7", "去味改写完成", 1)
@@ -72,7 +71,7 @@ def case_inner_gate_return_keeps_products():
 
 def case_inner_gate_idea_continue():
     """T4.1 内侧门带想法继续：想法原样返回给微循环注入下一步"""
-    cfg = {"writing": {"run_mode": "border", "gate_hard": ["G6"], "gate_soft": []}}
+    cfg = {"writing": {"gate_preset": "border", "gate_list": ["G6"]}}
     o = orch.Orchestrator(proj, cfg)
     threading.Timer(0.3, lambda: o.resolve_gate("next", "保留口语腔调")).start()
     r = o.gate("G6", "扫描完成", 1)
@@ -82,7 +81,7 @@ def case_inner_gate_idea_continue():
 project.write_file(os.path.join(proj, "大纲", "大纲.md"), "# 全书大纲\n\n阶段总览…")
 project.write_file(project.get_outline_path(proj, 1), "### 第 1 章：开场\n- 核心事件…")
 
-results.append(("auto 模式全门跳过", case_auto_skip()))
+results.append(("off 预置全门跳过", case_auto_skip()))
 results.append(("border 模式 G2 硬停+带想法继续", case_next_with_idea()))
 results.append(("step 模式 G9 回退归档+想法携带", case_return_archives_and_carries()))
 results.append(("border 模式 G3 软门等待", case_soft_gate_blocks_in_border()))

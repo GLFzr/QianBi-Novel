@@ -108,14 +108,16 @@ class Orchestrator(QThread):
     # ---------- 步骤决策门（Step Gates）----------
 
     def gate_enabled(self, key: str) -> bool:
-        """按运行模式判断门是否启用：auto=全关 / step=全开 / border=按硬软清单"""
-        mode = self.cfg.get("writing", {}).get("run_mode", "auto")
-        if mode == "auto":
-            return False
-        if mode == "step":
+        """门停靠判定（v1.2 两档制）：纯门预置驱动——
+        step=逐步确认（全接线门停）/ border=边界确认（按 gate_list 勾选）/ off=全放行。
+        run_mode 不再参与判定；共写档根本进不了流水线（startPipeline 前置拦截）"""
+        w = self.cfg.get("writing", {})
+        preset = str(w.get("gate_preset", "off"))
+        if preset == "step":
             return True
-        writing = self.cfg.get("writing", {})
-        return key in writing.get("gate_hard", []) or key in writing.get("gate_soft", [])
+        if preset == "border":
+            return key in (w.get("gate_list") or [])
+        return False
 
     def gate(self, key: str, summary: str = "", chapter: int = 0) -> str:
         """停在决策门等人确认。返回人提交的想法（空=直接继续）。
@@ -182,7 +184,26 @@ class Orchestrator(QThread):
             return
         roll = os.path.join(self.proj, "pipeline_debug", "rollback", f"{key}_ch{chapter}_{ts}")
         try:
-            if key == "G2":  # 回退重拟全书大纲（连带清空细纲，避免旧细纲对账过期）
+            if key == "G1":  # 回退重拟核心设定（v1.2 接线）
+                os.makedirs(roll, exist_ok=True)
+                t = os.path.join(self.proj, "设定", "题材定位.md")
+                if os.path.exists(t):
+                    shutil.copy2(t, os.path.join(roll, os.path.basename(t)))
+                    os.remove(t)
+                    self.log("warn", "G1 回退：核心设定已归档并清除，将重新生成")
+            elif key == "G3":  # 回退重拟本批细纲（v1.2 接线）：归档清除批次区间内细纲
+                os.makedirs(roll, exist_ok=True)
+                start = chapter or 0
+                removed = []
+                for n in range(start, start + OUTLINE_BATCH):
+                    p = project.get_outline_path(self.proj, n)
+                    if os.path.exists(p):
+                        shutil.copy2(p, os.path.join(roll, os.path.basename(p)))
+                        os.remove(p)
+                        removed.append(n)
+                if removed:
+                    self.log("warn", f"G3 回退：第 {removed[0]}~{removed[-1]} 章细纲已归档并清除，将重拟本批")
+            elif key == "G2":  # 回退重拟全书大纲（连带清空细纲，避免旧细纲对账过期）
                 os.makedirs(roll, exist_ok=True)
                 targets = [os.path.join(self.proj, "大纲", "大纲.md")]
                 outlines_dir = os.path.join(self.proj, "大纲")
@@ -286,6 +307,20 @@ class Orchestrator(QThread):
                 self.sig_stage.emit(st.STAGE_SETTING)
                 stages.stage_core_setting(self)
                 self.sig_queue.emit()
+                # 决策门 G1（v1.2 裁决接线）：核心设定完成 → 人确认/提想法/回退重拟
+                self.checkpoint()
+                g1_idea = self.gate("G1", "核心设定已生成（设定/题材定位.md）。下一步：全书大纲。",
+                                    chapter=0)
+                if g1_idea is None:
+                    # 回退：设定已归档清除，结束本次运行（缺失即重跑，携带的想法持久化注入重拟）
+                    state = st.load_state(self.proj)
+                    state["stage"] = st.STAGE_SETTING
+                    if self._gate_carry_idea:
+                        state["carry_idea"] = self._gate_carry_idea
+                    st.save_state(self.proj, state)
+                    return
+                if g1_idea:
+                    self._gate_carry_idea = g1_idea  # 注入重拟/下一阶段
                 state["stage"] = st.STAGE_OUTLINE
                 st.save_state(self.proj, state)
 
@@ -342,8 +377,21 @@ class Orchestrator(QThread):
                 if not os.path.exists(project.get_outline_path(self.proj, num)):
                     self._cur_stage = st.STAGE_CH_OUTLINE
                     self.sig_stage.emit(st.STAGE_CH_OUTLINE)
-                    stages.stage_chapter_outlines(self, num, num + OUTLINE_BATCH - 1)
-                    self.sig_queue.emit()
+                    # 决策门 G3（v1.2 裁决接线）：本批细纲完成 → 确认/带想法重拟本批。
+                    # 回退由 _apply_rollback 归档清除本批细纲，循环内重拟（上限 3 次防死循环）。
+                    for _g3_try in range(3):
+                        stages.stage_chapter_outlines(self, num, num + OUTLINE_BATCH - 1)
+                        self.sig_queue.emit()
+                        g3_idea = self.gate(
+                            "G3",
+                            f"第 {num}~{num + OUTLINE_BATCH - 1} 章细纲已生成。"
+                            f"下一步：继续写正文；可带想法重拟本批。",
+                            chapter=num)
+                        if g3_idea is None:
+                            continue   # 回退：本批细纲已清除，重新生成
+                        if g3_idea:
+                            self._gate_carry_idea = g3_idea  # 注入本章正文草稿
+                        break
                     if not os.path.exists(project.get_outline_path(self.proj, num)):
                         self.log("warn", f"第 {num} 章细纲仍缺失，流水线停在此处")
                         break

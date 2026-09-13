@@ -43,8 +43,10 @@ Item {
         function onStageKeyChanged() { pipeline.refresh() }
         function onLastRecordChanged() { pipeline.refresh() }
         function onRunningChanged() { pipeline.refresh() }
-        function onProjectOpened() { pipeline.refresh() }
+        function onProjectOpened() { pipeline.refresh(); modeChip.syncFromBridge() }
         function onCwModeChanged() { modeChip.syncFromBridge() }
+        function onRunModeChanged() { modeChip.syncFromBridge() }
+        function onGatePresetChanged() { gateBlock.preset = bridge.gatePreset() }
         function onBlurbGenerated(ok, text) {
             pipeline.blurbBusy = false
             if (ok) pipeline.blurb = text
@@ -88,71 +90,64 @@ Item {
                         width: parent.width
                     }
                 }
-                // 运行模式切换（全自动 / 边界确认 / 逐步确认 / 共写）——有项目即常显
+                // 运行模式切换（v1.2 两档制：全自动 / 共写）——两段互斥，点哪进哪
                 Rectangle {
                     id: modeChip
                     objectName: "modeChip"
                     function syncFromBridge() {
                         var m = bridge.runMode()
-                        var i = modes.indexOf(m)
-                        if (i >= 0) modeIdx = i
+                        segAuto.active = (m === "auto")
+                        segCw.active = (m === "cw")
                     }
                     visible: bridge.hasProject
-                    width: 132; height: 26; radius: 13
+                    width: 148; height: 26; radius: 13
                     color: Theme.bgHover
                     border.width: 1
-                    border.color: modeChip.stepOn ? Theme.accent : Theme.border
-                    property bool stepOn: false
-                    property var modes: ["auto", "border", "step", "cw"]
-                    property int modeIdx: 0
-                    property var modeNames: { "auto": "全自动", "border": "边界确认", "step": "逐步确认", "cw": "共写" }
-                    Component.onCompleted: {
-                        var m = bridge.runMode()
-                        modeIdx = Math.max(0, modes.indexOf(m))
-                        stepOn = (m === "step")
-                    }
+                    border.color: Theme.border
+                    Component.onCompleted: syncFromBridge()
                     Row {
-                        anchors.centerIn: parent
-                        spacing: 6
+                        anchors.fill: parent
+                        spacing: 0
                         Rectangle {
-                            width: 8; height: 8; radius: 4
-                            color: modeChip.stepOn ? Theme.accent : Theme.muted
-                            anchors.verticalCenter: parent.verticalCenter
-                            SequentialAnimation on opacity {
-                                running: bridge.isRunning && modeChip.stepOn
-                                loops: Animation.Infinite
-                                NumberAnimation { to: 0.3; duration: 650 }
-                                NumberAnimation { to: 1; duration: 650 }
+                            id: segAuto
+                            property bool active: true
+                            width: parent.width / 2; height: parent.height
+                            radius: 13
+                            color: active ? Theme.accentSoft : "transparent"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "全自动"
+                                color: segAuto.active ? Theme.accent : Theme.textTertiary
+                                font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.setRunMode("auto")
                             }
                         }
-                        Text {
-                            text: modeChip.modeNames[modeChip.modes[modeChip.modeIdx]]
-                            color: modeChip.stepOn ? Theme.accent : Theme.textTertiary
-                            font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
-                        }
-                    }
-                    MouseArea {
-                        id: modeMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            modeChip.modeIdx = (modeChip.modeIdx + 1) % modeChip.modes.length
-                            var m = modeChip.modes[modeChip.modeIdx]
-                            modeChip.stepOn = (m === "step")
-                            bridge.setRunMode(m)
+                        Rectangle {
+                            id: segCw
+                            property bool active: false
+                            width: parent.width / 2; height: parent.height
+                            radius: 13
+                            color: active ? Theme.accentSoft : "transparent"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "共写"
+                                color: segCw.active ? Theme.accent : Theme.textTertiary
+                                font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.setRunMode("cw")
+                            }
                         }
                     }
                     ToolTip.visible: modeMa.containsMouse
-                    ToolTip.text: "全自动=每步自动过 · 边界确认=只停大纲/草稿/定稿等大节点 · 逐步确认=每个决策门都停靠你确认 · 共写=六阶段人机共写（对话讨论+确定定稿）"
-                }
-                AppButton {
-                    visible: bridge.isRunning || bridge.isPaused
-                    text: "门"
-                    height: 26
-                    onClicked: gatesDialog.open()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "决策门清单：勾选哪些步骤要停下等你确认"
+                    ToolTip.text: "全自动=按下方决策门设置自动/停靠跑完整本书 · 共写=六阶段人机共写（对话讨论+确定定稿）"
+                    MouseArea { id: modeMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
                 }
             }
         }
@@ -372,6 +367,117 @@ Item {
                         enabled: !bridge.isStopping
                         Layout.fillWidth: true
                         onClicked: bridge.stopPipeline()
+                    }
+                }
+
+                // 决策门（v1.2 用户裁决）：仅流水线档显示；「逐步确认」「边界确认」两按钮
+                // 互斥——可同关（=全自动放行）、不可同开；边界确认开启时下方拉出勾选清单
+                ColumnLayout {
+                    id: gateBlock
+                    objectName: "gateBlock"
+                    property string preset: bridge.gatePreset()
+                    readonly property bool cwOn: bridge.cwMode === "cw"
+                    visible: bridge.hasProject && !cwOn
+                    Layout.fillWidth: true
+                    spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text {
+                            text: "决策门"
+                            color: Theme.textTertiary
+                            font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
+                        }
+                        Rectangle {
+                            id: stepBtn
+                            property bool on: gateBlock.preset === "step"
+                            width: 92; height: 26; radius: 13
+                            color: on ? Theme.accentSoft : Theme.bgHover
+                            border.width: 1
+                            border.color: on ? Theme.accent : Theme.border
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 5
+                                Rectangle {
+                                    width: 7; height: 7; radius: 3.5
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: stepBtn.on ? Theme.accent : Theme.muted
+                                }
+                                Text {
+                                    text: "逐步确认"
+                                    color: stepBtn.on ? Theme.accent : Theme.textSecondary
+                                    font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.setGatePreset(stepBtn.on ? "off" : "step")
+                            }
+                            ToolTip.visible: stepMa.containsMouse
+                            ToolTip.text: "开=每个决策门都停靠等你确认（原逐步确认档）"
+                            MouseArea { id: stepMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                        }
+                        Rectangle {
+                            id: borderBtn
+                            property bool on: gateBlock.preset === "border"
+                            width: 92; height: 26; radius: 13
+                            color: on ? Theme.accentSoft : Theme.bgHover
+                            border.width: 1
+                            border.color: on ? Theme.accent : Theme.border
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 5
+                                Rectangle {
+                                    width: 7; height: 7; radius: 3.5
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: borderBtn.on ? Theme.accent : Theme.muted
+                                }
+                                Text {
+                                    text: "边界确认"
+                                    color: borderBtn.on ? Theme.accent : Theme.textSecondary
+                                    font.family: Theme.uiFont; font.pixelSize: Theme.fsTiny
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: bridge.setGatePreset(borderBtn.on ? "off" : "border")
+                            }
+                            ToolTip.visible: borderMa.containsMouse
+                            ToolTip.text: "开=只在你勾选的步骤停靠（下方清单可勾选）"
+                            MouseArea { id: borderMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: gateBlock.preset === "off" ? "两个都关：全部自动放行"
+                                 : gateBlock.preset === "step" ? "每个决策门都停靠"
+                                 : "只停勾选的步骤"
+                            color: Theme.textTertiary
+                            font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro
+                            elide: Text.ElideRight
+                        }
+                    }
+                    // 边界确认清单：开「边界确认」后在下方拉出，逐门勾选即时生效
+                    GridLayout {
+                        visible: gateBlock.preset === "border"
+                        Layout.fillWidth: true
+                        columns: 3
+                        columnSpacing: 10
+                        rowSpacing: 4
+                        Repeater {
+                            model: bridge.gateMetaList()
+                            delegate: AppCheck {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                text: modelData.label
+                                checked: bridge.gateEnabled(modelData.key)
+                                font.pixelSize: Theme.fsMicro
+                                onToggled: bridge.setGateEnabled(modelData.key, checked)
+                                ToolTip.visible: hovered
+                                ToolTip.text: modelData.desc
+                            }
+                        }
                     }
                 }
 
@@ -655,105 +761,6 @@ Item {
                     regenGuidance.text = ""
                     regenDialog.close()
                 }
-            }
-        }
-    }
-
-    // ---- 决策门清单（哪些步骤要停等你确认；border/step 模式生效）----
-    Dialog {
-        id: gatesDialog
-        objectName: "gatesDialog"
-        parent: Overlay.overlay
-        modal: true
-        width: 420
-        x: parent ? Math.round((parent.width - width) / 2) : 0
-        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
-        padding: 18
-        background: DialogBg {}
-        header: Text {
-            text: "决策门清单（步骤确认点）"
-            color: Theme.textPrimary
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.fsTitle
-            font.bold: true
-            padding: 16
-        }
-        contentItem: Column {
-            spacing: 6
-            width: parent.width
-            Text {
-                width: parent.width
-                text: "border 模式按此清单硬停/软停；step 模式全部硬停；auto 全部自动过。"
-                color: Theme.textTertiary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsTiny
-                wrapMode: Text.Wrap
-            }
-            Repeater {
-                model: bridge.gateMetaList()
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool wired: modelData.wired !== false
-                    width: parent.width
-                    height: 34
-                    radius: 6
-                    color: Theme.bgHover
-                    opacity: wired ? 1.0 : 0.5
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 8
-                        CheckBox {
-                            Layout.preferredWidth: 22
-                            enabled: wired
-                            checked: bridge.gateEnabled(modelData.key)
-                            onToggled: bridge.setGateEnabled(modelData.key, checked)
-                            indicator: Rectangle {
-                                implicitWidth: 16; implicitHeight: 16
-                                radius: 4
-                                color: parent.checked ? Theme.accent : "transparent"
-                                border.width: 1
-                                border.color: parent.checked ? Theme.accent : Theme.border
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: 8; height: 8; radius: 2
-                                    color: Theme.accentText
-                                    visible: parent.parent.checked
-                                }
-                            }
-                        }
-                        Text {
-                            text: modelData.label
-                            color: Theme.textPrimary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsSmall
-                        }
-                        Text {
-                            visible: !wired
-                            text: "规划中"
-                            color: Theme.textTertiary
-                            font.family: Theme.uiFont
-                            font.pixelSize: 9
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: modelData.desc + (wired ? "" : "（见 plan_step_gates_v1 阶段 2）")
-                            color: Theme.textTertiary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsMicro
-                            elide: Text.ElideRight
-                        }
-                    }
-                }
-            }
-        }
-        footer: RowLayout {
-            spacing: 8
-            Item { Layout.fillWidth: true }
-            AppButton {
-                text: "关闭"
-                onClicked: gatesDialog.close()
             }
         }
     }

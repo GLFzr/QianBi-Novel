@@ -925,6 +925,9 @@ class Bridge(QObject):
     repairChanged = Signal()
     # 共写档（co-write）状态
     cwModeChanged = Signal()
+    # v1.2 两档制：档位与门预置变化（驾驶舱 chip 回弹 / 门按钮区刷新）
+    runModeChanged = Signal()
+    gatePresetChanged = Signal()
     cwStageChanged = Signal()
     supervisorFailedChanged = Signal()         # C2：衔接比对失败 → 显示跳过锁定出口
     cwBusyChanged = Signal()
@@ -1392,12 +1395,12 @@ class Bridge(QObject):
         self.orch.stop()
         self.logModel.append("warn", "停止已受理：正在生成的这一次调用会在下一 token 处中断")
 
-    # ============ 步骤决策门（Step Gates）============
+    # ============ 步骤决策门（Step Gates，v1.2 两档制）============
 
     GATE_META = [
-        {"key": "G1", "label": "G1 设定完成", "desc": "核心设定生成后确认，可回退重拟设定", "wired": False},
+        {"key": "G1", "label": "G1 设定完成", "desc": "核心设定生成后确认，可回退重拟设定", "wired": True},
         {"key": "G2", "label": "G2 大纲完成", "desc": "全书大纲生成后确认，可回退重拟大纲（连带清空细纲）", "wired": True},
-        {"key": "G3", "label": "G3 细纲批完成", "desc": "每批细纲（2章）生成后确认", "wired": False},
+        {"key": "G3", "label": "G3 细纲批完成", "desc": "每批细纲（2章）生成后确认，可带想法重拟本批", "wired": True},
         {"key": "G4", "label": "G4 素材组装后", "desc": "草稿开写前确认投入材料，可带想法或回退重组装", "wired": True},
         {"key": "G5L", "label": "G5 草稿开始前", "desc": "第N章开写前确认，可带想法（软门：无产物可回退）", "wired": True},
         {"key": "G6", "label": "G6 扫描完成", "desc": "AI 味扫描结果确认，可带想法或回退保留原稿跳过去味", "wired": True},
@@ -1406,9 +1409,31 @@ class Bridge(QObject):
         {"key": "G9", "label": "G9 定稿完成", "desc": "每章定稿后确认，可回退重写本章（版本历史保留）", "wired": True},
     ]
 
+    # 全部接线门（逐步确认=这份全停）；与 config.WIRED_GATES 同集合
+    WIRED_GATES = ("G1", "G2", "G3", "G4", "G5L", "G6", "G7", "G8", "G9")
+
     @Slot(result="QVariantList")
     def gateMetaList(self) -> list:
         return [dict(m) for m in self.GATE_META]
+
+    @Slot(result=str)
+    def gatePreset(self) -> str:
+        """门预置：off=全放行（两按钮同关）/ step=逐步确认 / border=边界确认"""
+        return str(self.cfg.get("writing", {}).get("gate_preset", "off"))
+
+    @Slot(str)
+    def setGatePreset(self, preset: str):
+        if preset not in ("off", "border", "step"):
+            return
+        w = self.cfg.setdefault("writing", {})
+        w["gate_preset"] = preset
+        if preset == "step":
+            # 逐步确认=全接线门停；同步清单，切回边界确认时保持全勾的可视一致性
+            w["gate_list"] = list(self.WIRED_GATES)
+        cfg_mod.save_config(self.cfg)
+        self.gatePresetChanged.emit()
+        names = {"off": "门全放行", "border": "边界确认", "step": "逐步确认"}
+        self.toast.emit("ok", f"决策门已切换为「{names[preset]}」")
 
     @Slot(result=str)
     def runMode(self) -> str:
@@ -1417,45 +1442,58 @@ class Bridge(QObject):
             state = st.load_state(self.proj)
             if st.ensure_cw(state).get("mode") == "cw":
                 return "cw"
-        # config 的 'cw' 只在项目已迁移时有效；未迁移时按 auto 显示（防脱同步，#1）
+        # v1.2 迁移后 config 不再出现 'cw'；容忍读（旧值按 auto 显示）
         m = str(self.cfg.get("writing", {}).get("run_mode", "auto"))
-        return "auto" if m == "cw" else m
+        return "auto" if m != "cw" else "cw"
 
     @Slot(str)
     def setRunMode(self, mode: str):
-        m = mode if mode in ("auto", "step", "border", "cw") else "auto"
-        self.cfg.setdefault("writing", {})["run_mode"] = m
-        self.cfg["writing"]["step_confirm"] = (m == "step")
-        cfg_mod.save_config(self.cfg)
-        # cw ↔ 自动档为受控切换（仅阶段空闲可切）：同步项目级粘性
+        m = mode if mode in ("auto", "cw") else "auto"
+        cur = str(self.runMode())
+        if m == cur:
+            return
+        # 守卫前置（v1.1 核实修正）：运行中一律拒绝，且不写任何配置；信号让 QML chip 回弹
+        if self._running:
+            self.toast.emit("warn", "流水线运行中不能切换档位，请先停止")
+            self.runModeChanged.emit()
+            return
         if m == "cw":
             self.setCwMode(True)
-        elif self._get_cw_mode() == "cw":
+            if self._get_cw_mode() != "cw":
+                # setCwMode 因无项目等原因静默拒绝：不落盘，chip 回弹
+                self.runModeChanged.emit()
+                return
+        else:
             self.setCwMode(False)
-        names = {"auto": "全自动", "step": "逐步确认", "border": "边界确认", "cw": "共写"}
+        self.cfg.setdefault("writing", {})["run_mode"] = m
+        cfg_mod.save_config(self.cfg)
+        names = {"auto": "全自动", "cw": "共写"}
         self.toast.emit("ok", f"运行模式已切换为「{names[m]}」")
+        self.runModeChanged.emit()
 
     @Slot(str, result=bool)
     def gateEnabled(self, key: str) -> bool:
+        """勾选清单显示口径：step=全亮；border=按清单；off=全灭（与 orchestrator 同语义）"""
         w = self.cfg.get("writing", {})
-        if self.cfg.get("writing", {}).get("run_mode", "auto") == "step":
+        preset = str(w.get("gate_preset", "off"))
+        if preset == "step":
             return True
-        return key in w.get("gate_hard", []) or key in w.get("gate_soft", [])
+        if preset == "border":
+            return key in (w.get("gate_list") or [])
+        return False
 
     @Slot(str, bool)
     def setGateEnabled(self, key: str, on: bool):
+        """边界确认清单勾选（v1.2）：写共享 self.cfg 再落盘（与 orchestrator 同引用，即时生效）"""
         w = self.cfg.setdefault("writing", {})
-        hard_keys = {"G1", "G2", "G3", "G5L", "G8", "G9"}
-        hard = set(w.get("gate_hard", []))
-        soft = set(w.get("gate_soft", []))
+        lst = set(w.get("gate_list") or [])
         if on:
-            (hard if key in hard_keys else soft).add(key)
+            lst.add(key)
         else:
-            hard.discard(key)
-            soft.discard(key)
-        w["gate_hard"] = sorted(hard)
-        w["gate_soft"] = sorted(soft)
+            lst.discard(key)
+        w["gate_list"] = sorted(lst)
         cfg_mod.save_config(self.cfg)
+        self.gatePresetChanged.emit()
 
     def _on_gate(self, key: str, chapter: int, summary: str):
         self.gateAsked.emit(key, chapter, summary)
@@ -1601,8 +1639,8 @@ class Bridge(QObject):
 
     # ---- 模型策略 / 连写（方案 B、F3）----
 
-    @Slot(str, result="QVariantList")
-    def modelPresetOptions(self, _arg=""):
+    @Slot(result="QVariantList")
+    def modelPresetOptions(self):
         from .. import model_strategy
         return model_strategy.preset_options()
 
@@ -1636,25 +1674,27 @@ class Bridge(QObject):
 
     @Property(bool, notify=generalChanged)
     def autoGate(self) -> bool:
-        return bool(cfg_mod.load_config().get("writing", {}).get("auto_gate", False))
+        return bool(self.cfg.get("writing", {}).get("auto_gate", False))
 
     @Slot(bool)
     def setAutoGate(self, on: bool):
-        cfg = cfg_mod.load_config()
-        cfg.setdefault("writing", {})["auto_gate"] = bool(on)
-        cfg_mod.save_config(cfg)
+        # v1.1 核实修复（#15）：写共享 self.cfg（orchestrator 持有同引用）再落盘，
+        # 旧实现 load_config() 新字典导致本会话内开关对流水线无效、重启才生效
+        w = self.cfg.setdefault("writing", {})
+        w["auto_gate"] = bool(on)
+        cfg_mod.save_config(self.cfg)
         self.generalChanged.emit()
         self.toast.emit("ok", "连写模式（决策门自动放行）已" + ("开启" if on else "关闭"))
 
     @Property(bool, notify=generalChanged)
     def offpeakRun(self) -> bool:
-        return bool(cfg_mod.load_config().get("writing", {}).get("offpeak_run", False))
+        return bool(self.cfg.get("writing", {}).get("offpeak_run", False))
 
     @Slot(bool)
     def setOffpeakRun(self, on: bool):
-        cfg = cfg_mod.load_config()
-        cfg.setdefault("writing", {})["offpeak_run"] = bool(on)
-        cfg_mod.save_config(cfg)
+        w = self.cfg.setdefault("writing", {})
+        w["offpeak_run"] = bool(on)
+        cfg_mod.save_config(self.cfg)
         self.generalChanged.emit()
         self.toast.emit("ok", "离峰挂机（peak 时段自动等待，电价半价档）已" + ("开启" if on else "关闭"))
 
@@ -2700,13 +2740,8 @@ class Bridge(QObject):
         self.currentChapterChanged.emit()
         self.refreshUsage()
         self._refresh_progress()
-        # 逐步确认模式：每章定稿后暂停（新版由决策门 G9 承担；此处仅兼容旧配置：auto 模式+step_confirm）
-        if (self._running and self.orch
-                and self.cfg.get("writing", {}).get("run_mode", "auto") == "auto"
-                and self.cfg.get("writing", {}).get("step_confirm")):
-            self.orch.pause()
-            self._set_paused(True)
-            self.logModel.append("info", f"第 {record.get('num')} 章已定稿（逐步确认模式）：阅读确认后点「继续」")
+        # v1.2 两档制：旧 auto+step_confirm 每章暂停分支已删——该语义由
+        # gate_preset=border + gate_list=[G9]（G9 门）承担，迁移见 config._migrate_run_mode
 
     def _on_finished(self, reason: str):
         self._set_running(False)
@@ -4594,7 +4629,7 @@ class Bridge(QObject):
         w = self.cfg.get("writing", {})
         return {"stylePref": w.get("style_pref", ""), "taboos": w.get("taboos", ""),
                 "pacePref": w.get("pace_pref", ""),
-                "stepConfirm": bool(w.get("step_confirm"))}
+                "stepConfirm": str(w.get("gate_preset", "off")) == "step"}
 
     @Slot(str, str, str)
     def saveGlobalPrefs(self, style: str, taboos: str, pace: str):
@@ -4704,17 +4739,9 @@ class Bridge(QObject):
             "tokens": self._get_tokens(), "cost": self._get_cost_text(),
         }
 
-    @Slot(bool)
-    def setStepConfirm(self, on: bool):
-        """运行模式切换：逐步确认（每章定稿后暂停等人确认）/ 自动续写"""
-        self.cfg.setdefault("writing", {})["step_confirm"] = bool(on)
-        cfg_mod.save_config(self.cfg)
-        self.toast.emit("ok", on and "已切换为逐步确认：每章定稿后暂停等你确认"
-                        or "已切换为自动续写")
-
-    @Slot(result=bool)
-    def stepConfirmEnabled(self) -> bool:
-        return bool(self.cfg.get("writing", {}).get("step_confirm"))
+    # v1.2 两档制：setStepConfirm/stepConfirmEnabled 已删除——
+    # 旧「默认运行模式」开关与驾驶舱档位 chip 双活打架（核实 #17），语义由
+    # gate_preset=border + gate_list=[G9] 承担（迁移见 config._migrate_run_mode）
 
 
     # ============ 题材预设（主干题材无关，题材差异走预设层）============

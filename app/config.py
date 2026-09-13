@@ -89,13 +89,14 @@ DEFAULT_CONFIG = {
               "review_pass_fast": True},  # 修复环复扫投票数（控成本）
     "llm": {"max_retries": 2, "backoff_base": 2.0},
     "writing": {"chapter_word_target": 3000, "default_genre": "", "default_platform": "番茄",
-                "run_mode": "auto",             # auto=全自动 / step=逐步确认 / border=边界确认 / cw=共写
-                "step_confirm": False,          # 兼容旧开关（逐步确认=step 模式启用且全硬停）
+                "run_mode": "auto",             # auto=全自动 / cw=共写（v1.2 两档制；共写为项目粘性，一般不写此处）
                 "regex_semantics": "logic",     # 正则语义：logic=逻辑约束规则集（默认）/ regex=字面正则样本
                 "readback_on_save": True,       # 读改揣摩：保存有变时触发 1 次（复用 review 槽）
                 "readback_min_diff": 200,       # 最小改动量阈值（低于不触发；0=每次都触发）
-                "gate_hard": ["G2", "G5L", "G8", "G9"],   # G8 审校门入硬停（plan_step_gates_v1 §2 默认）
-                "gate_soft": ["G1", "G3", "G4", "G6", "G7"],
+                # 门预置（v1.2 用户裁决）：off=全放行（两按钮同关）/ step=逐步确认（全接线门停）/
+                # border=边界确认（按 gate_list 勾选停靠）。两按钮互斥可同关，仅流水线档显示。
+                "gate_preset": "off",
+                "gate_list": ["G2", "G5L", "G8", "G9"],   # 边界确认勾选清单（出厂=大节点：大纲/开写/审校/定稿）
                 "offpeak_run": False,           # 离峰挂机：peak 时段自动等待，off-peak 再跑
                 "chapter_session": True},       # 章会话消息栈：同章阶段共享前缀（关闭回退单轮）
     "last_project": "",
@@ -131,6 +132,41 @@ def _migrate_legacy_dir():
             shutil.copy2(legacy_file, CONFIG_FILE)
         except OSError:
             pass
+
+
+# v1.2 两档制：全部接线门（G1/G3 接线后共九门）。step 预置=全停，即这份清单。
+WIRED_GATES = ["G1", "G2", "G3", "G4", "G5L", "G6", "G7", "G8", "G9"]
+
+
+def _migrate_run_mode(cfg: dict) -> dict:
+    """四档+双清单 → 两档+门预置（v1.2 用户裁决，一次性迁移）
+
+    旧 run_mode: step→preset=step；border→preset=border+清单并集；
+    auto→preset=off+清单保留（记忆勾选但关闭）；cw→auto（共写只存项目粘性）。
+    旧 step_confirm=true → preset=border + list=[G9]（每章定稿停，语义原样）。
+    """
+    w = cfg.get("writing")
+    if not isinstance(w, dict) or "gate_preset" in w:
+        return cfg
+    legacy = str(w.get("run_mode", "auto"))
+    union = sorted(set(w.get("gate_hard") or []) | set(w.get("gate_soft") or []))
+    if legacy == "step":
+        w["gate_preset"] = "step"
+        w["gate_list"] = union or list(WIRED_GATES)
+    elif legacy == "border":
+        w["gate_preset"] = "border"
+        w["gate_list"] = union
+    else:  # auto / cw：门全关，清单留作勾选记忆
+        w["gate_preset"] = "off"
+        w["gate_list"] = union or list(DEFAULT_CONFIG["writing"]["gate_list"])
+    w["run_mode"] = "auto"   # run_mode 收缩为 auto|cw 两值；'cw' 只存项目级粘性（#16 根治）
+    if w.pop("step_confirm", False) and w.get("gate_preset") == "off":
+        # 旧「逐步确认」开关（auto+step_confirm）：每章定稿停 → 边界确认 + 仅 G9
+        w["gate_preset"] = "border"
+        w["gate_list"] = ["G9"]
+    w.pop("gate_hard", None)
+    w.pop("gate_soft", None)
+    return cfg
 
 
 def _migrate_legacy_format(cfg: dict) -> dict:
@@ -294,6 +330,7 @@ def load_config() -> dict:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             cfg = json.load(f)
         cfg = _migrate_legacy_format(cfg)
+        cfg = _migrate_run_mode(cfg)
         # 补齐缺失键
         merged = json.loads(json.dumps(DEFAULT_CONFIG))
         for k, v in cfg.items():

@@ -192,10 +192,10 @@ def test_stream_passes_abort_predicate_bound_to_ctx(_no_record):
 
 # ---------------------------------------------------------------- 决策门竞态
 
-def _orch(tmp_path, monkeypatch, mode="step"):
+def _orch(tmp_path, monkeypatch, preset="step"):
     from app import project
     proj = project.create_project(str(tmp_path), "门测试")
-    orch = Orchestrator(proj, {"writing": {"run_mode": mode}})
+    orch = Orchestrator(proj, {"writing": {"gate_preset": preset}})
     return orch
 
 
@@ -222,7 +222,7 @@ def test_gate_stops_instead_of_opening(tmp_path):
 
 
 def test_gate_returns_immediately_when_disabled(tmp_path):
-    orch = _orch(tmp_path, None, mode="auto")
+    orch = _orch(tmp_path, None, preset="off")
     assert orch.gate("G2", "摘要", 1) == ""
 
 
