@@ -1,22 +1,22 @@
 {
-  "version": "0.19.7",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.7",
-  "notes": "0.19.5 公测版（长篇工程版 · 卷级会话 · 命中率战役 · 增量台账 · L0 账本对照）：\n· 卷级会话栈+S4 静态冻结+审校指令前置：跨章历史从全价重读变命中价复读，20 章长卷混合命中率 80.4%→93.8%\n· 台账 JSON 补丁协议+补尾式扩写+全局摘要降频：追踪输出 -43%、扩写 -81%、全局摘要 -68%\n· 同书同渠道同跨度对照：每章总成本 -29%（¥0.405→¥0.289）\n· L0 账本对照恒开（零 API）：爽点推迟/钟点复现/提前释放/伤情在场四项确定性预检\n· 接力压缩（实验性）、Span 级修订、CISC 置信票、清算条目级早停\n· 测试套件 690→932 件全部通过\n· 诚实边界：会话栈每章增量（+30k 级）本轮未根治",
-  "sha256": "3ad5cb25633b0ab4d2cfcc2e3d6eb4628901fc831db7964ca1a70abba8455cdf",
-  "published": "2026-09-12",
+  "version": "0.19.8",
+  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.8",
+  "notes": "0.19.8（书级语料流 · 思考治理 · Pro 总开关）：\n· 书级语料流：跨卷前后文不断档，长篇一致性更强，卷界不再重置缓存\n· 成本与速度：设定对账单章 90 秒+ → 数秒，长跑输出 -66%，综合命中率 85.3%→94.1%\n· Pro 总开关：默认彻底不用 Pro 严格档（连接列表里有 Pro 也不会被自动升级）；需要时在闸门配置显式开启 audit_strict_tier\n· 修复：失败重试不再重复计费（思考显式关闭）；扩写过的章现在也会进自动压缩；补尾扩写/审校重试骑会话省缓存\n· 审校恢复轻量思考：修复幻影引用类硬伤漏检\n· 测试套件 1015→1090 件全部通过",
+  "sha256": "668c7d296e707d087a67b861110854ca7b787563487411212ead824e9ced4580",
+  "published": "2026-09-13",
   "assets": {
     "setup": {
-      "name": "QianBi-Novel-v0.19.7-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.7/QianBi-Novel-v0.19.7-setup.exe",
-      "sha256": "3ad5cb25633b0ab4d2cfcc2e3d6eb4628901fc831db7964ca1a70abba8455cdf",
-      "size": 53827271
+      "name": "QianBi-Novel-v0.19.8-setup.exe",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.8/QianBi-Novel-v0.19.8-setup.exe",
+      "sha256": "668c7d296e707d087a67b861110854ca7b787563487411212ead824e9ced4580",
+      "size": 53838146
     },
     "portable": {
-      "name": "QianBi-Novel-v0.19.7-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.7/QianBi-Novel-v0.19.7-portable.zip",
-      "sha256": "7060fc3c7507a7ad49da8063105b2458efd88d11a28e5d20098e5ebd6ee3651a",
-      "size": 79248408
+      "name": "QianBi-Novel-v0.19.8-portable.zip",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.8/QianBi-Novel-v0.19.8-portable.zip",
+      "sha256": "052b513dd62f6358a59feaddcc19c14c0dbddc20f98c5e12edb889ddd12c07db",
+      "size": 79255073
     }
   },
-  "sig": "CiQal2Ow8P1Vj9EB0/FbOtwZ2x3UBGYaZ+tIq4aZhWCniSkSLcyFtu2qTprEFz52vV9cuJXkHhLdejQKs/TFBA=="
+  "sig": "09IQHgXrIysKb2XLhsJ8FBvV+RGteTY8b9L2ZEEgpGuTQzvZuYRpkl6Fcmuhr/eVJJzRolxvQyEhIqp9L1GDAQ=="
 }
