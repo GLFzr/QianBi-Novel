@@ -180,6 +180,8 @@ QtObject {
     readonly property int durIndet: 1600  // 不确定态扫过周期
     readonly property var easeOut: Easing.OutCubic   // 入场/推进（减速收尾）
     readonly property var easeStd: Easing.InOutQuad  // 双向状态/呼吸
+    // 减少动态总闸（v1.2）：循环类动画 running 一律挂 && Theme.motionOK；色值过渡保留
+    property bool motionOK: true
 
     // ===== 字号（6 档）=====
     readonly property int fsMicro: 10   // 徽章/角标（仅限全大写或数字场景）

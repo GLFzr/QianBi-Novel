@@ -403,6 +403,15 @@ ApplicationWindow {
                 anchors.fill: parent
                 currentIndex: mainWindow.panelIndexOf(mainWindow.activePanel)
 
+                // v1.2 动效：面板切换淡入（anchors.fill 下 x 归锚布局管，纯 opacity 最稳，
+                // 不阻塞流式文本渲染）
+                onCurrentIndexChanged: panelEnter.restart()
+                SequentialAnimation {
+                    id: panelEnter
+                    PropertyAction { target: panelStack; property: "opacity"; value: 0 }
+                    NumberAnimation { target: panelStack; property: "opacity"; from: 0; to: 1; duration: Theme.motionOK ? Theme.durNormal : 0; easing: Theme.easeOut }
+                }
+
                 BookshelfPanel {}
                 PipelinePanel {
                     onOpenChapter: function (n) { mainWindow.tryOpenChapter(n) }
@@ -1712,6 +1721,13 @@ ApplicationWindow {
     // ---- 局部重写对话框（选中段落 + 想法 → AI 只改这一段）----
     Dialog {
         id: rewriteDialog
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         objectName: "rewriteDialog"
         parent: Overlay.overlay
         modal: true
@@ -1924,6 +1940,13 @@ ApplicationWindow {
     // ---- 未保存保护：切换章节 / 关闭窗口前的「保存/放弃/取消」----
     Dialog {
         id: unsavedDialog
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         objectName: "unsavedDialog"
         parent: Overlay.overlay
         modal: true
@@ -1984,6 +2007,13 @@ ApplicationWindow {
     // ---- 版本历史（保存驱动）：查看 / 对比 / 回退 ----
     Dialog {
         id: versionsDialog
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         objectName: "versionsDialog"
         parent: Overlay.overlay
         modal: true

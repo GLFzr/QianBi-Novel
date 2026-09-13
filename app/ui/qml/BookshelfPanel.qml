@@ -196,6 +196,13 @@ Item {
 
     Dialog {
         id: newProjectDialog
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         objectName: "newProjectDialog"
         parent: Overlay.overlay
         title: "新建项目"
