@@ -226,7 +226,7 @@ def _mk_cfg(flash, fast_path=False, pro=None, user_id: str = "", ext: dict | Non
     }
 
 
-def cmd_prepare() -> None:
+def cmd_prepare(flash_conn: str = "") -> None:
     """一次性：种子书 + N 份细纲 → bench_base/"""
     from app import project
     from app.core import state as st
@@ -240,12 +240,23 @@ def cmd_prepare() -> None:
     os.environ["USERPROFILE"] = PREPARE_HOME
     os.environ["HOME"] = PREPARE_HOME
 
-    flash, pro = _load_key()
+    flash, pro = _load_key(prefer_id=flash_conn)
     _mark("测试连接：%s @ %s（严格档：%s）" % (flash["model"], flash["base"], (pro or {}).get("model", "无")))
     app, Qt = _qt()
     proj_root = os.path.join(PREPARE_HOME, "bench")
     from app.ui.bridge import Bridge
     bridge = Bridge()
+    if flash_conn:
+        # 钉定要贯穿到底：Bridge 走 fake home 的出厂默认槽位（ds-v4-pro 等），
+        # 不钉的话 prepare 的 LLM 调用绕开 --flash-conn 用旧连接（401 实证）。
+        bridge.cfg.setdefault("connections", []).append(
+            {"id": "t-prepare", "name": "prepare 钉定渠道", "provider": "custom",
+             "base_url": flash["base"], "api_key": flash["key"], "model": flash["model"],
+             "temperature": 0.7, "max_tokens": 65536, "timeout": 900,
+             "thinking": "enabled", "reasoning_effort": "high"})
+        bridge.cfg["slots"] = {"writing": "t-prepare", "helper": "t-prepare",
+                               "review": "t-prepare"}
+        _mark("Bridge 槽位钉定 → t-prepare（%s @ %s）" % (flash["model"], flash["base"]))
     ok = bridge.newProject(proj_root, BOOK, "都市悬疑", "番茄", 10,
                            "主角能用一支笔改写命运的笔记")
     assert ok, "建项目失败"
@@ -850,7 +861,7 @@ def _parse_args(argv):
 def main() -> None:
     args = _parse_args(sys.argv[1:])
     if args.prepare:
-        return cmd_prepare()
+        return cmd_prepare(flash_conn=args.flash_conn)
     if args.compare:
         return cmd_compare(args.phase)
     preset_params, gates, writing = load_preset_spec(args.preset_params)

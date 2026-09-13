@@ -31,7 +31,10 @@ GATE_MARK_CONTINUE = "mark_continue"  # 修复失败 → 标待修继续写（�
 # 表单选服务商时给下拉（providers.py 的 models），「拉取」到的实时列表优先。
 # id 保持稳定（槽位绑定与参数升级都按 id 认），尽管个别 id 里带着旧模型名的影子。
 DEFAULT_CONNECTIONS = [
-    {"id": "ds-v4-pro", "name": "DeepSeek 官方", "provider": "deepseek",
+    {"id": "ds-official-flash", "name": "DeepSeek 官方 Flash（推荐）", "provider": "deepseek",
+     "base_url": "https://api.deepseek.com", "api_key": "", "model": "",
+     "temperature": 0.7, "max_tokens": 65536, "timeout": 300},
+    {"id": "ds-v4-pro", "name": "DeepSeek 官方 Pro", "provider": "deepseek",
      "base_url": "https://api.deepseek.com", "api_key": "", "model": "",
      "temperature": 0.7, "max_tokens": 32768, "timeout": 300},
     {"id": "bl-qwen-max", "name": "阿里云百炼", "provider": "bailian",
@@ -71,10 +74,11 @@ DEFAULT_CONNECTIONS = [
 
 DEFAULT_CONFIG = {
     "connections": DEFAULT_CONNECTIONS,
-    # 三槽出厂都指向 DeepSeek 官方那条：内置提示词按 V4 系调校。但预设不再带模型——
-    # 新用户要先把这行的 Key 填上、模型选好（表单有候选下拉，或「拉取」实时列表），
-    # 全流程才跑得通；想压成本自己再加轻量模型或改指向（连接列表可以复制行）。
-    "slots": {SLOT_WRITING: "ds-v4-pro", SLOT_HELPER: "ds-v4-pro", SLOT_REVIEW: "ds-v4-pro"},
+    # 三槽出厂都指向 DeepSeek 官方 Flash（A14：出厂零 Pro——Pro 行仅在用户显式
+    # 开 audit_strict_tier 或自行改槽位后可达）。预设不带模型——新用户要先把这行
+    # 的 Key 填上、模型选好（表单有候选下拉，或「拉取」实时列表），全流程才跑得通。
+    "slots": {SLOT_WRITING: "ds-official-flash", SLOT_HELPER: "ds-official-flash",
+              SLOT_REVIEW: "ds-official-flash"},
     "gates": {"strategy": GATE_MARK_CONTINUE, "deslop_max_rounds": 2, "word_tolerance": 0.1,
               "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
               "review_enabled": True, "review_max_rounds": 1,
@@ -352,14 +356,37 @@ def find_connection(cfg: dict, conn_id: str) -> dict:
     return {}
 
 
+def _is_pro_conn(conn: dict) -> bool:
+    """A14 全局零 Pro 闸门的判定：model 以 pro 结尾；model 未填时看 id（出厂行
+    不预置模型，id 带模型名影子是本仓约定——ds-v4-pro 空模型行也必须被锁挡住，
+    否则新装用户填了 Key 就默认 Pro 计费）。"""
+    model = str(conn.get("model", "")).strip().lower()
+    if model:
+        return model.endswith("pro")
+    return str(conn.get("id", "")).strip().lower().endswith("pro")
+
+
 def slot_connection(cfg: dict, slot: str) -> dict:
-    """取某槽位当前绑定的连接；未绑定时回退写作槽，再回退第一条"""
+    """取某槽位当前绑定的连接；未绑定时回退写作槽，再回退第一条。
+
+    A14 全局零 Pro 闸门（用户裁决 2026-09-13，缺省=绝对不用 Pro）：三条回退路径
+    全部拒绝 Pro 连接（model 或 id 以 pro 结尾，见 _is_pro_conn）；无可用非 Pro
+    连接时返回空（上层报「未绑定」，绝不静默改用 Pro）。
+    gates.audit_strict_tier 显式开启后才放行 Pro（清算严格档/槽位路由恢复）。"""
+    strict_ok = bool((cfg.get("gates", {}) or {}).get("audit_strict_tier", False))
+
+    def _usable(c: dict) -> bool:
+        return bool(c) and (strict_ok or not _is_pro_conn(c))
+
     conn = find_connection(cfg, cfg.get("slots", {}).get(slot, ""))
-    if not conn:
+    if not _usable(conn):
         conn = find_connection(cfg, cfg.get("slots", {}).get(SLOT_WRITING, ""))
-    if not conn and cfg.get("connections"):
-        conn = cfg["connections"][0]
-    return conn
+    if not _usable(conn):
+        for c in cfg.get("connections", []):
+            if _usable(c):
+                conn = c
+                break
+    return conn if _usable(conn) else {}
 
 
 def new_connection_id() -> str:

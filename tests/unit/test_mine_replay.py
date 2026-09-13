@@ -140,8 +140,11 @@ def test_validate_queue_rejects_missing_source(tmp_path):
         validate_queue(queue, check_paths=True)
 
 
-def test_load_queue_on_real_file_with_tmp_source(tmp_path):
-    """路径校验通路：把章源指到 tmp 造的草稿后整链校验通过。"""
+def test_load_queue_on_real_file_with_tmp_source(tmp_path, monkeypatch):
+    """路径校验通路：把章源指到 tmp 造的草稿后整链校验通过。
+    bench_base 是 gitignored 产物（可重建），测试不依赖它——monkeypatch 掉。"""
+    (tmp_path / "base").mkdir()
+    monkeypatch.setattr("scripts.mine_replay.BASE_BOOK", str(tmp_path / "base"))
     drafts = tmp_path / "drafts"
     drafts.mkdir()
     (drafts / "第002.md").write_text(_sample_chapter(), encoding="utf-8")
