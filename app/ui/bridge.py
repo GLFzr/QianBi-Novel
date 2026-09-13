@@ -1665,6 +1665,12 @@ class Bridge(QObject):
 
     @Slot(str)
     def applyModelPreset(self, preset_id: str):
+        # 运行中禁止重绑 self.cfg（静态审计发现的 #15 同族隐患）：
+        # 此处 load_config() 会换新字典，orchestrator 仍持旧引用，本轮运行将看不到
+        # 此后的门预置/清单/连写开关变更——守卫拒绝，运行结束后再切
+        if self._running:
+            self.toast.emit("warn", "流水线运行中不能切换模型策略，请先停止")
+            return
         from .. import model_strategy
         cfg = cfg_mod.load_config()
         cfg = model_strategy.apply_preset(cfg, preset_id)
@@ -4630,8 +4636,7 @@ class Bridge(QObject):
     def writingPrefs(self) -> dict:
         w = self.cfg.get("writing", {})
         return {"stylePref": w.get("style_pref", ""), "taboos": w.get("taboos", ""),
-                "pacePref": w.get("pace_pref", ""),
-                "stepConfirm": str(w.get("gate_preset", "off")) == "step"}
+                "pacePref": w.get("pace_pref", "")}
 
     @Slot(str, str, str)
     def saveGlobalPrefs(self, style: str, taboos: str, pace: str):

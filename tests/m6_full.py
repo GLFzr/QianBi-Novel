@@ -128,8 +128,10 @@ def main():
             # ============ W 共写 ============
             cards = b.stageCards()
             check("W1", "驾驶舱阶段卡片（4 张+状态）", len(cards) == 4)
-            check("W2", "逐步确认开关持久化", b.setStepConfirm(True) or b.stepConfirmEnabled())
-            b.setStepConfirm(False)
+            # v1.2 两档制：旧 step_confirm 开关已删，改验门预置持久化
+            b.setGatePreset("step")
+            check("W2", "门预置持久化", str(b.cfg["writing"]["gate_preset"]) == "step")
+            b.setGatePreset("off")
             ideas0 = len(b.ideasList())
             b.submitIdeaScoped("M6：下一章出现红围巾", "next")
             b.submitIdeaScoped("M6：第9章专用想法", "9")

@@ -386,6 +386,15 @@ Item {
                     visible: bridge.hasProject && !cwOn
                     Layout.fillWidth: true
                     spacing: 6
+                    Text {
+                        Layout.fillWidth: true
+                        visible: bridge.autoGate
+                        text: "连写模式开启中：所有决策门自动放行（下方开关暂不生效）"
+                        color: Theme.warn
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsMicro
+                        wrapMode: Text.Wrap
+                    }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
@@ -456,9 +465,10 @@ Item {
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: gateBlock.preset === "off" ? "两个都关：全部自动放行"
-                                 : gateBlock.preset === "step" ? "每个决策门都停靠"
-                                 : "只停勾选的步骤"
+                            // 怪值落入 off 分支（gate_enabled 对未知值返回 False，语义一致）
+                            text: gateBlock.preset === "step" ? "每个决策门都停靠"
+                                 : gateBlock.preset === "border" ? "只停勾选的步骤"
+                                 : "两个都关：全部自动放行"
                             color: Theme.textTertiary
                             font.family: Theme.uiFont; font.pixelSize: Theme.fsMicro
                             elide: Text.ElideRight
