@@ -226,21 +226,28 @@ def _usage_delta(rows_before: int) -> dict:
 
 # ---------- 场景子进程：单场景执行（独立进程 = 独立 app 导入与 home 绑定） ----------
 
-def _review_client(cfg: dict, overrides: dict):
-    """review 槽客户端（与 canon_audit._client_for 同源构造）+ 场景参数覆盖层。"""
+def _review_client(cfg: dict, overrides: dict, preset_sp: dict = None,
+                   phase_key: str = "review"):
+    """review 槽客户端（与 canon_audit._client_for 同源构造）+ 场景参数覆盖层。
+
+    保真度（v18b）：覆盖层必须**先合并预设 stage_params 的本相位档**再叠加场景
+    覆盖——此前整层替换导致量具测的不是生产档（雷章门 C7 对照两侧都没吃到
+    预设档，n=2 结论与此有关）。"""
     from app import config as cfg_mod
     from app.llm.client import LLMClient
     conn = cfg_mod.slot_connection(cfg, cfg_mod.SLOT_REVIEW)
     client = LLMClient.from_connection(conn or {}, max_retries=1, slot="review")
-    if overrides:
-        client._overrides = lambda _ph, _o=dict(overrides): dict(_o)
+    effective = dict((preset_sp or {}).get(phase_key) or {})
+    effective.update(overrides or {})
+    if effective:
+        client._overrides = lambda _ph, _o=dict(effective): dict(_o)
     return client
 
 
 def run_review(proj: str, cfg: dict, num: int, prose: str, overrides: dict,
-               marks: list) -> dict:
+               marks: list, preset_sp: dict = None) -> dict:
     from app.core import stages
-    client = _review_client(cfg, overrides)
+    client = _review_client(cfg, overrides, preset_sp)
     prompt = stages.build_final_review_prompt(proj, cfg, num, prose)
     t0 = time.monotonic()
     rows0 = len(_usage_rows())
@@ -260,9 +267,9 @@ def run_review(proj: str, cfg: dict, num: int, prose: str, overrides: dict,
 
 
 def run_audit(proj: str, cfg: dict, num: int, prose: str, overrides: dict,
-              marks: list) -> dict:
+              marks: list, preset_sp: dict = None) -> dict:
     from app.core import canon_audit
-    client = _review_client(cfg, overrides)
+    client = _review_client(cfg, overrides, preset_sp, phase_key="canon_audit")
 
     class _Router:  # 注入点：audit_chapter 经 router.client("review") 取客户端
         def __init__(self, c):
@@ -292,20 +299,23 @@ RUNNERS = {"review": run_review, "audit": run_audit}
 
 
 def _build_cfg(queue: dict):
-    """cfg 构造与 cost_bench 同源（_mk_cfg），叠加 queue.preset 的 writing/gates。"""
+    """cfg 构造与 cost_bench 同源（_mk_cfg），叠加 queue.preset 的 writing/gates。
+    返回 (cfg, stage_params)——stage_params 供客户端覆盖层合并（保真度：量具
+    必须测生产档）。"""
     from scripts.cost_bench import _load_key, _mk_cfg, load_preset_spec
     # real_home 注入：本模块级 REAL_HOME 在进程启动（env 干净时）绑定
     flash, _pro = _load_key(prefer_id=queue.get("flash_conn", ""), real_home=REAL_HOME)
     cfg = _mk_cfg(flash)
     preset = queue.get("preset") or ""
+    sp = {}
     if preset:
         p_path = preset if os.path.isabs(preset) else os.path.join(ROOT, preset)
-        _sp, gates, writing = load_preset_spec("@" + p_path)
+        sp, gates, writing = load_preset_spec("@" + p_path)
         if gates:
             cfg.setdefault("gates", {}).update(gates)
         if writing:
             cfg.setdefault("writing", {}).update(writing)
-    return cfg
+    return cfg, (sp or {})
 
 
 def _read_source(src: str, num: int) -> str:
@@ -339,10 +349,11 @@ def cmd_scene(queue_path: str, scene_name: str, out_dir: str, budget_cny: float)
     os.environ["HOME"] = home
     proj = os.path.join(home, "bench", BOOK)
     shutil.copytree(BASE_BOOK, proj)
-    cfg = _build_cfg(queue)
-    _mark("场景 %s（雷 %d 颗 × 通道 %s × %d 票，覆盖层 %s）"
+    cfg, preset_sp = _build_cfg(queue)
+    _mark("场景 %s（雷 %d 颗 × 通道 %s × %d 票，覆盖层 %s，预设档 review=%s）"
           % (scene_name, len(defects), "/".join(channels), votes,
-             json.dumps(overrides, ensure_ascii=False)))
+             json.dumps(overrides, ensure_ascii=False),
+             json.dumps((preset_sp or {}).get("review") or {}, ensure_ascii=False)))
 
     fragment = {"scenario": scene_name, "calls": [], "plant_failures": [],
                 "spent_cny": 0.0, "aborted": False}
@@ -356,7 +367,7 @@ def cmd_scene(queue_path: str, scene_name: str, out_dir: str, budget_cny: float)
             return
         # 通道级覆盖优先（P1 决策只涉 audit 时不得连 review 一起改），回退场景平铺覆盖
         ov = (scene.get("overrides_by_channel") or {}).get(ch) or overrides
-        rec = runners[ch](proj, cfg, n, prose, ov, marks)
+        rec = runners[ch](proj, cfg, n, prose, ov, marks, preset_sp=preset_sp)
         u = rec.pop("usage")
         spent += u["cost_cny"]
         entry = dict(scenario=scene_name, kind=kind, defect=d_id, chapter=n,
@@ -473,7 +484,8 @@ def cmd_run(queue_path: str, gate: bool, baseline_path: str) -> int:
     control_scene = next((n for n in scene_names if n.startswith("control")), "")
     ab_fail = False
     if gate_scene and control_scene and not gate:
-        ok, lines = ab_verdict(results, gate_scene, control_scene)
+        ok, lines = ab_verdict(results, gate_scene, control_scene,
+                               ab_channel=queue.get("ab_channel") or "")
         for ln in lines:
             _mark("  " + ln)
         ab_fail = not ok
@@ -539,11 +551,16 @@ def _clean_counts(results: dict, scene: str) -> dict:
     return out
 
 
-def ab_verdict(results: dict, gate_scene: str, control_scene: str) -> tuple:
+def ab_verdict(results: dict, gate_scene: str, control_scene: str,
+               ab_channel: str = "") -> tuple:
     """同跑 A/B 判定 → (通过, 摘要行列表)。
 
     - 召回：逐 (雷,通道) 门档 ≥ 对照档；对照档缺格（预算截断等）＝不可比行——
       存在不可比行时整体判「不完整」（宁缺毋假，不产出绿色结论）。
+    - ab_channel（v18b）：队列声明「两场景真正分化的通道」——只对该通道做回归
+      门；其余通道两场景配置相同（保真修复后 review 两侧都吃生产预设档），
+      其差异是同配置抽样噪声（实测 D01/review 0/2 vs 2/2），降级为稳定性报告，
+      不产生门判定。
     - 假阳性：**相对口径**——独立脚手架里 bench_base 设定底册不含源跑次累积的
       收编/台账，干净章在两档都会出同量级 findings（实测 audit 11-16 条）；
       门只有在不相称地**高于**对照档时才失败。
@@ -556,17 +573,21 @@ def ab_verdict(results: dict, gate_scene: str, control_scene: str) -> tuple:
                        "不许判通过" % (len(t_gate), len(t_ctrl))]
     regs = [r for r in ab_regressions(results, gate_scene, control_scene)
             if r.get("old") != "（基线无）"]   # 缺格行走「不可比」分支，不算回归
+    if ab_channel:
+        regs = [r for r in regs if r["defect_channel"].endswith("/" + ab_channel)]
     incomparable = sorted(set(t_gate) - set(t_ctrl))
     for key in sorted(set(t_gate) | set(t_ctrl)):
         if key in incomparable:
             lines.append("[A/B] %-12s 对照档=缺格 门档=%.2f（不可比）"
                          % (key, t_gate[key][0]))
             continue
+        noise = ab_channel and not key.endswith("/" + ab_channel)
         lines.append("[A/B] %-12s 对照档=%.2f 门档=%.2f%s"
                      % (key, t_ctrl[key][0], t_gate[key][0],
-                        "  [回归]" if any(r["defect_channel"] == key for r in regs) else ""))
+                        "  [回归]" if any(r["defect_channel"] == key for r in regs) else ""
+                        if not noise else "  （同配置稳定性对，不入门）"))
     if regs:
-        lines.append("雷章门（同跑 A/B）：不通过——召回回归 %d 项" % len(regs))
+        lines.append("雷章门（同跑 A/B）：不通过——%s 通道召回回归 %d 项" % (ab_channel, len(regs)))
         return False, lines
     gate_fp = _clean_counts(results, gate_scene)
     ctrl_fp = _clean_counts(results, control_scene)

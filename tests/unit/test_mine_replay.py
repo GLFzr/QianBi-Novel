@@ -291,3 +291,23 @@ def test_load_key_reads_real_home_config(tmp_path, monkeypatch):
     flash, pro = cb._load_key(prefer_id="ds-official-flash")
     assert flash["key"] == "sk-test-123" and flash["model"] == "deepseek-flash"
     assert pro is None
+
+
+def test_ab_channel_restricts_gating_to_differentiated_channel():
+    """v18b 语义：ab_channel 声明真正分化的通道——其余通道的同配置差异是
+    抽样噪声（D01/review 0/2 vs 2/2 实测），降级为稳定性报告不产生门判定。"""
+    from scripts.mine_replay import ab_verdict
+    calls = []
+    # gate 场景 review D01 两票全空（同配置噪声），audit 全抓；control 全抓
+    for v in (0, 1):
+        calls.append(_call("planted", "D01", "review", [], scenario="gate_think_disabled", vote=v))
+        calls.append(_call("planted", "D01", "review", ["老周"], scenario="control_think_on", vote=v))
+        calls.append(_call("planted", "D01", "audit", ["老周"], scenario="gate_think_disabled", vote=v))
+        calls.append(_call("planted", "D01", "audit", ["老周"], scenario="control_think_on", vote=v))
+    ok, lines = ab_verdict({"calls": calls}, "gate_think_disabled",
+                           "control_think_on", ab_channel="audit")
+    assert ok is True                                  # review 噪声不入门，audit 无回归
+    assert any("稳定性对" in ln for ln in lines)
+    # 不声明 ab_channel：旧行为——review 回归仍然拦门
+    ok2, lines2 = ab_verdict({"calls": calls}, "gate_think_disabled", "control_think_on")
+    assert ok2 is False
