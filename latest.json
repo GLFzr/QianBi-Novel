@@ -1,22 +1,22 @@
 {
   "version": "0.19.9",
   "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.9",
-  "notes": "0.19.8（书级语料流 · 思考治理 · Pro 总开关）：\n· 书级语料流：跨卷前后文不断档，长篇一致性更强，卷界不再重置缓存\n· 成本与速度：设定对账单章 90 秒+ → 数秒，长跑输出 -66%，综合命中率 85.3%→94.1%\n· Pro 总开关：默认彻底不用 Pro 严格档（连接列表里有 Pro 也不会被自动升级）；需要时在闸门配置显式开启 audit_strict_tier\n· 修复：失败重试不再重复计费（思考显式关闭）；扩写过的章现在也会进自动压缩；补尾扩写/审校重试骑会话省缓存\n· 审校恢复轻量思考：修复幻影引用类硬伤漏检\n· 测试套件 1015→1090 件全部通过",
-  "sha256": "e771c84224f44a9bd3b00e36e75d320b57cedfce17ca3258eb611b16a66db3d8",
+  "notes": "0.19.9（槽位绑定原样生效 · 输出治理收尾）：\n· 模型选择契约：槽位绑定原样生效——选了 Flash 一定是 Flash，选了 Pro 就用 Pro，杜绝一切静默换型\n· 出厂默认改 DeepSeek Flash（新装用户未做选择时替选推荐项，Pro 行需显式选择或开开关）\n· 审校空转消除：每章 1 笔空内容白付清零（约省 12% 跑次成本 + 228 秒）\n· 细纲批量部分返回自动补齐：消除尾段回退生成税\n· 正文长度硬上限：修复环（压缩/扩写）触发大幅减少\n· 新书试跑：28 笔全 Flash、零空转，¥0.79，新书前期成本较上版 -53%\n· 测试套件 1090→1100 件全部通过",
+  "sha256": "ea33e07c7c1a0ae0969275beadc53cc37900cd13c3d176b4a494847018956466",
   "published": "2026-09-13",
   "assets": {
     "setup": {
       "name": "QianBi-Novel-v0.19.9-setup.exe",
       "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.9/QianBi-Novel-v0.19.9-setup.exe",
-      "sha256": "e771c84224f44a9bd3b00e36e75d320b57cedfce17ca3258eb611b16a66db3d8",
-      "size": 53829517
+      "sha256": "ea33e07c7c1a0ae0969275beadc53cc37900cd13c3d176b4a494847018956466",
+      "size": 53844174
     },
     "portable": {
       "name": "QianBi-Novel-v0.19.9-portable.zip",
       "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.9/QianBi-Novel-v0.19.9-portable.zip",
-      "sha256": "791e41a3ec9380c0f75b291db3cf65c6dd5e62db5f795865c61472350c3cb9ef",
-      "size": 79258362
+      "sha256": "18d08baefce381f4870b80d8c16be17ce7e8bd5b5b68701612f56eb53c5791df",
+      "size": 79257601
     }
   },
-  "sig": "KYs1Zt48E32a9FvrZhdk9OZZ7OLyRph0tMaK8GV3+f2co9oXBXHI0G57VTZwn5VRsXl9+EYHcO6BwzTPIQJDCA=="
+  "sig": "D+6PMBrhEr2XJunYX+bHsAvnDa2zvs7Uxmc1gDfhWRWwFNcki2DZNoTRpTMN1pMCv8MqMJ+UeTzfWu6HZp8QAw=="
 }
