@@ -1,5 +1,5 @@
 {
- "count": 53,
+ "count": 54,
  "entries": [
   {
    "i": 0,
@@ -234,139 +234,146 @@
   },
   {
    "i": 33,
+   "kind": "trim",
+   "slot": "writing",
+   "chars": 9915,
+   "sha256": "1a59748fe1ca5b93a6de95da7712d01ed916336128c9d0f3265f9b480147a406"
+  },
+  {
+   "i": 34,
    "kind": "review",
    "slot": "review",
    "chars": 15544,
    "sha256": "000a7fc6670fa8e33552c30ded89e527404021ea1264828551699103d7b1c50c"
   },
   {
-   "i": 34,
+   "i": 35,
    "kind": "tracking",
    "slot": "helper",
    "chars": 11026,
    "sha256": "1b89d0754e99954af85979f3ee3eafd8b12ea0014c1b58f33b13b2f15ca04510"
   },
   {
-   "i": 35,
+   "i": 36,
    "kind": "chapter_summary",
    "slot": "helper",
    "chars": 7346,
    "sha256": "9002b026df0f8fe0e8ef289edce3bf95ec0d8438f2a4c7b93ecd44c5794c0e3e"
   },
   {
-   "i": 36,
+   "i": 37,
    "kind": "global_summary",
    "slot": "helper",
    "chars": 4642,
    "sha256": "57e368457d9a7c70190338fd22c188224bebc1a00e311149d2f9d4ac6b7e0159"
   },
   {
-   "i": 37,
+   "i": 38,
    "kind": "unknown",
    "slot": "review",
    "chars": 9632,
    "sha256": "64b6775d23ff1c49d87948078f01ec54665bc20ae4f473bb556ecf8826089142"
   },
   {
-   "i": 38,
+   "i": 39,
    "kind": "unknown",
    "slot": "review",
    "chars": 9666,
    "sha256": "56283d9be1c740410c34c2c98d7b4a646d7b577b0410d0dac81dc1dacd267a23"
   },
   {
-   "i": 39,
+   "i": 40,
    "kind": "dialogue",
    "slot": "helper",
    "chars": 4757,
    "sha256": "07b8e10dd1f4fec0b66d8ab9f0af53b28929f56337763603a95b7feca4ed4190"
   },
   {
-   "i": 40,
+   "i": 41,
    "kind": "review",
    "slot": "review",
    "chars": 12390,
    "sha256": "c819fa03a2240ff133bd208d714d2f67dadb2fee52818b2720e76cd7227c3dcc"
   },
   {
-   "i": 41,
+   "i": 42,
    "kind": "deslop",
    "slot": "writing",
    "chars": 4045,
    "sha256": "196a59b88f7ed913e4000f64dc676db5b7dd830ce73580a2394c0c7bb30ba1c2"
   },
   {
-   "i": 42,
+   "i": 43,
    "kind": "backflow",
    "slot": "helper",
    "chars": 4616,
    "sha256": "4acd32e1ba38fd2c1d26309e08fe437ffbd57e5ebadc8654e568839619e9bb53"
   },
   {
-   "i": 43,
+   "i": 44,
    "kind": "co_summarize",
    "slot": "writing",
    "chars": 3066,
    "sha256": "3a018cbfc3e7497d200245037e40cbd712a7ebc3e89c850ad772be2dadcc08c5"
   },
   {
-   "i": 44,
+   "i": 45,
    "kind": "blurb",
    "slot": "helper",
    "chars": 663,
    "sha256": "ded6f4f946cffe465316da93efd251f7ab4af942bcb6757555b8b2e880ab77d8"
   },
   {
-   "i": 45,
+   "i": 46,
    "kind": "selection",
    "slot": "writing",
    "chars": 775,
    "sha256": "a564aa432134a76d3c1dcb262e358a09cbb4f796ab932d37ce065d8c9f9bb817"
   },
   {
-   "i": 46,
+   "i": 47,
    "kind": "selection",
    "slot": "writing",
    "chars": 683,
    "sha256": "5feede5e4b1de741e49efecdf9f4df3bd4416664ee8f28ff167a8dc5055a739e"
   },
   {
-   "i": 47,
-   "kind": "worldbook_text",
-   "slot": "budget=2000",
-   "chars": 288,
-   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
-  },
-  {
    "i": 48,
    "kind": "worldbook_text",
-   "slot": "budget=600",
+   "slot": "budget=2000",
    "chars": 288,
    "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
   },
   {
    "i": 49,
    "kind": "worldbook_text",
-   "slot": "budget=2000",
+   "slot": "budget=600",
    "chars": 288,
    "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
   },
   {
    "i": 50,
+   "kind": "worldbook_text",
+   "slot": "budget=2000",
+   "chars": 288,
+   "sha256": "0b38462ccb0f9948a211ad36747a69a043e4329b1bfd30618cc223c86d8303c6"
+  },
+  {
+   "i": 51,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=1 anchors=['陈更', '柳三更']",
    "chars": 150,
    "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
   },
   {
-   "i": 51,
+   "i": 52,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=2 anchors=['陈更', '柳三更']",
    "chars": 150,
    "sha256": "ccaa70c898a78bae1718ab1d88c295d8e7e0ff1f60e7b8cd9ab95e6c0f330b36"
   },
   {
-   "i": 52,
+   "i": 53,
    "kind": "worldbook_assemble",
    "slot": "budget=160 num=3 anchors=['陈更', '柳三更']",
    "chars": 150,
