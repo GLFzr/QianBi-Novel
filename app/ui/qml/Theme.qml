@@ -161,9 +161,20 @@ QtObject {
     readonly property color highlightRed: _pick("highlightRed")
 
     // ===== 字体 =====
-    readonly property string uiFont: "Microsoft YaHei UI"
+    // MiSans 由 main.py 启动时经 QFontDatabase 注册（assets/fonts，四字重一个家族，
+    // font.weight 直接可用）；未注册（理论上仅开发环境异常）时回落系统雅黑。
+    readonly property string uiFont: "MiSans"
+    readonly property string uiFontFallback: "Microsoft YaHei UI"
     readonly property string serifFont: "Source Han Serif SC"
     readonly property string monoFont: "JetBrains Mono"
+    // 动效令牌（v1.2 波次1 地基：全库 Behavior/Animation 时长一律引用这里，禁止字面量）
+    readonly property int durFast: 120    // hover/press/focus/色值微反馈
+    readonly property int durNormal: 200  // 面板切换、抽屉、门条、日志渐入
+    readonly property int durSlow: 320    // 弹窗出入场、全屏过渡
+    readonly property int durLoop: 1400   // 呼吸/循环单周期（克制的节奏）
+    readonly property int durIndet: 1600  // 不确定态扫过周期
+    readonly property var easeOut: Easing.OutCubic   // 入场/推进（减速收尾）
+    readonly property var easeStd: Easing.InOutQuad  // 双向状态/呼吸
 
     // ===== 字号（6 档）=====
     readonly property int fsMicro: 10   // 徽章/角标（仅限全大写或数字场景）

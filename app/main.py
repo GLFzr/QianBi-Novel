@@ -58,6 +58,18 @@ def main():
     app.setWindowIcon(QIcon(resource_path(os.path.join("assets", "icon.ico"))))
     logger.info("应用启动 v%s", __version__)
 
+    # ---- 内置字体（v1.2）：MiSans 四字重（Regular/Medium/Demibold/Bold 同家族，
+    # QML font.weight 直接可用）；注册失败静默回落系统雅黑，不影响功能 ----
+    from PySide6.QtGui import QFontDatabase
+    _fonts_dir = resource_path(os.path.join("assets", "fonts"))
+    try:
+        for _fn in sorted(os.listdir(_fonts_dir)):
+            if _fn.lower().endswith((".ttf", ".otf")):
+                if QFontDatabase.addApplicationFont(os.path.join(_fonts_dir, _fn)) < 0:
+                    logger.warning("字体注册失败：%s", _fn)
+    except OSError as _e:
+        logger.warning("内置字体目录不可用（%s），回落系统字体", _e)
+
     # ---- 单实例锁（T3.1）：二次启动唤起既有窗口并退出，防多开写坏配置 ----
     from .singleinstance import SingleInstance
     def _raise_window():
