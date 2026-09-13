@@ -102,7 +102,7 @@ Item {
                     text: "本书契约"
                     color: Theme.textPrimary
                     font.family: Theme.uiFont
-                    font.pixelSize: Theme.fsBig
+                    font.pixelSize: Theme.fsTitle   // v1.2：与其他面板头统一（原误用 fsBig）
                     font.bold: true
                 }
                 Text {

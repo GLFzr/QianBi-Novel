@@ -31,13 +31,14 @@ Rectangle {
             text: root.label
             color: Theme.textTertiary
             font.family: Theme.uiFont
-            font.pixelSize: Theme.fsTiny
+            font.pixelSize: Theme.fsMicro
+            font.letterSpacing: 0.5
         }
         Text {
             text: root.value
             color: root.valueColor
             font.family: Theme.monoFont
-            font.pixelSize: Theme.fsTitle
+            font.pixelSize: Theme.fsBig   // v1.2：15→20，数据大屏质感
             font.bold: true
         }
         Rectangle {
@@ -51,7 +52,7 @@ Rectangle {
                 height: parent.height
                 radius: 1.5
                 color: root.barColor
-                Behavior on width { NumberAnimation { duration: 150 } }
+                Behavior on width { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
             }
         }
     }

@@ -28,6 +28,8 @@ Rectangle {
     border.width: mouseArea.containsMouse ? 1 : 0
     border.color: Theme.borderStrong
     opacity: state === "queued" || state === "outline_ready" ? 0.55 : 1.0
+    Behavior on color { ColorAnimation { duration: Theme.durFast } }
+    Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
 
     Rectangle {
         width: 2

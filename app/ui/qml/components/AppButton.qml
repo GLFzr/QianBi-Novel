@@ -45,12 +45,15 @@ Button {
                      : btn.hovered && btn.kind === "ghost" ? Theme.textPrimary
                      : Theme.textSecondary
                 font: btn.font
-                Behavior on color { ColorAnimation { duration: 110 } }
+                Behavior on color { ColorAnimation { duration: Theme.durFast } }
             }
         }
     }
     background: Rectangle {
         radius: Theme.rBtn
+        // v1.2 动效：按压缩放微反馈（transform 类合成器友好）
+        scale: btn.pressed ? 0.98 : 1.0
+        Behavior on scale { NumberAnimation { duration: Theme.durFast; easing: Theme.easeOut } }
         // 禁用态保留按钮外形：主按钮留灰底，其余留描边——不能退化成裸文字（主次倒挂）
         color: !btn.enabled ? (btn.kind === "primary" ? Theme.bgActive : "transparent")
              : btn.kind === "primary" ? (btn.pressed ? Theme.accentPressed : btn.hovered ? Theme.accentHover : Theme.accent)
@@ -64,7 +67,7 @@ Button {
              : btn.kind === "success"
              ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, btn.hovered ? 0.55 : 0.35)
              : (btn.activeFocus ? Theme.accent : Theme.border)
-        Behavior on color { ColorAnimation { duration: 110 } }
-        Behavior on border.color { ColorAnimation { duration: 110 } }
+        Behavior on color { ColorAnimation { duration: Theme.durFast } }
+        Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
     }
 }

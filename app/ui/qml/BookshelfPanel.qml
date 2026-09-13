@@ -55,33 +55,40 @@ Item {
             }
         }
 
-        // 项目列表
+        // 项目列表（v1.2 修复：Layout 子项 anchors.margins 无效导致的左贴边右 20px 空隙）
         ListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            leftMargin: 12
+            rightMargin: 12
             model: shelf.items
             spacing: 6
             clip: true
-            anchors.margins: 10
 
             delegate: Rectangle {
                 required property var modelData
                 required property int index
-                width: ListView.view.width - 20
+                width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
                 height: 62
                 radius: Theme.rCard
                 color: itemHover.containsMouse ? Theme.bgHover : Theme.bgCard
                 border.width: 1
                 border.color: itemHover.containsMouse ? Theme.borderStrong : Theme.border
+                Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
 
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 12
                     spacing: 10
 
+                    // 迷你书封：双色调纵向渐变 + 首字
                     Rectangle {
                         width: 40; height: 40; radius: 8
-                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.32) }
+                            GradientStop { position: 1.0; color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12) }
+                        }
                         Text {
                             anchors.centerIn: parent
                             text: modelData.name.length > 0 ? modelData.name.charAt(0) : "书"
@@ -134,37 +141,19 @@ Item {
             }
         }
 
-        // 空状态引导（新用户）
+        // 空状态引导（新用户；v1.2 统一 AppEmptyState + 线性图标，替换裸字符"▤"）
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: shelf.items.length === 0
-            Column {
+            AppEmptyState {
                 anchors.centerIn: parent
-                spacing: 10
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "▤"
-                    color: Theme.borderStrong
-                    font.pixelSize: 40
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "书架还空着"
-                    color: Theme.textSecondary
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.fsBody
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "点下方「新建项目」开始你的第一部作品"
-                    color: Theme.textTertiary
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.fsTiny
-                }
+                iconName: "shelf"
+                title: "书架还空着"
+                hint: "点下方「新建项目」开始你的第一部作品"
                 AppButton {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "▶ 先看 5 分钟演示（无需 Key）"
+                    text: "先看 5 分钟演示（无需 Key）"
                     kind: "primary"
                     visible: bridge.demoAvailable
                     onClicked: bridge.demoStart()
@@ -219,12 +208,7 @@ Item {
         padding: 18
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgCard
-            border.width: 1
-            border.color: Theme.border
-        }
+        background: DialogBg {}   // v1.2：裸 Rectangle → 统一三层投影弹窗底
         header: Text {
             text: "新建项目"
             color: Theme.textPrimary

@@ -75,17 +75,18 @@ Item {
             }
         }
 
-        // 章节列表
+        // 章节列表（v1.2 修复：Layout 子项 anchors.margins 无效导致的对齐 bug）
         ListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: bridge.chapterModelProp
             spacing: 3
             clip: true
-            anchors.margins: 10
+            leftMargin: 10
+            rightMargin: 10
 
             delegate: QueueRow {
-                width: ListView.view.width - 20
+                width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
                 num: model.num
                 title: model.title
                 state: model.state
@@ -112,17 +113,16 @@ Item {
             }
         }
 
-        // 空状态
+        // 空状态（v1.2 统一 AppEmptyState）
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: bridge.chapterModelProp.rowCount === 0
-            Text {
-                text: "还没有章节\n点「流水线 开始」启动写作"
-                color: Theme.textTertiary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsSmall
-                horizontalAlignment: Text.AlignHCenter
+            AppEmptyState {
+                anchors.centerIn: parent
+                iconName: "chapters"
+                title: "还没有章节"
+                hint: "点「流水线 → 开始」启动写作"
             }
         }
     }
@@ -208,12 +208,7 @@ Item {
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
         property string currentRel: ""
-        background: Rectangle {
-            radius: Theme.rCard
-            color: Theme.bgPanel
-            border.width: 1
-            border.color: Theme.borderStrong
-        }
+        background: DialogBg {}   // v1.2：裸 Rectangle → 统一三层投影弹窗底
         header: Text {
             text: "项目文件 · " + bridge.bookTitle
             color: Theme.textPrimary

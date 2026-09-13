@@ -149,6 +149,11 @@ QtObject {
     readonly property color danger: _pick("danger")
     readonly property color info: _pick("info")
     readonly property color muted: _pick("muted")
+    // 语义淡底（v1.2 波次1）：替代全库手调 Qt.rgba alpha（15 种离散值收敛到统一令牌）
+    readonly property color successSoft: Qt.rgba(success.r, success.g, success.b, 0.14)
+    readonly property color warnSoft: Qt.rgba(warn.r, warn.g, warn.b, 0.14)
+    readonly property color dangerSoft: Qt.rgba(danger.r, danger.g, danger.b, 0.12)
+    readonly property color infoSoft: Qt.rgba(info.r, info.g, info.b, 0.12)
 
     // ===== 边框与遮罩 =====
     readonly property color border: _pick("border")

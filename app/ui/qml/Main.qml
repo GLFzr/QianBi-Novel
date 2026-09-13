@@ -489,17 +489,30 @@ ApplicationWindow {
                         Layout.alignment: Qt.AlignVCenter
                         // S2 thinking 呼吸动画：思考期（本轮还没吐正文）三点呼吸，不空白
                         // 判据用 reasoningLive，不能用 reasoningText 非空——后者跨阶段累积
-                        Text {
+                        Row {
                             visible: bridge.reasoningLive
-                            text: "● ● ●"
-                            color: Theme.info
-                            font.pixelSize: 8
+                            spacing: 3
                             anchors.verticalCenter: parent.verticalCenter
-                            SequentialAnimation on opacity {
-                                running: visible; loops: Animation.Infinite
-                                NumberAnimation { to: 0.15; duration: 600 }
-                                NumberAnimation { to: 1; duration: 600 }
+                            // v1.2 动效：三点同步呼吸 → 波浪错相（输出的"活着"节奏）
+                            Repeater {
+                                model: 3
+                                delegate: Rectangle {
+                                    id: dot
+                                    required property int index
+                                    width: 5; height: 5; radius: 2.5
+                                    color: Theme.info
+                                    opacity: 0.3
+                                    SequentialAnimation on opacity {
+                                        running: bridge.reasoningLive && Theme.motionOK
+                                        loops: Animation.Infinite
+                                        PauseAnimation { duration: dot.index * 180 }
+                                        NumberAnimation { to: 1; duration: Theme.durLoop / 4; easing: Theme.easeStd }
+                                        NumberAnimation { to: 0.3; duration: Theme.durLoop / 4; easing: Theme.easeStd }
+                                        PauseAnimation { duration: (2 - dot.index) * 180 }
+                                    }
+                                }
                             }
+                            objectName: "thinkDots"
                         }
                         Text {
                             text: bridge.reasoningLive
@@ -1572,8 +1585,13 @@ ApplicationWindow {
         opacity: 0
         visible: opacity > 0
         z: 100
+        // v1.2 动效：入场 y+14→0 上滑，宽高变化平滑（多行换行不再横向抽搐）
+        Behavior on width { NumberAnimation { duration: Theme.durFast; easing: Theme.easeOut } }
+        Behavior on height { NumberAnimation { duration: Theme.durFast; easing: Theme.easeOut } }
 
         property string toastLevel: "info"
+        property real toastYBase: 40
+        anchors.bottomMargin: toastYBase + (1 - opacity) * 14
 
         function showToast(level, msg) {
             toastBar.toastLevel = level
@@ -1594,9 +1612,9 @@ ApplicationWindow {
 
         SequentialAnimation {
             id: toastAnim
-            NumberAnimation { target: toastBar; property: "opacity"; to: 1; duration: 160 }
+            NumberAnimation { target: toastBar; property: "opacity"; to: 1; duration: Theme.durFast + 40; easing: Theme.easeOut }
             PauseAnimation { duration: 2600 }
-            NumberAnimation { target: toastBar; property: "opacity"; to: 0; duration: 300 }
+            NumberAnimation { target: toastBar; property: "opacity"; to: 0; duration: Theme.durNormal }
         }
     }
 

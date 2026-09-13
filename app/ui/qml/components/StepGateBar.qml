@@ -11,9 +11,12 @@ import ".."
 Rectangle {
     id: gateBar
     objectName: "gateBar"
-    visible: waiting
+    visible: opacity > 0.01 && height > 1
     width: parent ? parent.width : 0
     height: waiting ? gateCol.implicitHeight + 18 : 0
+    Behavior on height { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
+    Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
+    opacity: waiting ? 1.0 : 0.0
     radius: Theme.rCard
     color: Theme.bgCard
     border.width: 1
@@ -56,8 +59,14 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
+            AppIcon {
+                name: "pause"
+                size: 14
+                color: Theme.accent
+                anchors.verticalCenter: parent.verticalCenter
+            }
             Text {
-                text: "⏸ 决策门 " + gateKey + (gateChapter ? " · 第" + gateChapter + "章" : "")
+                text: "决策门 " + gateKey + (gateChapter ? " · 第" + gateChapter + "章" : "")
                 color: Theme.accent
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsSmall
@@ -72,15 +81,17 @@ Rectangle {
                 elide: Text.ElideRight
             }
             Text {
+                id: waitText
                 text: "等待你的决定…"
                 color: Theme.accent
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsTiny
-                SequentialAnimation on opacity {
-                    running: gateBar.waiting
+                // v1.2：循环动画改 render 线程 Animator + motionOK 总闸（减少动态）
+                SequentialAnimation {
+                    running: gateBar.waiting && Theme.motionOK
                     loops: Animation.Infinite
-                    NumberAnimation { to: 0.3; duration: 600 }
-                    NumberAnimation { to: 1; duration: 600 }
+                    OpacityAnimator { target: waitText; from: 1; to: 0.3; duration: Theme.durLoop / 2 }
+                    OpacityAnimator { target: waitText; from: 0.3; to: 1; duration: Theme.durLoop / 2 }
                 }
             }
         }
