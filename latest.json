@@ -1,22 +1,22 @@
 {
-  "version": "0.19.8",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.8",
+  "version": "0.19.9",
+  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.9",
   "notes": "0.19.8（书级语料流 · 思考治理 · Pro 总开关）：\n· 书级语料流：跨卷前后文不断档，长篇一致性更强，卷界不再重置缓存\n· 成本与速度：设定对账单章 90 秒+ → 数秒，长跑输出 -66%，综合命中率 85.3%→94.1%\n· Pro 总开关：默认彻底不用 Pro 严格档（连接列表里有 Pro 也不会被自动升级）；需要时在闸门配置显式开启 audit_strict_tier\n· 修复：失败重试不再重复计费（思考显式关闭）；扩写过的章现在也会进自动压缩；补尾扩写/审校重试骑会话省缓存\n· 审校恢复轻量思考：修复幻影引用类硬伤漏检\n· 测试套件 1015→1090 件全部通过",
-  "sha256": "668c7d296e707d087a67b861110854ca7b787563487411212ead824e9ced4580",
+  "sha256": "e771c84224f44a9bd3b00e36e75d320b57cedfce17ca3258eb611b16a66db3d8",
   "published": "2026-09-13",
   "assets": {
     "setup": {
-      "name": "QianBi-Novel-v0.19.8-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.8/QianBi-Novel-v0.19.8-setup.exe",
-      "sha256": "668c7d296e707d087a67b861110854ca7b787563487411212ead824e9ced4580",
-      "size": 53838146
+      "name": "QianBi-Novel-v0.19.9-setup.exe",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.9/QianBi-Novel-v0.19.9-setup.exe",
+      "sha256": "e771c84224f44a9bd3b00e36e75d320b57cedfce17ca3258eb611b16a66db3d8",
+      "size": 53829517
     },
     "portable": {
-      "name": "QianBi-Novel-v0.19.8-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.8/QianBi-Novel-v0.19.8-portable.zip",
-      "sha256": "052b513dd62f6358a59feaddcc19c14c0dbddc20f98c5e12edb889ddd12c07db",
-      "size": 79255073
+      "name": "QianBi-Novel-v0.19.9-portable.zip",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.9/QianBi-Novel-v0.19.9-portable.zip",
+      "sha256": "791e41a3ec9380c0f75b291db3cf65c6dd5e62db5f795865c61472350c3cb9ef",
+      "size": 79258362
     }
   },
-  "sig": "09IQHgXrIysKb2XLhsJ8FBvV+RGteTY8b9L2ZEEgpGuTQzvZuYRpkl6Fcmuhr/eVJJzRolxvQyEhIqp9L1GDAQ=="
+  "sig": "KYs1Zt48E32a9FvrZhdk9OZZ7OLyRph0tMaK8GV3+f2co9oXBXHI0G57VTZwn5VRsXl9+EYHcO6BwzTPIQJDCA=="
 }

@@ -356,37 +356,20 @@ def find_connection(cfg: dict, conn_id: str) -> dict:
     return {}
 
 
-def _is_pro_conn(conn: dict) -> bool:
-    """A14 全局零 Pro 闸门的判定：model 以 pro 结尾；model 未填时看 id（出厂行
-    不预置模型，id 带模型名影子是本仓约定——ds-v4-pro 空模型行也必须被锁挡住，
-    否则新装用户填了 Key 就默认 Pro 计费）。"""
-    model = str(conn.get("model", "")).strip().lower()
-    if model:
-        return model.endswith("pro")
-    return str(conn.get("id", "")).strip().lower().endswith("pro")
-
-
 def slot_connection(cfg: dict, slot: str) -> dict:
     """取某槽位当前绑定的连接；未绑定时回退写作槽，再回退第一条。
 
-    A14 全局零 Pro 闸门（用户裁决 2026-09-13，缺省=绝对不用 Pro）：三条回退路径
-    全部拒绝 Pro 连接（model 或 id 以 pro 结尾，见 _is_pro_conn）；无可用非 Pro
-    连接时返回空（上层报「未绑定」，绝不静默改用 Pro）。
-    gates.audit_strict_tier 显式开启后才放行 Pro（清算严格档/槽位路由恢复）。"""
-    strict_ok = bool((cfg.get("gates", {}) or {}).get("audit_strict_tier", False))
-
-    def _usable(c: dict) -> bool:
-        return bool(c) and (strict_ok or not _is_pro_conn(c))
-
+    A14 语义（用户裁决 2026-09-13「绝对符合用户选的」）：本函数**原样返回用户
+    绑定的连接**——选了 Flash 就是 Flash，选了 Pro 就用 Pro，不做任何模型过滤、
+    静默换型或降级替换。「没选 Pro 就绝不是 Pro」由两道显式闸门保证：
+    ①出厂默认槽位指向 Flash（新用户未做选择时，替选推荐项而非 Pro）；
+    ②清算自动升级由 gates.audit_strict_tier 独立把关（缺省关=不升级）。"""
     conn = find_connection(cfg, cfg.get("slots", {}).get(slot, ""))
-    if not _usable(conn):
+    if not conn:
         conn = find_connection(cfg, cfg.get("slots", {}).get(SLOT_WRITING, ""))
-    if not _usable(conn):
-        for c in cfg.get("connections", []):
-            if _usable(c):
-                conn = c
-                break
-    return conn if _usable(conn) else {}
+    if not conn and cfg.get("connections"):
+        conn = cfg["connections"][0]
+    return conn
 
 
 def new_connection_id() -> str:
