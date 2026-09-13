@@ -147,6 +147,9 @@ Canvas {
         case "plus":  // ＋
             p(); mv(.5, .24); ln(.5, .76); mv(.24, .5); ln(.76, .5); stroke2()
             break
+        case "minus":  // －（v1.2：AppSpinBox 减号）
+            p(); mv(.24, .5); ln(.76, .5); stroke2()
+            break
         case "backup":  // 备份：数据库圆柱
             p(); arc(.5, .26, .24, Math.PI, 0); ln(.74, .74); arc(.5, .74, .24, 0, Math.PI); ln(.26, .26); stroke2()
             p(); mv(.26, .5); arc(.5, .5, .24, Math.PI, 0); stroke2()

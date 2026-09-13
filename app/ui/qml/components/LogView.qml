@@ -19,11 +19,18 @@ Rectangle {
         spacing: 2
         boundsBehavior: Flickable.StopAtBounds
 
-        onCountChanged: Qt.callLater(function () { list.positionViewAtEnd() })
+        // v1.2 动效：贴底才自动跟随（上翻回看时新行不再把视线顶走），回到底部自动恢复
+        property bool follow: true
+        onContentYChanged: follow = atYEnd || dragging
+        onCountChanged: if (follow) Qt.callLater(function () { list.positionViewAtEnd() })
 
         delegate: Row {
             spacing: 8
             width: list.width
+            // v1.2 动效：新行渐入
+            opacity: 0
+            Component.onCompleted: opacity = 1
+            Behavior on opacity { NumberAnimation { duration: Theme.durNormal } }
             Text {
                 text: model.time
                 color: Theme.textTertiary
@@ -40,6 +47,10 @@ Rectangle {
                 visible: model.level !== "info"
                 color: Theme.levelColor(model.level)
                 opacity: 0.8
+                // v1.2 动效：warn/error 色条 0→3 展开
+                Component.onCompleted: width = 3
+                width: 3
+                Behavior on opacity { NumberAnimation { duration: Theme.durNormal } }
             }
             Text {
                 width: list.width - 100

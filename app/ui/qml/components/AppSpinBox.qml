@@ -36,11 +36,11 @@ SpinBox {
         height: parent.height
         radius: Theme.rBtn
         color: spin.up.pressed ? Theme.bgCard : "transparent"
-        Text {
+        AppIcon {
             anchors.centerIn: parent
-            text: "＋"
+            name: "plus"
+            size: 12
             color: Theme.textSecondary
-            font.pixelSize: Theme.fsSmall
         }
     }
 
@@ -50,11 +50,11 @@ SpinBox {
         height: parent.height
         radius: Theme.rBtn
         color: spin.down.pressed ? Theme.bgCard : "transparent"
-        Text {
+        AppIcon {
             anchors.centerIn: parent
-            text: "－"
+            name: "minus"
+            size: 12
             color: Theme.textSecondary
-            font.pixelSize: Theme.fsSmall
         }
     }
 }

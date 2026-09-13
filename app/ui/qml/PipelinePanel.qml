@@ -313,7 +313,7 @@ Item {
                         font.family: Theme.monoFont
                     }
                 }
-                ThinProgress { Layout.fillWidth: true; value: bridge.progressValue }
+                ThinProgress { Layout.fillWidth: true; value: bridge.progressValue; indeterminate: bridge.isRunning }
 
                 // 连写模式（F3）：开启后所有决策门自动放行，批量跑批不等人
                 AppCheck {
