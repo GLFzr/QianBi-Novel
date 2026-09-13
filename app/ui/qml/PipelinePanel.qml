@@ -46,7 +46,12 @@ Item {
         function onProjectOpened() { pipeline.refresh(); modeChip.syncFromBridge() }
         function onCwModeChanged() { modeChip.syncFromBridge() }
         function onRunModeChanged() { modeChip.syncFromBridge() }
-        function onGatePresetChanged() { gateBlock.preset = bridge.gatePreset() }
+        function onGatePresetChanged() {
+            gateBlock.preset = bridge.gatePreset()
+            // P1-1（评估修复）：checked 绑定无 NOTIFY 依赖，强制重建清单以刷新勾选显示
+            gateListRepeater.model = 0
+            gateListRepeater.model = bridge.gateMetaList()
+        }
         function onBlurbGenerated(ok, text) {
             pipeline.blurbBusy = false
             if (ok) pipeline.blurb = text
@@ -242,8 +247,9 @@ Item {
                                                     anchors.top: parent.top; anchors.topMargin: -1
                                                 }
                                                 RotationAnimation on rotation {
-                                                    from: 0; to: 360; duration: 850; loops: Animation.Infinite
-                                                    running: modelData.status === "active"
+                                                    from: 0; to: 360; duration: Theme.durLoop / 2; loops: Animation.Infinite
+                                                    // P2-1：motionOK 与运行态同闸（原 running 唯一化，消重复赋值）
+                                                    running: modelData.status === "active" && Theme.motionOK
                                                 }
                                             }
                                         }
@@ -466,6 +472,7 @@ Item {
                         columnSpacing: 10
                         rowSpacing: 4
                         Repeater {
+                            id: gateListRepeater
                             model: bridge.gateMetaList()
                             delegate: AppCheck {
                                 required property var modelData

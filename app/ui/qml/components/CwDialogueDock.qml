@@ -176,10 +176,10 @@ Rectangle {
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.fsMicro
                     SequentialAnimation on opacity {
-                        running: cwDock.busy
+                        running: cwDock.busy && Theme.motionOK
                         loops: Animation.Infinite
-                        NumberAnimation { to: 0.3; duration: 600 }
-                        NumberAnimation { to: 1; duration: 600 }
+                        NumberAnimation { to: 0.3; duration: Theme.durLoop / 2 }
+                        NumberAnimation { to: 1; duration: Theme.durLoop / 2 }
                     }
                 }
                 AppButton {

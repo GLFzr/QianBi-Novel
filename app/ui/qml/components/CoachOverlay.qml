@@ -128,10 +128,10 @@ Item {
         border.width: 2
         border.color: Theme.accent
         SequentialAnimation on opacity {
-            running: coach.visible && coach.targetItem !== null
+            running: coach.visible && coach.targetItem !== null && Theme.motionOK
             loops: Animation.Infinite
-            NumberAnimation { from: 1.0; to: 0.55; duration: 700 }
-            NumberAnimation { from: 0.55; to: 1.0; duration: 700 }
+            NumberAnimation { from: 1.0; to: 0.55; duration: Theme.durLoop / 2 }
+            NumberAnimation { from: 0.55; to: 1.0; duration: Theme.durLoop / 2 }
         }
     }
 

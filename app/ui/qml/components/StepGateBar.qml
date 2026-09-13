@@ -63,7 +63,7 @@ Rectangle {
                 name: "pause"
                 size: 14
                 color: Theme.accent
-                anchors.verticalCenter: parent.verticalCenter
+                Layout.alignment: Qt.AlignVCenter
             }
             Text {
                 text: "决策门 " + gateKey + (gateChapter ? " · 第" + gateChapter + "章" : "")

@@ -1581,7 +1581,6 @@ ApplicationWindow {
         id: toastBar
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 40
         // 宽度跟「限宽后」的文本走，高度跟换行后的真实高度走——固定 36px 会让多行文字溢出压到下层 UI
         width: toastText.width + 44
         height: toastText.implicitHeight + 20

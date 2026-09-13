@@ -254,9 +254,9 @@ Rectangle {
                         }
                         // 生成中呼吸动画
                         SequentialAnimation on opacity {
-                            running: isLive; loops: Animation.Infinite
-                            NumberAnimation { to: 0.45; duration: 700 }
-                            NumberAnimation { to: 1; duration: 700 }
+                            running: isLive && Theme.motionOK; loops: Animation.Infinite
+                            NumberAnimation { to: 0.45; duration: Theme.durLoop / 2 }
+                            NumberAnimation { to: 1; duration: Theme.durLoop / 2 }
                         }
                     }
                 }

@@ -40,16 +40,15 @@ Rectangle {
                 elide: Text.ElideRight
             }
             Rectangle {
-                width: 3
+                width: model.level !== "info" ? 3 : 0
                 height: 10
                 radius: 2
                 anchors.verticalCenter: parent.verticalCenter
                 visible: model.level !== "info"
                 color: Theme.levelColor(model.level)
                 opacity: 0.8
-                // v1.2 动效：warn/error 色条 0→3 展开
-                Component.onCompleted: width = 3
-                width: 3
+                // v1.2 动效：warn/error 色条入场展开（0→3）
+                Behavior on width { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
                 Behavior on opacity { NumberAnimation { duration: Theme.durNormal } }
             }
             Text {

@@ -318,6 +318,8 @@ class Orchestrator(QThread):
                     if self._gate_carry_idea:
                         state["carry_idea"] = self._gate_carry_idea
                     st.save_state(self.proj, state)
+                    # P0-2（评估修复）：归一收尾——不发 finished 会让 bridge 永远认为在跑
+                    self.sig_finished.emit("stopped")
                     return
                 if g1_idea:
                     self._gate_carry_idea = g1_idea  # 注入重拟/下一阶段
@@ -341,6 +343,8 @@ class Orchestrator(QThread):
                     if self._gate_carry_idea:
                         state["carry_idea"] = self._gate_carry_idea  # 重启后注入细纲
                     st.save_state(self.proj, state)
+                    # P0-2（评估修复）：与 G1 回退同款——归一收尾，防运行态卡死（旧遗留 bug）
+                    self.sig_finished.emit("stopped")
                     return  # 结束本次运行，等待用户再次点「开始」重跑（细纲层将带想法）
                 if g2_idea:
                     self._gate_carry_idea = g2_idea  # 注入首批细纲

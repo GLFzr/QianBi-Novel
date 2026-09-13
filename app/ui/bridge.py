@@ -1442,9 +1442,9 @@ class Bridge(QObject):
             state = st.load_state(self.proj)
             if st.ensure_cw(state).get("mode") == "cw":
                 return "cw"
-        # v1.2 迁移后 config 不再出现 'cw'；容忍读（旧值按 auto 显示）
-        m = str(self.cfg.get("writing", {}).get("run_mode", "auto"))
-        return "auto" if m != "cw" else "cw"
+        # #16 不变式：config 的 run_mode 恒为 'auto'（cw 只存项目粘性）；
+        # 存量 'cw'（旧版遗留）一律 mask 成 auto 显示，防跨项目全局粘性
+        return "auto"
 
     @Slot(str)
     def setRunMode(self, mode: str):
@@ -1465,8 +1465,10 @@ class Bridge(QObject):
                 return
         else:
             self.setCwMode(False)
-        self.cfg.setdefault("writing", {})["run_mode"] = m
-        cfg_mod.save_config(self.cfg)
+        if m == "auto":
+            # #16 不变式：config 只写 'auto'；cw 粘性由项目级 state 承载（setCwMode 已写）
+            self.cfg.setdefault("writing", {})["run_mode"] = "auto"
+            cfg_mod.save_config(self.cfg)
         names = {"auto": "全自动", "cw": "共写"}
         self.toast.emit("ok", f"运行模式已切换为「{names[m]}」")
         self.runModeChanged.emit()

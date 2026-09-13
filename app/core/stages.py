@@ -1079,7 +1079,8 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
     outlines = _generate_outline_batch(ctx, todo, chapter_words,
                                        core_setting, volume_outline, nearby_text,
                                        previous_ending, foreshadows,
-                                       wb_block, rg_block)
+                                       wb_block, rg_block,
+                                       carry_idea=ctx.consume_gate_idea())
     saved = []
     for num, title, content in outlines:
         if num in existing:
@@ -1096,10 +1097,13 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
                             core_setting: str, volume_outline: str,
                             nearby_text: str, previous_ending: str = "",
                             foreshadows: str = "",
-                            wb_block_text: str = "", rg_block_text: str = "") -> list:
+                            wb_block_text: str = "", rg_block_text: str = "",
+                            carry_idea: str = "") -> list:
     """一次调用生成一批细纲；解析失败或调用失败 → 拆半递归；单章失败跳过
 
     todo: 待生成章号列表（有序）。返回 [(num, title, content)]，失败章不在其中。
+    carry_idea: 门携带想法由调用方取一次后显式传入——拆半递归每一半都带
+    （P2-3 评估修复：原先递归内各自 consume，只有首半批能拿到想法）。
     """
     if not todo:
         return []
@@ -1130,7 +1134,7 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         genre_block=_genre_block(ctx.proj, "unit_outline"),
         worldbook_block=wb_block_text,
         regex_block=rg_block_text,
-        user_directive=ctx.consume_gate_idea() or "（无）",
+        user_directive=carry_idea or "（无）",
     ) + _dyn_directives(ctx, PHASE_OUTLINE)   # O2 长度预算（未配置=空串，基线字节不变）
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
@@ -1155,7 +1159,7 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
                                             core_setting, volume_outline,
                                             nearby_text, previous_ending,
                                             foreshadows, wb_block_text,
-                                            rg_block_text)
+                                            rg_block_text, carry_idea)
             seen = covered
             for o in extra:
                 if o[0] not in seen:
@@ -1173,11 +1177,11 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         left = _generate_outline_batch(ctx, todo[:mid], chapter_words,
                                        core_setting, volume_outline, nearby_text,
                                        previous_ending, foreshadows,
-                                       wb_block_text, rg_block_text)
+                                       wb_block_text, rg_block_text, carry_idea)
         right = _generate_outline_batch(ctx, todo[mid:], chapter_words,
                                         core_setting, volume_outline, nearby_text,
                                         previous_ending, foreshadows,
-                                        wb_block_text, rg_block_text)
+                                        wb_block_text, rg_block_text, carry_idea)
         return left + right
 
 

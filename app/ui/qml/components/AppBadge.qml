@@ -24,9 +24,9 @@ Rectangle {
     }
 
     SequentialAnimation on opacity {
-        running: badge.pulse
+        running: badge.pulse && Theme.motionOK
         loops: Animation.Infinite
-        NumberAnimation { to: 0.45; duration: 600; easing.type: Easing.InOutSine }
-        NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+        NumberAnimation { to: 0.45; duration: Theme.durLoop / 2; easing.type: Easing.InOutSine }
+        NumberAnimation { to: 1.0; duration: Theme.durLoop / 2; easing.type: Easing.InOutSine }
     }
 }
