@@ -50,6 +50,14 @@ QtObject {
             highlightYellow: "#FFD86E",
             highlightGreen: "#5FE39A",
             highlightRed: "#FF6E6E",
+            // 中性色阶（U-01）：n50 最亮 → n900 最深，夜间主题取灰蓝系
+            n50: "#F2F4F8", n100: "#D5DAE2", n200: "#B4BCC8", n300: "#8D97A6",
+            n400: "#6B7686", n500: "#4C5666", n600: "#3A4250", n700: "#2D3440",
+            n800: "#232932", n900: "#171A20",
+            // 浮起面（U-01）：比 bgCard 再高一层的 surface（弹窗/浮动工具栏）
+            bgRaise: "#2B3039",
+            // 阴影色（U-01）：手绘多层 Rectangle 柔影用（§5.4 红线①：不上 MultiEffect）
+            shadowColor: "#000000",
         },
         "qianbi_parchment": {
             // 羊皮纸：暖色亮底
@@ -78,6 +86,12 @@ QtObject {
             highlightYellow: "#E8B43A",
             highlightGreen: "#5FA86B",
             highlightRed: "#C25A4A",
+            // 中性色阶（U-01）：羊皮纸暖棕系
+            n50: "#FBF6E8", n100: "#EFE3C6", n200: "#DFCEA8", n300: "#C9B488",
+            n400: "#AE9670", n500: "#8F7A58", n600: "#6E5D42", n700: "#524634",
+            n800: "#3B3226", n900: "#2A241B",
+            bgRaise: "#FFFDF2",
+            shadowColor: "#52403A",
         },
         "qianbi_plain": {
             // 纯白：冷色亮底
@@ -206,6 +220,27 @@ QtObject {
     readonly property int s4: 16
     readonly property int s5: 20
     readonly property int s6: 24
+
+    // ===== 浮起与阴影（U-01：令牌先于质感——U-08 卡片分级/弹窗阴影的领取处）=====
+    readonly property color bgRaise: _pick("bgRaise")
+    readonly property color n50: _pick("n50")
+    readonly property color n100: _pick("n100")
+    readonly property color n200: _pick("n200")
+    readonly property color n300: _pick("n300")
+    readonly property color n400: _pick("n400")
+    readonly property color n500: _pick("n500")
+    readonly property color n600: _pick("n600")
+    readonly property color n700: _pick("n700")
+    readonly property color n800: _pick("n800")
+    readonly property color n900: _pick("n900")
+    readonly property color shadowColor: _pick("shadowColor")
+    // 阴影 3 档：e1 悬浮卡 / e2 弹出层 / e3 模态弹窗（多层 Rectangle 手绘，颜色×透明度）
+    readonly property real shE1Alpha: 0.10
+    readonly property real shE2Alpha: 0.16
+    readonly property real shE3Alpha: 0.24
+    // 焦点环：聚焦控件外环统一（AppField/AppSelect/AppSpinBox U-09 领取）
+    readonly property int focusRingWidth: 2
+    readonly property color focusRing: Qt.rgba(accent.r, accent.g, accent.b, 0.40)
 
     // ===== 工具函数 =====
     function stateColor(s) {
