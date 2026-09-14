@@ -70,6 +70,12 @@ def main() -> bool:
         if wb.assemble(rel, num=0, budget=len(doc), doc=doc)["text"] != doc:
             print("   FAIL 快速路径不逐字")
             fails += 1
+        # N-15 B 案断言组（更强、且物理可满足）：
+        #   ①近窗反哺逐字在场（最新章视角）②反哺保序（无"远的在场近的被裁"）
+        #   ③被裁必进 dropped 报告 ④反哺总量可容时全量逐字（原语义的可满足域）
+        backflow = [e for e in entries if e.is_backflow and e.kind != "prose" and e.size > 0]
+        max_seen = max([e.meta["first_seen"] or 0 for e in backflow] or [0])
+        bf_total = sum(e.size for e in backflow)
         for budget in BUDGETS:
             r = wb.assemble(rel, num=1, budget=budget, doc=doc)
             out = r["text"]
@@ -80,11 +86,44 @@ def main() -> bool:
             if len(out) > budget + 1:
                 print("   FAIL budget=%d 超预算 out=%d" % (budget, len(out)))
                 fails += 1
-            for e in entries:                    # 反哺登记逐字在场（除整节被预算挤掉）
-                if e.is_backflow and e.kind != "prose" and out and \
-                        e.name not in out and len(out) >= budget * 0.5:
-                    print("   FAIL budget=%d 反哺登记「%s」被挤掉" % (budget, e.name))
+            dropped_names = {d["name"] for d in r["dropped"]}
+            # ① 近窗反哺（最新章视角 [max-窗口, max]）逐字在场
+            r_new = (wb.assemble(rel, num=max_seen or 1, budget=budget, doc=doc)
+                     if backflow else r)
+            near_bf = [e for e in backflow
+                       if e.meta["first_seen"]
+                       and (max_seen - wb.RECENT_WINDOW) <= e.meta["first_seen"] <= max_seen]
+            near_total = sum(e.size for e in near_bf)
+            if near_bf and budget - wb.TRIM_FLOOR >= near_total:
+                for e in near_bf:
+                    if e.name not in r_new["text"]:
+                        print("   FAIL budget=%d 近窗反哺「%s」被挤掉（B 案近窗保证）"
+                              % (budget, e.name))
+                        fails += 1
+            # ② 保序：反哺按首见距离升序保留，被保留集必须是前缀
+            # 只比「唯一名」（名在源文档恰出现一次）——子串误配会造成假倒序
+            def unique_name(e):
+                return doc.count(e.name) == 1
+            present = [e for e in backflow if e.name in out and unique_name(e)]
+            absent = [e for e in backflow if e.name not in out and unique_name(e)]
+            if present and absent:
+                far_present = max((e.meta["first_seen"] or 0) for e in present)
+                near_absent = min(((e.meta["first_seen"] or 10 ** 9) for e in absent),
+                                  default=10 ** 9)
+                if far_present and near_absent < far_present:
+                    print("   FAIL budget=%d 反哺裁剪倒序：远登记在场而近登记被裁" % budget)
                     fails += 1
+            # ③ 被裁必进 dropped 报告（装配层说得清丢了什么）
+            for e in absent:
+                if len(out) >= budget * 0.5 and e.name not in dropped_names:
+                    print("   FAIL budget=%d 被裁反哺「%s」不在 dropped 报告" % (budget, e.name))
+                    fails += 1
+            # ④ 反哺总量可容时全量逐字（原断言的可满足域）
+            if bf_total and bf_total <= budget - wb.TRIM_FLOOR:
+                for e in backflow:
+                    if e.name not in out:
+                        print("   FAIL budget=%d 反哺总量可容却裁「%s」" % (budget, e.name))
+                        fails += 1
             print("   budget=%-5d out=%-5d act=%-3d drop=%-3d 空壳=%d" % (
                 budget, len(out), len(r["activated"]), len(r["dropped"]), len(holes)))
     print("=" * 78)

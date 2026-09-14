@@ -560,15 +560,22 @@ def _groups(entries: list, num: int, ctx_text: str, anchors) -> list:
     return sorted(out, key=lambda g: (g["band"], g["gid"]))
 
 
-def _pick(entries: list, groups: list, budget: int, anchors) -> dict:
+def _pick(entries: list, groups: list, budget: int, anchors, num: int = 0) -> dict:
     """按节贪心入预算 → {下标: 原因}
 
     反哺区先留保底再单独吃满，常规节的档位排在前面的先进；条目入预算时连带其节骨架
     （标题/表头随内容走）。选择顺序不等于渲染顺序——渲染仍按文件原序。
+    N-15 B 案（用户裁决 2026-09-14）：反哺区超保底时按「首见章距当前章」新近序裁——
+    最近的登记先进保底，尾部裁掉并进 dropped 报告（装配层说得清丢了什么）。
     """
     chosen, used = {}, 0
-    # 反哺保底要连它的节骨架一起算：只留条目钱、骨架挤进来照样丢登记
-    reserve = max(0, min(BACKFLOW_RESERVE,
+    # 反哺保底要连它的节骨架一起算：只留条目钱、骨架挤进来照样丢登记。
+    # N-15 B 案：保底 = 近窗反哺总量（新近保证，最近章的登记永不失忆）+ 600 老登记底，
+    # 仍受反哺总量与预算上限约束。
+    near_bf = sum(e.size + JOIN_COST for e in entries if e.is_backflow
+                  and e.meta.get("first_seen") is not None and num
+                  and abs(num - e.meta["first_seen"]) <= RECENT_WINDOW)
+    reserve = max(0, min(near_bf + BACKFLOW_RESERVE,
                          sum(e.size + JOIN_COST for e in entries if e.is_backflow),
                          budget - TRIM_FLOOR))
 
@@ -607,14 +614,15 @@ def _pick(entries: list, groups: list, budget: int, anchors) -> dict:
             used -= entries[s].size + JOIN_COST
         return False
 
-    def fill(group_list, cap):
+    def fill(group_list, cap, order=None):
         for g in group_list:
             if used >= cap:
                 break
             # 有内容的节：只按档位取条目，节骨架由 skeletons 连带（避免出现只有表头的空节）
             # 容器节（内容全在子节）没有自己的条目，单独进来只剩空标题 → 不做兜底填充
-            picks = ([i for _b, i in sorted(g["items"])]
-                     or [i for i in g["prose"] if not entries[i].container])
+            picks = (order(g) if order else
+                     ([i for _b, i in sorted(g["items"])]
+                      or [i for i in g["prose"] if not entries[i].container]))
             for i in picks:
                 if i in chosen:
                     continue
@@ -622,9 +630,18 @@ def _pick(entries: list, groups: list, budget: int, anchors) -> dict:
                 if not ok:
                     break               # 档位优先：吃不下就停，不给低档位条目让路
 
+    def backflow_order(g):
+        """N-15 B 案：首见章距当前章近者先进保底（无首见章 = 最远，殿后）"""
+        def dist(i):
+            fs = entries[i].meta.get("first_seen")
+            if fs is None or not num:
+                return 1 << 30
+            return abs(num - fs)
+        return [i for _d, i in sorted((dist(ix), ix) for _, ix in g["items"])]
+
     normal = [g for g in groups if not g["backflow"]]
     fill(normal, max(0, budget - reserve))
-    fill([g for g in groups if g["backflow"]], budget)
+    fill([g for g in groups if g["backflow"]], budget, order=backflow_order)
     fill(normal, budget)          # 反哺保底没吃满 → 余量回灌常规节
     return chosen
 
@@ -690,7 +707,7 @@ def assemble(proj: str, num: int = 0, budget: int = 2000, *, preset=None,
             anchors = []
     anchors = list(anchors or [])
     chosen = _pick(entries, _groups(entries, num, chapter_context(proj, num), anchors),
-                   budget, anchors)
+                   budget, anchors, num=num)
     text = _render(entries, chosen)
     return {"text": text or EMPTY_PLACEHOLDER,
             "activated": [_note(entries[i], why) for i, why in sorted(chosen.items())],
