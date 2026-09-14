@@ -76,6 +76,9 @@ Item {
                 border.color: itemHover.containsMouse ? Theme.borderStrong : Theme.border
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
+                // U-20：hover 微浮起（scale 合成器友好，挂 motionOK）
+                scale: itemHover.containsMouse && Theme.motionOK ? 1.015 : 1.0
+                Behavior on scale { NumberAnimation { duration: Theme.durFast; easing: Theme.easeOut } }
 
                 RowLayout {
                     anchors.fill: parent
