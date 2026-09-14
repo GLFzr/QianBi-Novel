@@ -94,7 +94,7 @@ ApplicationWindow {
         var num = bridge.currentChapterNum
         if (num > 0 && bridge.editorDirty) readerView.open(num, editor.text)
         else {
-            var chs = bridge.readerChapterList()
+            bridge.refreshReaderChapterList(); var chs = bridge.readerChapterList
             if (chs.length === 0) { bridge.showToast("warn", "还没有可读的章节"); return }
             readerView.open(num > 0 ? num : chs[chs.length - 1].num, "")
         }
