@@ -980,6 +980,10 @@ def stage_volume_outline(ctx, total_words_wan: int = 0) -> str:
     if canon_o:
         prompt += "\n\n" + canon_o + "\n（大纲剧情不得与禁则冲突，并按单元安排原作专名出场。）"
     ctx.last_prompt = prompt
+    # L1-18：G1「带想法继续」的想法注入大纲阶段（兑现门语义：想法跟着下一阶段走）
+    outline_carry = ctx.consume_gate_idea()
+    if outline_carry:
+        prompt += "\n\n作者对全书大纲的想法（务必吸收）：\n\n" + outline_carry
     result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="全书大纲",
                      phase=PHASE_VOLUME_OUTLINE)
     if not result:
