@@ -114,11 +114,7 @@ Item {
                 onViewGenConfig: function (n) { bridge.showGenConfig(n) }
             }
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-                contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
-                background: Item {}
-            }
+            ScrollBar.vertical: AppScrollBar {}   // U-20：串联统一滚动条
         }
 
         // 空状态（v1.2 统一 AppEmptyState）

@@ -137,11 +137,7 @@ Item {
                 }
             }
 
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-                contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
-                background: Item {}
-            }
+            ScrollBar.vertical: AppScrollBar {}   // U-20：串联统一滚动条
         }
 
         // 空状态引导（新用户；v1.2 统一 AppEmptyState + 线性图标，替换裸字符"▤"）
