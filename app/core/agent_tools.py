@@ -350,6 +350,8 @@ def execute(name: str, args: dict, proj: str, cfg: dict, *, pipeline_running: bo
 def help_text() -> str:
     ui_lines = "".join("· 共写动作（共写档对话区可用）：%s\n" % t["label"]
                        for t in UI_TOOLS.values())
+    reg_lines = "".join("· " + t["label"] + "\n"
+                        for t in list(TOOLS.values()) + list(UI_TOOLS.values()))
     return ("可用指令（自然语言或 / 前缀）：\n"
             "· 状态：「现在进度怎么样」\n"
             "· 读章：「看看第3章正文」\n"
@@ -357,7 +359,9 @@ def help_text() -> str:
             "· 重新生成细纲：「重新生成第3章的细纲」\n"
             "· 重写本章（可带指导）：「重写第2章，铺垫再足一点」\n"
             "· 设置：「关闭人工审校」「开启离峰挂机」\n"
-            + ui_lines.rstrip("\n"))
+            + ui_lines.rstrip("\n")
+            + "\n——全部已注册动作：\n"
+            + reg_lines.rstrip("\n"))
 
 
 # ---------- L2：LLM 意图兜底（规则未命中时的口语化泛化） ----------
