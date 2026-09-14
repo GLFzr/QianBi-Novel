@@ -130,12 +130,12 @@ Item {
             }
         }
 
-        Text {
+        AppEmptyState {
             visible: !bridge.hasProject
-            text: "尚未打开书籍。"
-            color: Theme.textTertiary
-            font.family: Theme.uiFont
-            font.pixelSize: Theme.fsSmall
+            anchors.horizontalCenter: parent.horizontalCenter
+            iconName: "contract"
+            title: "尚未打开书籍"
+            hint: "打开或新建一本书后，这里显示它的写作契约"
         }
 
         Text {

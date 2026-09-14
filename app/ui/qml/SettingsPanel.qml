@@ -675,7 +675,17 @@ Item {
                         }
                     }
 
-                    // v1.2 两档制：旧「默认运行模式」开关已删——与驾驶舱档位 chip 双活打架
+                                        AppCheck {
+                        id: motionCheck
+                        Layout.fillWidth: true
+                        text: "减少动态：关闭呼吸/脉冲类循环动画（色值过渡保留）"
+                        checked: !Theme.motionOK
+                        font.pixelSize: Theme.fsSmall
+                        palette.text: Theme.textPrimary
+                        onToggled: Theme.motionOK = !checked
+                    }
+
+// v1.2 两档制：旧「默认运行模式」开关已删——与驾驶舱档位 chip 双活打架
                     // （核实 #17）；档位在流水线面板切换，决策门在流水线下方两按钮设置。
 
                     // 「正则」语义（共写档世界书阶段产物；默认逻辑约束规则集）
