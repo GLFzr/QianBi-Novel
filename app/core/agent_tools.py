@@ -177,9 +177,10 @@ def _tool_set_setting(proj, cfg, args) -> dict:
                 % (key, "、".join(_SETTING_WORDS)), "level": "warn"}
     section, name, v_on, v_off = _SETTING_WORDS[key]
     value = v_on if on else v_off
-    c = cfg_mod.load_config()
-    c.setdefault(section, {})[name] = value
-    cfg_mod.save_config(c)
+    # L1-01（§11.1 家族）：cfg 就是 bridge 传进来的共享 self.cfg（execute 按引用下发），
+    # 必须改共享字典再落盘——旧实现 load_config() 换新字典，本会话内根本不生效
+    cfg.setdefault(section, {})[name] = value
+    cfg_mod.save_config(cfg)
     return {"ok": True, "level": "info", "message": "已%s「%s」" % ("开启" if on else "关闭", key)}
 
 

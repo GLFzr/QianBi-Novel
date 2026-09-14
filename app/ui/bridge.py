@@ -1564,9 +1564,9 @@ class Bridge(QObject):
 
     @Slot()
     def setOnboarded(self):
-        cfg = cfg_mod.load_config()
-        cfg.setdefault("general", {})["onboarded"] = True
-        cfg_mod.save_config(cfg)
+        # §11.1 写盘↔写内存一致：改共享 self.cfg 再落盘（旧实现 load_config 新字典）
+        self.cfg.setdefault("general", {})["onboarded"] = True
+        cfg_mod.save_config(self.cfg)
         self.generalChanged.emit()
 
     # ---- 演示引导（0.20.0）----
@@ -1632,10 +1632,10 @@ class Bridge(QObject):
 
     @Slot(bool)
     def setTelemetryEnabled(self, on: bool):
-        cfg = cfg_mod.load_config()
+        # §11.1：main.py 读的就是 self.cfg——必须改共享字典，回执才不说谎
         from .. import telemetry
-        cfg = telemetry.set_enabled(cfg, bool(on))
-        cfg_mod.save_config(cfg)
+        telemetry.set_enabled(self.cfg, bool(on))
+        cfg_mod.save_config(self.cfg)
         self.generalChanged.emit()
         self.toast.emit("ok", "遥测已" + ("开启（数据仅保存在本地）" if on else "关闭"))
 
@@ -1739,9 +1739,9 @@ class Bridge(QObject):
         return dict(cfg_mod.load_config().get("updates") or {})
 
     def _patch_updates(self, **kv):
-        cfg = cfg_mod.load_config()
-        cfg.setdefault("updates", {}).update(kv)
-        cfg_mod.save_config(cfg)
+        # §11.1：内存里的 self.cfg["updates"] 必须同步（按内存取镜像/代理的消费者拿旧值=隐患）
+        self.cfg.setdefault("updates", {}).update(kv)
+        cfg_mod.save_config(self.cfg)
         self.generalChanged.emit()
         self.updateStateChanged.emit()
 
