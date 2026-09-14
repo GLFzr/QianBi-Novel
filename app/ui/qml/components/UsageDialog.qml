@@ -9,6 +9,13 @@ import ".."
 // 数据来源 ~/.qianbi_novel/usage/usage.jsonl（本地，永不上传）
 // ============================================================
 Dialog {
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+    }
     id: usageDialog
     objectName: "usageDialog"
     modal: true

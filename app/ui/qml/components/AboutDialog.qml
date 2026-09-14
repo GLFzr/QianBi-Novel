@@ -9,6 +9,13 @@ import ".."
 // 遥测开关（opt-in，默认关）· 开源声明
 // ============================================================
 Dialog {
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+    }
     id: aboutDialog
     objectName: "aboutDialog"
     signal updateRequested()            // id 不跨文件作用域，让 Main.qml 去开 UpdateDialog

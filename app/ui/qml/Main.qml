@@ -1168,6 +1168,13 @@ ApplicationWindow {
 
     // ---- 导出（M4：排版选项 + 预览 + 报告）----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: exportDialog
         objectName: "exportDialog"
         parent: Overlay.overlay
@@ -1366,6 +1373,13 @@ ApplicationWindow {
 
     // ---- 发布物料：标签与简介（一键生成，粘贴到平台后台）----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: blurbDialog
         objectName: "blurbDialog"
         parent: Overlay.overlay
@@ -1486,6 +1500,13 @@ ApplicationWindow {
         }
     }
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: forceLockDialog
         objectName: "forceLockDialog"
         parent: Overlay.overlay
@@ -1559,6 +1580,13 @@ ApplicationWindow {
     // ---- 统计面板（管理者视角：章节/字数/成本）----
     property var statsData: ({})
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: statsDialog
         objectName: "statsDialog"
         parent: Overlay.overlay
@@ -2238,6 +2266,13 @@ ApplicationWindow {
 
     // ---- 崩溃/意外退出后的未保存草稿恢复 ----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: recoverDialog
         objectName: "recoverDialog"
         parent: Overlay.overlay

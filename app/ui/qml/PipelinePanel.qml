@@ -694,6 +694,13 @@ Item {
 
     // ---- 阶段重生成对话框（查看产物 / 带指导重生成）----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: regenDialog
         objectName: "regenDialog"
         parent: Overlay.overlay

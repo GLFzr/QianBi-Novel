@@ -9,6 +9,13 @@ import ".."
 // 步骤 2：连接配置指引（粘贴模型 Key，即时可用）→ 完成
 // ============================================================
 Dialog {
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+    }
     id: wizard
     objectName: "wizardDialog"
     modal: true

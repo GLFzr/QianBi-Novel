@@ -13,6 +13,13 @@ import ".."
 //   · 未识别出的落点直接列出来，让作者看见 Agent 没有替他编东西。
 // ============================================================
 Dialog {
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+    }
     id: dlg
     objectName: "importDialog"
     modal: true

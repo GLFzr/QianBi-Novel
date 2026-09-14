@@ -129,6 +129,13 @@ Item {
 
     // ---- 带指导重写对话框（面板级统一，窗口居中）----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: chapterGuidanceDialog
         objectName: "chapterGuidanceDialog"
         parent: Overlay.overlay
@@ -198,6 +205,13 @@ Item {
 
     // ---- 项目文件浏览/编辑对话框 ----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: fileDialog
         objectName: "fileDialog"
         parent: Overlay.overlay
@@ -337,6 +351,13 @@ Item {
 
     // ---- 整章重写确认（保存驱动语义：旧正文先归档「重写前备份」版本）----
     Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
         id: rewriteConfirmDialog
         objectName: "rewriteConfirmDialog"
         parent: Overlay.overlay

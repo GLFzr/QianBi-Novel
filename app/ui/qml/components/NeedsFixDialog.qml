@@ -9,6 +9,13 @@ import ".."
 // 修复前自动快照「修复前备份」，复扫未改善则保留原稿
 // ============================================================
 Dialog {
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+    }
     id: needsFixDialog
     objectName: "needsFixDialog"
     // 标题由 contentItem 内自绘头部承担（QQC2 对非空 title 会再画一层默认 header，形成双标题）
