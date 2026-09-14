@@ -355,11 +355,26 @@ Rectangle {
                 reader.bodyText = bridge.liveDraftText
         }
     }
+    // U-07/N-11：流式每 chunk 全章 toHtml 重渲是卡 GUI 线程的元凶——
+    // 250ms 合并（尾值触发一次），非流式场景仍即时渲染
+    Timer {
+        id: renderCoalesce
+        interval: 250
+        repeat: false
+        onTriggered: {
+            if (reader.opacity > 0.5) {
+                var keep = flick.contentY
+                render()
+                if (reader.isLive) Qt.callLater(function () { flick.contentY = keep })
+            }
+        }
+    }
     onBodyTextChanged: {
-        if (opacity > 0.5) {
+        if (opacity > 0.5 && isLive) {
+            renderCoalesce.restart()
+        } else if (opacity > 0.5) {
             var keep = flick.contentY
             render()
-            if (isLive) Qt.callLater(function () { flick.contentY = keep })
         }
     }
     onPrefsChanged: if (opacity > 0.5) render()

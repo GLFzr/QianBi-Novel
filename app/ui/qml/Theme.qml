@@ -184,8 +184,10 @@ QtObject {
     // font.weight 直接可用）；未注册（理论上仅开发环境异常）时回落系统雅黑。
     readonly property string uiFont: "MiSans"
     readonly property string uiFontFallback: "Microsoft YaHei UI"
-    readonly property string serifFont: "Source Han Serif SC"
-    readonly property string monoFont: "JetBrains Mono"
+    // U-06：衬线/等宽不随包（控制体积），改为全 Windows 保证存在的家族回落链
+    // ——干净机器上不再静默消失（思源宋体/JetBrains Mono 仅开发者机器有）
+    readonly property string serifFont: "SimSun, NSimSun, serif"
+    readonly property string monoFont: "Consolas, Courier New, monospace"
     // 动效令牌（v1.2 波次1 地基：全库 Behavior/Animation 时长一律引用这里，禁止字面量）
     readonly property int durFast: 120    // hover/press/focus/色值微反馈
     readonly property int durNormal: 200  // 面板切换、抽屉、门条、日志渐入
