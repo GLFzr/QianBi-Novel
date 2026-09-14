@@ -84,6 +84,14 @@ Item {
             clip: true
             leftMargin: 10
             rightMargin: 10
+            // U-11：新增行渐入下移、既有行让位（一次性过渡，红线⑩：不用 populate）
+            add: Transition {
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+                NumberAnimation { property: "y"; from: 8; duration: Theme.durNormal; easing: Theme.easeOut }
+            }
+            displaced: Transition {
+                NumberAnimation { property: "y"; duration: Theme.durNormal; easing: Theme.easeOut }
+            }
 
             delegate: QueueRow {
                 width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin

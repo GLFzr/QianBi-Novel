@@ -515,6 +515,34 @@ class ChapterListModel(QAbstractListModel):
         self._items = items
         self.endResetModel()
 
+    def set_items_diff(self, items: list):
+        """U-11：按 num 差量更新（改/增/删），替代整列 reset——队列不再整列闪重建"""
+        old_nums = {it.get("num") for it in self._items}
+        new_nums = {it.get("num") for it in items}
+        # 删：先从尾往头移除消失的行
+        for i in range(len(self._items) - 1, -1, -1):
+            if self._items[i].get("num") not in new_nums:
+                self.beginRemoveRows(QModelIndex(), i, i)
+                del self._items[i]
+                self.endRemoveRows()
+        # 增/改：保持传入顺序
+        for pos, it in enumerate(items):
+            num = it.get("num")
+            found = False
+            for i, cur in enumerate(self._items):
+                if cur.get("num") == num:
+                    if cur != it:
+                        self._items[i] = dict(it)
+                        idx = self.index(i)
+                        self.dataChanged.emit(idx, idx)
+                    found = True
+                    break
+            if not found:
+                self.beginInsertRows(QModelIndex(), len(self._items), len(self._items))
+                self._items.append(dict(it))
+                self.endInsertRows()
+        del old_nums
+
     def update_item(self, num: int, patch: dict):
         for i, it in enumerate(self._items):
             if it.get("num") == num:
@@ -2668,7 +2696,7 @@ class Bridge(QObject):
                 note = "未写"
             items.append({"num": num, "title": title, "state": state_str,
                           "words": words, "note": note})
-        self.chapterModel.set_items(items)
+        self.chapterModel.set_items_diff(items)   # U-11：差量刷新
         self._refresh_progress()
         self.needsFixChanged.emit()
 
