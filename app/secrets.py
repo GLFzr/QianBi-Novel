@@ -50,13 +50,20 @@ def get_secret(conn_id: str) -> str:
         return ""
 
 
-def delete_secret(conn_id: str):
+def delete_secret(conn_id: str) -> bool:
+    """删除凭据。返回是否确认删除（本就不存在也算 True）——
+    L2-02：调用方回执要诚实，失败必须让用户知道 Key 还躺在凭据管理器里"""
     if not (_AVAILABLE and conn_id):
-        return
+        return False
     try:
         _keyring.delete_password(SERVICE, conn_id)
-    except Exception:  # noqa: BLE001
-        pass
+        return True
+    except Exception as e:  # noqa: BLE001
+        # 条目本就不存在（PasswordDeleteError）= 目标状态已达成，算成功；
+        # 其余异常是真失败——必须让调用方的回执说实话
+        if "PasswordDeleteError" in type(e).__name__ or "not found" in str(e).lower():
+            return True
+        return False
 
 
 # 行丢过 key_ref（退役换血/旧版迁移弄丢指针）而凭据库里仍有同 id Key 的，领养回来。

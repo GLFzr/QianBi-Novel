@@ -2547,10 +2547,14 @@ class Bridge(QObject):
         cfg_mod.save_config(self.cfg)
         # 删了连接、Key 却留在凭据管理器里 = 只进不出的孤儿凭据（secrets.delete_secret
         # 定义了却零调用）。放在 save_config 之后：写盘失败不该连用户的 Key 一起毁掉。
-        secrets.delete_secret(cid)
+        if secrets.delete_secret(cid):
+            key_note = "及其 Key"
+        else:
+            # L2-02：Key 销毁失败不许谎报——指向手动清理路径
+            key_note = "（注意：凭据管理器中的 Key 删除失败，请到 Windows 凭据管理器手动删除 QianBiNovel/connections 下的该条目）"
         self.connectionModel.refresh()
         self.slotsTextChanged.emit()
-        self.toast.emit("ok", "已删除连接「%s」及其 Key" % name)
+        self.toast.emit("ok", "已删除连接「%s」%s" % (name, key_note))
 
     @Slot(str, str)
     def setSlot(self, slot: str, cid: str):
@@ -3891,18 +3895,21 @@ class Bridge(QObject):
         reasons += list(blocking or [])
         _ci, c_blocking, _cv = mustscan.contract_precheck(self.proj, self._cur_num, prose)
         reasons += list(c_blocking or [])
+        reasons_txt = "；".join(reasons) if reasons else "手动强锁"
         try:
             st.record_forced_lock(self.proj, st.load_state(self.proj), self._cur_num,
-                                  "；".join(reasons) if reasons else "手动强锁")
-        except Exception:
-            pass
-        self._do_lock_chapter(forced=True)
+                                  reasons_txt)
+        except Exception as e:  # noqa: BLE001
+            # N-05 家族：审计痕写失败不许静默——凭据没了用户要知道去哪补
+            self.toast.emit("warn", f"强锁审计痕写入失败（{e}）：本章被绕过的门不会进回看记录")
+        self._do_lock_chapter(forced=True, reasons=reasons_txt)
 
-    def _do_lock_chapter(self, forced: bool = False):
+    def _do_lock_chapter(self, forced: bool = False, reasons: str = ""):
         project.set_chapter_locked(self.proj, self._cur_num, True)
         self.cwLockedChanged.emit()
         self.refreshQueue()
-        tag = "（强制锁定：字数未达标，已留审计痕）" if forced else ""
+        # L2-01：回执说真话——强锁原因用真实判定结果（字数/契约/手动），不再硬编码
+        tag = "（强制锁定：%s，已留审计痕）" % (reasons or "手动强锁") if forced else ""
         self.toast.emit("ok", f"第 {self._cur_num} 章已确定（终稿锁定）{tag}：内容不再改动；"
                               "解锁后可继续编辑（终稿仍留版本历史）")
         self._maybe_backflow(self._cur_num)
@@ -5071,7 +5078,9 @@ class Bridge(QObject):
             st.append_review_chain(self.proj, s, cur,
                                    issues=[], reworks=["upstream_requested"],
                                    verdict="UPSTREAM_REQUEST", round_no=999)
-            self.toast.emit("info", f"第 {cur} 章已登记上游重做请求（执行请用章节右键「带指导重写」）")
+            # L2-03：产品边界（无上游重做环）要老实说——"已登记"暗示有自动回路
+            self.toast.emit("info", f"第 {cur} 章已留「需上游重做」标记。本产品没有自动上游"
+                                    "重做环：请用章节右键「带指导重写」，把要改的方向写进指导")
         else:  # local：按登记问题本地定向改稿（一键修复同款流程）
             self.toast.emit("info", f"第 {cur} 章开始本地定向改稿…")
         # 注意：不要在此发 reviewIssuesChanged——QML 侧选择后已关闭对话框，
