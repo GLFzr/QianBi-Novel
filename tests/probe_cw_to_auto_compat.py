@@ -11,7 +11,9 @@ import tempfile
 _FH = tempfile.mkdtemp(prefix="qbn_c2a_home_")
 os.environ["USERPROFILE"] = _FH
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
+from probe_format_guard import format_or_die  # noqa: E402  (N-14 护栏)
 
 from app import project, prompts
 from app.core import stages
@@ -56,7 +58,8 @@ contract2 = stages._unit_contract(proj, 60)
 check("_unit_contract 命中后段单元", "第31章-第60章" in contract2)
 
 # (c) 自动档全书大纲 stage 正常 format（读取器组装不抛 KeyError）
-volume_prompt = prompts.VOLUME_OUTLINE_PROMPT.format(
+volume_prompt = format_or_die(prompts.VOLUME_OUTLINE_PROMPT,
+    project_header="《兼容探针》",
     core_setting=project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:4000],
     total_words=100, chapter_words=3000,
     genre_block=stages._genre_block(proj, "outline"))

@@ -10,7 +10,9 @@ import sys
 import time
 import json
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
+from probe_format_guard import format_or_die  # noqa: E402  (N-14 护栏)
 
 KEY = os.environ.get("QIANBI_TEST_KEY", "")
 if not KEY:
@@ -47,7 +49,8 @@ effort = sys.argv[3] if len(sys.argv) > 3 else "max"
 max_tokens = int(sys.argv[4]) if len(sys.argv) > 4 else 32768
 count = end - start + 1
 
-prompt = prompts.CHAPTER_OUTLINE_PROMPT.format(
+prompt = format_or_die(prompts.CHAPTER_OUTLINE_PROMPT,
+    project_header="《细纲批探针》",
     chapter_num=start,
     volume_outline=volume_outline,
     nearby_outlines=nearby_text,

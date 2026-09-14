@@ -11,7 +11,9 @@ import tempfile
 _FH = tempfile.mkdtemp(prefix="qbn_wbf_home_")
 os.environ["USERPROFILE"] = _FH
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
+from probe_format_guard import format_or_die  # noqa: E402  (N-14 护栏)
 
 from app import project, prompts
 from app.prompts import scene_cards
@@ -37,7 +39,9 @@ project.write_file(os.path.join(proj, "设定", "正则.md"),
 
 # ---- ① 三段 prompt 组装期 .format（照 stages.py 真实组装参数）----
 
-prose_prompt = prompts.PROSE_WRITING_PROMPT.format(
+prose_prompt = format_or_die(prompts.PROSE_WRITING_PROMPT,
+    project_header="《格式探针》", chapter_header="### 第1章 开场",
+    style_discipline=prompts.STYLE_DISCIPLINE,
     chapter_num=1, core_setting="设定", outline="细纲", next_chapter_brief="预告",
     global_summary="摘要", recent_summaries="近三章", character_states="角色状态",
     foreshadows="伏笔", timeline="时间线", previous_excerpt="上文", style_sample="文风",
@@ -55,15 +59,19 @@ check("作者按落在正文 prompt 近端",
       and "可指认的物件反应" in prose_prompt)
 check("正文 prompt 注入 must 规则", "必须成立" in prose_prompt or "代价索回" in prose_prompt)
 
-review_prompt = prompts.REVIEW_PROMPT.format(
-    chapter_num=1, genre_review_extra="（无专项）", prose="正文", core_setting="设定",
-    global_summary="摘要", character_states="状态", foreshadows="伏笔", timeline="时间线",
+review_prompt = format_or_die(prompts.REVIEW_PROMPT,
+    project_header="《格式探针》", chapter_header="### 第1章 开场",
+    chapter_num=1, genre_review_extra="（无专项）",
+    prose="正文。力量体系：每次改写命运都必须付出对等代价。",
+    core_setting="设定", global_summary="摘要", character_states="状态",
+    foreshadows="伏笔", timeline="时间线", l0_findings="（无 L0 违规）",
     worldbook_block=project.worldbook_text(proj),
     regex_block=project.regex_block(proj, "logic"),
 )
 check("审校 prompt 注入世界书/正则", "力量体系" in review_prompt and "must" in review_prompt)
 
-outline_prompt = prompts.CHAPTER_OUTLINE_PROMPT.format(
+outline_prompt = format_or_die(prompts.CHAPTER_OUTLINE_PROMPT, 
+    project_header="《格式探针》",
     chapter_num=1, volume_outline="卷纲", nearby_outlines="相邻细纲",
     core_setting_brief="设定", start_chapter=1, end_chapter=2, count=2,
     chapter_words=3000, chapter_words_max=3300, next_chapter=2,
@@ -80,7 +88,9 @@ check("细纲 prompt 注入世界书/正则", "力量体系" in outline_prompt a
 proj_old = project.create_project(tempfile.mkdtemp(prefix="qbn_wbf_old_"), "旧项目")
 check("无文件世界书占位", "尚未生成世界书" in project.worldbook_text(proj_old))
 check("无文件正则占位", "尚未生成正则" in project.regex_block(proj_old))
-p2 = prompts.PROSE_WRITING_PROMPT.format(
+p2 = format_or_die(prompts.PROSE_WRITING_PROMPT,
+    project_header="《格式探针》", chapter_header="### 第1章 开场",
+    style_discipline=prompts.STYLE_DISCIPLINE,
     chapter_num=1, core_setting="", outline="", next_chapter_brief="", global_summary="",
     recent_summaries="", character_states="", foreshadows="", timeline="", previous_excerpt="",
     style_sample="", user_guidance="无特殊指导", user_ideas="（无）", word_target=3000,
@@ -94,11 +104,12 @@ check("空串回退组装不抛", "尚未生成世界书" in p2)
 # ---- ③ 缺参抛错对照（占位不是静默吞 bug）----
 try:
     prompts.PROSE_WRITING_PROMPT.format(
+        project_header="", chapter_header="", style_discipline="",
         chapter_num=1, core_setting="", outline="", next_chapter_brief="", global_summary="",
         recent_summaries="", character_states="", foreshadows="", previous_excerpt="",
         style_sample="", user_guidance="", user_ideas="", word_target=3000,
         tic_blacklist="", used_setpieces="", genre_block="",
-        # 故意缺 worldbook_block / regex_block
+        # 故意缺 worldbook_block / regex_block（其余新槽照生产补齐，保证 KeyError 命中的是这两块）
     )
     check("缺参抛错对照", False)
 except KeyError as e:

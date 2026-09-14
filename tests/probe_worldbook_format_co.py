@@ -11,7 +11,9 @@ import tempfile
 _FH = tempfile.mkdtemp(prefix="qbn_wbfco_home_")
 os.environ["USERPROFILE"] = _FH
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
+from probe_format_guard import format_or_die  # noqa: E402  (N-14 护栏)
 
 from app import project, prompts
 from app.core import co_dialogue
@@ -40,7 +42,9 @@ check("参考块含 grow_worldbook_direction", "世界书应覆盖板块" in ref
 check("参考块含 grow_regex_direction", "必须成立约束" in ref)
 
 role = prompts.CO_ROLES[st.STAGE_CW_WORLDBOOK]
-prompt1 = prompts.CO_DIALOGUE_PROMPT.format(
+prompt1 = format_or_die(prompts.CO_DIALOGUE_PROMPT,
+    project_header="《格式探针CO》",
+    mode_block=prompts.mode_block_for(st.STAGE_CW_WORLDBOOK, "discuss", "把宗门规则也写进去"),
     role_desc=role["role"], agent_name=role["agent"],
     stage_label=st.CW_STAGE_LABELS[st.STAGE_CW_WORLDBOOK],
     handoff="关键事实：力量体系=对等代价",
@@ -55,7 +59,9 @@ check("阶段边界提示注入", "阶段边界" in prompt1)
 proj_old = project.create_project(tempfile.mkdtemp(prefix="qbn_wbfco_old_"), "旧项目")
 ref_old = co_dialogue.compose_reference_block(proj_old, st.STAGE_CW_WORLDBOOK, "cultivation")
 check("空串回退占位", "尚未生成世界书" in ref_old and "尚未生成正则" in ref_old)
-prompt_old = prompts.CO_DIALOGUE_PROMPT.format(
+prompt_old = format_or_die(prompts.CO_DIALOGUE_PROMPT,
+    project_header="《格式探针CO》",
+    mode_block=prompts.mode_block_for(st.STAGE_CW_WORLDBOOK, "discuss", "hi"),
     role_desc=role["role"], agent_name=role["agent"],
     stage_label=st.CW_STAGE_LABELS[st.STAGE_CW_WORLDBOOK],
     handoff="（无）",
@@ -63,7 +69,8 @@ prompt_old = prompts.CO_DIALOGUE_PROMPT.format(
 check("旧项目对话组装不抛", "hi" in prompt_old)
 
 # ---- ② 世界书总结 prompt 组装（产物结构强制正则段）----
-prompt2 = prompts.CO_SUMMARIZE_PROMPT.format(
+prompt2 = format_or_die(prompts.CO_SUMMARIZE_PROMPT,
+    project_header="《格式探针CO》",
     stage_label=st.CW_STAGE_LABELS[st.STAGE_CW_WORLDBOOK],
     product_structure=prompts.CO_PRODUCT_STRUCTURES[st.STAGE_CW_WORLDBOOK],
     transcript="作者：规则定为逻辑约束集",
