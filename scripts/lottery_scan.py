@@ -29,16 +29,25 @@ def main() -> None:
                 rows.append(json.loads(line))
     rows.sort(key=lambda r: r.get("ts", ""))
     max_hit = 0
-    events = []
+    max_hit_by_ch = {}
+    events = []          # 口径 A（全局 max）：历史口径，跨章前缀增长会放大赤字
+    events_ch = []       # 口径 B（章内 max）：L1-19 双口径——同章期望深度为准，不重复计数
     for r in rows:
         hit = r.get("hit") or 0
+        ch = r.get("ch")
+        ch_max = max_hit_by_ch.get(ch, 0)
         if max_hit and hit < max_hit - THRESH:
-            events.append({"ch": r.get("ch"), "ts": r.get("ts"),
+            events.append({"ch": ch, "ts": r.get("ts"),
                            "phase": r.get("phase"), "hit": hit,
                            "deficit": max_hit - hit})
+        if ch_max and hit < ch_max - THRESH:
+            events_ch.append({"ch": ch, "ts": r.get("ts"),
+                              "phase": r.get("phase"), "hit": hit,
+                              "deficit": ch_max - hit})
         max_hit = max(max_hit, hit)
+        max_hit_by_ch[ch] = max(ch_max, hit)
     by_ch = defaultdict(lambda: [0, 0])
-    for e in events:
+    for e in events_ch:                     # 汇总与判据走口径 B（防同章重复计数）
         by_ch[e["ch"]][0] += 1
         by_ch[e["ch"]][1] += e["deficit"]
     n_ch = len({r.get("ch") for r in rows}) or 1
@@ -46,7 +55,11 @@ def main() -> None:
           % (len(rows), len(events), len(by_ch),
              sorted(v[0] for v in by_ch.values())[len(by_ch) // 2] if by_ch else 0,
              f"{sorted(v[1] for v in by_ch.values())[len(by_ch) // 2]:,}" if by_ch else "0"))
-    for e in events:
+    print("口径 A（vs 全局 max，历史口径，跨章增长会放大）：%d 次 / %s tok；"
+          "口径 B（vs 章内 max，判据口径）：%d 次 / %s tok"
+          % (len(events), f"{sum(e['deficit'] for e in events):,}",
+             len(events_ch), f"{sum(e['deficit'] for e in events_ch):,}"))
+    for e in events_ch:
         print("  ch%-3s %s %-14s hit=%9s deficit=%9s"
               % (e["ch"], (e.get("ts") or "?")[11:19],
                  e["phase"], f"{e['hit']:,}", f"{e['deficit']:,}"))
