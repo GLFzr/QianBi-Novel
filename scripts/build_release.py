@@ -322,6 +322,12 @@ def main():
                 full = os.path.join(dp, f)
                 z.write(full, os.path.relpath(full, dist_dir))
         z.writestr(readme_in_zip, readme_bytes)
+        # N-21：便携《使用说明》承诺「详见包内」的三份文档——真打进包里
+        # （旧实现只拷进产物目录由安装版使用，便携用户永远看不到，MIT 分发落空）
+        for doc in ("LICENSE", "THIRD-PARTY-LICENSES.md", "PRIVACY.md"):
+            src = os.path.join(out_dir, doc)
+            if os.path.exists(src):
+                z.write(src, doc)
     step("便携 zip", os.path.exists(portable),
          f"{os.path.getsize(portable) / 1048576:.0f} MB")
 

@@ -217,3 +217,48 @@ def test_rollback_then_microcycle_resumes_from_step(tmp_path):
         pass   # 假客户端下后续阶段可能解析失败——我们只关心「跳过了草稿」
     assert "draft" not in ctx.steps          # 草稿没有重跑（断点在 review→deslop）
     assert "scan" in ctx.steps or "deslop" in ctx.steps   # 从去味链路继续
+
+
+# ---------- L1-08：parse_instruction_llm 打桩确证（离线，零 API） ----------
+
+class _StubClient:
+    def __init__(self, raw):
+        self.raw = raw
+        self.prompts = []
+
+    def chat(self, prompt, **kw):
+        self.prompts.append(prompt)
+        return self.raw
+
+
+def test_parse_instruction_llm_valid_decision(tmp_path):
+    import json
+    from app.core import agent_tools as at
+    raw = json.dumps({"tool": "rewrite_chapter", "args": {"chapter": 3},
+                      "confidence": 0.9}, ensure_ascii=False)
+    got = at.parse_instruction_llm("把第3章推倒重写", _StubClient(raw), default_chapter=1)
+    assert got and got[0] == "rewrite_chapter" and got[1]["chapter"] == 3
+    assert got[2] == "llm"
+
+
+def test_parse_instruction_llm_rejects_bad_tool_and_low_confidence():
+    from app.core import agent_tools as at
+    assert at.parse_instruction_llm(
+        "x", _StubClient('{"tool": "format_disk", "confidence": 0.99}')) is None, \
+        "白名单外工具必须拒"
+    assert at.parse_instruction_llm(
+        "x", _StubClient('{"tool": "status", "confidence": 0.3}')) is None, \
+        "低置信必须拒"
+    assert at.parse_instruction_llm("x", _StubClient("不是 JSON")) is None
+
+
+def test_parse_instruction_llm_rollback_step_whitelist():
+    import json
+    from app.core import agent_tools as at
+    raw = json.dumps({"tool": "rollback_step",
+                      "args": {"chapter": 2, "to_step": "review"}, "confidence": 0.8})
+    got = at.parse_instruction_llm("第2章审校重跑", _StubClient(raw), default_chapter=2)
+    assert got and got[0] == "rollback_step"
+    bad = json.dumps({"tool": "rollback_step",
+                      "args": {"chapter": 2, "to_step": "不存在的步骤"}, "confidence": 0.9})
+    assert at.parse_instruction_llm("x", _StubClient(bad)) is None

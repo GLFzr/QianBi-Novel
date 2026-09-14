@@ -444,8 +444,8 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "升级只覆盖程序目录，不会写入：书稿 " + bridge.defaultBooksRoot()
-                  + " · 配置 " + bridge.dataDirPath()
+            text: "升级只覆盖程序目录，不改你的 config.json 配置；书稿 " + bridge.defaultBooksRoot()
+                  + " 不会被动。更新缓存（清单与安装包）会写入数据目录的 updates/ 子目录"
                   + "\n安装包没有代码签名证书，双击后 Windows 会弹蓝底「Windows 已保护你的电脑」："
                   + "那是缺证书，不是文件坏了。点「更多信息」→「仍要运行」继续；"
                     + "不确定就先对一下上面的 SHA-256，跟这里列的一致就是我发布的那个文件。"

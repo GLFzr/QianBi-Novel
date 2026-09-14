@@ -40,9 +40,11 @@ def test_telemetry_enabled_writes_local_jsonl(tmp_path, monkeypatch):
     monkeypatch.setattr(tm, "FILE", str(f))
     cfg = set_enabled({"telemetry": {"enabled": False}}, True)
     assert cfg["telemetry"]["enabled"] is True
-    record(cfg, "chapter_done", version="0.14.0", words=2000)
+    # N-24：只断言**生产代码确实会记**的事件（app_start，main.py 两处调用）——
+    # 旧版自造 chapter_done 事件发绿，暗示存在不存在的埋点（PRIVACY 文案已同步纠正）
+    record(cfg, "app_start", version="0.14.0")
     text = f.read_text(encoding="utf-8")
-    assert "chapter_done" in text and "2000" in text
+    assert "app_start" in text and "0.14.0" in text
 
 
 def test_telemetry_redacts_props(tmp_path, monkeypatch):
