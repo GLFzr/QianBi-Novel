@@ -14,10 +14,18 @@ Column {
     spacing: 6
 
     AppIcon {
+        id: emptyIcon
         name: root.iconName
-        size: 28
+        size: 40   // U-20：28→40 提升空态可见性
         color: Theme.textTertiary
+        opacity: 0.75
         anchors.horizontalCenter: parent.horizontalCenter
+        SequentialAnimation on opacity {
+            running: root.visible && Theme.motionOK
+            loops: Animation.Infinite
+            OpacityAnimator { from: 0.75; to: 0.45; duration: Theme.durLoop }
+            OpacityAnimator { from: 0.45; to: 0.75; duration: Theme.durLoop }
+        }
     }
     Text {
         visible: root.title !== ""
