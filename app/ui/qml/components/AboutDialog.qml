@@ -137,6 +137,50 @@ Dialog {
             wrapMode: Text.Wrap
         }
 
+        // L2-13/L2-17：审计痕回看 + 归档安全网入口
+        Rectangle {
+            Layout.fillWidth: true
+            height: auditCol.implicitHeight + 20
+            radius: Theme.rCard
+            color: Theme.bgHover
+            ColumnLayout {
+                id: auditCol
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 4
+                Text {
+                    text: "强锁审计痕（作者绕过的门都在这里可回看）"
+                    color: Theme.textSecondary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    font.bold: true
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: {
+                        var fl = bridge.forcedLocksList()
+                        if (fl.length === 0) return "暂无强锁记录"
+                        var lines = []
+                        for (var i = Math.max(0, fl.length - 8); i < fl.length; i++)
+                            lines.push("第" + fl[i].num + "章 · " + fl[i].reason + " · " + fl[i].ts)
+                        return lines.join("
+")
+                    }
+                    color: Theme.textTertiary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsMicro
+                    wrapMode: Text.Wrap
+                }
+                RowLayout {
+                    spacing: 8
+                    AppButton { text: "打开门回退归档"; onClicked: bridge.openProjDebugDir("rollback") }
+                    AppButton { text: "打开 Agent 归档"; onClicked: bridge.openProjDebugDir("agent_tools") }
+                    AppButton { text: "打开失败现场"; onClicked: bridge.openProjDebugDir("") }
+                    Item { Layout.fillWidth: true }
+                }
+            }
+        }
+
         RowLayout {
             spacing: 8
             AppButton { text: "打开日志目录"; onClicked: bridge.openLogDir() }

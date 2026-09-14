@@ -2998,6 +2998,25 @@ class Bridge(QObject):
             self.toast.emit("error", f"导出失败: {e}")
             return ""
 
+    @Slot(str)
+    def openProjDebugDir(self, sub: str):
+        """L2-17：归档安全网入口——打开当前项目的 pipeline_debug（rollback/agent_tools 归档）"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        target = os.path.join(self.proj, "pipeline_debug", sub) if sub else             os.path.join(self.proj, "pipeline_debug")
+        os.makedirs(target, exist_ok=True)
+        self.openPath(target)
+
+    @Slot(result="QVariantList")
+    def forcedLocksList(self) -> list:
+        """L2-13：强锁审计痕回看（哪章被绕了哪条门）——界面终于有读者了"""
+        if not self.proj:
+            return []
+        fl = (st.load_state(self.proj).get("forced_locks") or {})
+        return [{"num": int(k), "reason": v.get("reason", ""), "ts": v.get("ts", "")}
+                for k, v in sorted(fl.items(), key=lambda kv: int(kv[0]))][-50:]
+
     @Slot(result=str)
     def defaultBooksRoot(self) -> str:
         root = os.path.join(os.path.expanduser("~"), "Documents", "千笔一文")
