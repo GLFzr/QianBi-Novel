@@ -375,11 +375,14 @@ Item {
                             model: bridge.genrePresets()
                             textRole: "name"
                             font.pixelSize: Theme.fsSmall
-                            Component.onCompleted: {
+                            // N-12：模型与选中态随项目打开刷新（原一次性求值，新建书后皆旧）
+                            function refreshPreset() {
+                                model = bridge.genrePresets()
                                 var cur = bridge.projectPreset()
                                 for (var i = 0; i < count; i++)
                                     if ((model.get ? model.get(i) : model[i]).id === cur) currentIndex = i
                             }
+                            Component.onCompleted: refreshPreset()
                             onActivated: {
                                 var it = model.get ? model.get(index) : model[index]
                                 if (it) bridge.setProjectPreset(it.id)

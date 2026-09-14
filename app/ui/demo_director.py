@@ -152,8 +152,8 @@ class DemoDirector(QObject):
         b = self.bridge
         from ..core import co_dialogue
         stage = b._get_cw_stage_key()
-        state = b._cw.load()
-        co_dialogue.transcript_append(state, stage, "user", text)
+        # N-10：mode 不再忽略——演示转写与真机同构（讨论/撰写模式落在消息元数据里）
+        co_dialogue.transcript_append(state, stage, "user", text, mode=mode)
         b._cw_save_state(state)
         b._cw_sync_messages()
         b._console_log("user", text)

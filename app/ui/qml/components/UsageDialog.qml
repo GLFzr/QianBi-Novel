@@ -143,7 +143,7 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "数据仅保存在本机 ~/.qianbi_novel/usage/usage.jsonl。成本为按模型费率的估算值（可在配置中覆盖费率），非账单。"
+            text: "数据仅保存在本机 ~/.qianbi_novel/usage/usage.jsonl。上方逐行成本按**默认费率**估算（config.usage_prices 的覆盖只对汇总统计生效，不改这里的行估算），非账单。"
             color: Theme.textTertiary
             font.pixelSize: Theme.fsMicro
             wrapMode: Text.Wrap

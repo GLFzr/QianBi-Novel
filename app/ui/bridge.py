@@ -734,26 +734,6 @@ class _CanonAuditWorker(QThread):
                               f"{done}/{total} 章" + (f" · 末章错误 {last_err[:80]}" if last_err else ""))
 
 
-class _IdeaWorker(QThread):
-    """选题展开（灵感 → 3 个选题方向）：用辅助槽，后台执行"""
-    done = Signal(bool, str)                    # ok, result_or_error
-
-    def __init__(self, cfg: dict, idea: str, parent=None):
-        super().__init__(parent)
-        self.cfg, self.idea = cfg, idea
-
-    def run(self):
-        from .. import prompts
-        from ..llm import ModelRouter, clean_llm_output
-        try:
-            router = ModelRouter(self.cfg)
-            prompt = prompts.IDEA_EXPAND_PROMPT.format(user_input=self.idea)
-            result = clean_llm_output(router.client(cfg_mod.SLOT_HELPER).chat(prompt))
-            self.done.emit(bool(result), result or "模型返回为空")
-        except Exception as e:
-            self.done.emit(False, str(e))
-
-
 class _BlurbWorker(QThread):
     """发布物料生成（题材定位 + 全书大纲 → 标签 + 简介）：用辅助槽，后台执行"""
     done = Signal(bool, str)                    # ok, result_or_error
@@ -951,7 +931,6 @@ class Bridge(QObject):
     demoActiveChanged = Signal()
     connTestResult = Signal(str, bool, str)     # cid, ok, msg
     modelsFetched = Signal(str, list)           # cid, models
-    ideaExpanded = Signal(bool, str)            # ok, result_or_error
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
     lockBlocked = Signal(int, str, int, int, str)  # 锁定被闸门拦截：num, reason, actual, target, kind
     # kind: "word"=字数未达标（有 actual/target）| "contract"=正则 must 契约违规（无字数概念）
@@ -2791,6 +2770,15 @@ class Bridge(QObject):
         self.currentChapterChanged.emit()
         self.refreshUsage()
         self._refresh_progress()
+        # L2-23：卷完成反馈——下一章换卷时点一句（卷号解析来自 volume_session）
+        try:
+            from .core import volume_session as _vs
+            _n = int(record.get("num") or 0)
+            if _n and _vs.resolve_volume_number(self.proj, _n) !=                     _vs.resolve_volume_number(self.proj, _n + 1):
+                self.toast.emit("ok", f"第 {_vs.resolve_volume_number(self.proj, _n)} 卷完卷"
+                                      f"（第 {_n} 章止），下一章进入新卷")
+        except Exception:  # noqa: BLE001
+            pass
         # L2-14（确认感第 2 层 P0）：章完成必须有可感知回执——出厂 gate_preset=off
         # 下作者对「第 N 章写完了」曾经毫无感知
         _ok = record.get("status") == "pass"
@@ -2890,19 +2878,8 @@ class Bridge(QObject):
             result.append({"id": c.get("id", ""), "name": c.get("name", ""), "boundSlots": bound})
         return result
 
-    @Slot(str)
-    def expandIdea(self, idea: str):
-        """选题展开：一句话灵感 → 3 个选题方向（后台执行，结果经 ideaExpanded 信号返回）"""
-        idea = (idea or "").strip()
-        if not idea:
-            self.toast.emit("warn", "先填写一句话灵感，再点「AI 展开」")
-            return
-        w = _IdeaWorker(self.cfg, idea, self)
-        w.done.connect(self.ideaExpanded)
-        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
-        self._workers.append(w)
-        w.start()
-
+    # N-04：expandIdea/ideaExpanded 双死路径已删（QML 零调用、结果不落 state）——
+    # 若未来做「AI 展开选题」，须同时接 UI 入口与产物落盘，别再留只有一半的链路
     # ---- 发布物料：标签 + 简介（据大纲/设定生成）----
 
     @Slot(result=str)
