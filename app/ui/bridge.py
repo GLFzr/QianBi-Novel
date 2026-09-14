@@ -1514,8 +1514,16 @@ class Bridge(QObject):
                 self.toast.emit("warn", "没听懂这条指令，可用：" + agent_tools.help_text().split(chr(10))[1].strip())
                 return
             name, args, _conf = instr
-            if name == "rollback_step" or name == "rewrite_chapter":
-                # 映射到既有门回退语义（微循环内部处理：保留原稿/重新组装）
+            if name in ("rollback_step", "rewrite_chapter"):
+                # L1-05：映射到门回退时不得静默丢参数——章号不匹配要明说，别悄悄缩水
+                gate_ch = int(self._cur_num or 0)
+                want_ch = int(args.get("chapter") or gate_ch or 0)
+                if gate_ch and want_ch and want_ch != gate_ch:
+                    self.toast.emit(
+                        "warn",
+                        "决策门回退只作用于当前第 %d 章；重写第 %d 章请停止流水线后，"
+                        "在章节列表右键「重写本章」" % (gate_ch, want_ch))
+                    return
                 self.resolveStepGate("return", idea[1:].strip())
                 return
             res = agent_tools.execute(name, args, self.proj, self.cfg, pipeline_running=True)
