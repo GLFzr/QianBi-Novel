@@ -570,7 +570,7 @@ ApplicationWindow {
                                  && !(bridge.chapterLocked)
                         onClicked: mainWindow.saveEditor()
                         ToolTip.visible: hovered
-                        ToolTip.text: bridge.editorDirty ? "有未保存修改，保存后产生新版本" : "保存正文并生成新版本"
+                        ToolTip.text: "有未保存修改时保存会产生新版本；内容无变化则不产生新版本"  // L2-05：与 versions.snapshot 事实对齐
                     }
                     // 终稿锁定徽章 + 解锁（M4：章节确定=锁定；显式解锁唯一放行通道）
                     Rectangle {

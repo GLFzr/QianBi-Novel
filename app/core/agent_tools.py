@@ -54,11 +54,7 @@ _SETTING_WORDS = {
     "离峰": ("writing", "offpeak_run", True, False),
 }
 
-SETTING_WHITELIST = {
-    ("gates", "review_mode"), ("gates", "review_enabled"),
-    ("writing", "auto_gate"), ("writing", "chapter_session"),
-    ("writing", "offpeak_run"), ("writing", "chapter_word_target"),
-}
+# L1-11：SETTING_WHITELIST 死清单已删（全仓零引用；设置动词在 _SETTING_WORDS）
 
 
 def _fmt_status(proj: str, cfg: dict) -> dict:
@@ -135,7 +131,9 @@ def _tool_rollback_step(proj, cfg, args) -> dict:
     label = {"draft": "草稿重写（断点已清，草稿已归档删除）",
              "review": "审校重跑（已投票数清空）"}.get(to_step, "%s 起重跑" % to_step)
     return {"ok": True, "level": "warn",
-            "message": "第 %d 章已回退：%s。下次启动流水线将从该步继续。" % (num, label)}
+            "message": "第 %d 章已回退：%s。流水线从**首个缺失章**续跑——该章是当前唯一"
+                       "缺失章时从此步继续；更早章节缺失时先补它们（L1-12 作用域说明）"
+                       % (num, label)}
 
 
 def _tool_regen_outline(proj, cfg, args) -> dict:

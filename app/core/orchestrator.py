@@ -384,11 +384,13 @@ class Orchestrator(QThread):
                     # 决策门 G3（v1.2 裁决接线）：本批细纲完成 → 确认/带想法重拟本批。
                     # 回退由 _apply_rollback 归档清除本批细纲，循环内重拟（上限 3 次防死循环）。
                     for _g3_try in range(3):
-                        stages.stage_chapter_outlines(self, num, num + OUTLINE_BATCH - 1)
+                        # L1-16：尾批按总章数截断（旧实现会给 total+1 章生成细纲并虚报门摘要）
+                        _end = min(num + OUTLINE_BATCH - 1, total) if total else num + OUTLINE_BATCH - 1
+                        stages.stage_chapter_outlines(self, num, _end)
                         self.sig_queue.emit()
                         g3_idea = self.gate(
                             "G3",
-                            f"第 {num}~{num + OUTLINE_BATCH - 1} 章细纲已生成。"
+                            f"第 {num}~{_end} 章细纲已生成。"
                             f"下一步：继续写正文；可带想法重拟本批。",
                             chapter=num)
                         if g3_idea is None:

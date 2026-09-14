@@ -2412,6 +2412,10 @@ class Bridge(QObject):
         old = project.read_file(self._chapter_path)
         v = versions.snapshot(self.proj, self._cur_num, old, source)
         project.write_file(self._chapter_path, text)
+        if project.read_file(self._chapter_path) != text:
+            # L2-06：「已保存」前做回读校验——写盘失败不许报成功
+            self.toast.emit("error", "保存失败：磁盘回读与内容不一致（未标记已保存），请重试")
+            return
         self._chapter_text = text
         self._last_edit_action = ""
         self._working_text = ""
@@ -3503,6 +3507,10 @@ class Bridge(QObject):
         if instr and (text.startswith("/") or instr[2] == "guess"):
             res = agent_tools.execute(instr[0], instr[1], self.proj, self.cfg,
                                       pipeline_running=self._running)
+            # L1-10：破坏性工具回执说「下次启动流水线」，共写档启动是被拦的——补实话
+            if agent_tools.TOOLS.get(instr[0], {}).get("level") == "destructive"                     and self._get_cw_mode() == "cw":
+                res = {**res, "message": str(res.get("message", "")) +
+                       "（当前为共写档：流水线启动被拦，切回全自动档后生效）"}
             self._console_log("user", text)
             self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
             self._cw_tool_reply(text, res)
@@ -3519,6 +3527,9 @@ class Bridge(QObject):
             if llm_instr:
                 res = agent_tools.execute(llm_instr[0], llm_instr[1], self.proj, self.cfg,
                                           pipeline_running=self._running)
+                if agent_tools.TOOLS.get(llm_instr[0], {}).get("level") == "destructive"                         and self._get_cw_mode() == "cw":
+                    res = {**res, "message": str(res.get("message", "")) +
+                           "（当前为共写档：流水线启动被拦，切回全自动档后生效）"}
                 self._console_log("user", text)
                 self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
                 self._cw_tool_reply(text, res)
@@ -3569,7 +3580,12 @@ class Bridge(QObject):
             if client is None:
                 return None
             return _at.parse_instruction_llm(text, client, default_chapter=int(self._cur_num or 0))
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            # L1-09：失败不许无痕——共写区/日志必须看得见（返回 None 仍走本地规则兜底）
+            try:
+                self.logModel.append("warn", "Agent 指令 LLM 解析失败，已回退本地规则：%s" % e)
+            except Exception:  # noqa: BLE001
+                pass
             return None
 
     def _cw_tool_reply(self, instr_text: str, res: dict):
@@ -4492,6 +4508,12 @@ class Bridge(QObject):
         if not handoff:
             self.toast.emit("warn", "模型未输出「→ 下阶段交接」小节，下一阶段上下文将不完整")
         # 回看回边：写回世界书/正则后返回原阶段；cw_unit 确定后滚动生成细纲；否则前进
+        # L2-04：先落盘成功再报「已确定定稿」——顺序反了就是先喊成功后存档
+        try:
+            self._cw_save_state(state)
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", "定稿保存失败（%s）：阶段未推进，请重试或检查磁盘" % e)
+            return
         if st.ensure_cw(state).get("reopening"):
             ret = self._cw.confirm_reopen_return(state)
             self.toast.emit("ok", "世界书/正则已写回，返回「%s」阶段" % st.CW_STAGE_LABELS.get(ret, ret))
@@ -4503,7 +4525,6 @@ class Bridge(QObject):
             nxt = self._cw.advance(state)
             self.toast.emit("ok", "「%s」已确定定稿，进入「%s」"
                             % (st.CW_STAGE_LABELS.get(stage, stage), st.CW_STAGE_LABELS.get(nxt, nxt)))
-        self._cw_save_state(state)
         self._cw_view = self._get_cw_stage_key()
         self._cw_open_product(self._get_cw_stage_key())
         self._cw_refresh()
