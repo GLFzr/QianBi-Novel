@@ -4080,8 +4080,9 @@ class Bridge(QObject):
                     st.save_review_findings(self.proj, state, num, "ADVISORY",
                                             items, [], [it["text"] for it in items])
                     self.needsFixChanged.emit()
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                # N-05：toast 已宣称「详见问题登记」——写不进去必须纠正说法
+                self.toast.emit("warn", f"反哺偏离点落盘失败（{e}）：问题登记里不会有本轮偏离")
         else:
             self.toast.emit("ok", first_line)
         self._drain_backflow_queue()

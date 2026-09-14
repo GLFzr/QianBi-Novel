@@ -2015,8 +2015,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                           "quote": "", "root_layer": "ROOT_PROSE", "line": ""}
                                          for b in blocking_review],
                                         [], advisory_review)
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                ctx.log("warn", f"第 {num} 章 带保留通过结论落盘失败（{e}）：待修汇总可能缺此章")
             blocking_review, verdict_review = [], "PASS_WITH_NOTES"
 
         if blocking_review and all(str(b).startswith("[字数]") for b in blocking_review):
@@ -2058,8 +2058,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                         st.append_review_chain(proj, st.load_state(proj), num,
                                                issues, [root_result[:200]],
                                                verdict_review, review_rounds)
-                    except Exception:
-                        pass
+                    except Exception as e:  # noqa: BLE001
+                        ctx.log("warn", f"第 {num} 章 根因链落盘失败（{e}）：「详见 review_chain」不成立")
                     ctx.log("info", f"第 {num} 章 根因溯源完成（{len(issues)} issue · 详见 review_chain）")
                 except Exception as e:
                     ctx.log("warn", f"第 {num} 章 根因溯源失败：{e}")
@@ -2105,8 +2105,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     st.mark_chapter_need_human(proj, st.load_state(proj), num)
                     ctx.log("warn",
                             f"第 {num} 章 审校 {review_rounds} 轮后仍 {len(blocking_review)} 处阻塞 → 标 chapter_need_human，跳过本轮")
-                except Exception:
-                    pass
+                except Exception as e:  # noqa: BLE001
+                    ctx.log("error", f"第 {num} 章 标记转人工失败（{e}）：下一轮会再次拦截本章")
             else:
                 ctx.log("warn", f"第 {num} 章 审校 {review_rounds} 轮后仍有 {len(blocking_review)} 处阻塞")
             gates.resolve_failed(ctx, f"第 {num} 章审校未通过（{len(blocking_review)} 处阻塞）", gr)
@@ -2847,8 +2847,8 @@ def _author_review_entry(ctx, num: int, prose: str, *,
             gr.review_blocking = []
             try:
                 st.save_review_findings(proj, st.load_state(proj), num, "AUTHOR_PASS", [], [], [])
-            except Exception:
-                pass
+            except Exception as e:  # noqa: BLE001
+                ctx.log("warn", f"第 {num} 章 放行结论落盘失败（{e}）：本轮放行不会被记住，下次仍会拦")
             ctx.log("ok", f"第 {num} 章 人工审校通过（作者放行）")
             break
         if not cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
