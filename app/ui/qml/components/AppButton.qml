@@ -57,8 +57,8 @@ Button {
         // 禁用态保留按钮外形：主按钮留灰底，其余留描边——不能退化成裸文字（主次倒挂）
         color: !btn.enabled ? (btn.kind === "primary" ? Theme.bgActive : "transparent")
              : btn.kind === "primary" ? (btn.pressed ? Theme.accentPressed : btn.hovered ? Theme.accentHover : Theme.accent)
-             : btn.kind === "danger" ? (btn.pressed ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.22) : btn.hovered ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.12) : "transparent")
-             : btn.kind === "success" ? (btn.pressed ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.22) : btn.hovered ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.12) : "transparent")
+             : btn.kind === "danger" ? (btn.pressed ? Theme.dangerSoft : btn.hovered ? Theme.dangerSoft : "transparent")
+             : btn.kind === "success" ? (btn.pressed ? Theme.successSoft : btn.hovered ? Theme.successSoft : "transparent")
              : (btn.pressed ? Theme.bgActive : btn.hovered ? Theme.bgHover : "transparent")
         border.width: btn.kind === "ghost" ? 0 : 1
         border.color: !btn.enabled ? Theme.border

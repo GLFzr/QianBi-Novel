@@ -215,9 +215,9 @@ Item {
             Layout.fillWidth: true
             Layout.margins: 10
             radius: Theme.rCard
-            color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.07)
+            color: Theme.infoSoft
             border.width: 1
-            border.color: Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.3)
+            border.color: Theme.infoSoft
             implicitHeight: apiNoteCol.implicitHeight + 20
             ColumnLayout {
                 id: apiNoteCol
@@ -271,7 +271,7 @@ Item {
                     width: 172
                     height: 56
                     radius: 9
-                    color: settings.editingId === cid && !settings.isNew ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14)
+                    color: settings.editingId === cid && !settings.isNew ? Theme.accentSoft
                          : hover.containsMouse ? Theme.bgHover : Theme.bgCard
                     border.width: 1
                     border.color: settings.editingId === cid && !settings.isNew ? Theme.accent : Theme.border
@@ -705,7 +705,7 @@ Item {
                                         height: 26
                                         width: rgText.implicitWidth + 18
                                         radius: 7
-                                        color: settings.regexSem === modelData[1] ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                                        color: settings.regexSem === modelData[1] ? Theme.accentSoft : "transparent"
                                         border.width: 1
                                         border.color: settings.regexSem === modelData[1] ? Theme.accent : Theme.border
                                         Text {
@@ -912,7 +912,7 @@ Item {
                                         height: 26; radius: 7
                                         width: fsText.implicitWidth + 16
                                         color: Math.abs((settings.ep.fontScale || 1.0) - modelData.v) < 0.01
-                                               ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                                               ? Theme.accentSoft : "transparent"
                                         border.width: 1
                                         border.color: Math.abs((settings.ep.fontScale || 1.0) - modelData.v) < 0.01 ? Theme.accent : Theme.border
                                         Text {

@@ -114,7 +114,7 @@ Dialog {
             visible: dlg.report !== ""
             radius: Theme.rBtn
             height: reportCol.implicitHeight + 16
-            color: dlg.reportKind === "ok" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12)
+            color: dlg.reportKind === "ok" ? Theme.accentSoft
                                            : Qt.rgba(0.898, 0.325, 0.294, 0.12)
             border.width: 1
             border.color: dlg.reportKind === "ok" ? Theme.accent : Theme.danger
@@ -258,7 +258,7 @@ Dialog {
                                 height: 20
                                 radius: 5
                                 color: rowRect.modelData.trust
-                                       ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.15)
+                                       ? Theme.accentSoft
                                        : Qt.rgba(0.898, 0.325, 0.294, 0.16)
                                 Text {
                                     id: evText

@@ -325,7 +325,7 @@ Item {
                                     width: lvOpt.implicitWidth + 16
                                     radius: 6
                                     color: contractPanel.editLevel === modelData[0]
-                                           ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                           ? Theme.accentSoft
                                            : "transparent"
                                     border.width: 1
                                     border.color: contractPanel.editLevel === modelData[0]
@@ -459,7 +459,7 @@ Item {
 
     function ruleDelegateColor(level) {
         return level === "must"
-               ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.16)
-               : Qt.rgba(Theme.info.r, Theme.info.g, Theme.info.b, 0.14)
+               ? Theme.dangerSoft
+               : Theme.infoSoft
     }
 }

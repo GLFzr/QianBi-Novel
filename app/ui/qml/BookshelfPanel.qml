@@ -86,8 +86,8 @@ Item {
                     Rectangle {
                         width: 40; height: 40; radius: 8
                         gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.32) }
-                            GradientStop { position: 1.0; color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12) }
+                            GradientStop { position: 0.0; color: Theme.accentSoft }
+                            GradientStop { position: 1.0; color: Theme.accentSoft }
                         }
                         Text {
                             anchors.centerIn: parent

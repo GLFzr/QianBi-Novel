@@ -19,7 +19,7 @@ Row {
             width: stepperCW.width / Math.max(1, stepperCW.cards.length) - 5
             height: 30
             radius: Theme.rBtn
-            color: modelData.status === "active" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+            color: modelData.status === "active" ? Theme.accentSoft
                  : modelData.status === "done" ? Theme.bgCard : Theme.bgLog
             border.width: 1
             border.color: modelData.status === "active" ? Theme.accent : Theme.border

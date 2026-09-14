@@ -578,7 +578,7 @@ ApplicationWindow {
                         width: lockBadgeText.implicitWidth + 20
                         height: 22
                         radius: 11
-                        color: Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.15)
+                        color: Theme.successSoft
                         border.width: 1
                         border.color: Theme.success
                         Layout.alignment: Qt.AlignVCenter
@@ -618,7 +618,7 @@ ApplicationWindow {
                         radius: 4.5
                         color: Theme.warn
                         border.width: 1
-                        border.color: Qt.rgba(Theme.warn.r, Theme.warn.g, Theme.warn.b, 0.5)
+                        border.color: Theme.warnSoft
                         Layout.alignment: Qt.AlignVCenter
                         MouseArea {
                             id: ma
@@ -1186,7 +1186,7 @@ ApplicationWindow {
                         required property var modelData
                         height: 26; radius: 7
                         width: fmtText.implicitWidth + 18
-                        color: exportDialog.fmt === modelData.v ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        color: exportDialog.fmt === modelData.v ? Theme.accentSoft : "transparent"
                         border.width: 1
                         border.color: exportDialog.fmt === modelData.v ? Theme.accent : Theme.border
                         Text { id: fmtText; anchors.centerIn: parent; text: modelData.t
@@ -1209,7 +1209,7 @@ ApplicationWindow {
                         required property var modelData
                         height: 24; radius: 6
                         width: sepText.implicitWidth + 14
-                        color: exportDialog.sep === modelData.v ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        color: exportDialog.sep === modelData.v ? Theme.accentSoft : "transparent"
                         border.width: 1
                         border.color: exportDialog.sep === modelData.v ? Theme.accent : Theme.border
                         Text { id: sepText; anchors.centerIn: parent; text: modelData.t
@@ -1227,7 +1227,7 @@ ApplicationWindow {
                         required property int index
                         height: 24; radius: 6
                         width: tfText.implicitWidth + 14
-                        color: exportDialog.titleFmt === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        color: exportDialog.titleFmt === index ? Theme.accentSoft : "transparent"
                         border.width: 1
                         border.color: exportDialog.titleFmt === index ? Theme.accent : Theme.border
                         Text { id: tfText; anchors.centerIn: parent
@@ -1587,8 +1587,8 @@ ApplicationWindow {
         radius: Theme.rBtn
         color: Theme.bgCard
         border.width: 1
-        border.color: toastBar.toastLevel === "error" ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.5)
-                 : toastBar.toastLevel === "warn" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.5)
+        border.color: toastBar.toastLevel === "error" ? Theme.dangerSoft
+                 : toastBar.toastLevel === "warn" ? Theme.accentSoft
                  : Theme.borderStrong
         opacity: 0
         visible: opacity > 0
@@ -1791,7 +1791,7 @@ ApplicationWindow {
                         width: ctxText.implicitWidth + 18
                         height: 24
                         radius: 6
-                        color: mainWindow.rewriteCtxMode === modelData[1] ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                        color: mainWindow.rewriteCtxMode === modelData[1] ? Theme.accentSoft : "transparent"
                         border.width: 1
                         border.color: mainWindow.rewriteCtxMode === modelData[1] ? Theme.accent : Theme.border
                         Text {

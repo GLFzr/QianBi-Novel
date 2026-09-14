@@ -132,7 +132,7 @@ Item {
                                         width: scopeText.implicitWidth + 14
                                         color: (modelData.v === "#" ? scopeRow.scope.indexOf("#") === 0
                                                : scopeRow.scope === modelData.v)
-                                              ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : "transparent"
+                                              ? Theme.accentSoft : "transparent"
                                         border.width: 1
                                         border.color: (modelData.v === "#" ? scopeRow.scope.indexOf("#") === 0
                                                        : scopeRow.scope === modelData.v) ? Theme.accent : Theme.border

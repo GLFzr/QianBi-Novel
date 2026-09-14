@@ -21,8 +21,8 @@ Rectangle {
     height: 46
     radius: 8
     color: mouseArea.containsMouse ? Theme.bgHover
-         : state === "writing" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
-         : state === "needs_fix" ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.05)
+         : state === "writing" ? Theme.accentSoft
+         : state === "needs_fix" ? Theme.dangerSoft
          : state === "stale" ? Qt.rgba(Theme.highlightYellow.r, Theme.highlightYellow.g, Theme.highlightYellow.b, 0.06)
          : "transparent"
     border.width: mouseArea.containsMouse ? 1 : 0

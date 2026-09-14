@@ -192,7 +192,7 @@ Item {
                             radius: Theme.rCard
                             color: Theme.bgCard
                             border.width: 1
-                            border.color: modelData.status === "active" ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55)
+                            border.color: modelData.status === "active" ? Theme.accentSoft
                                      : modelData.status === "done" ? Theme.border : Theme.border
                             Rectangle {
                                 anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
@@ -235,7 +235,7 @@ Item {
                                             Rectangle {
                                                 anchors.fill: parent; radius: 6.5; color: "transparent"
                                                 border.width: 2
-                                                border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
+                                                border.color: Theme.accentSoft
                                             }
                                             Item {
                                                 id: stageOrbit
@@ -564,7 +564,7 @@ Item {
                                         width: Math.max(4, parent.width - 2)
                                         height: Math.max(3, parent.height * modelData.words / pipeline.trendMaxWords)
                                         radius: 2
-                                        color: modelData.blocking > 0 ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.36)
+                                        color: modelData.blocking > 0 ? Theme.dangerSoft
                                              : Theme.bgActive
                                     }
                                     // 阻断标记：柱顶小红点（语义色只占小面积）

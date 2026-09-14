@@ -163,7 +163,7 @@ Item {
                     width: stepText.width + 14
                     height: 16
                     radius: 8
-                    color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                    color: Theme.accentSoft
                     Text {
                         id: stepText
                         anchors.centerIn: parent

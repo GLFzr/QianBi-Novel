@@ -278,7 +278,7 @@ Rectangle {
                         radius: 6
                         width: pstText.implicitWidth + 14
                         color: bridge.cwPreset === modelData.id
-                               ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18) : Theme.bgCard
+                               ? Theme.accentSoft : Theme.bgCard
                         border.width: 1
                         border.color: bridge.cwPreset === modelData.id ? Theme.accent : Theme.border
                         Text {

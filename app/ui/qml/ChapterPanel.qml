@@ -240,7 +240,7 @@ Item {
                         width: ListView.view.width
                         height: 32
                         radius: 6
-                        color: fileList.currentIndex === index ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12) : "transparent"
+                        color: fileList.currentIndex === index ? Theme.accentSoft : "transparent"
                         RowLayout {
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: parent.left
