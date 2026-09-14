@@ -50,10 +50,11 @@ Rectangle {
     readonly property var th: themes[prefs.theme] || themes.night
     readonly property int fontSize: Math.round(18 * (prefs.fontScale || 1.0))
     readonly property real lineH: prefs.lineHeight || 1.8
-    readonly property var chapters: bridge.readerChapterList()
+    readonly property var chapters: bridge.readerChapterList   // N-02：Property+NOTIFY，随章定稿/打开自动刷新
 
     // ---- 生命周期 ----
     function open(initialNum, workText) {
+        bridge.refreshReaderChapterList()
         prefs = bridge.readerPrefs()
         loadChapter(initialNum, workText)
         opacity = 1

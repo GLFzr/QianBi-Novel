@@ -2616,7 +2616,9 @@ class Bridge(QObject):
     def refreshQueue(self):
         if not self.proj:
             self.chapterModel.set_items([])
+            self._refresh_reader_chapters()
             return
+        self._refresh_reader_chapters()   # N-02：阅读目录随队列同节拍刷新
         state = st.load_state(self.proj)
         history = {h["num"]: h for h in state.get("history", [])}
         chapters = {n: (name, path) for n, name, path in project.list_chapters(self.proj)}
@@ -3091,17 +3093,31 @@ class Bridge(QObject):
             data["position"] = float(max(0.0, min(1.0, pos)))
             self._write_store(self.proj, num, data)
 
-    @Slot(result="QVariantList")
-    def readerChapterList(self) -> list:
-        """阅读目录：[{num, title, words}]（有正文的章节）"""
-        if not self.proj:
-            return []
+    # N-02：从一次性 Slot 改为带 NOTIFY 的 Property——QML 记不住方法调用依赖，
+    # 旧形态下阅读目录恒为创建时的空表（目录空/章题空/上下章永久置灰三果同源）
+    readerChapterListChanged = Signal()
+    _reader_chapters = []
+
+    def _refresh_reader_chapters(self):
         result = []
-        for n, name, path in project.list_chapters(self.proj):
-            m = re.match(r"第\d+章_?(.+)\.md", name)
-            result.append({"num": n, "title": m.group(1) if m and m.group(1) else f"第{n}章",
-                           "words": project.count_chars(project.read_file(path))})
+        if self.proj:
+            for n, name, path in project.list_chapters(self.proj):
+                m = re.match(r"第\d+章_?(.+)\.md", name)
+                result.append({"num": n, "title": m.group(1) if m and m.group(1) else f"第{n}章",
+                               "words": project.count_chars(project.read_file(path))})
+        if result != self._reader_chapters:
+            self._reader_chapters = result
+            self.readerChapterListChanged.emit()
         return result
+
+    @Property("QVariantList", notify=readerChapterListChanged)
+    def readerChapterList(self) -> list:
+        return self._refresh_reader_chapters()
+
+    @Slot(result="QVariantList")
+    def refreshReaderChapterList(self) -> list:
+        """显式刷新口（项目打开/章定稿/保存后由桥内调用）"""
+        return self._refresh_reader_chapters()
 
     @Slot(int, result="QVariantMap")
     def readerChapter(self, num: int) -> dict:
