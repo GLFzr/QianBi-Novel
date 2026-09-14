@@ -39,6 +39,10 @@ def _cap(mode, ctx, msg):
 qInstallMessageHandler(_cap)
 
 app = QGuiApplication([])
+
+USAGE_FAILS = []
+STEP3_DONE = {"ok": False}
+
 engine = QQmlApplicationEngine()
 b = Bridge()
 engine.rootContext().setContextProperty("bridge", b)
@@ -120,15 +124,22 @@ def step3():
     if today_total < 1_000_000:
         print("WARN 当前真实今日用量 <100 万，未触发该场景（断言仍按固定值校验）", flush=True)
     if not ok:
-        sys.exit(2)
+        USAGE_FAILS.append("step3 断言失败")   # N-31：槽内 sys.exit 不可靠，改标记
     errs = [w for w in WARN if "ReferenceError" in w or "TypeError" in w or "Unable to assign" in w]
     print("warnings(filtered):", len(errs), " all:", len(WARN), flush=True)
     for w in WARN[:30]:
         print("  QML>", w, flush=True)
     print("PROBE_OK", flush=True)
+    STEP3_DONE["ok"] = True
     QTimer.singleShot(150, app.quit)
 
 
 QTimer.singleShot(900, step0)
-QTimer.singleShot(30000, app.quit)  # 看门狗
-sys.exit(app.exec())
+def _watchdog():
+    if not STEP3_DONE["ok"]:
+        USAGE_FAILS.append("看门狗到期未到达 step3 判定（上游崩了也不许假绿）")
+    app.quit()
+QTimer.singleShot(30000, _watchdog)
+_rc = app.exec()
+# N-31：失败必须非零退码（原 sys.exit(app.exec()) 恒 0）
+sys.exit(1 if USAGE_FAILS else 0)

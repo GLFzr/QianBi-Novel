@@ -191,7 +191,8 @@ def step4():
     print("TOTAL_ISSUES =", bad, flush=True)
     errs = [w for w in WARN if "ReferenceError" in w or "TypeError" in w or "Unable to assign" in w]
     print("qml warnings:", len(errs), flush=True)
-    print("PROBE_DONE", flush=True)
+    # N-31 同族：打绿灯必须给结论（退码本就随 TOTAL_ISSUES 非零）
+    print("PROBE_DONE " + ("FAIL" if bad else "PASS"), flush=True)
     QTimer.singleShot(150, app.quit)
 
 

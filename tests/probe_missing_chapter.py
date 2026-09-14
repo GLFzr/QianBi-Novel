@@ -116,4 +116,5 @@ def step4_warnings():
 
 
 QTimer.singleShot(600, step1_list)
-sys.exit(app.exec())
+_rc = app.exec()
+sys.exit(1 if getattr(check, 'failed', False) else 0)  # N-31：失败非零退码

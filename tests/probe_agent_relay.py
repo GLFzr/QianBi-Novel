@@ -12,6 +12,9 @@ _FH = tempfile.mkdtemp(prefix="qbn_relay_home_")
 os.environ["USERPROFILE"] = _FH
 
 sys.path.insert(0, os.getcwd())
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from probe_guard import arm_config_guard  # noqa: E402
+arm_config_guard()  # N-32：keyring 沙箱+更新链隔离（USERPROFILE 挡不住凭据管理器）
 
 from PySide6.QtCore import QCoreApplication
 app = QCoreApplication(sys.argv)

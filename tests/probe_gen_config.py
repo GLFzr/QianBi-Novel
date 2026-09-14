@@ -346,4 +346,6 @@ def watchdog():
 
 QTimer.singleShot(600, step1_wiring)
 QTimer.singleShot(45000, watchdog)
-sys.exit(app.exec())
+_rc = app.exec()
+# N-31：失败必须非零退码（原 sys.exit(app.exec()) 恒 0，失败被吞）
+sys.exit(1 if False in RESULTS else 0)

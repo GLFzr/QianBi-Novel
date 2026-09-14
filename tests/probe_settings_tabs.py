@@ -101,10 +101,15 @@ def step4():
     print("warnings:", len(errs), flush=True)
     for w in errs[:12]:
         print("  QML>", w, flush=True)
-    print("PROBE_DONE", flush=True)
+    # N-31：打绿灯必须给结论——QML 致命告警=FAIL，且退码随判定
+    print("PROBE_DONE " + ("FAIL" if errs else "PASS"), flush=True)
+    global TAB_FAILS
+    TAB_FAILS = bool(errs)
     QTimer.singleShot(150, app.quit)
 
 
+TAB_FAILS = True   # N-31：默认失败，判定步骤跑完才置真值（防上游崩了假绿）
 QTimer.singleShot(900, step0)
 QTimer.singleShot(60000, app.quit)  # 看门狗：任何步骤抛异常也不挂死
-sys.exit(app.exec())
+_rc = app.exec()
+sys.exit(1 if TAB_FAILS else 0)  # N-31：失败非零退码
