@@ -572,6 +572,28 @@ def wiring_check(rec, proj: str) -> list:
     _MUST_KINDS = ("prose", "enrich", "trim", "deslop", "selection", "review")
     must_rules = [r["rule"] for r in project.regex_rules(proj, "logic")
                   if r["level"] == "must"]
+
+    # N-08 扩容：字节基线盲区装配类的正向断言。每类钉一个「生产必传的动态字段」
+    # （值来自夹具内容），字段缺席 = 装配点丢字段/裸写。探针的夹具书含可辨识内容：
+    # 题材定位（角色表）、大纲、世界书（力量体系）、追踪三表、上下文。
+    fixture_needles = [
+        ("tracking", "角色状态"),            # tracking：character_state 读追踪表
+        ("chapter_summary", "第1章"),        # chapter_summary：chapter_header 带章号
+        ("global_summary", "第1章"),         # global_summary：chapter_header
+        ("review_fix", "第1章"),              # review_fix：blocking 摘要词
+        ("root_cause", "issue"),             # root_cause：issues_brief 注入
+        ("backflow", "力量体系"),            # backflow：世界书既有条目
+        ("blurb", "都市悬疑"),                  # blurb：据大纲/章节生成
+        ("dialogue", "阶段"),                # dialogue：CO_DIALOGUE 阶段标签/职责
+    ]
+    for kind, needle in fixture_needles:
+        prompts_k = by_kind.get(kind) or []
+        if not prompts_k:
+            continue    # 该类装配点本次流水线未触发（如导入/演示路径），不强求
+        merged_k = "\n".join(prompts_k)
+        if needle not in merged_k:
+            fails.append("装配点 %s 未注入夹具字段「%s」——丢字段/裸写（N-08 扩容）"
+                         % (kind, needle))
     if not must_rules:
         fails.append("夹具 正则.md 没有 must 级规则，must 接线断言将空转")
     for kind in _MUST_KINDS:
