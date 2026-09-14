@@ -577,8 +577,10 @@ Rectangle {
     // ---- 右侧抽屉（目录 / 标注·书签）----
     Rectangle {
         id: drawer
-        visible: drawer.opened
-        anchors.right: parent.right
+        visible: x < parent.width - 1
+        // U-20：抽屉滑入——纯 x 定位（不用 anchors.right，锚会接管 x）
+        x: drawer.opened ? parent.width - width : parent.width
+        Behavior on x { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
         anchors.top: topBar.bottom
         anchors.bottom: bottomBar.top
         width: 300
