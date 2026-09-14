@@ -66,11 +66,17 @@ co_dialogue.store_handoff(state, st.STAGE_CW_CORE, "关键事实：改命笔记"
 st.save_state(proj, state)
 
 stub = StubRouter("设定参考稿：主角的笔记每次改写命运都要付出代价。")
-w = DialogueWorker({}, proj, st.STAGE_CW_OUTLINE, "大纲别写崩，三幕式。", router=stub)
+w = DialogueWorker({}, proj, st.STAGE_CW_OUTLINE, "大纲别写崩，三幕式。", router=stub,
+                   mode="compose")
 w.run()
 prompt0 = stub.client_.calls[0]
 check("DialogueWorker 结果透传", w.result_text == stub.client_.text)
-check("槽位=writing(outline)", stub.last_slot == "writing")
+# N-19 双模式断言（8c54ca0 起讨论走 helper、撰写走职责槽；比旧单断言更严）
+check("槽位=writing(outline·compose)", stub.last_slot == "writing")
+stub_d = StubRouter("（讨论回复）")
+wd = DialogueWorker({}, proj, st.STAGE_CW_OUTLINE, "大纲别写崩，三幕式。", router=stub_d)
+wd.run()
+check("槽位=helper(outline·discuss)", stub_d.last_slot == "helper")
 check("提示词含角色职责", "大纲 Agent" in prompt0 and "职责" in prompt0)
 check("提示词含交接块", "改命笔记" in prompt0)
 check("提示词含转写", "开篇单元要压得住节奏" in prompt0)
@@ -99,17 +105,23 @@ co_dialogue.store_handoff(state, st.STAGE_CW_CORE, handoff)
 st.save_state(proj, state)
 check("下一阶段只读交接块", "改命笔记" in co_dialogue.prev_handoff(st.load_state(proj), st.STAGE_CW_OUTLINE))
 
-# ---- 3. 各阶段槽位映射全表 ----
-expect_slots = {
+# ---- 3. 各阶段槽位映射全表（N-19：讨论/撰写双模式各断言一遍，覆盖=旧表×2）----
+compose_slots = {
     st.STAGE_CW_CORE: "writing", st.STAGE_CW_OUTLINE: "writing",
     st.STAGE_CW_WORLDBOOK: "helper", st.STAGE_CW_UNIT: "helper",
     st.STAGE_CW_PROSE: "writing",
 }
-for stage, expect in expect_slots.items():
+for stage, expect in compose_slots.items():
     r = StubRouter("回复")
-    dlg = DialogueWorker({}, proj, stage, "hi", router=r)
+    dlg = DialogueWorker({}, proj, stage, "hi", router=r, mode="compose")
     dlg.run()
-    check(f"槽位映射 {stage}→{expect}", r.last_slot == expect)
+    check(f"槽位映射 {stage}→{expect}(compose)", r.last_slot == expect)
+for stage in compose_slots:
+    r2 = StubRouter("回复")
+    dlg2 = DialogueWorker({}, proj, stage, "hi", router=r2)   # 默认 discuss
+    dlg2.run()
+    expect2 = "helper" if stage != st.STAGE_CW_WORLDBOOK else "helper"
+    check(f"槽位映射 {stage}→{expect2}(discuss)", r2.last_slot == expect2)
 
 # ---- 4. 对话转写截断累积（≤4k 保尾）----
 state = st.load_state(proj)
