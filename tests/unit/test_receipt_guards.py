@@ -28,6 +28,9 @@ EVIDENCE_CALLEES = {"save_config", "save_state", "write_file", "set_chapter_lock
                     "register", "install", "set_items", "reset", "export",
                     "_cw_save_state", "saveChapterText", "zipfile", "write", "snapshot"}
 EXEMPT = {
+    ("app/ui/bridge.py", "_on_cw_deslop_done"): "去味效果在工作副本（cwProsePolished 信号驱动编辑器），内存生效类",
+    ("app/ui/bridge.py", "copyText"): "剪贴板 setText 即生效，无落盘语义",
+
     ("app/ui/bridge.py", "openProjDebugDir"): "目录创建类动作，openPath 即生效证据",
 }
 
