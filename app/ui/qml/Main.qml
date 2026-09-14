@@ -273,6 +273,21 @@ ApplicationWindow {
                             radius: 8
                             color: mainWindow.activePanel === modelData.key ? Theme.bgActive
                                  : navHover.containsMouse ? Theme.bgHover : "transparent"
+                            // U-13：流水线运行中全局「活着」信号（右下角呼吸点）
+                            Rectangle {
+                                visible: modelData.key === "pipeline" && bridge.isRunning
+                                width: 7; height: 7; radius: 3.5
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                color: Theme.success
+                                opacity: 0.9
+                                SequentialAnimation on opacity {
+                                    running: visible && Theme.motionOK
+                                    loops: Animation.Infinite
+                                    OpacityAnimator { from: 0.9; to: 0.25; duration: Theme.durLoop / 2 }
+                                    OpacityAnimator { from: 0.25; to: 0.9; duration: Theme.durLoop / 2 }
+                                }
+                            }
                             Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         }
                         AppIcon {
@@ -562,6 +577,8 @@ ApplicationWindow {
                         ToolTip.visible: hovered
                         ToolTip.text: "局部改写选中段落 · Ctrl+E"
                     }
+                    Rectangle { width: 1; height: 18; color: Theme.border
+                                Layout.alignment: Qt.AlignVCenter }   // U-19：主操作分组
                     AppButton {
                         iconName: "save"
                         text: bridge.editorDirty ? "● 保存" : "保存"
