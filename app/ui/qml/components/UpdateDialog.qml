@@ -27,7 +27,7 @@ Dialog {
         color: Theme.textPrimary
         font.family: Theme.uiFont
         font.pixelSize: Theme.fsTitle
-        font.bold: true
+        font.weight: Font.DemiBold
         padding: 4
     }
 

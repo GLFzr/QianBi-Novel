@@ -17,7 +17,7 @@ BASELINE = {
     "rgba_theme": 3,    # Qt.rgba(Theme.x.r, …) 手调淡底
     "duration_lit": 1, # duration: <数字字面量>
     "radius_lit": 60,   # radius: <数字字面量>
-    "bold": 80,         # font.bold: true（U-05 迁 font.weight 后只降）
+    "bold": 52,         # font.bold: true（U-05 迁 font.weight 后只降）
 }
 
 PATS = {

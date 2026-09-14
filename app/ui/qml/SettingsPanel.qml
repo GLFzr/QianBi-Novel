@@ -147,7 +147,7 @@ Item {
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsTitle
-                        font.bold: true
+                        font.weight: Font.DemiBold
                     }
                     Text {
                         text: ["连接与模型 · 任务槽位", "写作偏好 · 闸门", "编辑器 · 阅读", "备份 · 快捷键"][settings.settingsTab]

@@ -42,7 +42,7 @@ Item {
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsTitle
-                        font.bold: true
+                        font.weight: Font.DemiBold
                     }
                     Text {
                         text: bridge.progressText
@@ -143,7 +143,7 @@ Item {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 18
         }
         contentItem: Column {
@@ -214,7 +214,7 @@ Item {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
 
@@ -351,7 +351,7 @@ Item {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
         contentItem: Column {

@@ -36,7 +36,7 @@ Item {
                     color: Theme.textPrimary
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.fsTitle
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
                 Text {
                     text: shelf.items.length + " 本书"
@@ -221,7 +221,7 @@ Item {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
         contentItem: Column {

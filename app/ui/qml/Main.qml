@@ -1164,7 +1164,7 @@ ApplicationWindow {
                 color: Theme.textPrimary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsTitle
-                font.bold: true
+                font.weight: Font.DemiBold
             }
             Text {
                 text: "排版选项即时预览（前两章实际效果）· 导出后显示报告"
@@ -1356,7 +1356,7 @@ ApplicationWindow {
                 color: Theme.textPrimary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsTitle
-                font.bold: true
+                font.weight: Font.DemiBold
             }
             Text {
                 text: "据题材定位 + 全书大纲生成 · 自动保存到 设定/简介与标签.md · 流水线面板亦可生成"
@@ -1471,7 +1471,7 @@ ApplicationWindow {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             wrapMode: Text.Wrap
             padding: 16
         }
@@ -1542,7 +1542,7 @@ ApplicationWindow {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             wrapMode: Text.Wrap
             padding: 16
         }
@@ -1740,7 +1740,7 @@ ApplicationWindow {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
         contentItem: Column {
@@ -1959,7 +1959,7 @@ ApplicationWindow {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
         contentItem: Column {
@@ -2030,7 +2030,7 @@ ApplicationWindow {
                 color: Theme.textPrimary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsTitle
-                font.bold: true
+                font.weight: Font.DemiBold
             }
             Text {
                 text: "版本内容 vs 当前已保存内容：红=已移除 · 绿=新增 · 回退只进工作副本，保存后才提交"
@@ -2221,7 +2221,7 @@ ApplicationWindow {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
         contentItem: Column {

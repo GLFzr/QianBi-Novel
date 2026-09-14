@@ -63,7 +63,7 @@ Dialog {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
         }
         Text {
             text: "Agent 只摘录文档里真实写过的内容 · 拆出的每个部分先给你过一遍，勾选后才写入 · 已有章节一律不覆盖"

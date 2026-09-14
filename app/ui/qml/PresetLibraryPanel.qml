@@ -59,7 +59,7 @@ Item {
                     color: Theme.textPrimary
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.fsTitle
-                    font.bold: true
+                    font.weight: Font.DemiBold
                 }
                 AppBadge {
                     text: presets.length + " 项"

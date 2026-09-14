@@ -81,7 +81,7 @@ Item {
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.fsTitle
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         elide: Text.ElideRight
                         width: parent.width
                     }
@@ -710,7 +710,7 @@ Item {
             color: Theme.textPrimary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsTitle
-            font.bold: true
+            font.weight: Font.DemiBold
             padding: 16
         }
         contentItem: Column {
