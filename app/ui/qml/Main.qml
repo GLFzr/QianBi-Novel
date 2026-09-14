@@ -761,16 +761,30 @@ ApplicationWindow {
                     bottomPadding: 70
                     background: Rectangle { color: Theme.bgPage }
 
-                    // 流式输出时光标跟随末尾；非流式编辑时同步未保存状态（保存驱动）
+                    // U-12：流式跟随改「贴底才跟随」范式（移植 CwDialogueDock 正确实现）——
+                    // 上翻回看刚生成的句子不被顶走；回到贴底自动恢复跟随。
+                    // 平滑只作用于滚动（contentY Behavior），不动画文本本身（性能红线⑧）
+                    property bool followStream: true
                     onTextChanged: {
                         if (bridge.isStreaming) {
                             cursorPosition = text.length
                             Qt.callLater(function () {
                                 var fl = editor.flickableItem
-                                if (fl) fl.positionViewAtEnd()
+                                if (!fl) return
+                                if (editor.followStream) {
+                                    fl.contentY = Math.max(0, fl.contentHeight - fl.height)
+                                }
                             })
                         } else {
                             bridge.markEditorDirty(text)
+                        }
+                    }
+                    Connections {
+                        target: editor.flickableItem
+                        function onContentYChanged() {
+                            var fl = editor.flickableItem
+                            if (fl) editor.followStream =
+                                fl.atYEnd || fl.dragging || fl.flicking
                         }
                     }
                     // 选区浮动工具栏（共写：选中即打磨）
