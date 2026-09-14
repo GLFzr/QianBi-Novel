@@ -15,6 +15,13 @@
 - [ ] 探针全绿：probe_gate_flow / probe_gate_ui / probe_console / probe_chapter_lock（按改动面选）
 - [ ] 改过界面：`python tests/probe_qml_compile.py`（build_release 已必跑。QML 属性写错会让
       整棵界面树静默加载失败，单测与 prompt 基线都看不见它）
+- [ ] prompt 基线 + WIRING PASS：`python tests/probe_prompt_baseline.py`（54 装配点零漂移 + N-08 扩容断言）
+- [ ] 令牌计数门禁：`python -m pytest tests/unit/test_token_coverage.py`（字面量只准降）
+- [ ] 写盘↔内存 AST 门禁：`python -m pytest tests/unit/test_config_write_guard.py`
+- [ ] 能力清单对账 + 回执三态：`python -m pytest tests/unit/test_receipt_guards.py`
+- [ ] 模板装配冒烟：`python -m pytest tests/unit/test_template_smoke.py`
+- [ ] 探针舰队（离线子集，同 CI probes job）：逐支 rc=0 且读各自 PROBE_DONE 结论
+- [ ] 启动金标准：`python tests/check_layout.py`（rootObjects 非空 + 面板遍历 + 边界越界 0）
 - [ ] 改过更新链路：`python tests/probe_update_ui.py`（46 项、零真网络：通道回退、逐条死因、
       未验签不给安装按钮、离线导入、本机包哈希、限流、设置白名单、面板溢出）
 - [ ] 改过连接增删 / 配置迁移：`python tests/probe_conn_delete.py`（20 项：两步确认才删、
