@@ -466,9 +466,9 @@ def collect_needs_fix(state: dict) -> list:
         e["advisory"] = len(rf.get("advisory") or [])
         e["ts"] = rf.get("ts", "") or e["ts"]
         entries[num] = e
-    nhh = state.get("chapter_need_human") or {}
     for num in entries:
-        if str(num) in nhh:
+        # L1-14：走统一查询函数（原直读 state 键，读写口径分裂）
+        if st.is_chapter_need_human(state, num):
             entries[num]["needHuman"] = True
     return sorted(entries.values(), key=lambda e: e["num"])
 
@@ -2635,6 +2635,8 @@ class Bridge(QObject):
             if num in chapters and st.is_review_stale(self.proj, state, num):
                 state_str = "stale"
                 note = (note + " · " if note else "") + "结论已过期·待复审"
+            if st.is_chapter_need_human(state, num):
+                note = "已转人工" + (" · " + note if note else "")
             if num == self._cur_num and self._running:
                 state_str = "writing"
                 note = st.STEP_LABELS.get(self._cur_step, "")
@@ -2752,6 +2754,14 @@ class Bridge(QObject):
         self.currentChapterChanged.emit()
         self.refreshUsage()
         self._refresh_progress()
+        # L2-14（确认感第 2 层 P0）：章完成必须有可感知回执——出厂 gate_preset=off
+        # 下作者对「第 N 章写完了」曾经毫无感知
+        _ok = record.get("status") == "pass"
+        self.toast.emit("ok" if _ok else "warn",
+                        "第 %s 章「%s」已写完（%s 字）%s"
+                        % (record.get("num"), record.get("title") or "",
+                           record.get("words", 0),
+                           "" if _ok else "·有审校/AI味遗留，已标待修"))
         # v1.2 两档制：旧 auto+step_confirm 每章暂停分支已删——该语义由
         # gate_preset=border + gate_list=[G9]（G9 门）承担，迁移见 config._migrate_run_mode
 

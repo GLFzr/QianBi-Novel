@@ -19,7 +19,7 @@ import ast
 import json
 import os
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # tests/unit → 仓库根
 
 
 def _arg_repr(a: ast.expr) -> str:
@@ -125,3 +125,27 @@ def test_clear_chapter_step_scoped_to_chapter(tmp_path):
     assert raw and json.loads(raw)["num"] == 30, "跨章误清断点（L1-02 复发）"
     st.clear_chapter_step(proj, 30)            # 清对的章：真清
     assert st.load_state(proj).get("chapter_step") == ""
+
+
+def test_need_human_read_write_same_function(tmp_path):
+    """L1-14 语义钉：mark（写）与 bridge 侧查询（读）必须同一口径"""
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    from app import project
+    from app.core import state as st
+    proj = project.create_project(str(tmp_path), "口径书")
+    state = st.load_state(proj)
+    st.mark_chapter_need_human(proj, state, 7)
+    assert st.is_chapter_need_human(st.load_state(proj), 7) is True
+    assert st.is_chapter_need_human(st.load_state(proj), 8) is False
+    # bridge 侧 entries 构建走的是同一函数（原直读 state 键）
+    from app.ui import bridge as bridge_mod
+    state2 = st.load_state(proj)
+    state2["review_findings"] = {"7": {"blocking": ["x"], "verdict": "REJECT"}}
+    entries = bridge_mod.NeedsFixModel.collect(state2) if hasattr(
+        bridge_mod, "NeedsFixModel") else None
+    # 若 collect 不在模型上，直接验证纯函数路径（防 L1-14 退化：直读键绕过函数）
+    repo = ROOT
+    src = open(os.path.join(repo, "app", "ui", "bridge.py"), encoding="utf-8").read()
+    assert 'state.get("chapter_need_human")' not in src, \
+        "bridge 绕过 is_chapter_need_human 直读 state 键（L1-14 复发）"

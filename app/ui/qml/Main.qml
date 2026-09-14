@@ -110,7 +110,7 @@ ApplicationWindow {
     Shortcut {
         sequence: StandardKey.Save
         enabled: bridge.editorDirty && !bridge.isStreaming && bridge.canSaveEditor
-                 && !(bridge.cwMode === "cw" && bridge.chapterLocked)
+                 && !(bridge.chapterLocked)
         onActivated: mainWindow.saveEditor()
     }
     Shortcut {
@@ -567,14 +567,14 @@ ApplicationWindow {
                         text: bridge.editorDirty ? "● 保存" : "保存"
                         kind: bridge.editorDirty ? "primary" : "ghost"
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
-                                 && !(bridge.cwMode === "cw" && bridge.chapterLocked)
+                                 && !(bridge.chapterLocked)
                         onClicked: mainWindow.saveEditor()
                         ToolTip.visible: hovered
                         ToolTip.text: bridge.editorDirty ? "有未保存修改，保存后产生新版本" : "保存正文并生成新版本"
                     }
                     // 终稿锁定徽章 + 解锁（M4：章节确定=锁定；显式解锁唯一放行通道）
                     Rectangle {
-                        visible: bridge.cwMode === "cw" && bridge.chapterLocked
+                        visible: bridge.chapterLocked
                         width: lockBadgeText.implicitWidth + 20
                         height: 22
                         radius: Theme.rLg
@@ -592,7 +592,7 @@ ApplicationWindow {
                         }
                     }
                     AppButton {
-                        visible: bridge.cwMode === "cw" && bridge.chapterLocked
+                        visible: bridge.chapterLocked
                         text: "解锁"
                         kind: "ghost"
                         height: 26
@@ -726,7 +726,7 @@ ApplicationWindow {
                     id: editor
                     objectName: "mainEditor"
                     text: bridge.isStreaming ? (mainWindow.edPrefs.streamSmooth ? mainWindow.streamShown : bridge.liveDraftText) : bridge.chapterText
-                    readOnly: bridge.isStreaming || (bridge.cwMode === "cw" && bridge.chapterLocked)
+                    readOnly: bridge.isStreaming || (bridge.chapterLocked)
                     color: Theme.textPrimary
                     font.family: Theme.serifFont
                     font.pixelSize: Math.round(17 * (mainWindow.edPrefs.fontScale || 1.0))
