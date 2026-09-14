@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""GitHub 发布包镜像（GUI-only，不进 dual_sync 共享层）
+"""GitHub 发布包镜像（GUI-only）
 
 为什么要有这张表：Release 资产 53MB 走 github.com 直连，没挂代理的国内用户
 经常「下一半被重置」。清单通道（raw/jsDelivr/Pages）只解决 1KB 的 latest.json，

@@ -23,7 +23,6 @@
       以前每次 `save_config` 都在写真凭据管理器，只是值相同看不出来；别把这道沙箱拆掉
 - [ ] 改过关于页：`python tests/probe_about_ui.py`
 - [ ] 更新功能不碰 LLM prompt：`probe_prompt_baseline` 必须仍是**零漂移**（漂了就是改错地方了）
-- [ ] TUI `run.py --smoke` 全绿（共享层改动时必跑）
 - [ ] 涉流水线改动：≥3 章真机小 e2e（产物留档）
 - [ ] **禁止 `--skip-tests` / `--skip-probe` 发版**
 

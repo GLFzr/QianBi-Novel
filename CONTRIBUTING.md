@@ -28,7 +28,6 @@ python -m venv .venv
 - 动了**提示词装配**（`app/prompts/`、预设字段、装配层）：`tests/probe_prompt_baseline.py` 会红，
   逐字确认 diff 是你有意为之后 `--update-baseline`，并在 PR 里说明改了哪条链路；
 - 动了**共享业务核心**（`app/core`、`app/llm`、`app/prompts`、`app/presets`、`app/wb.py`）：
-  必须跑 `scripts/dual_sync_check.py`，与 `qianbi-Novel-TUI` 双端同步（水印机制见 README「开发」一节）；
 - 新功能请带测试：纯逻辑进 `tests/unit`，链路行为写成 `probe_*.py`。
 
 ## 提交与 PR

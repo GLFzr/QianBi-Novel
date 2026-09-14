@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""更新载荷的下载与校验（GUI-only，不进 dual_sync 共享层）
+"""更新载荷的下载与校验（GUI-only）
 
 门在调用方：只有 `update_check.CheckResult.can_install`（清单验签通过 + 确实有更新）
 才会走到这里；本模块自己再验一次，因为「谁调我」这件事迟早会被人改掉。

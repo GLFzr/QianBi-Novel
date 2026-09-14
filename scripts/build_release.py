@@ -216,7 +216,7 @@ def main():
     else:
         print("[WARN] --skip-tests：质量闸门已跳过（发版禁用）")
 
-    # ---- 2.5 不可跳过的七道闸门 ----
+    # ---- 2.5 不可跳过的六道闸门 ----
     # 这几条原先只写在 docs/release_checklist.md 里靠人记得跑，等于没有闸门：
     # 一次静默的 prompt 断链、一个写错的 QML 属性或共享层漂移，照样能一路打完安装包。
     # 私钥泄漏扫描、更新链路与连接删除探针也放进来，是因为它们的坏法一样静默——
@@ -256,14 +256,8 @@ def main():
          "两步确认 / Key 随连接销毁 / 退役预设护栏有断裂" if r.returncode
          else "20 项全过（凭据走进程内沙箱）")
 
-    r = subprocess.run([sys.executable, "scripts/dual_sync_check.py"], cwd=ROOT)
-    if r.returncode == 2:
-        # 退出码 2 = 目录无效；从本仓库跑 GUI 必然有效，故只可能是 TUI 未检出
-        print("[WARN] 共享层同源检查：未找到 TUI 检出，已跳过（rc=2）")
-    else:
-        step("共享层同源检查", r.returncode == 0,
-             "有漂移：改 app/core|llm|prompts|presets 须双端同步或在 EXPECTED_DIFFS 登记"
-             if r.returncode else "同步")
+    # L1-17（§9-Q2 裁决）：TUI 已彻底删除，「共享层同源」闸门随之退役
+    # （该闸门对 rc=2 只 WARN 跳过，事实上已不存在）——发布闸门七道改六道。
 
     # ---- 3. version_info.txt（版本资源，动态生成不入库）----
     parts = __version__.split(".")

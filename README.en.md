@@ -447,7 +447,6 @@ app/
 scripts/
   build_release.py      one-shot release pipeline (quality gates → version info → packaging →
                           smoke test → digest diff)
-  dual_sync_check.py    shared-layer drift check (file level + symbol level AST digests)
 tests/
   unit/                 50 files / 594 offline tests
   probe_*.py            45 headless chain probes
@@ -475,7 +474,6 @@ docs/                   design & planning docs, privacy notice
 
 ```bash
 .venv/Scripts/python scripts/build_release.py     # full release pipeline
-.venv/Scripts/python scripts/dual_sync_check.py   # shared-layer drift check
 ```
 
 This project shares its business core with its sibling `qianbi-Novel-TUI` (a Textual terminal
@@ -484,7 +482,6 @@ version): `app/core`, `app/llm`, `app/prompts`, `app/presets` and `app/wb.py`.
 Changes to the shared layer must be mirrored on both ends. Beyond file-level comparison there is
 a **symbol-level gate**: key symbols are hashed by AST structure (comments, blank lines and line
 endings don't count), which bypasses file-level exemptions. Symbols where the GUI intentionally
-runs ahead must be registered in `DEFERRED_SYMBOLS` with "reason + the TUI's watermark at the
 time" — if the watermark changed, the TUI was edited too, and it fails loudly.
 
 ---

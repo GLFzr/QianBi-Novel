@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """外部文档一键导入：拆解 → 预览映射 → 作者确认后才写盘
 
-GUI 独有模块（放 app 根，不进 dual_sync 的 SHARED_ROOT_FILES：拆解 prompt 与各落点
+GUI 独有模块（放 app 根：拆解 prompt 与各落点
 的写法都服务于导入对话框，TUI 没有这个入口）。
 
 作者提的两条硬约束，这里不是写进 prompt 祈祷模型自觉，而是各有机器兑现：

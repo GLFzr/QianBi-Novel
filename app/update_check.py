@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""版本清单获取：多通道 + 代理 + 本地缓存 + 验签（GUI-only，不进 dual_sync 共享层）
+"""版本清单获取：多通道 + 代理 + 本地缓存 + 验签（GUI-only）
 
 为什么不「一个 URL 拉 JSON」就完事：
     国内 raw.githubusercontent 常年 DNS 污染、Release 资产 CDN 会被重置，单通道失败在

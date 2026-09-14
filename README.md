@@ -444,7 +444,6 @@ app/
       components/       25 个组件（ReaderView / CwDialogueDock / ImportDialog / ReviewIssueDialog / …）
 scripts/
   build_release.py      一键发布流水线（质量闸门 → 版本资源 → 打包 → 冒烟 → 摘要对拍）
-  dual_sync_check.py    共享层漂移检查（文件级 + 符号级 AST 摘要）
 tests/
 # 千笔一文 Novel
 
@@ -489,7 +488,6 @@ tests/
 
 ```bash
 .venv/Scripts/python scripts/build_release.py     # 完整发布流水线
-.venv/Scripts/python scripts/dual_sync_check.py   # 共享层漂移检查
 ```
 
 本项目与同源的 `qianbi-Novel-TUI`（Textual 终端版）共享业务核心层：
@@ -497,7 +495,6 @@ tests/
 
 共享层改动必须双端同步。除了文件级比对，还有**符号级门禁**：
 对关键符号做 AST 结构哈希（注释/空行/换行符不计），绕开文件级豁免；
-GUI 先行暂不同步的符号要在 `DEFERRED_SYMBOLS` 登记「原因 + TUI 当时水印」——
 水印变了说明 TUI 也动过，直接炸。
 
 ---

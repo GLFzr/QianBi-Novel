@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """世界书装配内核（SillyTavern character book 路线）
 
-**双端共享模块**：本文件在 qianbi-novel(GUI) 与 qianbi-Novel-TUI 之间必须逐字节一致
-（scripts/dual_sync_check.py 的 SHARED_ROOT_FILES 硬校验）。放在 app 根而不是 app/core，
-是因为 app/project.py 依赖零副作用（只 import os/re/tempfile），不能被
-app/core/__init__.py 的 PySide6 导入链拖住——CLI/脚本也直接 import project。
+放在 app 根而不是 app/core，是因为 app/project.py 依赖零副作用（只 import
+os/re/tempfile），不能被 app/core/__init__.py 的 PySide6 导入链拖住——CLI/脚本也直接
+import project。（历史注记：本模块曾是 GUI/TUI 双端共享件，TUI 已删除——L1-17。）
 
 世界书文件格式契约（人工撰写与反哺写入都要遵守，装配层依赖）：
 1. 条目块内**禁用** ``##`` / ``###`` 标题 —— memory.py 以 ``^##\\s+[^#]`` 判定

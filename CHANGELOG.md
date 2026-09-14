@@ -1,5 +1,11 @@
 # 更新日志
 
+> 历史说明（2026-09-14 归档）：本项目曾有同源 TUI 版（qianbi-Novel-TUI），双端
+> 共享层同步由 `dual_sync_check.py` 门禁约束；TUI 已彻底删除，该门禁与
+> `DEFERRED_SYMBOLS` 登记制一并退役（0.20.0 轮 L1-17，§9-Q2 裁决）。下文涉及
+> 「双端同步 / TUI 侧延后」的条目均为已归档历史，不再有效。
+
+
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 > 版本号唯一来源为 `app/__init__.py` 的 `__version__` 常量，本文件与 README、git tag 均以其为准。
