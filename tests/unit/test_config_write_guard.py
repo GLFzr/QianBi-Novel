@@ -16,6 +16,7 @@ _patch_updates——同族七处发作。病根：``cfg_mod.save_config(新字�
 持久化（save_config(DEFAULT_CONFIG) 等）不在本族语义内。
 """
 import ast
+import json
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -109,3 +110,18 @@ def test_set_setting_writes_shared_cfg(tmp_path):
     assert res.get("ok") is True
     assert shared["gates"]["review_enabled"] is True, \
         "共享字典未被改——写盘不写内存复发（L1-01）"
+
+
+def test_clear_chapter_step_scoped_to_chapter(tmp_path):
+    """L1-02 语义钉：清 A 章断点不得动 B 章断点"""
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    from app import project
+    from app.core import state as st
+    proj = project.create_project(str(tmp_path), "断点守卫")
+    st.save_chapter_step(proj, 30, "draft", draft_path="x.md")
+    st.clear_chapter_step(proj, 12)            # 重写第 12 章：不得动第 30 章断点
+    raw = st.load_state(proj).get("chapter_step")
+    assert raw and json.loads(raw)["num"] == 30, "跨章误清断点（L1-02 复发）"
+    st.clear_chapter_step(proj, 30)            # 清对的章：真清
+    assert st.load_state(proj).get("chapter_step") == ""

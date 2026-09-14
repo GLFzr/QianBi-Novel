@@ -583,8 +583,19 @@ def get_chapter_step(proj: str) -> dict:
         return {}
 
 
-def clear_chapter_step(proj: str):
+def clear_chapter_step(proj: str, num: int = None):
+    """清除章内断点。num 给定时只清**属于该章**的断点（L1-02：agent 重写第 12 章
+    不得动第 30 章的在途断点——旧实现无条件清，跨章误清=毁断点）；num=None 保持
+    旧无差别语义（仅限定稿收尾自己清自己）。"""
     state = load_state(proj)
-    if state.get("chapter_step"):
-        state["chapter_step"] = ""
-        save_state(proj, state)
+    raw = state.get("chapter_step")
+    if not raw:
+        return
+    if num is not None:
+        try:
+            if json.loads(raw).get("num") != int(num):
+                return          # 断点属于别的章：不动
+        except (ValueError, TypeError):
+            pass
+    state["chapter_step"] = ""
+    save_state(proj, state)

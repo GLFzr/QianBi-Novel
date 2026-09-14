@@ -160,7 +160,7 @@ def _tool_rewrite_chapter(proj, cfg, args) -> dict:
         return {"ok": False, "message": "没有第 %d 章的正文可重写" % num, "level": "warn"}
     versions.snapshot(proj, num, project.read_file(chapters[num]), "agent重写前归档")
     os.remove(chapters[num])
-    st.clear_chapter_step(proj)
+    st.clear_chapter_step(proj, num)   # L1-02：只清本章断点
     if guidance:
         project.write_file(os.path.join(proj, "追踪", "阶段指导.md"), guidance)
     return {"ok": True, "level": "warn",

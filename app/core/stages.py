@@ -2320,8 +2320,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         except Exception as e:  # noqa: BLE001
             ctx.log("warn", f"语料滚动失败（不阻断）：{e}")
 
-    # 断点收尾（方案 H）：本章全流程完成，清除章内断点
-    st.clear_chapter_step(proj)
+    # 断点收尾（方案 H）：本章全流程完成，清除章内断点（带章号，L1-02 守卫）
+    st.clear_chapter_step(proj, num)
     # S1 卷会话：逐章 append-only 落盘（v3 §2.4）——崩溃恢复后消息逐字节一致，
     # 服务端前缀缓存继续有效（不重放、不重新 miss）。
     _save_session_checkpoint(ctx, session, "定稿后")

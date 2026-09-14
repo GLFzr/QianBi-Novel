@@ -82,6 +82,7 @@ def main():
     # ---- 全局崩溃处理（T3.2）：未捕获异常脱敏落盘 + 主线程对话框 ----
     from .crash import CrashReporter
     reporter = CrashReporter()
+    reporter.install()   # N-01（P0）：钩子在 install() 里而全仓从未调用——不装=崩溃零落盘
     cfg = {}
     try:
         from . import config as cfg_mod
