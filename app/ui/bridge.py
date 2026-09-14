@@ -1536,6 +1536,8 @@ class Bridge(QObject):
         suffix = f"，并附想法：{idea[:60]}" if (idea or "").strip() else ""
         act = "回退重做" if action == "return" else "继续"
         self.logModel.append(level, f"决策门已{act}{suffix}")
+        # L2-19：门决策必须有界面回执（原来只进默认折叠的日志）
+        self.toast.emit(level, f"决策门已{act}{suffix}")
         # T4.3 M2：门决策镜像到 Console 对话区
         if action == "return":
             self._console_log("agent", f"↩ 已回退重做{(f'，想法：{idea[:60]}' if (idea or '').strip() else '')}")
@@ -2395,7 +2397,7 @@ class Bridge(QObject):
         self._last_edit_action = source or ""
 
     @Slot(str)
-    def saveChapterText(self, text: str):
+    def saveChapterText(self, text: str, quiet: bool = False):
         """保存驱动版本的唯一提交动作：
         ① 磁盘旧内容归档为新版本（内容有变化才产生）
         ② 新内容写正文 ③ 工作副本变干净
@@ -2425,7 +2427,8 @@ class Bridge(QObject):
             self.editorDirtyChanged.emit()
         if self.proj and self._cur_num:
             versions.discard_draft(self.proj, self._cur_num)
-        self.toast.emit("ok", f"已保存（{project.count_chars(text)} 字）"
+        if not quiet:   # L2-21：落稿场景由调用方合并 toast
+            self.toast.emit("ok", f"已保存（{project.count_chars(text)} 字）"
                          + (f" · 版本 v{v} 已归档" if v else " · 内容无变化，未产生新版本"))
         self.refreshQueue()
         # 读改揣摩（M4）：共写档 + 内容有变 + 开关开 + 改动量达阈值 → review 槽读一遍
@@ -2491,7 +2494,8 @@ class Bridge(QObject):
         self._editor_dirty = True
         self._working_text = content
         self._draft_timer.stop()
-        versions.discard_draft(self.proj, num)
+        # L2-20：恢复不再先销毁草稿——草稿保留到该章真正「保存」时才清
+        # （saveChapterText 内有 discard_draft）；用户恢复后不保存直接走，草稿还在
         self.editorDirtyChanged.emit()
         self.chapterFindingsChanged.emit()
         self.toast.emit("ok", f"已恢复第 {num} 章未保存草稿（工作副本，点「保存」提交为新版本）")
@@ -2799,7 +2803,10 @@ class Bridge(QObject):
         self.currentStepChanged.emit()
         self.refreshQueue()
         if reason == "done":
-            self.toast.emit("ok", "全书完本")
+            self.toast.emit("ok", "全书完本：所有章节已定稿，可在「待修」入口复查或直接导出")
+        elif reason == "stopped":
+            # L2-24：跑完与被停要分得清——停止有受理提示，这里补终态提示
+            self.toast.emit("info", "流水线已停止：进度已保存，点「开始」从缺失章续跑")
         # 检查出问题 → 汇总待修并询问作者是否一键修复（跑完即触发）
         nf = self._needs_fix_entries()
         if nf:
@@ -4217,7 +4224,9 @@ class Bridge(QObject):
         if not body.strip():
             self.toast.emit("warn", "没能从回复中提取出正文")
             return
-        self.saveChapterText(body)
+        # L2-21：saveChapterText 会发自己的「已保存」toast——这里先落盘再合并成一条结论，
+        # 避免「已保存」被下一条立刻覆盖（自相遮蔽）
+        self.saveChapterText(body, quiet=True)
         self.toast.emit("ok", f"已提取正文到第 {self._cur_num} 章（{project.count_chars(body)} 字），请核对后点「确定」锁定")
 
     def _start_cw_supervisor(self):
