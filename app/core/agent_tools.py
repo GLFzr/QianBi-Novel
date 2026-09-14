@@ -182,6 +182,16 @@ def _tool_set_setting(proj, cfg, args) -> dict:
     return {"ok": True, "level": "info", "message": "已%s「%s」" % ("开启" if on else "关闭", key)}
 
 
+# L1-07：共写档界面动作的工具注册（fn 为空 = 由 bridge 在派发面接管执行；
+# 注册在此是让能力清单 ↔ 注册表对账成立，解析器也知道这些动作存在）
+UI_TOOLS = {
+    "cw_deslop": {"label": "共写正文去AI味", "level": "ui"},
+    "cw_review": {"label": "共写正文审校", "level": "ui"},
+    "cw_generate_draft": {"label": "生成共写草案", "level": "ui"},
+    "cw_prose_to_editor": {"label": "草案落稿到编辑器", "level": "ui"},
+    "cw_rollback_stage": {"label": "回退共写阶段", "level": "ui"},
+}
+
 TOOLS = {
     "status": {"label": "查看流水线状态", "level": "readonly", "fn": _tool_status},
     "read_chapter": {"label": "读某章正文", "level": "readonly", "fn": _tool_read_chapter},
@@ -318,9 +328,15 @@ def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
 
 def execute(name: str, args: dict, proj: str, cfg: dict, *, pipeline_running: bool = False) -> dict:
     """执行工具。流水线运行中：readonly 放行，写操作拒绝（防对运行中的内存状态做手术）。"""
-    tool = TOOLS.get(name)
+    tool = TOOLS.get(name) or UI_TOOLS.get(name)
     if not tool:
         return {"ok": False, "level": "warn", "message": "未知指令：%s" % name}
+    if tool["level"] == "ui":
+        # L1-07：UI 工具不经 agent_tools 执行——bridge 派发面在共写对话里接管；
+        # 走到这里的（比如自动档 Console）明确说做不到并指路，不再变成一段聊天
+        return {"ok": False, "level": "warn",
+                "message": "「%s」是共写档界面动作：切到共写档，在对话区说或点对应按钮即可。"
+                           % tool["label"]}
     if pipeline_running and tool["level"] != "readonly":
         return {"ok": False, "level": "warn",
                 "message": "流水线正在运行，「%s」需要先停止流水线再执行（决策门内可用「回退」按钮）。"
@@ -332,13 +348,16 @@ def execute(name: str, args: dict, proj: str, cfg: dict, *, pipeline_running: bo
 
 
 def help_text() -> str:
+    ui_lines = "".join("· 共写动作（共写档对话区可用）：%s\n" % t["label"]
+                       for t in UI_TOOLS.values())
     return ("可用指令（自然语言或 / 前缀）：\n"
             "· 状态：「现在进度怎么样」\n"
             "· 读章：「看看第3章正文」\n"
             "· 回退重跑：「回退到去味之前」「重跑第4章审校」\n"
             "· 重新生成细纲：「重新生成第3章的细纲」\n"
             "· 重写本章（可带指导）：「重写第2章，铺垫再足一点」\n"
-            "· 设置：「关闭人工审校」「开启离峰挂机」")
+            "· 设置：「关闭人工审校」「开启离峰挂机」\n"
+            + ui_lines.rstrip("\n"))
 
 
 # ---------- L2：LLM 意图兜底（规则未命中时的口语化泛化） ----------

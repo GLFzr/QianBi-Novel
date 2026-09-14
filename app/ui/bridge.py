@@ -3547,6 +3547,9 @@ class Bridge(QObject):
         instr = agent_tools.parse_instruction(
             text, default_chapter=int(self._cur_num or 0))
         if instr and (text.startswith("/") or instr[2] == "guess"):
+            if instr[0] in agent_tools.UI_TOOLS:
+                self._ui_tool_dispatch(instr[0])
+                return
             res = agent_tools.execute(instr[0], instr[1], self.proj, self.cfg,
                                       pipeline_running=self._running)
             # L1-10：破坏性工具回执说「下次启动流水线」，共写档启动是被拦的——补实话
@@ -3567,6 +3570,9 @@ class Bridge(QObject):
         if self._looks_like_instruction(text):
             llm_instr = self._parse_instruction_llm_safe(text)
             if llm_instr:
+                if llm_instr[0] in agent_tools.UI_TOOLS:
+                    self._ui_tool_dispatch(llm_instr[0])
+                    return
                 res = agent_tools.execute(llm_instr[0], llm_instr[1], self.proj, self.cfg,
                                           pipeline_running=self._running)
                 if agent_tools.TOOLS.get(llm_instr[0], {}).get("level") == "destructive"                         and self._get_cw_mode() == "cw":
@@ -3629,6 +3635,35 @@ class Bridge(QObject):
             except Exception:  # noqa: BLE001
                 pass
             return None
+
+    def _ui_tool_dispatch(self, name: str):
+        """L1-07：共写界面动作的派发面——Agent 话术真实驱动 dock 同款能力"""
+        label = agent_tools.UI_TOOLS[name]["label"]
+        if self._get_cw_mode() != "cw":
+            self.toast.emit("warn", "「%s」是共写档动作：请先切到共写档" % label)
+            return
+        stage = self._get_cw_stage_key()
+        try:
+            if name == "cw_deslop":
+                if stage != st.STAGE_CW_PROSE:
+                    self.toast.emit("warn", "去AI味只在共写正文阶段可用"); return
+                self.deslopCwProse()
+            elif name == "cw_review":
+                if stage != st.STAGE_CW_PROSE:
+                    self.toast.emit("warn", "审校只在共写正文阶段可用"); return
+                self.reviewCwProse()
+            elif name == "cw_generate_draft":
+                if stage != st.STAGE_CW_PROSE:
+                    self.toast.emit("warn", "草案生成只在共写正文阶段可用"); return
+                self.generateCwDraft()
+            elif name == "cw_prose_to_editor":
+                self.proseToEditor()
+            elif name == "cw_rollback_stage":
+                self.toast.emit("warn", "回退阶段请点共写步骤条上的目标阶段（可回看已到达的阶段）")
+                return
+            self._console_log("agent", "已执行：%s" % label)
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", "%s 执行失败：%s" % (label, e))
 
     def _cw_tool_reply(self, instr_text: str, res: dict):
         """Agent 工具执行结果回显到共写转写（user 指令 + agent 结果），并刷新 UI"""
