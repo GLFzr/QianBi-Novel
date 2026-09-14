@@ -16,7 +16,7 @@ ScrollBar {
         color: ctl.pressed ? Theme.borderStrong
              : ctl.hovered ? Theme.borderStrong
              : Theme.border
-        Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on color { ColorAnimation { duration: Theme.durFast } }
     }
     background: Item {}
 }

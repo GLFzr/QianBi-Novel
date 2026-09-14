@@ -704,7 +704,7 @@ Item {
                                         required property var modelData
                                         height: 26
                                         width: rgText.implicitWidth + 18
-                                        radius: 7
+                                        radius: Theme.rMd
                                         color: settings.regexSem === modelData[1] ? Theme.accentSoft : "transparent"
                                         border.width: 1
                                         border.color: settings.regexSem === modelData[1] ? Theme.accent : Theme.border
@@ -909,7 +909,7 @@ Item {
                                     model: [{ t: "小", v: 0.9 }, { t: "标准", v: 1.0 }, { t: "大", v: 1.12 }, { t: "特大", v: 1.25 }]
                                     delegate: Rectangle {
                                         required property var modelData
-                                        height: 26; radius: 7
+                                        height: 26; radius: Theme.rMd
                                         width: fsText.implicitWidth + 16
                                         color: Math.abs((settings.ep.fontScale || 1.0) - modelData.v) < 0.01
                                                ? Theme.accentSoft : "transparent"
@@ -1099,7 +1099,7 @@ Item {
                                     spacing: 10
                                     Layout.fillWidth: true
                                     Rectangle {
-                                        width: 72; height: 24; radius: 6
+                                        width: 72; height: 24; radius: Theme.rMd
                                         color: Theme.bgHover
                                         border.width: 1; border.color: Theme.border
                                         Text { anchors.centerIn: parent; text: modelData[0]; color: Theme.accent; font.family: Theme.monoFont; font.pixelSize: 11 }

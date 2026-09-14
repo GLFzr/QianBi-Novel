@@ -18,8 +18,8 @@ ComboBox {
         color: !ctl.enabled ? Theme.bgHover : ctl.hovered ? Theme.bgHover : Theme.bgCard
         border.width: 1
         border.color: ctl.activeFocus ? Theme.accent : Theme.border
-        Behavior on border.color { ColorAnimation { duration: 110 } }
-        Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
+        Behavior on color { ColorAnimation { duration: Theme.durFast } }
     }
 
     contentItem: Item {
@@ -56,7 +56,7 @@ ComboBox {
         y: ctl.height / 2 - height / 2
         size: 12
         color: ctl.hovered ? Theme.textPrimary : Theme.textSecondary
-        Behavior on color { ColorAnimation { duration: 110 } }
+        Behavior on color { ColorAnimation { duration: Theme.durFast } }
     }
 
     delegate: ItemDelegate {

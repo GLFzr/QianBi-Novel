@@ -27,7 +27,7 @@ SpinBox {
         color: Theme.bgHover
         border.width: 1
         border.color: spin.activeFocus ? Theme.accent : Theme.border
-        Behavior on border.color { ColorAnimation { duration: 120 } }
+        Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
     }
 
     up.indicator: Rectangle {

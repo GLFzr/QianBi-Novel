@@ -15,8 +15,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 刻意与写作主题解耦）……以实际 sweep 后计数冻结
 BASELINE = {
     "rgba_theme": 3,    # Qt.rgba(Theme.x.r, …) 手调淡底
-    "duration_lit": 24, # duration: <数字字面量>
-    "radius_lit": 85,   # radius: <数字字面量>
+    "duration_lit": 1, # duration: <数字字面量>
+    "radius_lit": 60,   # radius: <数字字面量>
     "bold": 80,         # font.bold: true（U-05 迁 font.weight 后只降）
 }
 

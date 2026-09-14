@@ -217,7 +217,7 @@ Rectangle {
                     delegate: Rectangle {
                         required property var modelData
                         height: 24
-                        radius: 6
+                        radius: Theme.rMd
                         width: rlText.implicitWidth + 14
                         color: rlHot.containsMouse ? Theme.bgHover : Theme.bgCard
                         border.width: 1
@@ -275,7 +275,7 @@ Rectangle {
                     delegate: Rectangle {
                         required property var modelData
                         height: 24
-                        radius: 6
+                        radius: Theme.rMd
                         width: pstText.implicitWidth + 14
                         color: bridge.cwPreset === modelData.id
                                ? Theme.accentSoft : Theme.bgCard

@@ -39,8 +39,8 @@ Row {
                     onMyIdxChanged: if (myIdx < stepper.order.indexOf(stepper.stageKey)) popAnim.restart()
                     SequentialAnimation {
                         id: popAnim
-                        NumberAnimation { target: parent; property: "scale"; to: 1.5; duration: 120; easing.type: Easing.OutCubic }
-                        NumberAnimation { target: parent; property: "scale"; to: 1.0; duration: 200; easing.type: Easing.InOutQuad }
+                        NumberAnimation { target: parent; property: "scale"; to: 1.5; duration: Theme.durFast; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: parent; property: "scale"; to: 1.0; duration: Theme.durNormal; easing.type: Easing.InOutQuad }
                     }
                 }
                 Text {

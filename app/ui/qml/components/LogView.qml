@@ -6,7 +6,7 @@ Rectangle {
     id: logBox
     property alias model: list.model
 
-    radius: 10
+    radius: Theme.rLg
     color: Theme.bgLog
     border.width: 1
     border.color: Theme.border

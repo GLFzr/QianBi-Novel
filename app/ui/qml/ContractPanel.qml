@@ -323,7 +323,7 @@ Item {
                                     required property var modelData
                                     height: 24
                                     width: lvOpt.implicitWidth + 16
-                                    radius: 6
+                                    radius: Theme.rMd
                                     color: contractPanel.editLevel === modelData[0]
                                            ? Theme.accentSoft
                                            : "transparent"

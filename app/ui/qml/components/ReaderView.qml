@@ -188,7 +188,7 @@ Rectangle {
     }
     function hideDrawer() { drawer.opened = false }
 
-    Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: Theme.durNormal; easing.type: Easing.OutCubic } }
 
     // ---- 顶部栏 ----
     Rectangle {
@@ -240,7 +240,7 @@ Rectangle {
                     // 未定稿徽章（工作副本 / 流式中）
                     Rectangle {
                         visible: isDraft || isLive
-                        height: 20; radius: 10
+                        height: 20; radius: Theme.rLg
                         width: badgeText.implicitWidth + 16
                         color: isLive ? Qt.rgba(0.89, 0.70, 0.36, 0.16) : Qt.rgba(0.86, 0.47, 0.38, 0.14)
                         border.width: 1
@@ -400,7 +400,7 @@ Rectangle {
                     width: parent.width * reader.progressPercent / 100
                     height: parent.height; radius: 2
                     color: th.accent
-                    Behavior on width { NumberAnimation { duration: 120 } }
+                    Behavior on width { NumberAnimation { duration: Theme.durFast } }
                 }
             }
             Text {
@@ -425,7 +425,7 @@ Rectangle {
                 color: reader.th.faint
                 font.pixelSize: 30
                 opacity: hot.containsMouse ? 1 : 0.35
-                Behavior on opacity { NumberAnimation { duration: 150 } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durNormal } }
             }
             MouseArea {
                 id: hot
@@ -453,7 +453,7 @@ Rectangle {
         function show() { opacity = 1; hideTimer.restart() }
         function hide() { opacity = 0 }
 
-        Behavior on opacity { NumberAnimation { duration: 130 } }
+        Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
         Timer { id: hideTimer; interval: 6000; onTriggered: annBar.hide() }
 
         Row {
@@ -467,7 +467,7 @@ Rectangle {
                         { k: "highlight_red", c: th.hlR, t: "红色高亮" }]
                 delegate: Rectangle {
                     required property var modelData
-                    width: 20; height: 20; radius: 10
+                    width: 20; height: 20; radius: Theme.rLg
                     color: modelData.c
                     border.width: 2
                     border.color: dotHot.containsMouse ? th.accent : "transparent"
@@ -509,7 +509,7 @@ Rectangle {
         modal: true
         padding: 0
         background: Rectangle { radius: 14; color: reader.th.card; border.width: 1; border.color: reader.th.border }
-        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150 } }
+        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal } }
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 16
@@ -663,7 +663,7 @@ Rectangle {
                             Layout.margins: 10
                             Layout.fillWidth: true
                             height: markCol.implicitHeight + 16
-                            radius: 10
+                            radius: Theme.rLg
                             color: Qt.rgba(0.5, 0.5, 0.5, 0.07)
                             border.width: 1
                             border.color: reader.th.border
@@ -734,7 +734,7 @@ Rectangle {
                             Layout.margins: 10
                             Layout.fillWidth: true
                             height: 40
-                            radius: 10
+                            radius: Theme.rLg
                             color: Qt.rgba(0.89, 0.70, 0.36, 0.08)
                             border.width: 1
                             border.color: reader.th.border
@@ -865,7 +865,7 @@ Rectangle {
         property bool dimmed: false
         signal clicked()
         height: 30
-        radius: 6
+        radius: Theme.rMd
         width: row2.implicitWidth + 16
         opacity: dimmed ? 0.4 : 1
         color: active ? Qt.rgba(0.6, 0.6, 0.6, 0.18)
@@ -952,7 +952,7 @@ Rectangle {
                 required property int index
                 property var value: seg.values[index]
                 height: 27
-                radius: 7
+                radius: Theme.rMd
                 width: segText.implicitWidth + 14
                 color: seg.current === value ? reader.th.accent : Qt.rgba(0.5, 0.5, 0.5, 0.1)
                 border.width: 1

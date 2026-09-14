@@ -233,7 +233,7 @@ Item {
                                             width: 13; height: 13
                                             anchors.verticalCenter: parent.verticalCenter
                                             Rectangle {
-                                                anchors.fill: parent; radius: 6.5; color: "transparent"
+                                                anchors.fill: parent; radius: Theme.rMd /*8→8*/; color: "transparent"
                                                 border.width: 2
                                                 border.color: Theme.accentSoft
                                             }

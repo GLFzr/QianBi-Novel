@@ -37,7 +37,7 @@ Column {
             color: Theme.bgHover
             border.width: 1
             border.color: input.activeFocus ? Theme.accent : Theme.border
-            Behavior on border.color { ColorAnimation { duration: 120 } }
+            Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
         }
     }
 }

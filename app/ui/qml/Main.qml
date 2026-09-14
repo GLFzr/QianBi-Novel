@@ -243,7 +243,7 @@ ApplicationWindow {
                 // Logo · 极简方标
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    width: 28; height: 28; radius: 6
+                    width: 28; height: 28; radius: Theme.rMd
                     color: Theme.textPrimary
                     Text {
                         anchors.centerIn: parent
@@ -273,7 +273,7 @@ ApplicationWindow {
                             radius: 8
                             color: mainWindow.activePanel === modelData.key ? Theme.bgActive
                                  : navHover.containsMouse ? Theme.bgHover : "transparent"
-                            Behavior on color { ColorAnimation { duration: 100 } }
+                            Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         }
                         AppIcon {
                             anchors.centerIn: parent
@@ -311,7 +311,7 @@ ApplicationWindow {
                         color: updHover.containsMouse ? Theme.bgHover : "transparent"
                         border.width: bridge.updateAvailable ? 1.5 : (updateNav.failed ? 1 : 0)
                         border.color: bridge.updateAvailable ? Theme.accent : Theme.warn
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
                     }
                     AppIcon {
                         anchors.centerIn: parent
@@ -362,7 +362,7 @@ ApplicationWindow {
                         radius: 8
                         color: mainWindow.logVisible ? Theme.bgActive
                              : logHover.containsMouse ? Theme.bgHover : "transparent"
-                        Behavior on color { ColorAnimation { duration: 100 } }
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
                     }
                     AppIcon {
                         anchors.centerIn: parent
@@ -577,7 +577,7 @@ ApplicationWindow {
                         visible: bridge.cwMode === "cw" && bridge.chapterLocked
                         width: lockBadgeText.implicitWidth + 20
                         height: 22
-                        radius: 11
+                        radius: Theme.rLg
                         color: Theme.successSoft
                         border.width: 1
                         border.color: Theme.success
@@ -717,7 +717,7 @@ ApplicationWindow {
                         implicitWidth: 6
                         radius: 3
                         color: Theme.bgHover
-                        Behavior on implicitWidth { NumberAnimation { duration: 100 } }
+                        Behavior on implicitWidth { NumberAnimation { duration: Theme.durFast } }
                     }
                     background: Item {}
                 }
@@ -882,7 +882,7 @@ ApplicationWindow {
                         model: bridge.chapterFindings
                         delegate: Rectangle {
                             height: 22
-                            radius: 11
+                            radius: Theme.rLg
                             color: Theme.bgHover
                             Row {
                                 anchors.left: parent.left
@@ -1067,7 +1067,7 @@ ApplicationWindow {
         border.width: 1
         border.color: Theme.borderStrong
         opacity: visible ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: 120 } }
+        Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
 
         Row {
             id: selRow
@@ -1084,7 +1084,7 @@ ApplicationWindow {
                     required property var modelData
                     width: stBtnText.implicitWidth + 16
                     height: 26
-                    radius: 6
+                    radius: Theme.rMd
                     color: stBtnHover.containsMouse ? Theme.bgHover : "transparent"
                     Text {
                         id: stBtnText
@@ -1184,7 +1184,7 @@ ApplicationWindow {
                     model: [{ t: "txt（平台上传标准）", v: "txt" }, { t: "epub（阅读器通用）", v: "epub" }]
                     delegate: Rectangle {
                         required property var modelData
-                        height: 26; radius: 7
+                        height: 26; radius: Theme.rMd
                         width: fmtText.implicitWidth + 18
                         color: exportDialog.fmt === modelData.v ? Theme.accentSoft : "transparent"
                         border.width: 1
@@ -1207,7 +1207,7 @@ ApplicationWindow {
                     model: [{ t: "空行", v: "blank" }, { t: "分隔线", v: "line" }, { t: "分页符", v: "page" }]
                     delegate: Rectangle {
                         required property var modelData
-                        height: 24; radius: 6
+                        height: 24; radius: Theme.rMd
                         width: sepText.implicitWidth + 14
                         color: exportDialog.sep === modelData.v ? Theme.accentSoft : "transparent"
                         border.width: 1
@@ -1225,7 +1225,7 @@ ApplicationWindow {
                     model: 4
                     delegate: Rectangle {
                         required property int index
-                        height: 24; radius: 6
+                        height: 24; radius: Theme.rMd
                         width: tfText.implicitWidth + 14
                         color: exportDialog.titleFmt === index ? Theme.accentSoft : "transparent"
                         border.width: 1
@@ -1790,7 +1790,7 @@ ApplicationWindow {
                         required property var modelData
                         width: ctxText.implicitWidth + 18
                         height: 24
-                        radius: 6
+                        radius: Theme.rMd
                         color: mainWindow.rewriteCtxMode === modelData[1] ? Theme.accentSoft : "transparent"
                         border.width: 1
                         border.color: mainWindow.rewriteCtxMode === modelData[1] ? Theme.accent : Theme.border

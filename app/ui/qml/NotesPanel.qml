@@ -128,7 +128,7 @@ Item {
                                     model: [{ t: "下一章", v: "next" }, { t: "通用", v: "通用" }, { t: "指定章", v: "#" }]
                                     delegate: Rectangle {
                                         required property var modelData
-                                        height: 24; radius: 6
+                                        height: 24; radius: Theme.rMd
                                         width: scopeText.implicitWidth + 14
                                         color: (modelData.v === "#" ? scopeRow.scope.indexOf("#") === 0
                                                : scopeRow.scope === modelData.v)

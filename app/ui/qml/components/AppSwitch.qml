@@ -24,12 +24,12 @@ AbstractButton {
         y: ctl.height / 2 - height / 2
         width: 36
         height: 20
-        radius: 10
+        radius: Theme.rLg
         color: ctl.checked ? Theme.accent : Theme.bgActive
         border.width: 1
         border.color: ctl.checked ? Theme.accent : Theme.borderStrong
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Behavior on border.color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: Theme.durFast } }
+        Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
 
         Rectangle {
             id: knob
@@ -39,7 +39,7 @@ AbstractButton {
             height: 16
             radius: 8
             color: Theme.accentText
-            Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            Behavior on x { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
         }
     }
 

@@ -239,7 +239,7 @@ Item {
                     delegate: Rectangle {
                         width: ListView.view.width
                         height: 32
-                        radius: 6
+                        radius: Theme.rMd
                         color: fileList.currentIndex === index ? Theme.accentSoft : "transparent"
                         RowLayout {
                             anchors.verticalCenter: parent.verticalCenter
