@@ -559,13 +559,25 @@ Item {
                                     height: parent.height
                                     anchors.verticalCenter: parent.verticalCenter
                                     Rectangle {
+                                        id: trendBar
                                         anchors.bottom: parent.bottom
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         width: Math.max(4, parent.width - 2)
                                         height: Math.max(3, parent.height * modelData.words / pipeline.trendMaxWords)
                                         radius: 2
-                                        color: modelData.blocking > 0 ? Theme.dangerSoft
+                                        // U-20：hover 提亮 + 有阻断红/正常中性
+                                        color: barHover.containsMouse ? Theme.accentSoft
+                                             : modelData.blocking > 0 ? Theme.dangerSoft
                                              : Theme.bgActive
+                                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                                        MouseArea {
+                                            id: barHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            ToolTip.visible: containsMouse
+                                            ToolTip.text: "第" + modelData.num + " 章 · " + modelData.words + " 字"
+                                                          + (modelData.blocking > 0 ? " · 阻断 " + modelData.blocking : "")
+                                        }
                                     }
                                     // 阻断标记：柱顶小红点（语义色只占小面积）
                                     Rectangle {

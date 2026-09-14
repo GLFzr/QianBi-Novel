@@ -104,7 +104,9 @@ Rectangle {
             TextField {
                 id: ideaInput
                 Layout.fillWidth: true
-                placeholderText: "想法 / 修改意见（可留空）"
+                placeholderText: gateKey === "G8"
+                    ? "人工审校：每行一条**阻断级**问题；留空 = 放行"
+                    : "想法 / 修改意见（可留空）"
                 placeholderTextColor: Theme.textTertiary
                 color: Theme.textPrimary
                 font.family: Theme.uiFont

@@ -40,15 +40,15 @@ Rectangle {
                 elide: Text.ElideRight
             }
             Rectangle {
-                width: model.level !== "info" ? 3 : 0
+                width: 3
                 height: 10
                 radius: 2
                 anchors.verticalCenter: parent.verticalCenter
                 visible: model.level !== "info"
                 color: Theme.levelColor(model.level)
-                opacity: 0.8
-                // v1.2 动效：warn/error 色条入场展开（0→3）
-                Behavior on width { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
+                // N-11 红线修正：delegate 内禁 width 动画（牵连 Row 重排）——改 opacity 渐入
+                opacity: 0
+                Component.onCompleted: opacity = 0.8
                 Behavior on opacity { NumberAnimation { duration: Theme.durNormal } }
             }
             Text {
