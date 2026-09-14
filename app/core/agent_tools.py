@@ -162,7 +162,7 @@ def _tool_rewrite_chapter(proj, cfg, args) -> dict:
     if guidance:
         project.write_file(os.path.join(proj, "追踪", "阶段指导.md"), guidance)
     return {"ok": True, "level": "warn",
-            "message": "第 %d 章正文已归档并清除，重写指导已带入（%s）。下次启动流水线将重写本章。"
+            "message": "第 %d 章正文已归档并清除（留底 pipeline_debug/agent_tools/），重写指导已带入（%s）。下次启动流水线将重写本章。"
                        % (num, "含你的指导" if guidance else "无附加指导")}
 
 

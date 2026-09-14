@@ -2205,6 +2205,25 @@ class Bridge(QObject):
             self._console_log("user", text)
             self._console_log("agent", "已作为「带想法继续」送入当前决策门")
             return
+        # L1-04：/ 指令在自动档同样**真实执行**（占位符承诺过的「给 Agent 的指令」接线）
+        if text.startswith("/"):
+            if not self.proj:
+                self._console_log("agent", "当前未打开项目，指令无从执行")
+                return
+            from ..core import agent_tools
+            instr = agent_tools.parse_instruction(text, default_chapter=int(self._cur_num or 0))
+            if not instr:
+                msg = "没听懂这条指令，可用：" + agent_tools.help_text().split(chr(10))[1].strip()
+                self._console_log("agent", msg)
+                self.toast.emit("warn", msg)
+                return
+            name, args, _conf = instr
+            res = agent_tools.execute(name, args, self.proj, self.cfg,
+                                      pipeline_running=self._running)
+            self._console_log("user", text)
+            self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
+            self.toast.emit("ok" if res.get("ok") else "warn", str(res.get("message", ""))[:120])
+            return
         if self.proj and not self._running:
             self.toast.emit("warn", "流水线未运行，想法已保存为「下一章」")
         elif not self.proj:
