@@ -78,7 +78,9 @@ Rectangle {
                 color: Theme.textSecondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsTiny
-                elide: Text.ElideRight
+                // L2-11：多违规不再只露第一条——换行呈现（上限 3 条 + 余量计数）
+                wrapMode: Text.Wrap
+                maximumLineCount: 4
             }
             Text {
                 id: waitText
@@ -102,7 +104,7 @@ Rectangle {
             TextField {
                 id: ideaInput
                 Layout.fillWidth: true
-                placeholderText: "对这一步的想法 / 修改意见（留空直接继续；写了想法再按 继续=带想法走，回退=带想法重做）…"
+                placeholderText: "想法 / 修改意见（可留空）"
                 placeholderTextColor: Theme.textTertiary
                 color: Theme.textPrimary
                 font.family: Theme.uiFont
@@ -124,7 +126,7 @@ Rectangle {
                 enabled: gateBar.waiting
                 onClicked: gateBar.doNext()
                 ToolTip.visible: hovered
-                ToolTip.text: "回车 · 空想法=直接继续，有想法=带想法继续"
+                ToolTip.text: "继续：空想法=直接过门，有想法=想法带进下一步"
             }
             AppButton {
                 text: "回退"
@@ -134,7 +136,7 @@ Rectangle {
                 visible: gateBar.rollbackable
                 onClicked: gateBar.doReturn()
                 ToolTip.visible: hovered
-                ToolTip.text: "R · 带想法回退重做本步（产物先归档，正文走版本安全网）"
+                ToolTip.text: "回退：本步产物先归档再重做（G5 软门无产物，只带想法重来）"
             }
         }
 
