@@ -16,6 +16,7 @@ from PySide6.QtQuick import QQuickWindow  # noqa: F401  # 必须先于引擎加�
 from .. import config as cfg_mod
 from .. import mustscan, project, deslop, prompts, secrets
 from ..core import gates, state as st, versions
+from ..core.volume_session import _keep_aside
 from ..core.shared_prefix import project_header, chapter_header
 from ..core.orchestrator import Orchestrator
 from ..core.co_writing import CoWriting
@@ -3058,8 +3059,22 @@ class Bridge(QObject):
                 data.setdefault("bookmarks", [])
                 data.setdefault("position", 0.0)
                 return data
-        except (OSError, ValueError):
-            pass
+            raise ValueError("批注库顶层不是 JSON 对象")
+        except OSError:
+            pass    # 文件不存在=首次打开，正常空库
+        except ValueError:
+            # N-03：损坏的批注库绝不能当空库用——否则随后 _write_store 会把用户
+            # 批注整份覆写掉。复用 volume_session 的 _keep_aside（追加式，不覆盖
+            # 上一次现场）把坏文件留证为 .corrupt，再按空库打开并上界面告警。
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    _keep_aside(path + ".corrupt", f.read())
+            except OSError:
+                pass
+            self.toast.emit("warn",
+                            f"第 {num} 章批注库损坏，坏文件已留证为 .corrupt 并按空库打开"
+                            f"（证据不会被覆盖，可发给开发者找回）")
+            logger.warning("批注库损坏已隔离：%s", path, exc_info=True)
         return {"annotations": [], "bookmarks": [], "position": 0.0}
 
     def _write_store(self, proj: str, num: int, data: dict):

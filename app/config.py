@@ -81,7 +81,7 @@ DEFAULT_CONFIG = {
               SLOT_REVIEW: "ds-official-flash"},
     "gates": {"strategy": GATE_MARK_CONTINUE, "deslop_max_rounds": 2, "word_tolerance": 0.1,
               "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
-              "review_enabled": True, "review_max_rounds": 1,
+              "review_enabled": True, "review_max_rounds": 3,   # N-06：出厂 3（曾出厂 1 被读取点地板 3 永久吃掉，配置 <3 永不生效）；地板现改 1，配置真实生效
               "review_temperature": 0.2,   # 审校判定低温（单次覆盖，不改连接档案）
               "review_mode": "auto",       # auto=AI 六维审校 | manual=作者人工审校（门里填阻断问题）
               "review_votes": 3,           # 首扫多轮投票数（平票从严，阻塞需 ≥2 票）

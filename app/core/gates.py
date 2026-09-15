@@ -86,23 +86,45 @@ def resolve_failed(ctx, reason: str, gr: GateResult):
         ctx.log("warn", f"{reason}，已标记「待修」，继续写作（可在章节详情中人工修改）")
 
 
-def chapter_word_target(proj: str, num: int, default: int) -> int:
+def chapter_word_target(proj: str, num: int, default: int, source: list = None) -> int:
     """正文目标字数优先取本章细纲登记的字数目标（C2 联动）；缺省回退默认。
 
     防模型幻觉：细纲文本里的「字数目标」若与默认值偏差超过 50%，视为模型
     自造数字（曾出现细纲写 3000 而配置为 300 的污染），一律回退默认值。
+
+    N-07：细纲读取失败不再静默回落——warning 带原因；调用方可传 source 列表
+    接收取值出处（outline=细纲登记 / config_read_fail / config_deviation /
+    config_absent），供门摘要区分「按哪个数、是否回落」。阈值语义未动。
     """
+    _log = logging.getLogger("qianbi.gates")
     try:
         text = project.read_file(project.get_outline_path(proj, num))
-        m = re.search(r"字数目标\s*[：:]\s*(\d+)", text or "")
-        if m:
-            target = int(m.group(1))
-            if abs(target - default) <= default * 0.5:
-                return target
-            logging.getLogger("qianbi.gates").warning(
-                "细纲字数目标 %s 与配置 %s 偏差过大，按配置执行（防模型幻觉）", target, default)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        _log.warning("第 %s 章 细纲字数目标读取失败（%s），回落配置值 %s", num, e, default)
+        if source is not None:
+            source.append("config_read_fail")
+        return default
+    if not (text or "").strip():
+        # read_file 对缺失/空文件静默返回 ""——对字数闸门而言同样什么都没读到，
+        # 必须与「读到了但没登记」区分（N-07：否则按错阈值判，可误锁/误放）
+        _log.warning("第 %s 章 细纲不存在或为空，字数目标回落配置值 %s", num, default)
+        if source is not None:
+            source.append("config_read_fail")
+        return default
+    m = re.search(r"字数目标\s*[：:]\s*(\d+)", text or "")
+    if m:
+        target = int(m.group(1))
+        if abs(target - default) <= default * 0.5:
+            if source is not None:
+                source.append("outline")
+            return target
+        _log.warning("第 %s 章 细纲字数目标 %s 与配置 %s 偏差过大，按配置执行（防模型幻觉）",
+                     num, target, default)
+        if source is not None:
+            source.append("config_deviation")
+        return default
+    if source is not None:
+        source.append("config_absent")
     return default
 
 
@@ -120,13 +142,19 @@ def word_count_precheck(proj: str, num: int, prose: str, cfg: dict) -> tuple:
         return [], [], ""
     default = int((cfg or {}).get("writing", {}).get("chapter_word_target", 3000))
     tolerance = float(gates_cfg.get("word_tolerance", 0.1))
-    target = chapter_word_target(proj, num, default)
+    _src: list = []
+    target = chapter_word_target(proj, num, default, source=_src)
     actual = project.count_chars(prose or "")
     floor = int(target * (1 - tolerance))
     if actual >= floor:
         return [], [], ""
-    text = (f"[字数] 第{num}章正文 {actual} 字，低于目标 {target}"
-            f"（容差 {tolerance:.0%}，下限 {floor}），需扩写达标后再过审")
+    # N-07：门摘要写明目标字数取自哪、是否回落——短章申诉时能对上口径
+    _src_txt = {"outline": "细纲登记",
+                "config_read_fail": "配置值（细纲读取失败回落）",
+                "config_deviation": "配置值（细纲登记偏差过大回落）",
+                "config_absent": "配置值（细纲未登记）"}.get(_src[0] if _src else "", "配置值")
+    text = (f"[字数] 第{num}章正文 {actual} 字，低于目标 {target}（来源：{_src_txt}；"
+            f"容差 {tolerance:.0%}，下限 {floor}），需扩写达标后再过审")
     items = [{"dim": "D_PLOT", "level": "fail", "text": text,
               "quote": "", "root_layer": "ROOT_PROSE", "line": ""}]
     return items, [text], "REJECT"

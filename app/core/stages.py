@@ -409,6 +409,17 @@ def _session_seed(session, prose_text: str):
     return session
 
 
+def _review_round_cap(gates_cfg: dict) -> int:
+    """审校修复环轮数上限（N-06）：出厂 3，配置真实生效，地板 1。
+
+    旧实现出厂 1 + 读取点地板 max(...,3)，配置任何 <3 的值都被永久吃掉；
+    现出厂改 3、地板改 1——缺省行为不变（3），配置 1 ⇒ 上限 1。"""
+    try:
+        return max(1, int((gates_cfg or {}).get("review_max_rounds", 3)))
+    except (TypeError, ValueError):
+        return 3
+
+
 def _split_merged_summary(raw: str) -> tuple:
     """A11 合并摘要解析：按【章摘要】/【全局摘要】标记切分。章摘要取标记间的
     第一个非空行；任一节缺失/顺序颠倒返回空串（调用方回退旧路径或沿用旧值）。"""
@@ -2022,8 +2033,8 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         if blocking_review and all(str(b).startswith("[字数]") for b in blocking_review):
             _demote_word_block()
         review_rounds = 0
-        # v2 反馈环触发：verdict == REJECT/REJECT-HARD 且未达 3 次熔断
-        max_review_rounds = max(gates_cfg.get("review_max_rounds", 1), 3)
+        # v2 反馈环触发：verdict == REJECT/REJECT-HARD 且未达轮数熔断（N-06：上限由配置真实生效，地板 1）
+        max_review_rounds = _review_round_cap(gates_cfg)
         while blocking_review and review_rounds < max_review_rounds:
             if all(str(b).startswith("[字数]") for b in blocking_review):
                 _demote_word_block()
@@ -2032,7 +2043,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             prev_n = len(blocking_review)
             ctx.step(num, st.STEP_REVIEW)
             ctx.log("warn",
-                    f"第 {num} 章 6 维审校 {verdict_review} → 修复（第 {review_rounds} 轮）· 阻塞 {prev_n} 处")
+                    f"第 {num} 章 6 维审校 {verdict_review} → 修复（第 {review_rounds} 轮，上限 {max_review_rounds} 轮）· 阻塞 {prev_n} 处")
             ctx.checkpoint()
             # v2 反馈环：若 REJECT 且 review_rounds >= 2 → 调 ROOT_CAUSE_PROMPT 重新生成问题列表
             if verdict_review in ("REJECT", "REJECT-HARD") and review_rounds >= 2:
@@ -2882,8 +2893,9 @@ def _author_review_entry(ctx, num: int, prose: str, *,
             prose = rewritten
         else:
             ctx.log("warn", f"第 {num} 章 人工审校修复返回非正文，保留原稿（问题清单仍生效，可回退或继续填）")
-        if manual_rounds >= max(gates_cfg.get("review_max_rounds", 1), 3):
-            ctx.log("warn", f"第 {num} 章 人工审校修复已达 {manual_rounds} 轮上限，请最终裁决")
+        _cap = _review_round_cap(gates_cfg)
+        if manual_rounds >= _cap:
+            ctx.log("warn", f"第 {num} 章 人工审校修复已达 {manual_rounds} 轮上限（上限 {_cap} 轮，N-06 配置生效），请最终裁决")
     return blocking_review, advisory_review, verdict_review, prose
 
 
