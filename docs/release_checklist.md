@@ -7,7 +7,6 @@
 - [ ] 版本号已在 `app/__init__.py: __version__` 更新（单一来源）
 - [ ] `CHANGELOG.md` 已补本版条目（用户可读语言）
 - [ ] 工作树干净（`git status`），提交已推送
-- [ ] 若改过共享层（app/core|llm|prompts|presets）：`dual_sync_check.py` 零意外漂移
 
 ## 1. 质量闸门
 

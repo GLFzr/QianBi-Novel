@@ -13,6 +13,10 @@
 - except:pass 检查曾去 Try.body 找 ExceptHandler（处理器实际挂在 Try.handlers）
   ⇒ parent_body 恒 None ⇒ 该测试不可能失败。
 两台都已修成真护栏并做变异验证（见提交信息）。
+
+扫描面注记（WP-07/N-05/N-36）：本护栏只解析 app/ui/bridge.py；app/core/stages.py
+的 4 处同类「except: pass 后紧邻成功 log」站点在扫描面之外——扩面需先给 core 侧
+定义「生效证据」名单（ctx.log 无落盘语义），已登记台账 N-36，不许算已覆盖。
 """
 import ast
 import os

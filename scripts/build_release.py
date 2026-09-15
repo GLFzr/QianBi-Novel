@@ -23,6 +23,33 @@ import subprocess
 import sys
 import zipfile
 
+PORTABLE_DOCS = ("LICENSE", "THIRD-PARTY-LICENSES.md", "PRIVACY.md")
+
+
+def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
+                       readme_bytes: bytes, root: str = None) -> str:
+    """便携 zip 装配（N-21 门禁版）。
+
+    《使用说明》承诺「详见包内」的三份文档必须打进包里：直接从 ROOT（源码库）
+    读取打包——旧实现读 out_dir 里的拷贝，而拷贝发生在打包之后 ⇒ 新版本首构建
+    /干净机必然不存在 ⇒ os.path.exists 假 ⇒ 静默少打三份，MIT 分发落空。
+    现在缺任何一份即抛错中止，不许静默出包。"""
+    root = root or ROOT
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for dp, _, fs in os.walk(dist_dir):
+            for f in fs:
+                full = os.path.join(dp, f)
+                z.write(full, os.path.relpath(full, dist_dir))
+        z.writestr(readme_name, readme_bytes)
+        for doc in PORTABLE_DOCS:
+            src = os.path.join(root, doc)
+            if not os.path.exists(src):
+                raise FileNotFoundError(
+                    f"N-21 门禁：便携包承诺文档缺失 {doc}（拒绝静默出包）")
+            z.write(src, doc)
+    return zip_path
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 sys.path.insert(0, ROOT)
@@ -304,7 +331,7 @@ def main():
         ok, detail = sign(exe, cert, signtool)
         step("代码签名 · 主程序", ok, detail if not ok else os.path.basename(exe))
 
-    # ---- 6. 产物目录 + 便携 zip + SHA256SUMS ----
+# ---- 6. 产物目录 + 便携 zip + SHA256SUMS ----
     out_dir = os.path.join(ROOT, "dist", "release", f"v{__version__}")
     os.makedirs(out_dir, exist_ok=True)
     # 说明文件两个名字：包内用中文（解压后与 exe 并列，一眼看到，UTF-8 名解压正常）；
@@ -316,18 +343,7 @@ def main():
     with open(os.path.join(out_dir, readme_standalone), "wb") as f:
         f.write(readme_bytes)
     portable = os.path.join(out_dir, f"QianBi-Novel-v{__version__}-portable.zip")
-    with zipfile.ZipFile(portable, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        for dp, _, fs in os.walk(dist_dir):
-            for f in fs:
-                full = os.path.join(dp, f)
-                z.write(full, os.path.relpath(full, dist_dir))
-        z.writestr(readme_in_zip, readme_bytes)
-        # N-21：便携《使用说明》承诺「详见包内」的三份文档——真打进包里
-        # （旧实现只拷进产物目录由安装版使用，便携用户永远看不到，MIT 分发落空）
-        for doc in ("LICENSE", "THIRD-PARTY-LICENSES.md", "PRIVACY.md"):
-            src = os.path.join(out_dir, doc)
-            if os.path.exists(src):
-                z.write(src, doc)
+    write_portable_zip(portable, dist_dir, readme_in_zip, readme_bytes)
     step("便携 zip", os.path.exists(portable),
          f"{os.path.getsize(portable) / 1048576:.0f} MB")
 
