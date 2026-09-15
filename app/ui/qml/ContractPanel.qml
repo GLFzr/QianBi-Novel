@@ -132,7 +132,7 @@ Item {
 
         AppEmptyState {
             visible: !bridge.hasProject
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             iconName: "contract"
             title: "尚未打开书籍"
             hint: "打开或新建一本书后，这里显示它的写作契约"

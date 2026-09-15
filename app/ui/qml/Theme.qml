@@ -240,6 +240,10 @@ QtObject {
     readonly property real shE1Alpha: 0.10
     readonly property real shE2Alpha: 0.16
     readonly property real shE3Alpha: 0.24
+    // 预合成柔影色（组件直接引用；delegate 内不许手调带 Theme 色的 rgba 字面量，U-08）
+    readonly property color shadowSoft1: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shE1Alpha)
+    readonly property color shadowSoft2: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shE2Alpha)
+    readonly property color shadowSoft3: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shE3Alpha)
     // 焦点环：聚焦控件外环统一（AppField/AppSelect/AppSpinBox U-09 领取）
     readonly property int focusRingWidth: 2
     readonly property color focusRing: Qt.rgba(accent.r, accent.g, accent.b, 0.40)

@@ -18,7 +18,7 @@ Rectangle {
         anchors.fill: parent
         anchors.topMargin: 2
         radius: parent.radius
-        color: Qt.rgba(Theme.shadowColor.r, Theme.shadowColor.g, Theme.shadowColor.b, Theme.shE1Alpha)
+        color: Theme.shadowSoft1
         z: -1
     }
     Rectangle {
@@ -26,7 +26,7 @@ Rectangle {
         anchors.fill: parent
         anchors.topMargin: 5
         radius: parent.radius
-        color: Qt.rgba(Theme.shadowColor.r, Theme.shadowColor.g, Theme.shadowColor.b, Theme.shE2Alpha)
+        color: Theme.shadowSoft2
         z: -2
     }
 

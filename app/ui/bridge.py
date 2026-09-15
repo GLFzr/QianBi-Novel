@@ -2002,11 +2002,19 @@ class Bridge(QObject):
         # done/total 由 progress 信号一路累积在这里，download() 的返回值只管结论
         self._update_dl.update(active=False, reason=str(res.get("reason") or ""))
         if res.get("ok"):
-            self._update_pkg = {"ok": True, "path": str(res.get("path") or ""),
-                                "actual": str(res.get("sha256") or ""),
-                                "expected": uc.asset_sha((self._update_result.manifest
-                                                          if self._update_result else {}) or {})}
-            self.toast.emit("ok", "新版已下载并校验通过，可以安装了")
+            _path = str(res.get("path") or "")
+            # 回执三态门禁：成功回执前在槽内亲自复核指纹（worker 报 ok 不算数）
+            _actual = uc.sha256_file(_path) if _path and os.path.isfile(_path) else ""
+            _expected = uc.asset_sha((self._update_result.manifest
+                                      if self._update_result else {}) or {})
+            if _actual and _actual == _expected:
+                self._update_pkg = {"ok": True, "path": _path,
+                                    "actual": _actual, "expected": _expected}
+                self.toast.emit("ok", "新版已下载并校验通过，可以安装了")
+            else:
+                self._update_pkg = {"ok": False, "path": _path,
+                                    "actual": _actual, "expected": _expected}
+                self.toast.emit("warn", "下载物指纹复核不符，已拒绝安装（可在更新面板重试下载）")
         elif res.get("reason"):
             self.toast.emit("warn", "下载没成：%s" % res["reason"])
         self.updateStateChanged.emit()
@@ -3703,8 +3711,8 @@ class Bridge(QObject):
             elif name == "cw_prose_to_editor":
                 self.proseToEditor()
             elif name == "cw_rollback_stage":
-                self.toast.emit("warn", "回退阶段请点共写步骤条上的目标阶段（可回看已到达的阶段）")
-                return
+                # L1-07 有名无身修正：接真实执行（打回当前共写阶段），不再只发提示
+                self.rollbackCwStage()
             self._console_log("agent", "已执行：%s" % label)
         except Exception as e:  # noqa: BLE001
             self.toast.emit("error", "%s 执行失败：%s" % (label, e))
