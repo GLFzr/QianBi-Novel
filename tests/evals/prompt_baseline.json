@@ -33,8 +33,8 @@
    "i": 4,
    "kind": "prose",
    "slot": "writing",
-   "chars": 9232,
-   "sha256": "66f9842e09726c08cb0e9b242f1bed07245f8b43cdda1f235bd698dea95d7573"
+   "chars": 9401,
+   "sha256": "65a5a1b73df354de8e9b8c5b97c186f1cdb66fa5dab69e745d6d0821d3d0da98"
   },
   {
    "i": 5,
@@ -82,8 +82,8 @@
    "i": 11,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10635,
-   "sha256": "1525cf2eece27109129e7459f369ad7ed6dd5b6da37323ae7a65dad5715a9e13"
+   "chars": 10804,
+   "sha256": "534650659e2e3ef44780d7eb696a8f12b0e89c010298e7b1bfe413eb9989929d"
   },
   {
    "i": 12,
@@ -166,8 +166,8 @@
    "i": 23,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10662,
-   "sha256": "1fd7fb4a67e7a565daf31cb74d132038303cb66298a0017fa287ba5d9d176b67"
+   "chars": 10831,
+   "sha256": "c67ee48c76a15325e2e16bef489683faa155012b68f2b330d23e85873817264c"
   },
   {
    "i": 24,
@@ -222,8 +222,8 @@
    "i": 31,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10537,
-   "sha256": "b35ea083df177520c8b7973157621f4d9c037de7ec707d79f2c597d9977150d1"
+   "chars": 10706,
+   "sha256": "8393f0bbf77528561fdc51ec4a91cc7c74ad42799cb970691a612d35fe41fec2"
   },
   {
    "i": 32,
@@ -299,8 +299,8 @@
    "i": 42,
    "kind": "deslop",
    "slot": "writing",
-   "chars": 4045,
-   "sha256": "196a59b88f7ed913e4000f64dc676db5b7dd830ce73580a2394c0c7bb30ba1c2"
+   "chars": 4002,
+   "sha256": "22d4f30d584f320b390d978c516886222f7b32816adf55e59e233f67081c526d"
   },
   {
    "i": 43,
@@ -327,15 +327,15 @@
    "i": 46,
    "kind": "selection",
    "slot": "writing",
-   "chars": 775,
-   "sha256": "a564aa432134a76d3c1dcb262e358a09cbb4f796ab932d37ce065d8c9f9bb817"
+   "chars": 790,
+   "sha256": "f070289c166cc46df68f5cbbf34b18e0517cecbcb1a5edeab546af08e4010693"
   },
   {
    "i": 47,
    "kind": "selection",
    "slot": "writing",
-   "chars": 683,
-   "sha256": "5feede5e4b1de741e49efecdf9f4df3bd4416664ee8f28ff167a8dc5055a739e"
+   "chars": 698,
+   "sha256": "64b33d6e1b964007379cde6d67682c4b4d9a3363744ee247f7275f3e84d6ce0e"
   },
   {
    "i": 48,
