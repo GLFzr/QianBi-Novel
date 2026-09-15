@@ -6,8 +6,9 @@ import os, sys, tempfile
 _FH = tempfile.mkdtemp(prefix="qbn_fakehome_")
 os.environ["USERPROFILE"] = _FH
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault("QT_QUICK_BACKEND", "software")
+# §7.4-7（WP-10）：offscreen 全豆腐块/全上一帧——换 windows 平台真合成；
+# 软件后端同步移除（windows 平台下走真 GPU/光栅路径）
+os.environ.setdefault("QT_QPA_PLATFORM", "windows")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 sys.path.insert(0, os.getcwd())
 
@@ -69,10 +70,15 @@ def grab_all():
     for name, idx in pages:
         if stack is not None:
             stack.setProperty("currentIndex", idx)
+        # §7.4-7：显隐一次强制合成（否则抓到的是上一帧），再排空事件循环等光栅完成
+        win.hide()
+        app.processEvents()
+        win.show()
+        win.requestActivate()
         for _ in range(10):
             app.processEvents()
         t = QElapsedTimer(); t.start()
-        while t.elapsed() < 250:
+        while t.elapsed() < 350:
             app.processEvents()
         screen = app.primaryScreen()
         img = screen.grabWindow(win.winId()).toImage()
