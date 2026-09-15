@@ -54,9 +54,21 @@ FATE_SUMMARY = re.compile(
 # 破折号（密度阈值策略：>6/千字 才阻断，低密度仅 advisory）
 EM_DASH = re.compile(r"——|—(?!-)")
 
+# 文言腔比喻标记（lieflat Phase 2 联动降级：原属一级禁用词逐词 blocking。
+# 上游 283 万字语料：人类比喻频率是 AI 的 2.4 倍，逐词阻断与生成端
+# 「每千字 ≥1 处具象比喻」下限自相矛盾（旧病：复扫 2 轮烧尽→章章待修）；
+# 比喻总量另由 metaphor-density advisory 管控。现降为密度阈值型 advisory。
+CLICHE_SIMILE = re.compile(r"仿佛|犹如|宛若|如同")
+
+# 提示性冒号（lieflat 规则 5 形态一子集：提示语+冒号替自己说话，千字密度 advisory）
+PROMPTING_COLON = re.compile(
+    r"(?:一句话总结|核心是|关键在于|原因如下|结论是|答案是|先说结论|本质上|换句话说|说白了)[：:]")
+
+# 顿号罗列句（lieflat 规则 2：分句内 ≥2 顿号连起 ≥3 并列项）
+DUNHAO_IN_CLAUSE = re.compile(r"、")
+
 # 模板化微表情（一级禁用词）
 CLICHE_PATTERNS = [
-    re.compile(r"仿佛|犹如|宛若|如同"),
     re.compile(r"一丝|一抹|些许|几分|隐约"),
     re.compile(r"深吸一口气|不禁"),
     re.compile(r"眼中闪过|嘴角勾起|眉头微皱|眉眼低垂|瞳孔微缩|瞳孔收缩|指节泛白|眼神锐利|目光锐利"),
@@ -183,6 +195,44 @@ def scan_text(text: str) -> list:
             cliche_total += 1
             add("cliche-word", "blocking", f"一级禁用词「{m.group(0)}」", m,
                 "替换为具体动作/白描")
+
+    # 文言腔比喻标记：密度阈值型 advisory（lieflat Phase 2 降级，不再 blocking）。
+    # 人类语料基线 1.78/千字（上游）/1.14/千字（corpus_pd 实测）；阈值 2/千字
+    # 且 ≥4 处起报——人类文风零误报，AI 堆叠（3.21/千字）稳定触发。
+    simile_hits = list(CLICHE_SIMILE.finditer(body))
+    if len(simile_hits) >= max(4, kilo * 2):
+        for m in simile_hits:
+            add("simile-marker-density", "advisory",
+                f"文言腔比喻标记高密度（仿佛/犹如/宛若/如同 {len(simile_hits)} 处"
+                f" / {kilo:.1f} 千字）", m,
+                "只留最有功能的一两个，其余改成动作/物件承接的具象描写")
+
+    # 提示性冒号：提示语+冒号替自己说话（lieflat 规则 5；人类 0.08/千字，
+    # AI 0.29——阈值 ≥max(2, 1/千字)，corpus_pd 18.4 千字人类语料实测 0 命中）
+    colon_hits = [m for m in PROMPTING_COLON.finditer(body)
+                  if not _in_dialogue(body, m.start())]
+    if len(colon_hits) >= max(2, kilo * 1):
+        for m in colon_hits:
+            add("prompting-colon", "advisory",
+                f"提示性冒号（核心是/关键在于…替自己说话 ×{len(colon_hits)}）", m,
+                "删提示语直接写内容，或冒号换句号/逗号")
+
+    # 顿号罗列密度：分句内 ≥2 顿号（≥3 并列项）为一条罗列句（lieflat 规则 2；
+    # corpus_pd 人类实测 1.14/千字——阈值 2/千字且 ≥4 句起报，人类文风零误报）
+    list_clauses = []
+    for seg in re.split(r"[。！？!?；;" + chr(92) + "n]", body):
+        if seg.count("、") >= 2:
+            pos = body.find(seg)
+            if pos >= 0 and not _in_dialogue(body, pos):
+                list_clauses.append(seg.strip())
+    if len(list_clauses) >= max(4, kilo * 2):
+        findings.append(Finding(
+            rule="dunhao-list-density", level="advisory",
+            message=f"顿号罗列句高密度（{len(list_clauses)} 句 / {kilo:.1f} 千字，"
+                    f"如「{list_clauses[0][:24]}…」）",
+            text="", start=body_offset, end=body_offset,
+            fix_hint="能概括就别逐项列举；必须保留时改变其中一项的句法结构",
+        ))
 
     # 认知直接告知（密度超阈值才逐个报）
     cog_hits = list(TELLING_COGNITION.finditer(body))
