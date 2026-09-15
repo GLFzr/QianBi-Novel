@@ -378,14 +378,16 @@ Item {
 
                 // 决策门（v1.2 用户裁决）：仅流水线档显示；「逐步确认」「边界确认」两按钮
                 // 互斥——可同关（=全自动放行）、不可同开；边界确认开启时下方拉出勾选清单
-                ColumnLayout {
+                // WP-09：AppCard elevation=1 首个真实消费者（悬浮影真实落在界面上）
+                AppCard {
                     id: gateBlock
                     objectName: "gateBlock"
+                    elevation: 1
+                    contentSpacing: 6
                     property string preset: bridge.gatePreset()
                     readonly property bool cwOn: bridge.cwMode === "cw"
                     visible: bridge.hasProject && !cwOn
                     Layout.fillWidth: true
-                    spacing: 6
                     Text {
                         Layout.fillWidth: true
                         visible: bridge.autoGate
