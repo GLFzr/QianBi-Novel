@@ -38,6 +38,16 @@ Column {
             border.width: 1
             border.color: input.activeFocus ? Theme.accent : Theme.border
             Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
+            Rectangle {
+                // U-09 收口：焦点环真接线（Theme.focusRing/focusRingWidth 首批消费者）
+                anchors.fill: parent
+                anchors.margins: -3
+                radius: parent.radius + 3
+                color: "transparent"
+                border.color: Theme.focusRing
+                border.width: Theme.focusRingWidth
+                visible: input.activeFocus
+            }
         }
     }
 }

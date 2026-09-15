@@ -16,7 +16,7 @@ Rectangle {
     // 必须走 Layout 附加属性：本件是 RowLayout 的直接子项，只给裸 width 时布局
     // 永远按折叠宽记账，展开的那 280px 会被相邻不透明面板盖住（看起来像「被遮挡」）
     Layout.preferredWidth: expanded ? 280 : 24
-    Behavior on Layout.preferredWidth { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
+    // 红线⑦：Layout.preferredWidth 动画=逐帧 relayout，禁用（WP-09 移除）
     Layout.minimumWidth: Layout.preferredWidth
     Layout.maximumWidth: Layout.preferredWidth
     Layout.fillHeight: true

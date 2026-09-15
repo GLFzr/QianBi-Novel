@@ -965,6 +965,7 @@ class Bridge(QObject):
     # kind: "word"=字数未达标（有 actual/target）| "contract"=正则 must 契约违规（无字数概念）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
+    bookFinished = Signal()   # U-20 收尾：全书完本的一次性庆祝触发（区别于普通 toast）
     consoleChanged = Signal()                   # T4.3：Console 思考链/对话区/展开态更新
     mainWindowReady = Signal()                  # 主窗口就绪（单实例唤起时序）
     generalChanged = Signal()                   # 向导/遥测等通用设置变更
@@ -2816,6 +2817,13 @@ class Bridge(QObject):
         self.chapterModel.update_item(num, {"note": st.STEP_LABELS.get(step_key, "")})
 
     def _on_chapter_done(self, record: dict):
+        # U-13：点亮一次性完成徽标（4 秒后自动熄灭）
+        try:
+            self._last_done_num = int(record.get("num") or 0)
+            self.lastDoneChanged.emit()
+            QTimer.singleShot(4000, self._clear_last_done)
+        except (TypeError, ValueError) as _e:
+            logger.warning("完成徽标点亮失败（不阻塞主流程）：%s", _e)
         self._cur_title = record.get("title", "")
         self._last_record = record
         self._streaming = False
@@ -2878,6 +2886,7 @@ class Bridge(QObject):
         self.currentStepChanged.emit()
         self.refreshQueue()
         if reason == "done":
+            self.bookFinished.emit()
             self.toast.emit("ok", "全书完本：所有章节已定稿，可在「待修」入口复查或直接导出")
         elif reason == "stopped":
             # L2-24：跑完与被停要分得清——停止有受理提示，这里补终态提示
@@ -3209,6 +3218,18 @@ class Bridge(QObject):
     @Property("QVariantList", notify=forcedLocksChanged)
     def forcedLocks(self) -> list:
         return self.forcedLocksList()
+
+    # U-13：一次性完成徽标——「第 N 章 ✓」在完成后短暂点亮 4 秒（滚动清单里一眼看到刚完成的那章）
+    lastDoneChanged = Signal()
+    _last_done_num = 0
+
+    @Property(int, notify=lastDoneChanged)
+    def lastDoneNum(self) -> int:
+        return self._last_done_num
+
+    def _clear_last_done(self):
+        self._last_done_num = 0
+        self.lastDoneChanged.emit()
 
     def _refresh_reader_chapters(self):
         result = []

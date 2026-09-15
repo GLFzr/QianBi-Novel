@@ -84,6 +84,13 @@ Rectangle {
             tint: Theme.stateColor(row.state)
             pulse: row.state === "writing"
         }
+        AppBadge {
+            // U-13：一次性完成徽标（bridge.lastDoneNum 点亮 4 秒，不是常驻状态）
+            Layout.alignment: Qt.AlignVCenter
+            visible: bridge.lastDoneNum === row.num && row.state !== "writing"
+            text: "✓ 刚完成"
+            tint: Theme.success
+        }
     }
 
     MouseArea {

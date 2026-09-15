@@ -193,6 +193,7 @@ QtObject {
     readonly property int durNormal: 200  // 面板切换、抽屉、门条、日志渐入
     readonly property int durSlow: 320    // 弹窗出入场、全屏过渡
     readonly property int durLoop: 1400   // 呼吸/循环单周期（克制的节奏）
+    readonly property int durCelebrate: 1800  // 完本庆祝停留（U-20，WP-09 补入令牌表）
     readonly property int durIndet: 1600  // 不确定态扫过周期
     readonly property var easeOut: Easing.OutCubic   // 入场/推进（减速收尾）
     readonly property var easeStd: Easing.InOutQuad  // 双向状态/呼吸
@@ -244,8 +245,15 @@ QtObject {
     readonly property color shadowSoft1: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shE1Alpha)
     readonly property color shadowSoft2: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shE2Alpha)
     readonly property color shadowSoft3: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, shE3Alpha)
-    // 焦点环：聚焦控件外环统一（AppField/AppSelect/AppSpinBox U-09 领取）
+    // 弹窗三层假影专用（原 DialogBg 硬编码 #2E000000 族，U-20 收编入主题表）
+    readonly property color dialogShadow1: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, 0.18)
+    readonly property color dialogShadow2: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, 0.14)
+    readonly property color dialogShadow3: Qt.rgba(shadowColor.r, shadowColor.g, shadowColor.b, 0.10)
+    // 焦点环：聚焦控件外环统一（AppField/AppSelect/AppSpinBox/AppButton——WP-09 已真实接线）
     readonly property int focusRingWidth: 2
+    // 预置未用令牌（WP-09 写明）：中性色阶 n50-n100/n750-n900 部分 3 主题档位、
+    // AppSwitch 组件（0 实例）、bgRaise 非弹层场景——均为设计系统预置位，允许暂不消费，
+    // 不算「已完成零消费者」；新增界面优先从这里取
     readonly property color focusRing: Qt.rgba(accent.r, accent.g, accent.b, 0.40)
 
     // ===== 工具函数 =====

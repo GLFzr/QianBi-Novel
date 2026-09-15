@@ -605,7 +605,7 @@ ApplicationWindow {
                             text: "✓ 已确定（终稿锁定）"
                             color: Theme.success
                             font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsMicro
+                            font.pixelSize: Theme.fsTiny
                         }
                     }
                     AppButton {
@@ -724,17 +724,7 @@ ApplicationWindow {
                 ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                    width: 10
-                    contentItem: Rectangle {
-                        implicitWidth: 6
-                        radius: 3
-                        color: Theme.bgHover
-                        Behavior on implicitWidth { NumberAnimation { duration: Theme.durFast } }
-                    }
-                    background: Item {}
-                }
+                ScrollBar.vertical: AppScrollBar {}
 
                 TextArea {
                     id: editor
@@ -760,7 +750,7 @@ ApplicationWindow {
 
                     // U-12：流式跟随改「贴底才跟随」范式（移植 CwDialogueDock 正确实现）——
                     // 上翻回看刚生成的句子不被顶走；回到贴底自动恢复跟随。
-                    // 平滑只作用于滚动（contentY Behavior），不动画文本本身（性能红线⑧）
+                    // contentY 为瞬时赋值（无 Behavior 平滑；WP-09 按实修正注释，不动画文本本身）
                     property bool followStream: true
                     onTextChanged: {
                         if (bridge.isStreaming) {
@@ -1651,9 +1641,7 @@ ApplicationWindow {
         opacity: 0
         visible: opacity > 0
         z: 100
-        // v1.2 动效：入场 y+14→0 上滑，宽高变化平滑（多行换行不再横向抽搐）
-        Behavior on width { NumberAnimation { duration: Theme.durFast; easing: Theme.easeOut } }
-        Behavior on height { NumberAnimation { duration: Theme.durFast; easing: Theme.easeOut } }
+        // v1.2 动效：入场 y+14→0 上滑；红线⑦（WP-09）：宽高=relayout 动画禁用，多行换行瞬时调整
 
         property string toastLevel: "info"
         property real toastYBase: 40
@@ -1693,6 +1681,45 @@ ApplicationWindow {
             PauseAnimation { duration: 2600 }
             NumberAnimation { target: toastBar; property: "opacity"; to: 0; duration: Theme.durNormal }
             onStopped: toastBar._showNextToast()
+        }
+    }
+
+    // ---- 完本庆祝（U-20 收尾）：全书完本瞬间的一次性仪式感；尊重 motionOK 总闸 ----
+    Rectangle {
+        id: celebrateOverlay
+        parent: Overlay.overlay
+        anchors.fill: parent
+        color: Theme.successSoft
+        opacity: 0
+        visible: opacity > 0.01
+        z: 90
+        MouseArea { anchors.fill: parent; onClicked: celebrateFade.stop() }
+        Column {
+            anchors.centerIn: parent
+            spacing: 10
+            Text { text: "🎉"; font.pixelSize: 64; anchors.horizontalCenter: parent.horizontalCenter }
+            Text {
+                text: "全书完本"
+                color: Theme.success
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTitle
+                font.weight: Font.DemiBold
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: "所有章节已定稿——去「待修」复查，或直接导出发布"
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+        }
+        SequentialAnimation {
+            id: celebrateFade
+            NumberAnimation { target: celebrateOverlay; property: "opacity"; to: 1; duration: Theme.durSlow; easing: Theme.easeOut }
+            PauseAnimation { duration: Theme.durCelebrate }
+            NumberAnimation { target: celebrateOverlay; property: "opacity"; to: 0; duration: Theme.durSlow }
+            onStopped: celebrateOverlay.opacity = 0
         }
     }
 
@@ -1769,6 +1796,9 @@ ApplicationWindow {
             else if (a.action === "nav") mainWindow.activePanel = a.arg
         }
         function onToast(level, msg) { toastBar.showToast(level, msg) }
+        function onBookFinished() {
+            if (Theme.motionOK) celebrateFade.restart()   // 减少动态用户只收 toast，不弹庆祝
+        }
         function onProjectOpened() {
             mainWindow.activePanel = "pipeline"
             // 自动打开最新章节

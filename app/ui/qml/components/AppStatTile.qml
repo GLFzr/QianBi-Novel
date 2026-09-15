@@ -52,7 +52,6 @@ Rectangle {
                 height: parent.height
                 radius: 1.5
                 color: root.barColor
-                Behavior on width { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
             }
         }
     }

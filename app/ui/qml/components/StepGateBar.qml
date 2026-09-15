@@ -14,7 +14,7 @@ Rectangle {
     visible: opacity > 0.01 && height > 1
     width: parent ? parent.width : 0
     height: waiting ? gateCol.implicitHeight + 18 : 0
-    Behavior on height { NumberAnimation { duration: Theme.durNormal; easing: Theme.easeOut } }
+    // 红线⑦：height 属 relayout 动画禁用——出显改为纯 opacity（WP-09）
     Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
     opacity: waiting ? 1.0 : 0.0
     radius: Theme.rCard
@@ -166,7 +166,7 @@ Rectangle {
             text: "快捷键：回车=继续 · Ctrl+回车=带想法继续 · R=回退重做（G5 软门无回退）"
             color: Theme.textTertiary
             font.family: Theme.uiFont
-            font.pixelSize: Theme.fsMicro
+            font.pixelSize: Theme.fsTiny
         }
     }
 }

@@ -69,5 +69,15 @@ Button {
              : (btn.activeFocus ? Theme.accent : Theme.border)
         Behavior on color { ColorAnimation { duration: Theme.durFast } }
         Behavior on border.color { ColorAnimation { duration: Theme.durFast } }
+        Rectangle {
+            // U-09 收口：键盘焦点环（仅 primary/success/danger；ghost 无框不加噪）
+            anchors.fill: parent
+            anchors.margins: -3
+            radius: parent.radius + 3
+            color: "transparent"
+            border.color: Theme.focusRing
+            border.width: Theme.focusRingWidth
+            visible: btn.activeFocus && btn.kind !== "ghost"
+        }
     }
 }

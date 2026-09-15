@@ -168,10 +168,7 @@ Item {
             spacing: 8
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AsNeeded
-                contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
-            }
+            ScrollBar.vertical: AppScrollBar {}
 
             delegate: Rectangle {
                 objectName: "contractRule"

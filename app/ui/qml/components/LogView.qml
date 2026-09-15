@@ -61,14 +61,6 @@ Rectangle {
             }
         }
 
-        ScrollBar.vertical: ScrollBar {
-            policy: ScrollBar.AsNeeded
-            contentItem: Rectangle {
-                implicitWidth: 4
-                radius: 2
-                color: Theme.bgHover
-            }
-            background: Item {}
-        }
+        ScrollBar.vertical: AppScrollBar {}
     }
 }

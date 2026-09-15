@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import ".."
 
 Rectangle {
@@ -6,6 +7,9 @@ Rectangle {
     property int pad: 14
     // U-08：浮起分级。0=平面卡片（现状默认，视觉零变化）/ 1=悬浮影 / 2=弹层影+提亮面
     property int elevation: 0
+    // WP-09：inner 由 Item 改 ColumnLayout——普通 Item 不聚合子项 implicit 尺寸，
+    // 0 实例时从未暴露（首实例 gateBlock 会塌成 0 高）；内容间距可调
+    property real contentSpacing: 8
 
     radius: Theme.rCard
     color: elevation >= 2 ? Theme.bgRaise : Theme.bgCard
@@ -33,9 +37,10 @@ Rectangle {
     implicitWidth: inner.implicitWidth + pad * 2
     implicitHeight: inner.implicitHeight + pad * 2
 
-    Item {
+    ColumnLayout {
         id: inner
         anchors.fill: parent
         anchors.margins: pad
+        spacing: contentSpacing
     }
 }

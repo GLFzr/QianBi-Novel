@@ -477,10 +477,7 @@ Rectangle {
                     lastContentY = contentY
                 }
                 onAtYEndChanged: if (atYEnd) cwDock.follow = true
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                    contentItem: Rectangle { implicitWidth: 4; radius: 2; color: Theme.bgHover }
-                }
+                ScrollBar.vertical: AppScrollBar {}
                 delegate: Rectangle {
                     id: msgBubbleRect
                     required property string msgRole

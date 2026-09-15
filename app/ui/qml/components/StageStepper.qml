@@ -70,7 +70,6 @@ Row {
                     width: parent.lit ? parent.width : 0
                     height: parent.height
                     color: Theme.success
-                    Behavior on width { NumberAnimation { duration: Theme.durSlow; easing: Theme.easeOut } }
                 }
             }
         }
