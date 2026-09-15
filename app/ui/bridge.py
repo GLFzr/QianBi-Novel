@@ -2244,6 +2244,31 @@ class Bridge(QObject):
             self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
             self.toast.emit("ok" if res.get("ok") else "warn", str(res.get("message", ""))[:120])
             return
+        # L1-04：自然语言指令接线（自动档）——带指令动词线索的文本走解析执行
+        # （本地规则→helper 槽 LLM 兜底），不动的沉淀为想法；不再石沉大海。
+        _looks_instr = False
+        if self.proj:
+            from ..core import agent_tools as _at
+            instr = None
+            if self._looks_like_instruction(text):
+                _looks_instr = True
+                instr = _at.parse_instruction(text, default_chapter=int(self._cur_num or 0))
+                if not instr:
+                    instr = self._parse_instruction_llm_safe(text)
+            if instr:
+                name, args = instr[0], instr[1]
+                self._console_log("user", text)
+                if name in _at.UI_TOOLS:
+                    self._ui_tool_dispatch(name)
+                    return
+                res = _at.execute(name, args, self.proj, self.cfg,
+                                  pipeline_running=self._running)
+                self._console_log("agent", ("✅ " if res.get("ok") else "⚠ ") + str(res.get("message", "")))
+                self.toast.emit("ok" if res.get("ok") else "warn", str(res.get("message", ""))[:120])
+                return
+            if _looks_instr:
+                self._console_log("agent", "像是给 Agent 的指令但没听懂；先按想法保留。"
+                                  "可用 / 指令：" + _at.help_text().split(chr(10))[1].strip())
         if self.proj and not self._running:
             self.toast.emit("warn", "流水线未运行，想法已保存为「下一章」")
         elif not self.proj:

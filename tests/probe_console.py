@@ -135,6 +135,35 @@ results.append(("隐藏思考写入配置",
                 cfg_mod.load_config().get("general", {}).get("show_reasoning") is False
                 and bridge.showReasoning is False))
 
+# ---- consoleSubmit 真实路由断言（WP-04/L1-04：此前对本入口零覆盖）----
+def _last_agent_text():
+    for e in reversed(bridge._console_dialogue):
+        if e.get("kind") == "agent":
+            return e.get("text", "")
+    return ""
+
+# 8a 自然语言指令真实执行（本地规则层，零 LLM 调用）：「看看进度」→ status 工具
+bridge.consoleSubmit("看看进度")
+results.append(("自然语言指令真实执行（看看进度→status）",
+                "✅" in _last_agent_text() or "进度" in _last_agent_text()))
+
+# 8b / 未注册指令明确拒绝（听不懂时不说谎）
+bridge.consoleSubmit("/no_such_verb_xyz")
+results.append(("/ 未注册指令明确拒绝", "没听懂" in _last_agent_text()))
+
+# 8c 普通想法沉淀为「下一章」（不丢用户输入）
+_n0 = len(st.load_state(proj).get("pending_ideas") or [])
+bridge.consoleSubmit("给主角加一只橘猫")
+_n1 = len(st.load_state(proj).get("pending_ideas") or [])
+results.append(("普通想法沉淀为下一章", _n1 == _n0 + 1))
+
+# 8d 像指令但两层解析都不中：显式告知「没听懂」并按想法保留（不许静默吞）
+bridge.consoleSubmit("把关掉的世界关掉再关掉一次")
+_tail = " ".join(e.get("text", "") for e in bridge._console_dialogue[-3:]
+                 if e.get("kind") == "agent")
+results.append(("像指令没听懂时显式告知",
+                "没听懂" in _tail and "已沉淀" in _last_agent_text()))
+
 # 基线告警（与 probe_gate_ui 同一份静默表：改动前已存在的存量惰性绑定，git diff 确认非本次引入）
 mute = ("QML Layout", "QQuickText", "anchor", "cycle",
         "multiple key bindings", "hovered is not defined",

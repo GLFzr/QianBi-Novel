@@ -163,7 +163,7 @@ Rectangle {
                 id: consoleInput
                 objectName: "consoleInput"
                 Layout.fillWidth: true
-                placeholderText: "想法 / 给 Agent 的指令…"
+                placeholderText: "想法，或对 Agent 说「看看进度」「重写第2章」/ 用 / 指令…"
                 font.pixelSize: 11
                 color: Theme.textPrimary
                 background: Rectangle {
