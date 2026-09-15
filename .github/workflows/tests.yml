@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    # 仓库面向 Windows（凭据管理器/路径约定），单测也在 Windows 环境验证
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: 安装依赖
+        run: pip install -r requirements.txt pytest
+      - name: 离线单测（无需 API Key）
+        run: python -m pytest tests/unit -q --tb=short
+
+  probes:
+    # N-30/N-20：探针舰队纳入 CI——离线可判子集，一份名单双处校验：
+    # tests/unit/test_workflow_probe_list.py 保证这里点名的每支 probe_*.py 真实存在。
+    # 名单=WP-06 本地实测 34 支离线全绿（rc=0+自打结论行）；需真 Key/真机/--exe 的
+    # 一律不进（8b3fb80 教训：名单里有不存在的名字；CI 无 Key，真 Key 探针必红）。
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: 安装依赖
+        run: pip install -r requirements.txt pytest
+      - name: 离线探针舰队（驱动器逐支真退码，任一失败整体红）
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tests/run_probe_fleet.py probe_about_ui probe_backflow_chain probe_blurb probe_chapter_lock probe_chapter_lock_cross_mode probe_co_outline_parse probe_conn_delete probe_console probe_contract_ui probe_cw_batch_ui probe_cw_state probe_cw_to_auto_compat probe_export probe_gate_flow probe_gate_ui probe_gen_config probe_import_ui probe_missing_chapter probe_needs_fix probe_outline_confirm probe_panel_fit probe_prompt_baseline probe_qml_compile probe_reader_close probe_settings_overlap probe_settings_tabs probe_ui_gallery probe_update_ui probe_usage_dialog probe_wb_import probe_word_block probe_worldbook_activation probe_worldbook_format probe_worldbook_format_co
