@@ -1383,6 +1383,8 @@ class Bridge(QObject):
             self.orch.pause()
             self._set_paused(True)
             self.logModel.append("info", "暂停已受理：本次 LLM 调用跑完后停在当前步骤边界（不是立刻掐断）")
+            # L2-18：暂停/继续/停止必须有可感知回执（曾谎报有 toast，实际函数体没有）
+            self.toast.emit("info", "已暂停：本次调用跑完后停在步骤边界")
 
     @Slot()
     def resumePipeline(self):
@@ -1390,6 +1392,7 @@ class Bridge(QObject):
             self.orch.resume()
             self._set_paused(False)
             self.logModel.append("info", "继续写作")
+            self.toast.emit("info", "已继续写作")
 
     @Slot()
     def stopPipeline(self):
@@ -1402,6 +1405,7 @@ class Bridge(QObject):
         self.stoppingChanged.emit()   # 按钮转「正在停止…」并禁用，避免「点了没反应」的体感
         self.orch.stop()
         self.logModel.append("warn", "停止已受理：正在生成的这一次调用会在下一 token 处中断")
+        self.toast.emit("warn", "停止已受理：本次调用将在下一 token 处中断")
 
     # ============ 步骤决策门（Step Gates，v1.2 两档制）============
 
@@ -2801,13 +2805,14 @@ class Bridge(QObject):
         self._refresh_progress()
         # L2-23：卷完成反馈——下一章换卷时点一句（卷号解析来自 volume_session）
         try:
-            from .core import volume_session as _vs
+            from ..core import volume_session as _vs
             _n = int(record.get("num") or 0)
-            if _n and _vs.resolve_volume_number(self.proj, _n) !=                     _vs.resolve_volume_number(self.proj, _n + 1):
-                self.toast.emit("ok", f"第 {_vs.resolve_volume_number(self.proj, _n)} 卷完卷"
-                                      f"（第 {_n} 章止），下一章进入新卷")
-        except Exception:  # noqa: BLE001
-            pass
+            _vol_now = _vs.resolve_volume_number(self.proj, _n) if _n else 0
+            _vol_next = _vs.resolve_volume_number(self.proj, _n + 1) if _n else 0
+            if _n and _vol_now != _vol_next:
+                self.toast.emit("ok", f"第 {_vol_now} 卷完卷（第 {_n} 章止），下一章进入新卷")
+        except Exception as _e:  # noqa: BLE001
+            logger.warning("卷完成 toast 判定失败（不阻塞主流程）：%s", _e, exc_info=True)
         # L2-14（确认感第 2 层 P0）：章完成必须有可感知回执——出厂 gate_preset=off
         # 下作者对「第 N 章写完了」曾经毫无感知
         _ok = record.get("status") == "pass"

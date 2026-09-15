@@ -47,7 +47,7 @@ def run():
         check("指导+偏好合成", "本章要打脸" in g and "短句" in g and "品牌" in g)
         g2 = stages._compose_guidance("", {"writing": {}})
         check("空指导回退", g2 == "无特殊指导")
-        rl = b.readerChapterList()
+        rl = b.readerChapterList
         check("阅读目录=2章含字数", len(rl) == 2 and rl[0]["words"] > 0)
         rc = b.readerChapter(2)
         check("阅读章节加载", rc["num"] == 2 and len(rc["text"]) > 0)

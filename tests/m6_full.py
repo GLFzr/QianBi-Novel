@@ -48,7 +48,7 @@ def main():
         try:
             # ============ R 阅读器 ============
             b._open_project(m1, silent=True)
-            rl = b.readerChapterList()
+            rl = b.readerChapterList
             check("R1", "阅读目录构建（进入阅读的数据基础）", len(rl) >= 2)
             check("R3", "阅读偏好持久化（字号/行距/字体/翻页/主题）",
                   b.setReaderPref("fontScale", 1.35) or True
@@ -199,7 +199,7 @@ def main():
             check("兼容", "旧项目打开（41章）", len(proj_mod.list_chapters(old_proj)) == 41)
             check("兼容", "旧项目队列刷新", b.chapterModelProp.rowCount() >= 41)
             check("兼容", "旧项目统计", b.statsSummary()["chapters"] == 41)
-            rl = b.readerChapterList()
+            rl = b.readerChapterList
             check("兼容", "旧项目阅读目录", len(rl) == 41 and rl[0]["words"] > 0)
             pv = b.exportPreviewText("blank", 0)
             check("兼容", "旧项目导出预览", len(pv) > 10)

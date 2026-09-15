@@ -470,7 +470,7 @@ def _sec_qml() -> dict:
         proj = _build_fixture(project, "qml")
         bridge._open_project(proj, silent=True)
         report["bridge"] += [
-            _entry("bridge.readerChapterList", bridge.readerChapterList()),
+            _entry("bridge.readerChapterList", bridge.readerChapterList),
             _entry("bridge.needsFixChapters", bridge.needsFixChapters()),
             _entry("bridge.chapterGenConfig 1 夹具书", bridge.chapterGenConfig(1)),
         ]

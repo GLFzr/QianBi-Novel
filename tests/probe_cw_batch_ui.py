@@ -177,7 +177,7 @@ def step5_reader_toggle():
                        "正文第一句。" * 30)
     project.write_file(project.get_chapter_path(PROJ, 2), "第二章正文。" * 30)
     b._cur_num = 1
-    chs = b.readerChapterList()
+    chs = b.readerChapterList
     check("阅读器有可读章节", len(chs) >= 1)
     win.openReader()
     pump(500)
