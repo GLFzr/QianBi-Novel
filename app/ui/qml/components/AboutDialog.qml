@@ -165,7 +165,9 @@ Dialog {
                 Text {
                     Layout.fillWidth: true
                     text: {
-                        var fl = bridge.forcedLocksList()
+                        // L2-13：改用 forcedLocks Property（带 NOTIFY）——原
+                        // forcedLocksList() 方法调用式绑定永不重算，弹窗只显首帧值
+                        var fl = bridge.forcedLocks
                         if (fl.length === 0) return "暂无强锁记录"
                         var lines = []
                         for (var i = Math.max(0, fl.length - 8); i < fl.length; i++)

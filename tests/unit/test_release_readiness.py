@@ -47,6 +47,15 @@ def test_telemetry_enabled_writes_local_jsonl(tmp_path, monkeypatch):
     assert "app_start" in text and "0.14.0" in text
 
 
+def test_main_py_actually_records_app_start_and_version():
+    """N-24 补完：静态证明生产代码会调 record（旧断言只证明手工调用能写文件）。"""
+    import os
+    src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))), "app", "main.py"), encoding="utf-8").read()
+    assert 'record(cfg, "app_start"' in src or 'record(cfg,"app_start"' in src,         "main.py 缺 app_start 埋点调用——telemetry 面板承诺与生产代码脱节"
+    assert 'record(cfg, "version"' in src or 'record(cfg,"version"' in src,         "main.py 缺 version 埋点调用"
+
+
 def test_telemetry_redacts_props(tmp_path, monkeypatch):
     import app.telemetry as tm
     f = tmp_path / "pending.jsonl"

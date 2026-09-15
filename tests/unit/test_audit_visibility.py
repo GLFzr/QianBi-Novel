@@ -34,8 +34,9 @@ def test_audit_trails_have_ui_readers():
     links = [
         # ① 强锁审计痕
         ("forced_locks 写源（state）", '"forced_locks"' in state_src),
-        ("forced_locks 读者（bridge.forcedLocksList）", "forcedLocksList" in bridge_src),
-        ("forced_locks 界面消费者（强锁审计痕区）", "强锁审计痕" in qml_all and "forcedLocksList" in qml_all),
+        ("forced_locks 读者（bridge Property forcedLocks，L2-13 带 NOTIFY）",
+         "forcedLocks" in bridge_src and "forcedLocksChanged" in bridge_src),
+        ("forced_locks 界面消费者（强锁审计痕区）", "强锁审计痕" in qml_all and "bridge.forcedLocks" in qml_all),
         # ② 转人工痕
         ("chapter_need_human 写源（state）", "mark_chapter_need_human" in state_src and '"chapter_need_human"' in state_src),
         ("chapter_need_human 读者（bridge）", "is_chapter_need_human" in bridge_src),

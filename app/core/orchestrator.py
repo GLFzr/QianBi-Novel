@@ -133,8 +133,9 @@ class Orchestrator(QThread):
         # 先过 checkpoint 停在步骤边界，等用户恢复后再来要这个决策。
         self.checkpoint()
         state = st.load_state(self.proj)
+        # L2-11：源头不再截断 [:200]——QML 换行上限拿不到全量，摘要完整性交给界面控制
         state["gate_status"] = {"gate": key, "chapter": chapter,
-                                "summary": summary[:200], "ts": time.time()}
+                                "summary": summary, "ts": time.time()}
         st.save_state(self.proj, state)
         self._gate_evt.clear()
         self._gate_idea = ""

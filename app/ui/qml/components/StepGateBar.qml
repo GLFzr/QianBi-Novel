@@ -27,6 +27,14 @@ Rectangle {
     property int gateChapter: 0
     property string gateSummary: ""
     property bool waiting: false
+    // L2-09/10/12 免裁决半步：门条显示「这门拦什么/能做什么」——静态表，绑定算一次即正确
+    property var gateMetaMap: {
+        var m = {}
+        var l = bridge.gateMetaList()
+        for (var i = 0; i < l.length; i++)
+            m[l[i].key] = l[i]
+        return m
+    }
     property bool rollbackable: gateKey !== "G5L"
 
     function showGate(key, chapter, summary) {
@@ -96,6 +104,17 @@ Rectangle {
                     OpacityAnimator { target: waitText; from: 0.3; to: 1; duration: Theme.durLoop / 2 }
                 }
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: gateMetaMap[gateKey] !== undefined
+            text: "拦哪条：" + (gateMetaMap[gateKey] ? gateMetaMap[gateKey].desc : "")
+                  + (gateMetaMap[gateKey] && gateMetaMap[gateKey].wired ? "" : "（未接线）")
+            color: Theme.textTertiary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTiny
+            wrapMode: Text.Wrap
         }
 
         RowLayout {

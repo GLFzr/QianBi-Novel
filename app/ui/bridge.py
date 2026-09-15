@@ -1312,6 +1312,7 @@ class Bridge(QObject):
         self._maybe_auto_backup()
         if not silent:
             self.projectOpened.emit()
+        self.forcedLocksChanged.emit()   # L2-13：换书后审计痕重算
 
     def _reset_editor_state(self):
         """工作副本状态复位：编辑器内容 == 磁盘基准，无未保存修改"""
@@ -3201,6 +3202,14 @@ class Bridge(QObject):
     readerChapterListChanged = Signal()
     _reader_chapters = []
 
+    # L2-13：审计痕「回看不了」修复——AboutDialog 原来是 text:{ forcedLocksList() }
+    # 方法调用式绑定（N-02 同病：永不重算），改 Property+NOTIFY，锁/解锁/开项目即刷新
+    forcedLocksChanged = Signal()
+
+    @Property("QVariantList", notify=forcedLocksChanged)
+    def forcedLocks(self) -> list:
+        return self.forcedLocksList()
+
     def _refresh_reader_chapters(self):
         result = []
         if self.proj:
@@ -4095,6 +4104,7 @@ class Bridge(QObject):
     def _do_lock_chapter(self, forced: bool = False, reasons: str = ""):
         project.set_chapter_locked(self.proj, self._cur_num, True)
         self.cwLockedChanged.emit()
+        self.forcedLocksChanged.emit()   # L2-13：审计痕即时可见
         self.refreshQueue()
         # L2-01：回执说真话——强锁原因用真实判定结果（字数/契约/手动），不再硬编码
         tag = "（强制锁定：%s，已留审计痕）" % (reasons or "手动强锁") if forced else ""
@@ -4214,6 +4224,7 @@ class Bridge(QObject):
             return
         if project.attempt_unlock(self.proj, self._cur_num):
             self.cwLockedChanged.emit()
+            self.forcedLocksChanged.emit()   # L2-13：审计痕即时可见
             self.refreshQueue()
             self.toast.emit("ok", f"第 {self._cur_num} 章已解锁（原终稿仍在版本历史）")
         else:

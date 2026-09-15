@@ -651,10 +651,7 @@ ApplicationWindow {
                         text: ""
                         enabled: !bridge.isStreaming && bridge.chapterPath !== ""
                         onClicked: {
-                            versionListModel.clear()
-                            var vs = bridge.versionsForChapter(bridge.currentChapterNum)
-                            for (var i = 0; i < vs.length; i++)
-                                versionListModel.append(vs[i])
+                            versionsDialog.viewChapter = bridge.currentChapterNum
                             versionsDialog.open()
                         }
                         ToolTip.visible: hovered
@@ -1662,9 +1659,20 @@ ApplicationWindow {
         property real toastYBase: 40
         anchors.bottomMargin: toastYBase + (1 - opacity) * 14
 
+        // L2-21：连发排队——先进先出逐条播，不再后进覆盖先进（章完成回执曾被吞）
+        property var _toastQueue: []
+        property bool _toastBusy: false
         function showToast(level, msg) {
-            toastBar.toastLevel = level
-            toastText.text = msg
+            if (_toastQueue.length >= 6) _toastQueue.shift()   // 防积压（error 不特殊处理：超限同样丢最旧）
+            _toastQueue.push({level: level, msg: msg})
+            if (!_toastBusy) _showNextToast()
+        }
+        function _showNextToast() {
+            if (_toastQueue.length === 0) { _toastBusy = false; return }
+            _toastBusy = true
+            var t = _toastQueue.shift()
+            toastBar.toastLevel = t.level
+            toastText.text = t.msg
             toastAnim.restart()
         }
 
@@ -1684,6 +1692,7 @@ ApplicationWindow {
             NumberAnimation { target: toastBar; property: "opacity"; to: 1; duration: Theme.durFast + 40; easing: Theme.easeOut }
             PauseAnimation { duration: 2600 }
             NumberAnimation { target: toastBar; property: "opacity"; to: 0; duration: Theme.durNormal }
+            onStopped: toastBar._showNextToast()
         }
     }
 
@@ -2079,6 +2088,20 @@ ApplicationWindow {
         modal: true
         width: 820
         height: 540
+        // L2-22：版本历史此前写死只看当前章——现在可切任意章回看/对比/回退
+        property int viewChapter: -1
+        function reloadVersions() {
+            versionListModel.clear()
+            var vs = bridge.versionsForChapter(versionsDialog.viewChapter)
+            for (var i = 0; i < vs.length; i++)
+                versionListModel.append(vs[i])
+            versionsDialog.selVersion = -1
+            diffListModel.clear()
+            if (versionListModel.count > 0) {
+                versionList.currentIndex = 0
+                versionsDialog.selVersion = versionListModel.get(0).v
+            }
+        }
         x: parent ? Math.round((parent.width - width) / 2) : 0
         y: parent ? Math.max(24, Math.round((parent.height - height) / 2)) : 0
         padding: 0
@@ -2086,12 +2109,28 @@ ApplicationWindow {
         header: Column {
             padding: 16
             spacing: 2
-            Text {
-                text: "版本历史 · 第 " + bridge.currentChapterNum + " 章（保存驱动：仅「保存」产生版本）"
-                color: Theme.textPrimary
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.fsTitle
-                font.weight: Font.DemiBold
+            RowLayout {
+                width: parent.width
+                spacing: 10
+                Text {
+                    text: "版本历史 · 第 " + versionsDialog.viewChapter + " 章（保存驱动：仅「保存」产生版本）"
+                    color: Theme.textPrimary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTitle
+                    font.weight: Font.DemiBold
+                }
+                Item { Layout.fillWidth: true }
+                AppSelect {
+                    id: versionChapterBox
+                    objectName: "versionChapterBox"
+                    model: ListModel { id: versionChapterModel }
+                    textRole: "label"
+                    Layout.preferredWidth: 260
+                    onActivated: {
+                        versionsDialog.viewChapter = versionChapterModel.get(currentIndex).num
+                        versionsDialog.reloadVersions()
+                    }
+                }
             }
             Text {
                 text: "版本内容 vs 当前已保存内容：红=已移除 · 绿=新增 · 回退只进工作副本，保存后才提交"
@@ -2234,7 +2273,7 @@ ApplicationWindow {
                         enabled: versionsDialog.selVersion > 0
                         onClicked: {
                             // 回退 = 版本内容进工作副本（不落盘），保存才提交为新版本
-                            var t = bridge.readVersion(bridge.currentChapterNum, versionsDialog.selVersion)
+                            var t = bridge.readVersion(versionsDialog.viewChapter, versionsDialog.selVersion)
                             if (t !== "") {
                                 bridge.noteEditAction("整章重写")
                                 editor.text = t
@@ -2248,17 +2287,22 @@ ApplicationWindow {
             }
         }
         onOpened: {
-            versionsDialog.selVersion = -1
-            diffListModel.clear()
-            if (versionListModel.count > 0) {
-                versionList.currentIndex = 0
-                versionsDialog.selVersion = versionListModel.get(0).v
-            }
+            versionChapterModel.clear()
+            var chs = bridge.readerChapterList
+            for (var i = 0; i < chs.length; i++)
+                versionChapterModel.append({num: chs[i].num,
+                                            label: "第" + chs[i].num + "章 · " + (chs[i].title || "")})
+            for (var j = 0; j < versionChapterModel.count; j++)
+                if (versionChapterModel.get(j).num === versionsDialog.viewChapter) {
+                    versionChapterBox.currentIndex = j
+                    break
+                }
+            versionsDialog.reloadVersions()
         }
         onSelVersionChanged: {
             if (versionsDialog.selVersion > 0) {
                 diffListModel.clear()
-                var ds = bridge.diffVersionWithDisk(bridge.currentChapterNum, versionsDialog.selVersion)
+                var ds = bridge.diffVersionWithDisk(versionsDialog.viewChapter, versionsDialog.selVersion)
                 for (var i = 0; i < ds.length; i++)
                     diffListModel.append(ds[i])
             }
