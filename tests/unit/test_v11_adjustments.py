@@ -53,11 +53,36 @@ def test_tracking_static_head_generic_wording_and_marker():
 
 
 def test_deslop_static_rules_extraction():
+    """lieflat 集成后双模式契约（方案 Phase 3 快照族）：并集模式锁新锚点，
+    builtin 模式锁旧行为逐字节回退；两者共同契约=零占位符+模板切片同源。"""
     rules = prompts.deslop_static_rules()
     assert rules.startswith("## 改写原则")
-    assert "10." in rules and rules.rstrip().endswith("保持对白引号格式与原文一致")
     assert "{" not in rules and "}" not in rules, "改写原则段零占位符"
     assert rules in prompts.DESLOP_REWRITE_PROMPT
+    from app.prompts import skill_rules
+    if skill_rules.active_mode() == "lieflat":
+        # 并集：内置 10 条（含规则 10 尾句）+ skill 后缀（负表/11 条/适配边界/验收）
+        assert "保持对白引号格式与原文一致" in rules
+        assert "去 AI 味规则补充" in rules
+        assert "不作为改写理由" in rules
+        assert "检出问题清单 / 口头禅黑名单 / 本书正则契约" in rules
+        assert rules.rstrip().endswith("判断强度有没有被加重")   # skill 最终验收末条
+    else:
+        # builtin 旧行为逐字节回退
+        assert "10." in rules and rules.rstrip().endswith("保持对白引号格式与原文一致")
+
+
+def test_deslop_static_rules_builtin_fallback_is_byte_identical(monkeypatch):
+    """rules_source=builtin：deslop_static_rules() 必须逐字节等于原始模板切片。"""
+    from app.prompts import skill_rules, writing
+    skill_rules.init_rules_cache({"deslop": {"rules_source": "builtin"}})
+    try:
+        rules = writing.deslop_static_rules()
+        assert rules == writing.builtin_deslop_static_rules()
+        assert rules in writing._ORIGINAL_DESLOP_REWRITE_PROMPT
+        assert rules in writing.DESLOP_REWRITE_PROMPT
+    finally:
+        skill_rules.init_rules_cache({})   # 还原进程默认（lieflat）
 
 
 def _mk_proj(tmp_path):

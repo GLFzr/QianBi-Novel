@@ -1,0 +1,15 @@
+upstream: https://github.com/larashero3-dotcom/lieflat-less-ai-tone
+commit: 27d29232f10124db904ca9c0536d0b67cb3b2833
+upstream_last_commit_time: 2026-08-24T06:56:55Z
+upstream_last_commit_message: 冒号规则重测：新增空转句形态，修正数据与改法
+vendored_date: 2026-09-16
+vendored_by: qianbi-novel（集成方案 docs/lieflat-less-ai-tone-integration-plan.md v2）
+files:
+  - SKILL.md  28382 bytes  sha256=55dec1765c2d6ce31f9e03e62876b36a3a65af830350d4d0d5bab6df766b042（原文存档，未作任何修改）
+  - LICENSE   1064 bytes   sha256=ea0bb158cb3b86076842202461a9bef2bd96d560dc76b3ef5d7a2c0f326c55b9（MIT, Copyright (c) 2026 shiujan）
+license: MIT。本项目对 SKILL.md 的 loader 适配（裁剪交互节/删除"提示作者"句/边界措辞适配）
+属 MIT 允许的衍生使用，适配部分同样遵循 MIT。
+注意：仅集成本仓库；上游同系列 lieflat-gongwen / lieflat-charts 为 PolyForm Noncommercial
+1.0.0（禁商用），禁止并入。
+复查纪律：上游无 tag/release、规则仍在修正——每季度复查一次上游 main，重新 vendor 时
+更新本文件（commit hash / 时间 / sha256）并跑 tests/unit/test_skill_rules.py 快照比对。

@@ -89,6 +89,15 @@ def main():
         cfg = cfg_mod.load_config()
     except Exception:  # noqa: BLE001
         pass
+    # ---- 去 AI 味规则源缓存（lieflat 集成）：启动时一次性读入 vendor 文件并冻结。
+    # volume_session 卷级冻结头按字节比对，运行中文件改动/规则源切换 = 会话栈整卷
+    # 作废重建（费用损失）——进程生命周期内只读这一份。读不到/解析失败自动回退
+    # builtin 并出声告警（见 skill_rules.init_rules_cache）。
+    try:
+        from .prompts import skill_rules
+        skill_rules.init_rules_cache(cfg)
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("去 AI 味规则源缓存初始化失败，回退内置规则：%s", _e)
     telemetry.record(cfg, "app_start", version=__version__)
 
     engine = QQmlApplicationEngine()

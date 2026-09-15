@@ -28,6 +28,7 @@ a = Analysis(
         ('app/ui/qml', 'app/ui/qml'),
         ('assets', 'assets'),
         ('app/presets', 'app/presets'),
+        ('app/vendor/lieflat-less-ai-tone', 'app/vendor/lieflat-less-ai-tone'),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],

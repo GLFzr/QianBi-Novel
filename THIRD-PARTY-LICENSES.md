@@ -13,6 +13,7 @@
 | [psutil](https://github.com/giampaolo/psutil)（如随包） | 5.x+ | [BSD-3-Clause](https://github.com/giampaolo/psutil/blob/master/LICENSE) | 内存采样（长跑稳定性） |
 | [Inno Setup](https://jrsoftware.org/isinfo.php) | 6.x | [Inno Setup License](https://jrsoftware.org/files/is/license.txt) | 安装器（仅构建期） |
 | [MiSans](https://hyperos.mi.com/font) | 3.x | [MiSans 字体知识产权许可协议](https://hyperos.mi.com/font)（全网免费商用，允许嵌入分发） | 内置界面字体（assets/fonts：Regular/Medium/Demibold/Bold） |
+| [lieflat-less-ai-tone](https://github.com/larashero3-dotcom/lieflat-less-ai-tone) | 27d2923（2026-08-24 快照） | [MIT License](app/vendor/lieflat-less-ai-tone/LICENSE)，Copyright (c) 2026 shiujan | 去 AI 味规则内核（app/vendor/lieflat-less-ai-tone/；本项目含衍生适配——裁剪交互节、改写边界措辞，**适配部分同样遵循 MIT**） |
 
 > 说明：
 > - PySide6 以 LGPL-3.0 动态链接方式使用（PyInstaller onedir 保留独立 DLL，用户可替换 Qt 库），符合 LGPL 义务；Qt 的大多数源可经 https://www.qt.io/ 获取。

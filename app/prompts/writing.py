@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """正文写作 prompt：草稿（含摘要链上下文）/ 扩写 / 去味改写"""
+import logging
+
+logger = logging.getLogger("qianbi.prompts")
 
 # ========== 章节草稿（微循环第②步）==========
 
@@ -208,12 +211,61 @@ DESLOP_REWRITE_PROMPT = """{project_header}
 DESLOP_RULES_MARKER = "## 改写原则"
 DESLOP_RULES_END_MARKER = "## 本书正则契约"
 
+# 原始模板快照（lieflat 集成）：并集拼接会就地替换本模块的 DESLOP_REWRITE_PROMPT，
+# 内置切片必须永远从这份快照取，保证 rules_source=builtin 时逐字节回退到旧行为。
+_ORIGINAL_DESLOP_REWRITE_PROMPT = DESLOP_REWRITE_PROMPT
+
+logger = logging.getLogger("qianbi.prompts")
+
+
+def builtin_deslop_static_rules() -> str:
+    """内置静态规则段（改写原则 1-10）——永远从原始模板切片，零占位符"""
+    i = _ORIGINAL_DESLOP_REWRITE_PROMPT.find(DESLOP_RULES_MARKER)
+    j = _ORIGINAL_DESLOP_REWRITE_PROMPT.find(DESLOP_RULES_END_MARKER)
+    return _ORIGINAL_DESLOP_REWRITE_PROMPT[i:j] if 0 <= i < j else ""
+
+
+def _set_active_template(value: str) -> None:
+    """同步替换 writing 模块与 app.prompts 包两级属性（运行方都走包属性取模板）。
+
+    stages.py:1941 / co_dialogue.py:638 用 prompts.DESLOP_REWRITE_PROMPT——包级
+    属性是包导入时绑定的旧字符串引用，只改 writing 模块属性会导致 splice 静默失效。
+    """
+    global DESLOP_REWRITE_PROMPT
+    DESLOP_REWRITE_PROMPT = value
+    import sys
+    pkg = sys.modules.get(__package__)
+    if pkg is not None:
+        setattr(pkg, "DESLOP_REWRITE_PROMPT", value)
+
 
 def deslop_static_rules() -> str:
-    """去味静态规则段（改写原则 1-10），零占位符，可进卷级冻结头"""
-    i = DESLOP_REWRITE_PROMPT.find(DESLOP_RULES_MARKER)
-    j = DESLOP_REWRITE_PROMPT.find(DESLOP_RULES_END_MARKER)
-    return DESLOP_REWRITE_PROMPT[i:j] if 0 <= i < j else ""
+    """去味静态规则段，零占位符，可进卷级冻结头。
+
+    lieflat 集成（方案 Phase 1）：配置 deslop.rules_source="lieflat" 且 vendor
+    装载成功时，返回并集文本（内置 10 条体裁层原则 ∪ skill 11 条新规则 ∪ 负表
+    全量 ∪ 适配后硬性边界），并**同字节拼接进本模块的 DESLOP_REWRITE_PROMPT**——
+    _rewrite_phase 的逐字剥除、co_dialogue 的 .format、volume_session 卷级头
+    三者都从模板/本函数取文本，必须同源同字节，否则双重规则/剥除告警/静默漏注入。
+    装载失败或 rules_source="builtin" → 返回内置切片（逐字节旧行为），模板还原。
+    """
+    from . import skill_rules
+    skill_rules._ensure_init()
+    union = skill_rules._cache["union"]
+    if skill_rules._cache["mode"] == "lieflat" and union:
+        if union not in DESLOP_REWRITE_PROMPT:
+            base = skill_rules._cache["builtin_slice"]
+            if base in DESLOP_REWRITE_PROMPT:
+                _set_active_template(DESLOP_REWRITE_PROMPT.replace(base, union, 1))
+            else:
+                # 模板既无内置切片也无并集（不可能态）——保险回退 builtin
+                logger.warning("去味模板切片失配，规则回退 builtin（模板被外部改动？）")
+                skill_rules._cache.update(mode="builtin", union=None, reason="模板切片失配")
+                return builtin_deslop_static_rules()
+        return union
+    if DESLOP_REWRITE_PROMPT is not _ORIGINAL_DESLOP_REWRITE_PROMPT:
+        _set_active_template(_ORIGINAL_DESLOP_REWRITE_PROMPT)
+    return builtin_deslop_static_rules()
 
 
 # 定点修复（writing.deslop_pinned，缺省关）：命中段 ≤2 处时只输出替换段全文
@@ -234,6 +286,7 @@ DESLOP_PINNED_PROMPT = """你是文字编辑。本会话中的章正文有以下
 3. 同一替换写法不得反复出现；保持与前后段的衔接；段内字数变化 ≤10%
 4. 专属口头禅黑名单（改写中同样禁用）：{tic_blacklist}
 5. 本书正则契约（must 级）：{must_block}
+6. **以下情况禁止作为改写理由**（实测不构成 AI 指纹，不许据此改文字）：句长/段落不够参差、单字虚词偏少、反复写全称、被动句、名词化与长句本身、正文"首先其次"、句内同构排比、问句设问、比喻本身与独立成段的比喻、抽象名词配具体动词（lieflat 负表 lean 压缩版——定点路径豁免全套规则注入，只带这一行）
 
 ## 输出格式（严格遵守）
 对每个待改写段落各输出一行，格式：⟦Pnn⟧ 替换后的完整段落全文

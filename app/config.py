@@ -88,6 +88,12 @@ DEFAULT_CONFIG = {
               "review_votes_recheck": 1,
               "review_pass_fast": True},  # 修复环复扫投票数（控成本）
     "llm": {"max_retries": 2, "backoff_base": 2.0},
+    # 去 AI 味规则源（lieflat-less-ai-tone 集成，方案 docs/lieflat-less-ai-tone-integration-plan.md）
+    # rules_source: "lieflat"=vendor skill 并集（缺省）/ "builtin"=内置 10 条原则
+    # rules_render: "lean"=裁示例只留触发标记+改法（缺省，token 成本低）/ "full"=带 ❌/✅ 示例
+    # ⚠ 应用启动时一次性读入缓存；卷写作中途切换 rules_source 或修改 vendor 文件 = 会话栈
+    #   整卷作废重建（卷级冻结头字节变化），需开新卷
+    "deslop": {"rules_source": "lieflat", "rules_render": "lean"},
     "writing": {"chapter_word_target": 3000, "default_genre": "", "default_platform": "番茄",
                 "run_mode": "auto",             # auto=全自动 / cw=共写（v1.2 两档制；共写为项目粘性，一般不写此处）
                 "regex_semantics": "logic",     # 正则语义：logic=逻辑约束规则集（默认）/ regex=字面正则样本
