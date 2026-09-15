@@ -215,9 +215,23 @@ def finish():
         print("QML-ERR:", w)
     print("TOTAL", f"{sum(1 for _, p in results if p)} / {len(results)}")
     shutil.rmtree(TMP, ignore_errors=True)
-    QTimer.singleShot(50, app.quit)
-    sys.exit(0 if ok else 1)
+    FINISHED["ok"] = ok          # WP-06（N-31 同族）：槽内 sys.exit 不可靠，改标记
 
+
+FINISHED = {"ok": False}
 
 QTimer.singleShot(700, step1_product_follows_latest_batch)
+
+
+def _watchdog():
+    if not FINISHED["ok"]:
+        print("ABORTED：看门狗到期未到达 finish 判定（上游崩了不许假绿/挂死）", flush=True)
+    app.quit()
+
+
+QTimer.singleShot(180000, _watchdog)
 app.exec()
+# WP-06：结论行统一 PROBE_DONE + 退码在事件循环外取（挂死根因=WP-03 前的
+# readerChapterList() 调用式 TypeError 打断 finish 调度链，app.exec 永不退出）
+print("PROBE_DONE " + ("PASS" if FINISHED["ok"] else "FAIL"), flush=True)
+sys.exit(0 if FINISHED["ok"] else 1)

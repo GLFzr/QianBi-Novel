@@ -159,8 +159,22 @@ def finish(failed=False):
         print(("PASS" if passed else "FAIL"), name, ("| " + extra) if extra else "")
         ok = ok and passed
     print("TOTAL", f"{sum(1 for _n, p, _e in results if p)} / {len(results)}")
-    sys.exit(0 if ok else 1)
+    FINISHED["ok"] = ok          # WP-06（N-31 同族）：槽内 sys.exit 不可靠，改标记
 
+
+FINISHED = {"ok": False}
 
 QTimer.singleShot(700, guard(run_all))
+
+
+def _watchdog():
+    if not FINISHED["ok"]:
+        print("ABORTED：看门狗到期未到达 finish 判定（上游崩了不许假绿/挂死）", flush=True)
+    app.quit()
+
+
+QTimer.singleShot(90000, _watchdog)
 app.exec()
+# WP-06：结论行统一 PROBE_DONE + 退码在事件循环外取
+print("PROBE_DONE " + ("PASS" if FINISHED["ok"] else "FAIL"), flush=True)
+sys.exit(0 if FINISHED["ok"] else 1)

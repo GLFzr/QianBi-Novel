@@ -78,6 +78,7 @@ b._open_project(PROJ, silent=True)
 
 STACK = None
 REPORT = {}
+QML_ERRS = 0
 BLOBS = {}          # panel key -> 渲染出的全部文本（断言「某区块真的显示了出来」用）
 PANELS = ["pipeline", "library", "settings", "chapters", "notes", "shelf"]   # library = 预设库面板
 CUR = 0
@@ -284,7 +285,9 @@ def finish():
         for line in blob.split("\n"):        # 实际渲染出的参数档区块，区分「没显示」与「显示了一半」
             if any(k in line for k in ("参数档", "基线", "温度", "核采样", "连接槽")):
                 print("  BLOB>", line, flush=True)
+    global QML_ERRS
     errs = [w for w in WARN if "ReferenceError" in w or "TypeError" in w or "Unable to assign" in w]
+    QML_ERRS = len(errs)
     print("qml warnings:", len(errs), flush=True)
     for w in errs[:8]:
         print("  QML>", w, flush=True)
@@ -301,4 +304,4 @@ QTimer.singleShot(900, start)
 QTimer.singleShot(90000, app.quit)
 rc = app.exec()
 bad = sum(len(v.get("h_overflow", [])) + len(v.get("v_overflow", [])) + len(v.get("squashed", [])) + len(v.get("offside", [])) for v in REPORT.values())
-sys.exit(2 if (bad or FAILS) else rc)
+sys.exit(2 if (bad or FAILS or QML_ERRS) else rc)   # WP-06：QML 错误必须进退码（曾 FAIL 却退 0）

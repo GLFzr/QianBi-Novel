@@ -780,7 +780,9 @@ ApplicationWindow {
                         }
                     }
                     Connections {
-                        target: editor.flickableItem
+                        // flickableItem 首帧前是 undefined——直接赋给 target 会报
+                        // 「Unable to assign [undefined] to QObject*」（panel_fit errs 门禁）
+                        target: editor.flickableItem ?? null
                         function onContentYChanged() {
                             var fl = editor.flickableItem
                             if (fl) editor.followStream =

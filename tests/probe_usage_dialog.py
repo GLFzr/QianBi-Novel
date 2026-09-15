@@ -129,7 +129,6 @@ def step3():
     print("warnings(filtered):", len(errs), " all:", len(WARN), flush=True)
     for w in WARN[:30]:
         print("  QML>", w, flush=True)
-    print("PROBE_OK", flush=True)
     STEP3_DONE["ok"] = True
     QTimer.singleShot(150, app.quit)
 
@@ -142,4 +141,7 @@ def _watchdog():
 QTimer.singleShot(30000, _watchdog)
 _rc = app.exec()
 # N-31：失败必须非零退码（原 sys.exit(app.exec()) 恒 0）
+# WP-06：结论行统一 PROBE_DONE（旧 PROBE_OK 在判定前打印、失败也打 = 假绿标记，删除）
+print("PROBE_DONE " + ("FAIL" if USAGE_FAILS else "PASS")
+      + ("" if not USAGE_FAILS else ("：" + "；".join(USAGE_FAILS))), flush=True)
 sys.exit(1 if USAGE_FAILS else 0)
