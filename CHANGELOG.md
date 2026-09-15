@@ -10,6 +10,15 @@
 
 > 版本号唯一来源为 `app/__init__.py` 的 `__version__` 常量，本文件与 README、git tag 均以其为准。
 
+## Unreleased（0.20.0-dev）
+
+### 新增（去 AI 味规则源 lieflat-less-ai-tone 集成）
+- 并入上游去 AI 味 skill 规则内核（11 条白名单改写规则 + 硬约束 + 「不作为改写理由」负表），与内置 10 条体裁层原则以**并集**共同生效，负表能显著减少误改（比喻/设问/被动句等实测不构成 AI 指纹，禁止据此改文字）
+- 去 AI 味规则源可切换：deslop.rules_source = lieflat（缺省）/ builtin；渲染档 deslop.rules_render = lean（缺省，裁示例省 token）/ full（带示例）。**切换规则源或改 vendor 文件需开新卷**（卷级冻结头按字节比对）
+- 修复检测/生成自相矛盾的老毛病：「仿佛/犹如/宛若/如同」不再逐词判死（改为密度型建议级），与「每千字至少 1 处具象比喻」的写作要求不再打架；新增提示性冒号、顿号罗列密度两条建议级检测（经人类语料误报门禁）
+- 合规：上游 MIT License（Copyright (c) 2026 shiujan），vendored 于 app/vendor/ 并随包分发 LICENSE；详见 docs/lieflat-less-ai-tone-integration-notes.md
+
+
 ## [0.19.9] - 2026-09-13（槽位绑定原样生效 · 输出治理收尾 · 新书试跑验证）
 
 > 本版主题：**「绝对符合用户选的」**。用户发现 Pro 计费（考古定案：151 笔

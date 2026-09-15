@@ -225,6 +225,11 @@ def builtin_deslop_static_rules() -> str:
     return _ORIGINAL_DESLOP_REWRITE_PROMPT[i:j] if 0 <= i < j else ""
 
 
+# 当前已拼接进模板的并集文本（None=模板处于原始态）。支持进程内重初始化后的
+# 任意档位切换（lean↔full↔builtin）——生产上模式启动即固定，切换只发生在测试。
+_ACTIVE_UNION = None
+
+
 def _set_active_template(value: str) -> None:
     """同步替换 writing 模块与 app.prompts 包两级属性（运行方都走包属性取模板）。
 
@@ -249,21 +254,29 @@ def deslop_static_rules() -> str:
     三者都从模板/本函数取文本，必须同源同字节，否则双重规则/剥除告警/静默漏注入。
     装载失败或 rules_source="builtin" → 返回内置切片（逐字节旧行为），模板还原。
     """
+    global _ACTIVE_UNION
     from . import skill_rules
     skill_rules._ensure_init()
     union = skill_rules._cache["union"]
     if skill_rules._cache["mode"] == "lieflat" and union:
         if union not in DESLOP_REWRITE_PROMPT:
             base = skill_rules._cache["builtin_slice"]
-            if base in DESLOP_REWRITE_PROMPT:
+            if _ACTIVE_UNION and _ACTIVE_UNION in DESLOP_REWRITE_PROMPT:
+                # 旧并集在模板上（重初始化换档：lean↔full）——原位换新并集
+                _set_active_template(DESLOP_REWRITE_PROMPT.replace(_ACTIVE_UNION, union, 1))
+            elif base in DESLOP_REWRITE_PROMPT:
                 _set_active_template(DESLOP_REWRITE_PROMPT.replace(base, union, 1))
             else:
                 # 模板既无内置切片也无并集（不可能态）——保险回退 builtin
                 logger.warning("去味模板切片失配，规则回退 builtin（模板被外部改动？）")
                 skill_rules._cache.update(mode="builtin", union=None, reason="模板切片失配")
+                _ACTIVE_UNION = None
+                _set_active_template(_ORIGINAL_DESLOP_REWRITE_PROMPT)
                 return builtin_deslop_static_rules()
+        _ACTIVE_UNION = union
         return union
-    if DESLOP_REWRITE_PROMPT is not _ORIGINAL_DESLOP_REWRITE_PROMPT:
+    if _ACTIVE_UNION or DESLOP_REWRITE_PROMPT is not _ORIGINAL_DESLOP_REWRITE_PROMPT:
+        _ACTIVE_UNION = None
         _set_active_template(_ORIGINAL_DESLOP_REWRITE_PROMPT)
     return builtin_deslop_static_rules()
 
