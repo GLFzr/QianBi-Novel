@@ -12,6 +12,7 @@ _CORE = os.path.join(_ROOT, "tests_output", "长测_改命笔记", "设定", "�
 if not os.path.exists(_CORE):
     sys.exit(f"夹具缺失: {_CORE}")
 core = open(_CORE, encoding="utf-8").read()
+FAILS = []  # R10：非 200/异常调用入此清单，PROBE_DONE 与退码由它派生
 prompt = f"""你是网络小说结构设计师。基于以下核心设定，设计全书卷级大纲与第一卷详细大纲。
 
 ## 核心设定
@@ -47,5 +48,10 @@ for model, mt in tests:
               f"total_tokens={d.get('usage', {}).get('total_tokens')}", flush=True)
         if r.status_code != 200:
             print("   body:", str(d)[:300], flush=True)
+            FAILS.append(f"{model}-mt{mt}")
     except Exception as e:
         print(f"{model} mt={mt}: ERR {type(e).__name__} {e}", flush=True)
+        FAILS.append(f"{model}-mt{mt}")
+
+print("PROBE_DONE " + ("PASS" if not FAILS else "FAIL"), flush=True)
+sys.exit(1 if FAILS else 0)

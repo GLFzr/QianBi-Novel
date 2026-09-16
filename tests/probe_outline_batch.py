@@ -27,6 +27,7 @@ if not KEY:
     except Exception:
         pass
 BASE = os.environ.get("QIANBI_TEST_BASE", "https://opencode.ai/zen/go/v1")
+FAILS = []  # R10：非 200/异常调用入此清单，PROBE_DONE 与退码由它派生
 
 from app import project, prompts
 from app.config import load_config
@@ -95,6 +96,7 @@ try:
           f"usage={json.dumps(usage, ensure_ascii=False)}", flush=True)
     if r.status_code != 200:
         print("body:", str(d)[:500], flush=True)
+        FAILS.append(f"{start}-{end}")
     else:
         outlines = parse_outlines(content)
         nums = [o[0] for o in outlines]
@@ -108,4 +110,6 @@ try:
         print(f"原始输出已存 .tmp_test/outline_batch_{start}-{end}_{effort}.md", flush=True)
 except Exception as e:
     print(f"ERR {type(e).__name__} {e}", flush=True)
-print("DONE", flush=True)
+    FAILS.append(f"{start}-{end}")
+print("PROBE_DONE " + ("PASS" if not FAILS else "FAIL"), flush=True)
+sys.exit(1 if FAILS else 0)

@@ -27,6 +27,7 @@ print("KEY 来源:", "环境变量" if os.environ.get("DEEPSEEK_API_KEY") else "
 
 BASE = "https://api.deepseek.com"
 MODEL = "deepseek-v4-flash"
+FAILS = []  # R10：非 200/异常调用入此清单，PROBE_DONE 与退码由它派生
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CORE = os.path.join(_ROOT, "tests_output", "长测_改命笔记", "设定", "题材定位.md")
@@ -66,11 +67,13 @@ def call(tag, prompt, max_tokens=8192, extra=None):
               f"usage={u}", flush=True)
         if r.status_code != 200:
             print("   body:", str(d)[:300], flush=True)
+            FAILS.append(tag)
         if c:
             print("   开头:", c[:100].replace("\n", " "), flush=True)
         return c
     except Exception as e:
         print(f"[{tag}] ERR {type(e).__name__} {e}", flush=True)
+        FAILS.append(tag)
         return ""
 
 
@@ -83,4 +86,5 @@ call("t2", outline_prompt)
 print("=== 3. 官方 flash 大纲（thinking disabled）===", flush=True)
 call("t3", outline_prompt, extra={"thinking": {"type": "disabled"}})
 
-print("DONE", flush=True)
+print("PROBE_DONE " + ("PASS" if not FAILS else "FAIL"), flush=True)
+sys.exit(1 if FAILS else 0)

@@ -33,6 +33,7 @@ if not KEY:
     except Exception:
         pass
 assert KEY, "未找到 API Key（设 QIANBI_TEST_KEY 或配置 ~/.qianbi_novel/config.json）"
+FAILS = []  # R10：非 200/异常调用入此清单，PROBE_DONE 与退码由它派生
 BASE = os.environ.get("QIANBI_TEST_BASE", "https://opencode.ai/zen/go/v1")
 MODEL = "deepseek-v4-flash"
 
@@ -75,9 +76,11 @@ def call(tag, prompt, max_tokens, extra=None):
               f"usage={json.dumps(u, ensure_ascii=False)}", flush=True)
         if r.status_code != 200:
             print("   body:", str(d)[:500], flush=True)
+            FAILS.append(tag)
         return c
     except Exception as e:
         print(f"[{tag}] ERR {type(e).__name__} {e}", flush=True)
+        FAILS.append(tag)
         return ""
 
 
@@ -103,4 +106,5 @@ print(f"\n=== D. 对照：大纲任务 + thinking disabled + max_tokens=16384 ==
 c = call("D", outline_prompt, 16384, off_think)
 print("   长度:", len(c), flush=True)
 
-print("\nDONE", flush=True)
+print("PROBE_DONE " + ("PASS" if not FAILS else "FAIL"), flush=True)
+sys.exit(1 if FAILS else 0)

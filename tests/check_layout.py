@@ -102,3 +102,9 @@ for p in problems[:20]:
     print("  OVERFLOW:", p)
 print("LAYOUT_CHECK_DONE")
 app.quit()
+sys.stdout.flush()
+sys.stderr.flush()
+# R10：结论与退码必须一致。sys.exit 仍走解释器析构，Qt 静态析构期会间歇性 native
+# fastfail（0xC0000409，经 MSYS timeout 映射成 127）把「PASS」的退码改写掉（复跑
+# 实测 sys.exit 亦复现）；os._exit 跳过析构，退码=判定结果。同 probe_word_block 对策。
+os._exit(1 if problems else 0)
