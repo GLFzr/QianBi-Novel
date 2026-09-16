@@ -140,7 +140,9 @@ Rectangle {
         }
         Column {
             Layout.fillWidth: true
-            visible: gateDetail.violations && gateDetail.violations.length > 0
+            // 初始 gateDetail=({}) 时 violations 是 undefined——直接 && 会把
+            // undefined 赋给 bool（panel_fit 实测抓到），必须先归一再比较
+            visible: (gateDetail.violations || []).length > 0
             spacing: 2
             Repeater {
                 model: gateDetail.violations || []
