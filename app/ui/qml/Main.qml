@@ -1477,6 +1477,8 @@ ApplicationWindow {
     property int lockBlockActual: 0
     property int lockBlockTarget: 0
     property string lockBlockKind: "word"   // word=字数未达标 | contract=正则 must 违规
+    property var lockBlockViolations: []    // Q6：被拦的全量违规清单（旧 reason 仍是首条）
+    property var lockBlockDetail: ({})      // Q6：当前值/阈值/继续与回退后果
     Connections {
         target: bridge
         function onLockBlocked(num, reason, actual, target, kind) {
@@ -1486,6 +1488,15 @@ ApplicationWindow {
             mainWindow.lockBlockTarget = target
             mainWindow.lockBlockKind = kind || "word"
             forceLockDialog.open()
+        }
+        // Q6（只加不改）：全量违规与两侧后果随伴随信号同批到齐
+        function onLockBlockedDetail(num, detail) {
+            mainWindow.lockBlockViolations = detail.violations || []
+            mainWindow.lockBlockDetail = detail || {}
+        }
+        // Q6：九门停靠详情 → 门条（gateAsked 旧链路原样保留）
+        function onGateDetail(key, chapter, detail) {
+            gateBar.showGateDetail(key, detail)
         }
     }
     Dialog {
@@ -1525,6 +1536,41 @@ ApplicationWindow {
                 color: Theme.danger
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+            // Q6：被拦的全部违规逐条列出（旧 reason 只是首条）
+            Column {
+                width: parent.width
+                spacing: 2
+                Repeater {
+                    model: mainWindow.lockBlockViolations
+                    Text {
+                        required property string modelData
+                        width: parent.width
+                        text: "· " + modelData
+                        color: Theme.danger
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+            Text {
+                visible: (mainWindow.lockBlockDetail.continue_consequence || "") !== ""
+                width: parent.width
+                text: "仍要锁定的后果：" + mainWindow.lockBlockDetail.continue_consequence
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.Wrap
+            }
+            Text {
+                visible: (mainWindow.lockBlockDetail.rollback_consequence || "") !== ""
+                width: parent.width
+                text: "先不锁定的后果：" + mainWindow.lockBlockDetail.rollback_consequence
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
                 wrapMode: Text.Wrap
             }
             Text {

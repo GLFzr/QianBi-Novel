@@ -962,6 +962,8 @@ class Bridge(QObject):
     modelsFetched = Signal(str, list)           # cid, models
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
     lockBlocked = Signal(int, str, int, int, str)  # 锁定被闸门拦截：num, reason, actual, target, kind
+    gateDetail = Signal(str, int, "QVariantMap")    # Q6（只加不改）：九门停靠详情，伴随 gateAsked
+    lockBlockedDetail = Signal(int, "QVariantMap")  # Q6（只加不改）：锁门全量违规+当前值/阈值+两侧后果
     # kind: "word"=字数未达标（有 actual/target）| "contract"=正则 must 契约违规（无字数概念）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
@@ -1373,6 +1375,7 @@ class Bridge(QObject):
         self.orch.sig_failed.connect(self._on_failed)
         self.orch.sig_auto_paused.connect(self._on_auto_paused)
         self.orch.sig_gate.connect(self._on_gate)
+        self.orch.sigGateDetail.connect(self._on_gate_detail)
         self._set_running(True)
         self._set_paused(False)
         self.logModel.append("info", "流水线启动")
@@ -1515,6 +1518,10 @@ class Bridge(QObject):
         self.gateAsked.emit(key, chapter, summary)
         self.logModel.append("info", f"⏸ 决策门 {key}（第{chapter}章）：{summary}")
         self._console_log("gate", f"⏸ 决策门 {key}（第{chapter}章）：{summary}", num=chapter)
+
+    def _on_gate_detail(self, key: str, chapter: int, detail: dict):
+        """Q6：九门停靠详情转发（旧 gateAsked 语义不动，详情走伴随信号）"""
+        self.gateDetail.emit(key, chapter, detail)
 
     @Slot(str, str)
     def resolveStepGate(self, action: str, idea: str):
@@ -4087,13 +4094,36 @@ class Bridge(QObject):
         if verdict:
             default = int(self.cfg.get("writing", {}).get("chapter_word_target", 3000))
             target = gates.chapter_word_target(self.proj, self._cur_num, default)
+            actual = project.count_chars(prose)
             self.lockBlocked.emit(self._cur_num, blocking[0],
-                                  project.count_chars(prose), target, "word")
+                                  actual, target, "word")
+            # Q6：全量违规 + 当前值/阈值 + 继续与回退的后果（旧信号原样并存）
+            self.lockBlockedDetail.emit(self._cur_num, {
+                "gate_key": "G9",
+                "gate_label": "字数闸门",
+                "violations": [str(b) for b in (blocking or [])],
+                "current_value": actual,
+                "threshold": target,
+                "continue_consequence": "跳过字数校验强制锁定；违规原因写进强锁审计痕"
+                                        "（「关于→强锁审计痕」可回看），解锁后可继续扩写",
+                "rollback_consequence": "回到编辑器补足字数后再锁定，不做任何锁定动作",
+            })
             return
         _c_items, c_blocking, c_verdict = mustscan.contract_precheck(
             self.proj, self._cur_num, prose)
         if c_verdict:
             self.lockBlocked.emit(self._cur_num, c_blocking[0], 0, 0, "contract")
+            self.lockBlockedDetail.emit(self._cur_num, {
+                "gate_key": "G9",
+                "gate_label": "正则契约",
+                "violations": [str(b) for b in (c_blocking or [])],
+                "current_value": "",
+                "threshold": "",
+                "continue_consequence": "跳过正则契约强制锁定；被违反的规则与内容写进强锁审计痕"
+                                        "（「关于→强锁审计痕」可回看）",
+                "rollback_consequence": "回到编辑器处理违规项，或改 设定/正则.md 修规则本身，"
+                                        "不做任何锁定动作",
+            })
             return
         self._do_lock_chapter(forced=False)
 
@@ -4111,9 +4141,10 @@ class Bridge(QObject):
         reasons = []
         _items, blocking, _v = gates.word_count_precheck(
             self.proj, self._cur_num, prose, self.cfg)
-        reasons += list(blocking or [])
+        # Q6：审计痕与回执点名被绕过的是哪条闸门（原来是裸问题文本，闸门名靠猜）
+        reasons += [f"字数闸门：{b}" for b in (blocking or [])]
         _ci, c_blocking, _cv = mustscan.contract_precheck(self.proj, self._cur_num, prose)
-        reasons += list(c_blocking or [])
+        reasons += [f"正则契约：{b}" for b in (c_blocking or [])]
         reasons_txt = "；".join(reasons) if reasons else "手动强锁"
         try:
             st.record_forced_lock(self.proj, st.load_state(self.proj), self._cur_num,

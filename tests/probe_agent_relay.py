@@ -103,6 +103,8 @@ sup_started, blocked = [], []
 b._start_cw_supervisor = lambda: sup_started.append(1)
 b._maybe_backflow = lambda num, force=False: None
 b.lockBlocked.connect(lambda num, reason, actual, target, kind: blocked.append((num, target)))
+blocked_detail = []
+b.lockBlockedDetail.connect(lambda num, detail: blocked_detail.append(detail))   # Q6 伴随详情
 s2 = st.load_state(proj)
 st.ensure_cw(s2)["stage"] = st.STAGE_CW_PROSE
 st.save_state(proj, s2)
@@ -128,6 +130,12 @@ b.openChapter(1)
 b.confirmCwStage()
 check("已比对但字数未达标 → 拦截而非静默锁定",
       b.chapterLocked is False and blocked == [(1, 3000)] and sup_started == [1])
+check("Q6 详情伴随信号同发：阈值/违规清单/两侧后果齐备",
+      bool(blocked_detail) and blocked_detail[-1].get("threshold") == 3000
+      and isinstance(blocked_detail[-1].get("violations"), list)
+      and len(blocked_detail[-1]["violations"]) >= 1
+      and bool(blocked_detail[-1].get("continue_consequence"))
+      and bool(blocked_detail[-1].get("rollback_consequence")))
 project.attempt_unlock(proj, 1)
 # 触发点②：世界书变更 → locked 章影响提示（纯逻辑，不发 LLM）
 project.set_chapter_locked(proj, 1, True)

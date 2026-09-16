@@ -187,6 +187,11 @@ def test_dead_check_on_start_key_never_becomes_a_user_decision(tmp_path, monkeyp
 
     默认翻成开之后这条换了个说法：它不该决定 auto_check 的真假（现在两种值都合法），
     但它绝对不能冒充成「用户表过态」——冒充的代价是面板不再说明这事是谁开的。
+
+    WP-12 收窄注记：load_config 现在**允许一次性写盘**——N-06 迁移标记必须在
+    首次载入落盘（否则「从未设过 review_max_rounds」与「主动设小」永远分不清，
+    用户显式设 1 会被反复回填成 3，反向静默行为变更）。本断言相应从
+    「绝不写盘」收窄为「updates 死键迁移不落盘 + N-06 一次性标记写盘幂等」。
     """
     raw = _cfg_with_updates({"manifest_url": "https://example.invalid/m.json",
                              "check_on_start": True})
@@ -196,7 +201,13 @@ def test_dead_check_on_start_key_never_becomes_a_user_decision(tmp_path, monkeyp
     assert not cfg["updates"].get("auto_check_chosen"), "死键冒充成了用户的选择"
     assert cfg["updates"]["manifest_url"] == "https://example.invalid/m.json"
     with open(f, encoding="utf-8") as fh:
-        assert fh.read() == raw, "load_config 不该把迁移结果顺手写回磁盘"
+        after_first = fh.read()
+    # updates 死键迁移本身依旧不落盘：盘上不能留下任何 check_on_start 痕迹
+    assert "check_on_start" not in after_first, "死键迁移写回了盘"
+    # N-06 一次性标记落盘后，二次 load 幂等零写入
+    cfg_mod.load_config()
+    with open(f, encoding="utf-8") as fh:
+        assert fh.read() == after_first, "二次 load_config 仍有写盘——迁移不幂等"
 
 
 def test_inherited_false_auto_check_gets_flipped(tmp_path, monkeypatch):

@@ -101,8 +101,12 @@ def check(name, ok):
 check.failed = False
 
 LOCK_BLOCKED = []
+LOCK_BLOCKED_DETAIL = []
 b.lockBlocked.connect(lambda num, reason, actual, target, kind:
                       LOCK_BLOCKED.append((num, reason, actual, target, kind)))
+# Q6：伴随详情信号——全量违规/当前值/阈值/两侧后果必须同批到齐
+b.lockBlockedDetail.connect(lambda num, detail:
+                            LOCK_BLOCKED_DETAIL.append((num, detail)))
 
 
 def step1_precheck():
@@ -139,6 +143,17 @@ def step3_lock_gate():
           and LOCK_BLOCKED[0][3] == 2000)
     check("闸门类型标注为 word（决定强锁对话框文案）",
           bool(LOCK_BLOCKED) and LOCK_BLOCKED[0][4] == "word")
+    check("Q6 详情伴随信号同发：违规全清单=逐条列表且含首条",
+          bool(LOCK_BLOCKED_DETAIL) and LOCK_BLOCKED_DETAIL[0][0] == 4
+          and isinstance(LOCK_BLOCKED_DETAIL[0][1].get("violations"), list)
+          and len(LOCK_BLOCKED_DETAIL[0][1]["violations"]) >= 1
+          and "1800" in " ".join(LOCK_BLOCKED_DETAIL[0][1]["violations"]))
+    check("Q6 详情携带当前值/阈值与两侧后果",
+          bool(LOCK_BLOCKED_DETAIL)
+          and LOCK_BLOCKED_DETAIL[0][1].get("current_value") == project.count_chars(SHORT_PROSE)
+          and LOCK_BLOCKED_DETAIL[0][1].get("threshold") == 2000
+          and bool(LOCK_BLOCKED_DETAIL[0][1].get("continue_consequence"))
+          and bool(LOCK_BLOCKED_DETAIL[0][1].get("rollback_consequence")))
     check("短章未被静默锁定", not project.is_chapter_locked(PROJ, 4))
     QTimer.singleShot(400, step4_force_dialog)
 

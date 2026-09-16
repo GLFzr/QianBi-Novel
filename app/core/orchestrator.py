@@ -41,6 +41,39 @@ class Orchestrator(QThread):
     sig_failed = Signal(str)
     sig_auto_paused = Signal(str)       # 闸门自动暂停（strict 策略），带原因
     sig_gate = Signal(str, int, str)    # 步骤决策门：gate_key, chapter, summary
+    sigGateDetail = Signal(str, int, dict)   # Q6（只加不改）：九门停靠详情伴随信号——旧 sig_gate 位置参数与语义不动
+
+    # Q6：九门停靠指导（拦哪条 / 继续与回退的后果）。决策门的「拦哪条」是门语义
+    # 本身；字数/正则硬闸的当前值与阈值在 bridge 锁定路径里有真值，不在此表。
+    GATE_GUIDANCE = {
+        "G1": {"blocked": "核心设定是否成立——缺核心冲突、金手指机制不闭合、世界观自相矛盾就该拦下",
+               "continue": "设定按当前文本冻结，进入全书大纲阶段",
+               "rollback": "当前设定归档后重拟，已生成的大纲/细纲连带清空"},
+        "G2": {"blocked": "全书大纲是否成立——卷级结构断裂、主线推进缺阶段、结尾无回收就该拦下",
+               "continue": "大纲文本冻结，进入细纲批生成",
+               "rollback": "当前大纲归档后重拟，细纲连带清空"},
+        "G3": {"blocked": "本批细纲是否成立——章与章不衔接、节拍缺钩子、与大纲冲突就该拦下",
+               "continue": "本批细纲冻结，继续下一批或进入素材组装",
+               "rollback": "本批细纲归档，可带想法重拟本批（其余批不动）"},
+        "G4": {"blocked": "素材组装是否完备——材料缺口、伏笔未登记、设定遗漏就该拦下",
+               "continue": "材料按当前清单投入本章写作",
+               "rollback": "归档组装清单重组装（未消费材料可重选）"},
+        "G5L": {"blocked": "本章开写条件（软门）——字数目标、前章钩子、视角衔接提醒；无产物可回退",
+                "continue": "开始写本章正文",
+                "rollback": "软门无产物，只带想法重新确认即可"},
+        "G6": {"blocked": "AI 味扫描结果确认——本地扫描检出的问题清单是否要处理",
+               "continue": "按当前扫描结论进入去味/下一步",
+               "rollback": "保留原稿跳过去味（扫描记录照常留痕）"},
+        "G7": {"blocked": "去味改写前后对比确认——改写是否引入新问题、是否漏检",
+               "continue": "去味稿生效，进入审校",
+               "rollback": "还原去味前原稿，本次改写作废"},
+        "G8": {"blocked": "审校结论确认——人工审校=你录入的阻断问题清单；AI 审校=六维投票结论",
+               "continue": "结论生效进入定稿（G9 字数/正则仍把关）",
+               "rollback": "还原审校前原稿，本轮审校作废"},
+        "G9": {"blocked": "定稿确认——字数闸门（目标下限 90%）与正则 must 契约未过会拦",
+               "continue": "本章锁定进版本历史，触发剧情反哺",
+               "rollback": "归档本章重写（旧版本保留在版本历史）"},
+    }
 
     def __init__(self, proj: str, cfg: dict, parent=None):
         super().__init__(parent)
@@ -143,6 +176,19 @@ class Orchestrator(QThread):
         self._gate_pending = key
         self.log("info", f"决策门 {key}（第{chapter}章）等待你的决定：{summary[:60]}")
         self.sig_gate.emit(key, chapter, summary)
+        # Q6：详情伴随信号——界面必须能答出「拦哪条 / 当前值 vs 阈值 / 继续与回退
+        # 分别发生什么」。决策门本身无数值阈值（诚实给空串），字数/正则硬闸的
+        # 当前值与阈值走 bridge.lockBlockedDetail（有真值才填）。
+        g = self.GATE_GUIDANCE.get(key, {})
+        self.sigGateDetail.emit(key, chapter, {
+            "gate_key": key,
+            "blocked_rule": g.get("blocked", ""),
+            "current_value": "",
+            "threshold": "",
+            "violations": [],
+            "continue_consequence": g.get("continue", ""),
+            "rollback_consequence": g.get("rollback", ""),
+        })
         # 直等决策（T3.3）：stop() 会置位 _gate_evt 立即唤醒；1s 超时仅兜底
         while not self._gate_evt.wait(1.0):
             if self._stop:

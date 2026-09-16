@@ -36,6 +36,9 @@ Rectangle {
         return m
     }
     property bool rollbackable: gateKey !== "G5L"
+    // Q6（只加不改）：九门停靠详情——拦哪条/当前值 vs 阈值/违规清单/两侧后果
+    property var gateDetail: ({})
+    property bool g8Mode: gateKey === "G8"
 
     function showGate(key, chapter, summary) {
         gateKey = key
@@ -44,6 +47,13 @@ Rectangle {
         ideaInput.text = ""
         waiting = true
         ideaInput.forceActiveFocus()
+    }
+
+    function showGateDetail(key, detail) {
+        // 与 onGateAsked 配套的伴随流：key 对不上时以旧链路为准，不覆盖
+        if (key !== gateKey || !waiting)
+            return
+        gateDetail = detail || {}
     }
 
     function doNext() {
@@ -117,28 +127,90 @@ Rectangle {
             wrapMode: Text.Wrap
         }
 
+        // Q6：停靠详情（当前值 vs 阈值 / 违规全清单 / 继续与回退的后果）
+        Text {
+            Layout.fillWidth: true
+            visible: (gateDetail.current_value || "") !== "" || (gateDetail.threshold || "") !== ""
+            text: "当前值：" + (gateDetail.current_value || "—")
+                  + "　阈值：" + (gateDetail.threshold || "—")
+            color: Theme.textTertiary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTiny
+            wrapMode: Text.Wrap
+        }
+        Column {
+            Layout.fillWidth: true
+            visible: gateDetail.violations && gateDetail.violations.length > 0
+            spacing: 2
+            Repeater {
+                model: gateDetail.violations || []
+                Text {
+                    required property string modelData
+                    Layout.fillWidth: false
+                    width: parent.width
+                    text: "· 违规：" + modelData
+                    color: Theme.danger
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsTiny
+                    wrapMode: Text.Wrap
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: (gateDetail.continue_consequence || "") !== ""
+            text: "继续：" + gateDetail.continue_consequence
+            color: Theme.textTertiary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTiny
+            wrapMode: Text.Wrap
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: (gateDetail.rollback_consequence || "") !== ""
+            text: "回退：" + gateDetail.rollback_consequence
+                  + (gateBar.rollbackable ? "" : "（本门不可回退）")
+            color: Theme.textTertiary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTiny
+            wrapMode: Text.Wrap
+        }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            TextField {
+            TextArea {
                 id: ideaInput
                 Layout.fillWidth: true
-                placeholderText: gateKey === "G8"
-                    ? "人工审校：每行一条**阻断级**问题；留空 = 放行"
+                // Q6③：G8 人工审校要能录多条阻断问题——多行录入，回车=换行不提交
+                //（旧单行框 + 回车即过门，物理上录不进去）；其余门回车提交不变
+                placeholderText: gateBar.g8Mode
+                    ? "人工审校：每行一条**阻断级**问题；回车换行，录完点「继续」；留空 = 放行"
                     : "想法 / 修改意见（可留空）"
                 placeholderTextColor: Theme.textTertiary
                 color: Theme.textPrimary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsSmall
                 selectByMouse: true
+                wrapMode: TextArea.Wrap
                 background: Rectangle {
                     radius: Theme.rBtn
                     color: Theme.bgHover
                     border.width: 1
                     border.color: ideaInput.activeFocus ? Theme.accent : Theme.border
                 }
-                Keys.onReturnPressed: gateBar.doNext()
-                Keys.onEnterPressed: gateBar.doNext()
+                Keys.onReturnPressed: function (event) {
+                    if (!gateBar.g8Mode) {
+                        event.accepted = true
+                        gateBar.doNext()
+                    }
+                }
+                Keys.onEnterPressed: function (event) {
+                    if (!gateBar.g8Mode) {
+                        event.accepted = true
+                        gateBar.doNext()
+                    }
+                }
             }
             AppButton {
                 text: "继续"
