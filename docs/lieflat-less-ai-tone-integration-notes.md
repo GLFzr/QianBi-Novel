@@ -108,7 +108,9 @@
   1. `curl` 取新 commit hash，diff SKILL.md；
   2. 重新 vendor（原文件覆盖 + 更新 `VERSION.txt`）；
   3. 跑 `pytest tests/unit/test_skill_rules.py` ——golden 快照会立刻暴露切片/措辞
-     变化，人工确认差异后删除 golden 重新生成并入库；
+     变化（golden 缺失即 fail，不再自动写入）；人工确认差异后跑
+     `python tests/bless_snapshots.py` 重新生成并入库（WP-15①/R11：测试永不
+     自动调用 bless）；
   4. 走 PR，不改 `config.py` 缺省值（用户无感）。
 
 ## 5. 双开关样章回归的 LLM 侧说明（环境不判）
@@ -116,3 +118,42 @@
 方案 §5 验收第 3 条"lieflat 模式复扫通过率 ≥ builtin 基线"需要真实 LLM 改写：
 离线已完成装配/契约/检出一致性部分（`test_skill_dualmode_regression`）；
 复扫通过率与"待修"章数对比需配置真 Key 跑 3-5 章样稿（两次全链路），留待真机窗口。
+
+## 6. 归因更正与缺省态声明（WP-15⑤⑦，2026-09-17 补）
+
+### 6.1 prompt 基线漂移归因更正（更正 80b7c8c 提交信息）
+
+`80b7c8c` 刷新基线时对 7 点漂移写的归因里，6 点准确，1 点不实：
+
+- 原文：「deslop/writing #42：DESLOP_REWRITE_PROMPT 改写原则段**并入 lieflat
+  并集**（Phase 1 核心改动，字符数 4045→4002 系模板切片源切换）」
+- 事实：#42 装配点在 Phase 1/3 的并集架构下**逐字未变**（静态段走卷级冻结头，
+  不在轮次装配点计字符串内）。4045→4002（−43）的真实成因是 **Phase 2 的一级
+  禁用词放松**——DESLOP_REWRITE_PROMPT「改写原则」第 4 条删去「仿佛」相关措辞
+  （与 CLICHE_SIMILE 降级、SELECTION 第 4 条解除"仿佛"同批联动）。并集有
+  8,108 字，若真并入装配点方向应为正向大增，"−43 归因于并入并集"在数量级和
+  方向上都不成立。
+
+另（R2 类自评更正）：`13796c5`/`a01d308` 提交信息自称「prompt 基线零漂移」，
+而漂移实际发生在 `0f12215`（Phase 2）——那两个提交内"零漂移"表述是**当时未跑
+基线**下的乐观措辞，不是实测结论。完整逐条归因见 80b7c8c（其 #42 一条按本节
+更正）与本节。
+
+### 6.2 生产行为变更登记（N-38）
+
+| 项 | 内容 |
+|---|---|
+| 变更 | 检测面：一级禁用词「仿佛/犹如/宛若/如同」由逐词 blocking 降为密度型 advisory（simile-marker-density，阈值 max(4, 2/千字)），并新增 prompting-colon / dunhao-list-density 两条 advisory |
+| 影响面 | deslop 检出计数 #42：4045→4002（−43，全部来自比喻标记降级）；章「待修」判定随之可能减少（advisory 不进阻断集） |
+| 是否默认生效 | **是**——本地扫描器无条件运行，不收 instruction_in_head 控制；正文/选区改写模板的红线措辞同步放宽（随模板默认生效） |
+| 反向面 | lieflat 并集注入 prompt **默认不生效**（见 6.3）——默认态下检测面已变而改写指令未变，二者口径差由检测降级本身保证不冲突（比喻不再判死） |
+
+### 6.3 instruction_in_head 缺省态（显式声明，不许隐式）
+
+`writing.instruction_in_head` **不在 `DEFAULT_CONFIG`**，读取点
+`stages.py:1556` 的缺省值为 `False` ⇒ **全新安装与未显式开启的存量用户：
+lieflat 并集从不进入任何 prompt**（`stages.py:1922-1923`、
+`volume_session.py:704/728` 三处注入点都收它控制）。本集成在缺省安装下的全部
+实际生效面 = 6.2 表所列检测面/模板措辞变更；并集注入属于**显式 opt-in** 的
+实验特性。开启方式：config.json → `writing.instruction_in_head: true`
+（注意：开启会改变卷级冻结头字节，写作中途开启需开新卷）。

@@ -80,7 +80,11 @@ def test_dual_mode_prompt_assembly_no_keyerror():
 
 
 def test_token_cost_estimate_and_lean_default():
-    """token 成本对比（估算口径）：full 档增量若不可接受则默认档必须为 lean。"""
+    """token 成本对比（估算口径）+ lean 缺省锁（WP-15：无条件断言，不许条件式）。
+
+    成本证据用 print 记录（估算=字数×0.6 上界，非计量值）；锁本身无条件：
+    缺省渲染档必须是 lean——把 if full_delta > 4000 当前置的旧写法在增量缩到
+    4000 以下时整条锁形同不存在（R11 违规③）。"""
     raw = open(skill_rules.SKILL_PATH, encoding="utf-8").read()
     builtin_chars = len(writing.builtin_deslop_static_rules())
     full_chars = len(skill_rules._render_skill(raw, "full"))
@@ -90,11 +94,14 @@ def test_token_cost_estimate_and_lean_default():
         return int(chars_delta * 0.6)
     lean_delta = est(lean_chars)
     full_delta = est(full_chars)
-    assert skill_rules and True
+    assert lean_chars < full_chars, "lean 裁剪失效（不小于 full）"
     import app.config as cfg_mod
     default_render = cfg_mod.DEFAULT_CONFIG["deslop"]["rules_render"]
-    if full_delta > 4000:      # 单章 prompt 增量 >4k token 视为不可接受
-        assert default_render == "lean", "full 档增量不可接受，默认档必须定 lean"
+    assert default_render == "lean", (
+        f"缺省渲染档漂移为 {default_render}——lean 增量锁失效（成本战役口径）")
+    skill_rules.init_rules_cache({})
+    assert skill_rules.active_mode() == "lieflat", (
+        "缺省激活规则源漂移（应为 lieflat；builtin=回退态）")
     # 记录证据（汇报用）
     print(f"\n[token 成本估算] 内置静态段 {builtin_chars} 字；"
           f"lean 增量 {lean_chars} 字 ≈ {lean_delta} token；"

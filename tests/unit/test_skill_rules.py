@@ -136,51 +136,70 @@ def test_full_and_lean_render_modes():
 def test_union_static_segment_snapshot(lieflat_cache):
     """并集静态段快照（lean 档）：切片/剥除契约的 golden。
 
-    重新生成方式：删除 golden 文件后跑一次本测试（写入新模式），人工 diff 确认
-    差异只来自预期中的 vendor 更新或内置规则修改，再入库。
+    R11：golden 缺失 = 失败（绝不自动写入当前产物再 skip——那会把任何未来输出
+    都当成正确答案）。重新生成走人工通道：python tests/bless_snapshots.py
+    （生成后必须人工 diff 确认差异只来自预期中的 vendor 更新或内置规则修改，
+    再入库），测试永不自动调用 bless。
     """
     union = writing.deslop_static_rules()
     assert union, "并集静态段为空"
-    if not os.path.exists(UNION_SNAPSHOT):
-        os.makedirs(SNAPSHOT_DIR, exist_ok=True)
-        with open(UNION_SNAPSHOT, "w", encoding="utf-8", newline="") as f:
-            f.write(union)
-        pytest.skip("golden 不存在，已写入当前产物——人工 diff 后入库重跑")
+    assert os.path.exists(UNION_SNAPSHOT), (
+        f"golden 缺失：{os.path.relpath(UNION_SNAPSHOT, ROOT)}——快照锁失去比较基准。"
+        "跑 `python tests/bless_snapshots.py` 生成后人工 diff 确认再入库，"
+        "然后重跑本测试")
     golden = open(UNION_SNAPSHOT, encoding="utf-8").read()
     assert union == golden, (
         "并集静态段与快照不一致——vendor 更新或内置规则改动改变了切片/剥除契约；"
-        "确认差异符合预期后删除并重新生成 golden")
+        "确认差异符合预期后跑 tests/bless_snapshots.py 重新生成 golden，人工 diff 后入库")
+
+
+def _derived_rule_families():
+    """从代码派生全部规则 ID（R11：期望清单不许手写在测试里）。
+
+    收集 app/deslop.py 里 add("rule-id", …) 首参与 Finding(rule="rule-id", …)
+    的全部字面量——删掉/改名任一规则，派生集合即缩，快照比对必红。
+    """
+    import ast as _ast
+    src = open(os.path.join(ROOT, "app", "deslop.py"), encoding="utf-8").read()
+    tree = _ast.parse(src)
+    ids = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Call):
+            fname = getattr(node.func, "id", getattr(node.func, "attr", ""))
+            if fname == "add" and node.args and isinstance(node.args[0], _ast.Constant):
+                ids.add(node.args[0].value)
+        if isinstance(node, _ast.keyword) and node.arg == "rule" \
+                and isinstance(node.value, _ast.Constant):
+            ids.add(node.value.value)
+    return sorted(i for i in ids if i)
 
 
 def test_deslop_rule_family_snapshot():
-    """deslop.py 规则族清单快照：防规则表无意识漂移。"""
+    """deslop.py 规则族清单快照：防规则表无意识漂移（期望从代码派生，非手写）。
+
+    R11：golden 缺失 = 失败。重新生成：python tests/bless_snapshots.py（人工
+    通道，测试永不自动写入）。"""
     from app import deslop as d
     families = sorted({r.rule for r in d.scan_text(
         "他站在桥头上。" * 40)})   # 任意正文：只取规则 ID 清单
-    # 规则常量清点（Phase 2 后的预期全族）
-    expected_families = sorted({
-        "not-is-comparison", "reverse-not-is", "negation-parade", "voice-contrast",
-        "flat-voice", "trailer-ending", "trailer-summary", "fate-summary",
-        "em-dash", "daizhe-adverb", "cliche-word", "simile-marker-density",
-        "prompting-colon", "dunhao-list-density", "telling-cognition",
-        "metaphor-density", "micro-action-tic", "abstract-summary-tic",
-        "reasoning-chain", "period-stutter", "long-paragraph", "quote-emphasis",
-        "gaze-density", "brake-sentence", "brake-standalone-para", "one-line-para",
-        "stamp-para", "mengdi-density",
-    })
-    # CLICHE 表：比喻标记已移出，剩 8 组
-    assert len(d.CLICHE_PATTERNS) == 8, "CLICHE_PATTERNS 数量漂移"
+    derived = _derived_rule_families()
+    assert derived, "规则 ID 派生失效（deslop.py 里一个字面量都没收集到）"
+    # Phase 2 契约钉：文言腔比喻标记只进密度型 advisory 正则，不再进一级禁用表
     assert d.CLICHE_SIMILE.pattern == r"仿佛|犹如|宛若|如同"
+    assert not any(getattr(p, "pattern", "") == r"仿佛|犹如|宛若|如同"
+                   for p in d.CLICHE_PATTERNS), "比喻标记仍在一级禁用表（Phase 2 降级被回退）"
+    # CLICHE 表：比喻标记已移出，剩 8 组（计数从模块属性派生）
     golden_path = RULE_FAMILY_SNAPSHOT
-    current = "\n".join(expected_families + ["", f"CLICHE_PATTERNS={len(d.CLICHE_PATTERNS)}",
-                                             f"scan_rule_ids={'|'.join(sorted(set(families)))}"])
-    if not os.path.exists(golden_path):
-        os.makedirs(SNAPSHOT_DIR, exist_ok=True)
-        with open(golden_path, "w", encoding="utf-8", newline="") as f:
-            f.write(current)
-        pytest.skip("golden 不存在，已写入当前规则族——人工确认后入库重跑")
+    current = "\n".join(derived + ["", f"CLICHE_PATTERNS={len(d.CLICHE_PATTERNS)}",
+                                   f"scan_rule_ids={'|'.join(sorted(set(families)))}"])
+    assert os.path.exists(golden_path), (
+        f"golden 缺失：{os.path.relpath(golden_path, ROOT)}——规则族快照失去基准。"
+        "跑 `python tests/bless_snapshots.py` 生成后人工确认再入库，然后重跑本测试")
     golden = open(golden_path, encoding="utf-8").read()
-    assert current == golden, "deslop 规则族清单漂移（见 tests/snapshots/…）"
+    assert current == golden, (
+        "deslop 规则族清单漂移（与从代码派生的期望不一致，删规则/改规则名必红；"
+        "见 tests/snapshots/deslop_rule_families.txt，确认符合预期后 "
+        "python tests/bless_snapshots.py 重新生成）")
 
 
 # ---------- 契约：剥除/卷级头同源（§5 验收第 2 条的静态面） ----------

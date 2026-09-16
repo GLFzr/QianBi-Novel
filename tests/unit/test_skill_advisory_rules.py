@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """lieflat Phase 2 验证资产：两条新增 advisory 正则的上线门禁（方案 §4 Phase 2.3）。
 
-- 误报：扫 tests/corpus_pd 人类语料（萧红《呼兰河传》、鲁迅《野草》，繁体原文）
-  ——两条新规则必须 0 触发；simile-marker-density 同样 0 触发（人类 1.14/千字
-  低于 2/千字 阈值）。测不过就不上线（宁缺毋滥）。
+- 误报：扫**入库夹具** tests/fixtures/corpus_min/（原创简体人类文风短篇，
+  WP-15④：旧实现扫 tests/corpus_pd 整库——该目录被 .gitignore 忽略，干净机/CI
+  只能红在"资产缺失"，且繁体原文与新规则词表简体不同口径，误报分母不可复核。
+  夹具版 CI 可判；corpus_pd 整库扫描降级为本地可选，资产在则多扫一道）
+  ——两条新规则必须 0 触发；simile-marker-density 同样 0 触发。
 - 召回：植入样例（正例必须触发 / 单例低于阈值不触发）。
   偏差说明：tests/planted_defects/defects.json 是审校六维（A-F）雷集，不含
   去 AI 味维度条目——召回样例按同构思路植入本文件（文档化于方案落地记录）。
@@ -13,6 +15,8 @@
 import glob
 import os
 import sys
+
+import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT)
@@ -28,20 +32,42 @@ def _blocking_of(findings):
     return [f for f in findings if f.level == "blocking"]
 
 
-# ---------- 误报：人类语料零触发 ----------
+_ADVISORY_RULES = ("prompting-colon", "dunhao-list-density", "simile-marker-density")
 
-def test_human_corpus_no_false_positives():
+
+def _assert_no_advisory_hits(text, label):
+    rules = _rules_of(deslop.scan_text(text))
+    for banned in _ADVISORY_RULES:
+        assert banned not in rules, f"人类语料误报：{label} 触发 {banned}"
+
+
+# ---------- 误报：入库夹具（CI 可判） ----------
+
+def test_human_corpus_min_no_false_positives():
+    files = sorted(glob.glob(os.path.join(ROOT, "tests", "fixtures",
+                                          "corpus_min", "*.txt")))
+    assert len(files) >= 3, f"corpus_min 夹具缺失（只找到 {len(files)} 篇）"
+    total = 0
+    for path in files:
+        text = open(path, encoding="utf-8").read()
+        total += len(text)
+        _assert_no_advisory_hits(text, os.path.basename(path))
+    assert total > 2000, "corpus_min 语料量异常（<2 千字，误报测试失去分母）"
+
+
+# ---------- 误报：corpus_pd 整库（本地可选——资产被 gitignore，不在则跳过） ----------
+
+def test_human_corpus_pd_full_scan_local_optional():
     files = sorted(glob.glob(os.path.join(ROOT, "tests", "corpus_pd", "**", "*.txt"),
                              recursive=True))
-    assert len(files) >= 3, f"corpus_pd 资产异常（只找到 {len(files)} 个文件）"
+    if not files:
+        pytest.skip("corpus_pd 未入库（.gitignore）——CI 判据由 corpus_min 夹具承担，"
+                    "整库扫描为本地可选复核")
     total_chars = 0
     for path in files:
         text = open(path, encoding="utf-8").read()
         total_chars += len(text)
-        rules = _rules_of(deslop.scan_text(text))
-        for banned in ("prompting-colon", "dunhao-list-density", "simile-marker-density"):
-            assert banned not in rules, \
-                f"人类语料误报：{os.path.basename(path)} 触发 {banned}"
+        _assert_no_advisory_hits(text, os.path.basename(path))
     assert total_chars > 10000, "corpus_pd 语料量异常（<1 万字，误报测试失去分母）"
 
 
@@ -110,6 +136,21 @@ def test_simile_word_is_not_blocking_anymore():
         if f.rule in ("simile-marker-density", "cliche-word", "metaphor-density"):
             assert f.level != "blocking", \
                 f"联动决策被破坏：比喻标记词又回到了 blocking（{f.rule}）"
+
+
+def test_simile_density_recall():
+    """WP-15③：放松后的 simile-marker-density 必须有召回夹具——堆叠样张必报。
+    （此前只有"不再 blocking"的单向断言：删掉整块检测，相关测试依旧全绿。）"""
+    body = ("他站在桥头，雨丝仿佛牛毛。桥下的水声犹如闷雷，远处的灯火宛若星子，"
+            "雾气如同纱幔，一层一层漫过堤岸。城里的钟声仿佛隔了十年，"
+            "他又觉得这夜犹如一张网，把他和这条街一起兜住。"
+            "灯影在水里晃，晃碎了又聚拢，聚拢了又晃碎。")
+    text = "# 第1章 雨夜\n" + body + ("河水拍着桥墩，一声接一声，没有停的意思。"
+                                     "他数着自己的呼吸，数到一百就重新数。"
+                                     "对岸的狗叫了两声，又静下去。") * 24
+    assert len(text) > 1000
+    assert "simile-marker-density" in _rules_of(deslop.scan_text(text)), \
+        "文言腔比喻堆叠未被检出（密度型 advisory 召回失败）"
 
 
 def test_cliche_family_still_blocks_on_other_words():

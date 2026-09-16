@@ -12,10 +12,10 @@
 
 ## Unreleased（0.20.0-dev）
 
-### 新增（去 AI 味规则源 lieflat-less-ai-tone 集成）
-- 并入上游去 AI 味 skill 规则内核（11 条白名单改写规则 + 硬约束 + 「不作为改写理由」负表），与内置 10 条体裁层原则以**并集**共同生效，负表能显著减少误改（比喻/设问/被动句等实测不构成 AI 指纹，禁止据此改文字）
-- 去 AI 味规则源可切换：deslop.rules_source = lieflat（缺省）/ builtin；渲染档 deslop.rules_render = lean（缺省，裁示例省 token）/ full（带示例）。**切换规则源或改 vendor 文件需开新卷**（卷级冻结头按字节比对）
-- 修复检测/生成自相矛盾的老毛病：「仿佛/犹如/宛若/如同」不再逐词判死（改为密度型建议级），与「每千字至少 1 处具象比喻」的写作要求不再打架；新增提示性冒号、顿号罗列密度两条建议级检测（经人类语料误报门禁）
+### 新增（去 AI 味规则源 lieflat-less-ai-tone 集成——**实验性**）
+- 并入上游去 AI 味 skill 规则内核（11 条白名单改写规则 + 硬约束 + 「不作为改写理由」负表），与内置 10 条体裁层原则以**并集**共同生效，负表能显著减少误改（比喻/设问/被动句等实测不构成 AI 指纹，禁止据此改文字）。**默认未启用**：并集仅在 `writing.instruction_in_head` 开启后才注入改写 prompt（该开关缺省不在 `DEFAULT_CONFIG`，全新安装下并集不进任何 prompt，改写行为与集成前一致）
+- 去 AI 味规则源可切换（实验性配置项）：deslop.rules_source = lieflat（缺省值）/ builtin；渲染档 deslop.rules_render = lean（缺省，裁示例省 token）/ full（带示例）。**缺省值仅在 `instruction_in_head` 开启时产生实际差异**。**切换规则源或改 vendor 文件需开新卷**（卷级冻结头按字节比对）
+- 检测面修正（此条**默认生效**——本地扫描器无条件运行，且**未经真机整卷验证**）：「仿佛/犹如/宛若/如同」不再逐词判死（改为密度型建议级；一级禁用词放松的连带后果：deslop 检出计数 #42 由 4045 降至 4002），与「每千字至少 1 处具象比喻」的写作要求不再打架；新增提示性冒号、顿号罗列密度两条建议级检测（经人类语料误报门禁）；正文/选区改写模板中的比喻红线措辞同步放宽（默认随模板生效）
 - 合规：上游 MIT License（Copyright (c) 2026 shiujan），vendored 于 app/vendor/ 并随包分发 LICENSE；详见 docs/lieflat-less-ai-tone-integration-notes.md
 
 
