@@ -339,3 +339,29 @@ def test_key_scanner_does_not_flag_the_files_that_describe_it():
         with open(path, "rb") as f:
             body = f.read()
         assert not pat.search(body), os.path.basename(path)
+
+
+def test_main_boot_telemetry_events_pinned():
+    """N-24 补完（WP-18）：main.py 必须静态存在 record(cfg,"app_start"…) 与
+    record(cfg,"version"…)——此前只证明「手工调了会写盘」，调用点本身没人钉，
+    谁删了启动埋点这条护栏也全绿。AST 断言调用点存在且事件名为字面量。"""
+    import ast
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(root, "app", "main.py")
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    events = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fname = getattr(node.func, "attr", getattr(node.func, "id", ""))
+        if fname != "record" or not node.args:
+            continue
+        # record(cfg, "event", …) / telemetry.record(cfg, "event", …)
+        ev = node.args[1] if len(node.args) > 1 else None
+        if isinstance(ev, ast.Constant) and isinstance(ev.value, str):
+            events.add(ev.value)
+    for required in ("app_start", "version"):
+        assert required in events, (
+            f"main.py 丢失 record(cfg, {required!r}…) 启动埋点——版本与启动事件"
+            "将不再落本地遥测（N-24 回归）")

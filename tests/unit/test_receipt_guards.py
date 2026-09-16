@@ -352,6 +352,61 @@ def g(self):
         "pass+log() 处理器被误判为静默吞——扩面过宽")
 
 
+# ---- N-36/N-05：静默吞护栏扩面到 app/core（WP-18） ----
+# core 侧没有 toast，log 就是回执；except 静默吞后同层紧跟「成功语义 log」= 说谎。
+# 成功语义判定只看 info/debug/log 调用（warning/error 本身是失败声明，不算回执）。
+
+_CORE_LOG_CALLEES = ("log", "info", "debug")
+_CORE_SUCCESS_WORDS = ("完成", "成功", "已")
+
+
+def test_no_silent_pass_before_success_log_in_core():
+    core_dir = os.path.join(ROOT, "app", "core")
+    bad = []
+    for fn in sorted(os.listdir(core_dir)):
+        if not fn.endswith(".py"):
+            continue
+        path = os.path.join(core_dir, fn)
+        src = open(path, encoding="utf-8").read()
+        tree = ast.parse(src)
+        parent = {}
+        for p in ast.walk(tree):
+            for child in ast.iter_child_nodes(p):
+                parent[child] = p
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            if not _handler_is_silent(node):
+                continue
+            try_node = parent.get(node)
+            if not isinstance(try_node, ast.Try):
+                continue
+            holder = parent.get(try_node)
+            if holder is None:
+                continue
+            siblings_after = []
+            for _fieldname, value in ast.iter_fields(holder):
+                if isinstance(value, list) and try_node in value:
+                    siblings_after = value[value.index(try_node) + 1:]
+                    break
+            for st_ in siblings_after:
+                for c in ast.walk(st_):
+                    if not isinstance(c, ast.Call):
+                        continue
+                    name = getattr(c.func, "attr", getattr(c.func, "id", ""))
+                    if name not in _CORE_LOG_CALLEES or not c.args:
+                        continue
+                    # 级别在首参（log("warn", …) 是失败/告警声明，不是成功回执）
+                    lvl = ast.unparse(c.args[0]).strip("'\"")
+                    if lvl in ("warn", "warning", "error", "critical"):
+                        continue
+                    # 成功语义在消息参（可能是 f-string），全参扫
+                    msg = " ".join(ast.unparse(a) for a in c.args[1:] or c.args)
+                    if any(w in msg for w in _CORE_SUCCESS_WORDS):
+                        bad.append(f"app/core/{fn}:{c.lineno} except 静默吞后紧跟成功语义 log")
+    assert not bad, "core 静默吞后说谎（N-36 扫描面）：" + " | ".join(bad)
+
+
 def test_user_facing_slash_commands_are_registered():
     """用户可见文案里的 /命令 必须在注册表里（QML 双引号字面量 + README）。"""
     from app.core import agent_tools as at

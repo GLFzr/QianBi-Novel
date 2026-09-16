@@ -1737,24 +1737,6 @@ class Bridge(QObject):
         self.generalChanged.emit()
         self.toast.emit("ok", "离峰挂机（peak 时段自动等待，电价半价档）已" + ("开启" if on else "关闭"))
 
-    @Slot()
-    def runCanonAudit(self):
-        """F2 世界观对账：对本书全部已写章节跑设定清算（后台），报告落 追踪/"""
-        if not self.proj:
-            self.toast.emit("warn", "请先打开项目")
-            return
-        chapters = project.list_chapters(self.proj)
-        if not chapters:
-            self.toast.emit("warn", "本书还没有正文可对账")
-            return
-        self.toast.emit("info", f"世界观对账开始（{len(chapters)} 章，后台执行）…")
-        w = _CanonAuditWorker(self.proj, self.cfg, chapters, parent=self)
-        w.finished_ok.connect(lambda ok, msg: self.toast.emit(
-            "ok" if ok else "warn", "世界观对账完成：" + msg))
-        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
-        self._workers.append(w)
-        w.start()
-
     # ========== 检查更新（多通道 + 验签 + 一键更新）==========
 
     # 检查间隔的边界：与 app/config.py 的出厂 interval_hours 同值，改一处要改两处就是隐患
@@ -1901,11 +1883,6 @@ class Bridge(QObject):
                 self.checkForUpdates(True)       # 刚打开就查一次，别让人等到明天
                 return
         self._patch_updates(**clean)
-
-    @Slot(str)
-    def dismissUpdate(self, version: str):
-        """「以后再说」：只压住这一版；下个新版本照样亮图标"""
-        self._patch_updates(dismissed_version=str(version or ""))
 
     @Slot(str)
     def openUpdateUrl(self, url: str):
@@ -2533,12 +2510,6 @@ class Bridge(QObject):
                 return project.read_file(path)
         return ""
 
-    @Slot(int, int, int, result="QVariantList")
-    def diffVersions(self, num: int, v1: int, v2: int) -> list:
-        if not self.proj:
-            return []
-        return versions.diff_versions(self.proj, num, v1, v2)
-
     @Slot(int, int, result="QVariantList")
     def diffVersionWithDisk(self, num: int, v: int) -> list:
         """版本 v vs 磁盘当前内容（回退前预览）"""
@@ -2594,10 +2565,6 @@ class Bridge(QObject):
                 for f in findings
             ]
         self.chapterFindingsChanged.emit()
-
-    @Slot(result=str)
-    def readFileText(self) -> str:
-        return self._chapter_text
 
     # ============ 连接与模型 ============
 
@@ -3979,20 +3946,6 @@ class Bridge(QObject):
         if not self._cw_open_outline_batch(want):
             self.toast.emit("warn", "这批细纲的文件已经不在了（可能被打回清除）")
 
-    @Slot()
-    def validateCwOutlines(self):
-        """校验本批细纲衔接；无阻塞 → 进入正文写作（「确定细纲」走的就是这条链）"""
-        if not self.proj or not self._cw:
-            return
-        if self._cw_busy:
-            self.toast.emit("warn", "AI 正在工作中，稍后再校验")
-            return
-        stage = self._get_cw_stage_key()
-        if stage != st.STAGE_CW_UNIT or self._cw_view != stage:
-            self.toast.emit("warn", "请先回到单元细纲阶段")
-            return
-        self._start_cw_outline_validation()
-
     def _start_cw_outline_validation(self):
         """起细纲校验 worker（无守卫版：供「确定细纲」定稿后直接续链）"""
         nums = [n for n, _p in project.list_outlines(self.proj)]
@@ -4683,19 +4636,6 @@ class Bridge(QObject):
         self._cw_refresh()
         self.toast.emit("ok", "项目创建完成，进入「核心设定」：与设定 Agent 讨论后点确定")
 
-    @Slot(str, str, str, int)
-    def saveCwIdeaInfo(self, genre: str, platform: str, idea: str, totalWan: int):
-        """共写档创建项目表单：写选题信息（确定前的可编辑阶段）"""
-        if not self.proj:
-            return
-        project.write_idea_info(self.proj, (genre or "").strip(),
-                                (platform or "").strip() or "番茄",
-                                (idea or "").strip(), int(totalWan or 0))
-        self._book_meta = " · ".join(p for p in [(genre or "").strip(),
-                                                 (platform or "").strip() or "番茄"] if p)
-        self.bookMetaChanged.emit()
-        self.toast.emit("ok", "选题信息已保存，点「确定」进入核心设定")
-
     @Slot(str)
     def setCwPreset(self, preset_id: str):
         """共写档选题表单：选用题材预设（写入 state['cw']['preset'] 与 genre_preset）"""
@@ -5137,20 +5077,6 @@ class Bridge(QObject):
             view[phase] = {"label": labels.get(phase, phase), "value": " · ".join(parts)}
         return view
 
-    @Slot(str, str, result=bool)
-    def exportPreset(self, preset_id: str, out_path: str) -> bool:
-        """v2 导出预设到指定路径（无 UI 按钮时用 TUI 命令面板）"""
-        from .. import presets as genre_presets
-        if out_path.startswith("file:///"):
-            from PySide6.QtCore import QUrl
-            out_path = QUrl(out_path).toLocalFile()
-        ok = genre_presets.export_preset(preset_id, out_path)
-        if ok:
-            self.toast.emit("ok", f"预设「{preset_id}」已导出到 {out_path}")
-        else:
-            self.toast.emit("warn", f"预设「{preset_id}」导出失败：未找到")
-        return ok
-
     @Slot(result=str)
     def currentTheme(self) -> str:
         """当前主题名（qianbi_night / qianbi_parchment / qianbi_plain）"""
@@ -5356,11 +5282,6 @@ class Bridge(QObject):
             return ""
         rf = st.load_state(self.proj).get("review_findings") or {}
         return rf.get(str(self._review_issue_num), {}).get("verdict", "")
-
-    @Slot()
-    def clearReviewIssues(self):
-        """清空 review_issues 显示（用户已处理完）"""
-        self.reviewIssuesChanged.emit()
 
     # ---- 待修章节汇总 + 一键修复 ----
 
