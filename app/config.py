@@ -81,7 +81,7 @@ DEFAULT_CONFIG = {
               SLOT_REVIEW: "ds-official-flash"},
     "gates": {"strategy": GATE_MARK_CONTINUE, "deslop_max_rounds": 2, "word_tolerance": 0.1,
               "word_enrich_rounds": 2,   # 字数不足的自动扩写轮数（真机缺陷④：原单轮偏宽松）
-              "review_enabled": True, "review_max_rounds": 3,   # N-06：出厂 3（曾出厂 1 被读取点地板 3 永久吃掉，配置 <3 永不生效）；地板现改 1，配置真实生效
+              "review_enabled": True, "review_max_rounds": 3,   # N-06：出厂 3（曾出厂 1 被读取点地板 3 永久吃掉）；地板现改 1 + 老 config 显式迁移（_migrate_review_rounds，首次载入回填 3 并落标记）
               "review_temperature": 0.2,   # 审校判定低温（单次覆盖，不改连接档案）
               "review_mode": "auto",       # auto=AI 六维审校 | manual=作者人工审校（门里填阻断问题）
               "review_votes": 3,           # 首扫多轮投票数（平票从严，阻塞需 ≥2 票）
@@ -142,6 +142,31 @@ def _migrate_legacy_dir():
 
 # v1.2 两档制：全部接线门（G1/G3 接线后共九门）。step 预置=全停，即这份清单。
 WIRED_GATES = ["G1", "G2", "G3", "G4", "G5L", "G6", "G7", "G8", "G9"]
+
+# N-06 迁移标记（R12）：一次性迁移时点标记——落盘后用户显式设 1 不再回填
+_N06_MARKER_KEY = "_n06_review_rounds_migrated"
+
+
+def _migrate_review_rounds(cfg: dict) -> dict:
+    """N-06 显式迁移（R12「保持升级前行为」支）：老 config 盘上的
+    review_max_rounds=1 是被旧读取点地板 max(...,3) 永久吃掉的出厂值——实际生效
+    的一直是 3；出厂改 3、地板改 1 之后若不迁移，升级会让修复环上限从 3 静默
+    掉到 1。「从未设过」与「主动设小」在 load 时点不可区分，用迁移时点解决：
+    首次载入落标记，标记之后用户显式改 1 即尊重用户（不再回填）。"""
+    if cfg.get(_N06_MARKER_KEY):
+        return cfg
+    gates = cfg.get("gates")
+    if isinstance(gates, dict) and gates.get("review_max_rounds") == 1:
+        gates["review_max_rounds"] = 3
+        cfg[_N06_MARKER_KEY] = True
+        logging.getLogger("qianbi.config").info(
+            "N-06 迁移：盘上 review_max_rounds=1 是旧地板吃掉的出厂值（实际生效一直是"
+            " 3），已回填为 3；此后显式设 1 不再回填")
+        return cfg
+    # 值不是 1（新装出厂 3 / 用户自改过）：无需回填，但同样落标记，防止用户将来
+    # 显式设 1 时被误当成老出厂值
+    cfg[_N06_MARKER_KEY] = True
+    return cfg
 
 
 def _migrate_run_mode(cfg: dict) -> dict:
@@ -330,13 +355,19 @@ def load_config() -> dict:
     os.makedirs(CONFIG_DIR, exist_ok=True)
     _migrate_legacy_dir()
     if not os.path.exists(CONFIG_FILE):
-        save_config(DEFAULT_CONFIG)
-        return json.loads(json.dumps(DEFAULT_CONFIG))
+        # 全新安装同样落 N-06 迁移标记：否则用户首启后在界面里显式把修复轮设为 1，
+        # 下次启动会被迁移当成「老出厂值」误回填成 3（反向静默行为变更）
+        fresh = json.loads(json.dumps(DEFAULT_CONFIG))
+        fresh[_N06_MARKER_KEY] = True
+        save_config(fresh)
+        return fresh
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             cfg = json.load(f)
         cfg = _migrate_legacy_format(cfg)
         cfg = _migrate_run_mode(cfg)
+        _n06_first_load = not cfg.get(_N06_MARKER_KEY)
+        cfg = _migrate_review_rounds(cfg)
         # 补齐缺失键
         merged = json.loads(json.dumps(DEFAULT_CONFIG))
         for k, v in cfg.items():
@@ -361,6 +392,10 @@ def load_config() -> dict:
             if merged["slots"].get(slot) not in ids:
                 merged["slots"][slot] = merged["connections"][0]["id"]
         merged = secrets.hydrate(merged)
+        if _n06_first_load:
+            # 迁移时点必须落盘：否则「从未设过」与「主动设小」永远分不开，用户
+            # 升级后显式改 1 会在下次启动被再次回填成 3（反向静默行为变更）
+            save_config(merged)
         return merged
     except Exception as e:  # noqa: BLE001
         # 读不懂/读不到 ≠ 没有配置：先把用户那份另存，再回落默认值。
