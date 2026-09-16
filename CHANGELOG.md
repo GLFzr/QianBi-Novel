@@ -12,6 +12,11 @@
 
 ## Unreleased（0.20.0-dev）
 
+### 修复（升级行为与门禁语义）
+- **审校修复环上限升级保持**（N-06 显式迁移）：老用户盘上 `review_max_rounds: 1` 是被旧版读取点地板永久吃掉的出厂值（实际生效一直是 3）——升级后首次启动自动回填为 3 并落一次性迁移标记；标记之后你显式改成 1（更省成本）会被尊重、不再回填。全新安装出厂即 3
+- 决策门停靠详情（Q6 限定形态：只加不改）：九门停靠时界面能答出「拦的是哪条 / 当前值 vs 阈值 / 继续与回退分别发生什么」；锁定被拦时强锁确认框列出**全部**违规并预告两侧后果，强锁回执逐条点名被绕过的闸门
+- G8 人工审校录入改多行：每行一条阻断问题，回车换行不再误触「过门」
+
 ### 修复（WP-18 台账收口）
 - 删除 8 个「三面都不接」的死 Slot（N-13 判定=删除）：runCanonAudit / readFileText / validateCwOutlines / saveCwIdeaInfo / exportPreset / dismissUpdate / diffVersions / clearReviewIssues——全仓零调用点（QML/Agent/内部均无），留着只会让面板假装有这些功能；版本历史实际走 diffVersionWithDisk/readVersion，共写表单走 saveIdeaInfo 链，均不受影响
 
