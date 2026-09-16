@@ -3118,7 +3118,8 @@ class Bridge(QObject):
                 with open(path, "r", encoding="utf-8", errors="replace") as f:
                     _keep_aside(path + ".corrupt", f.read())
             except OSError:
-                pass
+                # WP-13④：留证重读失败必须留日志——静默吞后 toast 仍宣称「已留证」就是说谎
+                logger.warning("批注库 .corrupt 留证前重读失败：%s", path, exc_info=True)
             self.toast.emit("warn",
                             f"第 {num} 章批注库损坏，坏文件已留证为 .corrupt 并按空库打开"
                             f"（证据不会被覆盖，可发给开发者找回）")

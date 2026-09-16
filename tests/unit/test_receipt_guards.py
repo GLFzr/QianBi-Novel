@@ -76,6 +76,8 @@ EVIDENCE_CALLEES = {
     "pause": "流水线暂停（流程序真实变更）",
     "resume": "流水线继续（流程序真实变更）",
     "stop": "流水线停止（流程序真实变更）",
+    "requestInterruption": "worker 中断标志置位（运行态真实变更，pause/resume/stop 同族，WP-13）",
+    "_drain_backflow_queue": "反哺队列起跑（后台 worker 串行执行并落盘，WP-13）",
     "chat": "LLM 调用（花费真实发生）",
     "register": "更新器注册（外部效果）",
     "install": "更新安装（外部效果）",
@@ -86,18 +88,36 @@ EVIDENCE_CALLEES = {
     "openLogDir": "打开日志目录（外部效果）",
     "openDataDir": "打开数据目录（外部效果）",
     "openUrl": "打开外部链接（外部效果）",
+    # —— WP-13 万能名判定后补收的真实效果名（回执实际有真效果，原先证据不在射程）——
+    "attempt_unlock": "终稿锁解锁写项目状态盘（unlockChapter 的真实效果，WP-13）",
+    "mark_chapter_need_human": "human 标记写状态盘（resolveReviewIssue ignore 支，WP-13）",
+    "append_review_chain": "上游重做登记写状态盘（resolveReviewIssue upstream 支，WP-13）",
+    "save_review_findings": "审校结论 v2 写状态盘（_on_cw_review_done，WP-13）",
+    "_keep_aside": "坏批注库留证 .corrupt 落盘（_read_store 损坏隔离，WP-13）",
     # —— 内存生效类（界面/模型态，无盘语义但状态真实切换） ——
-    "set_enabled": "控件/动作启停（界面态生效）",
-    "set_items": "模型整体重建（界面态生效）",
-    "reset": "模型重置（界面态生效）",
-    "refreshQueue": "队列模型重建（界面态生效）",
     "cwProsePolished": "共写去味信号驱动编辑器（内存生效）",
 }
+# WP-13 万能名判定留档（③：纯读/纯刷新剔除，死名删除）：
+# - "save"（通用保存）：bridge.py 全文无 `.save(` 调用点——死名，任何回执都不可能
+#   靠它生效，留着只会让假证据永真 ⇒ 删。
+# - "record"：bridge.py 无 `.record(` 调用点（遥测 record 在 app/telemetry，不经
+#   回执函数）⇒ 死名，删。
+# - "reset"：bridge.py 无 `.reset(` 调用点 ⇒ 死名，删。
+# - "set_items"/"refreshQueue"：模型重建=纯刷新，不产生任何持久效果；"set_enabled"：
+#   控件启停纯界面态——「已保存」类回执靠它们过关就是说谎 ⇒ 全部剔除（原依赖它们的
+#   回执函数已逐一核对：要么另有真实证据，要么进 EXEMPT 并写明理由）。
+# - "write"：保留——bridge.py 内 f.write 是遥测 JSONL 真落盘；文件句柄写入语义
+#   见条目注记。
 EXEMPT = {
     # 豁免只能在「语义确实成立」时开并写明理由；不许用豁免绕过自己写错的代码。
     # WP-05 撤销 copyText 豁免：其理由建立在缺逗号导致 setText 不在证据集上，
     # 逗号修复后 setText 是真证据，无需豁免。
     ("bridge.py", "_on_cw_deslop_done"): "去味效果在工作副本（cwProsePolished 信号驱动编辑器），内存生效类",
+    # WP-13 扩面后新增（每条写明为什么免证据仍然不算说谎）：
+    ("bridge.py", "_on_sel_done"): "局部改写结果存 _sel_result 内存工作副本，用户点「应用」才经 saveChapterText 落盘；回执只说「可应用或放弃」未宣称已落盘",
+    ("bridge.py", "_on_finished"): "流水线终态由 orchestrator/stages 逐检查点 save_state 落盘；本函数是 UI 态收尾+转述（「进度已保存」指 worker 已落盘的检查点）",
+    ("bridge.py", "_start_cw_outline_batch"): "「已全部生成」是存量状态转述（细纲由批 worker 经 _cw_save_state 落盘），本函数 batch 为空时零动作早退",
+    ("bridge.py", "confirmChapterLocked"): "「该章已终稿锁定」是早退分支的状态转述（锁由 _do_lock_chapter→set_chapter_locked 落盘）",
 }
 
 
@@ -143,42 +163,123 @@ def _bridge_tree_and_src():
     return ast.parse(src), src
 
 
-def test_success_toasts_have_effect_evidence():
-    tree, src = _bridge_tree_and_src()
+# 成功语义词/免责否定词（WP-13①：级别只影响颜色，不影响检核）。
+# 否定词 = 消息语义不是「宣称成功」的（失败/拒绝/状态告示/进行中），不进检核射程。
+SUCCESS_WORDS = ("已", "完成", "成功")
+FAILURE_WORDS = ("失败", "无法", "未能", "拒绝", "不能", "没有", "还没", "尚未",
+                 "无需", "找不到", "不存在", "已经不在", "过期", "正在", "请先",
+                 "先停止", "先完成", "不是", "没通过", "不够", "没听懂")
+
+
+def _is_success_claim(msg_src: str) -> bool:
+    has_ok = any(w in msg_src for w in SUCCESS_WORDS)
+    has_fail = any(w in msg_src for w in FAILURE_WORDS)
+    return has_ok and not has_fail
+
+
+def _toast_emit_sites(tree, src):
+    """全部 toast.emit(level, msg) 站点（含成功语义的，不论级别）"""
     funcs = _enclosing_functions(tree)
-    violations = []
+    sites = []
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                 and node.func.attr == "emit" and node.args):
             continue
         lvl = node.args[0]
-        if not (isinstance(lvl, ast.Constant) and lvl.value in ("ok",)):
+        if not (isinstance(lvl, ast.Constant) and lvl.value in ("ok", "info", "warn", "error")):
             continue
         msg = node.args[1] if len(node.args) > 1 else None
         msg_src = ast.get_source_segment(src, msg) if msg else ""
-        if not msg_src or "已" not in msg_src:
+        if not msg_src or not _is_success_claim(msg_src):
             continue
         fn = next((f for f in funcs
                    if f.lineno <= node.lineno <= getattr(f, "end_lineno", f.lineno)), None)
         if fn is None:
             continue
+        sites.append((node, msg_src, fn))
+    return sites
+
+
+def test_success_toasts_have_effect_evidence():
+    """WP-13①：任何带成功语义（已…/完成/成功）的 toast，**不论级别**（ok/info/
+    warn/error），其所在函数必须有生效证据调用。级别只影响颜色，不影响检核——
+    否则把「ok」挪成「info」就能让说谎回执过关（L2-18 实证路径）。"""
+    tree, src = _bridge_tree_and_src()
+    violations = []
+    for node, msg_src, fn in _toast_emit_sites(tree, src):
         if (os.path.basename("app/ui/bridge.py"), fn.name) in EXEMPT:
             continue
         callees = {getattr(c.func, "attr", getattr(c.func, "id", ""))
                    for c in ast.walk(fn) if isinstance(c, ast.Call)}
         if not (callees & set(EVIDENCE_CALLEES)):
-            violations.append(f"bridge.py:{node.lineno} 「{msg_src[:50]}…」所在函数 {fn.name} 无落盘/生效证据调用")
-    assert not violations, "回执三态违规（宣称「已X」但无生效证据）：" + " | ".join(violations)
+            violations.append(
+                f"bridge.py:{node.lineno} [{msg_src[:50]}…] 所在函数 {fn.name} 无落盘/生效证据调用")
+    assert not violations, "回执三态违规（宣称「已X」但无生效证据，不论级别）：" + " | ".join(violations)
 
 
-def test_no_silent_pass_before_success_claim():
-    """except: pass 后同层紧跟成功回执 = 说谎（N-05 家族静态面）。
+def test_pipeline_receipts_backed_by_real_state_change():
+    """WP-13②：pause/resume/stop 三条回执的「生效证据」必须落在真实状态变更上。
 
-    WP-05 修正：ExceptHandler 挂在 Try.handlers（不是 Try.body，更不在
-    FunctionDef.body 里被 walk 到）——旧实现永不命中 ⇒ 恒真。现用父指针
-    定位 except 所在 Try，再取该 Try 所在语句列表的同层后续兄弟。
+    证据集里 pause/resume/stop 三个名字本身不构成保障——名字匹配是纯字面的：
+    orchestrator 的方法被删掉/改名/改成空体，bridge 里的调用字面量仍在，
+    回执门禁照样绿。本断言把链路两头钉死：
+    ① orchestrator.pause/resume/stop 各自必须真实变更状态（事件 set/clear
+       或 _stop 标志赋值）；
+    ② bridge 三条回执函数必须真的调用 self.orch.<pause|resume|stop>()。
     """
+    orch_src = open(os.path.join(ROOT, "app", "core", "orchestrator.py"), encoding="utf-8").read()
+    orch_tree = ast.parse(orch_src)
+    methods = {f.name: f for f in ast.walk(orch_tree)
+               if isinstance(f, ast.FunctionDef) and f.name in ("pause", "resume", "stop")}
+    assert set(methods) == {"pause", "resume", "stop"}, (
+        f"orchestrator 的 pause/resume/stop 缺失：{set(('pause','resume','stop')) - set(methods)}")
+    for name, fn in methods.items():
+        has_evt = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                      and isinstance(c.func.value, ast.Attribute)
+                      and c.func.value.value.id == "self"  # type: ignore[attr-defined]
+                      and c.func.attr in ("set", "clear")
+                      for c in ast.walk(fn))
+        has_flag = any(isinstance(st_, (ast.Assign, ast.AnnAssign))
+                       and any(isinstance(t, ast.Attribute) and t.value.id == "self"
+                               and t.attr == "_stop"  # type: ignore[attr-defined]
+                               for t in (st_.targets if isinstance(st_, ast.Assign) else [st_.target]))
+                       for st_ in ast.walk(fn) if isinstance(st_, (ast.Assign, ast.AnnAssign)))
+        assert has_evt or has_flag, (
+            f"orchestrator.{name}() 体内没有任何状态变更（事件 set/clear 或 _stop 赋值）"
+            "——回执宣称的暂停/继续/停止是空头支票（WP-13②）")
+
     tree, _src = _bridge_tree_and_src()
+    bridges = {"pausePipeline": "pause", "resumePipeline": "resume", "stopPipeline": "stop"}
+    funcs = {f.name: f for f in ast.walk(tree)
+             if isinstance(f, ast.FunctionDef) and f.name in bridges}
+    assert set(funcs) == set(bridges), f"bridge 缺回执函数：{set(bridges) - set(funcs)}"
+    for fname, orch_name in bridges.items():
+        calls = [c for c in ast.walk(funcs[fname]) if isinstance(c, ast.Call)
+                 and isinstance(c.func, ast.Attribute) and c.func.attr == orch_name]
+        assert calls, (
+            f"bridge.{fname} 没有调用 orch.{orch_name}()——回执宣称与真实状态变更脱钩（WP-13②）")
+
+
+# 上界面/落日志动作的调用名：handler 体里出现任一即不算「静默吞」
+_UI_OR_LOG_CALLEES = {
+    "emit", "append",              # toast.emit / logModel.append
+    "info", "warning", "warn", "error", "debug", "exception", "critical", "log",
+}
+
+
+def _handler_is_silent(handler: ast.ExceptHandler) -> bool:
+    """WP-13④：handler 体不含任何上界面/落日志动作 = 静默吞。
+    旧实现只认「体恰好一条 Pass」——`pass` 后补一行无关计算就能绕过。"""
+    for c in ast.walk(handler):
+        if isinstance(c, ast.Call):
+            name = getattr(c.func, "attr", getattr(c.func, "id", ""))
+            if name in _UI_OR_LOG_CALLEES:
+                return False
+    return True
+
+
+def _silent_swallow_violations(tree, src):
+    """except 静默吞后同层紧跟成功回执（不论级别）= 说谎。返回违规描述列表。"""
     parent = {}
     for p in ast.walk(tree):
         for child in ast.iter_child_nodes(p):
@@ -187,7 +288,7 @@ def test_no_silent_pass_before_success_claim():
     for node in ast.walk(tree):
         if not isinstance(node, ast.ExceptHandler):
             continue
-        if not (len(node.body) == 1 and isinstance(node.body[0], ast.Pass)):
+        if not _handler_is_silent(node):
             continue
         try_node = parent.get(node)
         if not isinstance(try_node, ast.Try):
@@ -204,9 +305,51 @@ def test_no_silent_pass_before_success_claim():
             for c in ast.walk(st_):
                 if (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
                         and c.func.attr == "emit" and c.args
-                        and isinstance(c.args[0], ast.Constant) and c.args[0].value == "ok"):
-                    bad.append(f"bridge.py:{c.lineno} except:pass 后直接成功回执")
+                        and isinstance(c.args[0], ast.Constant)
+                        and c.args[0].value in ("ok", "info", "warn", "error")):
+                    msg = ast.get_source_segment(src, c.args[1]) if len(c.args) > 1 else ""
+                    if msg and _is_success_claim(msg):
+                        bad.append(f"行 {c.lineno} except 静默吞后直接成功回执")
+    return bad
+
+
+def test_no_silent_pass_before_success_claim():
+    """except 静默吞（体不含任何上界面/落日志动作）后同层紧跟成功回执 = 说谎。
+
+    WP-05 修正：ExceptHandler 挂在 Try.handlers——旧实现去 Try.body 找 ⇒ 恒真。
+    WP-13④ 扩面：「体恰好一条 Pass」放宽为「体不含任何上界面/落日志动作」，
+    `pass` 后补一行无关计算不再构成绕过；`pass`+`log()` 有日志动作则不算静默。
+    """
+    tree, src = _bridge_tree_and_src()
+    bad = _silent_swallow_violations(tree, src)
     assert not bad, "静默吞后说谎：" + " | ".join(bad)
+
+
+def test_silent_swallow_guard_synthetic():
+    """WP-13④ 合成夹具：纯 pass 吞 + 成功回执必须红；pass+log() 不算静默必须绿。"""
+    red_sample = '''
+def f(self):
+    try:
+        do_work()
+    except Exception:
+        pass
+    self.toast.emit("info", "已保存")
+'''
+    ok_log_sample = '''
+def g(self):
+    try:
+        do_work()
+    except Exception:
+        pass
+        log.warning("save skipped: %s", e)
+    self.toast.emit("info", "已保存")
+'''
+    red_tree = ast.parse(red_sample)
+    assert _silent_swallow_violations(red_tree, red_sample), (
+        "纯 pass 静默吞 + 成功回执未被判定违规——扩面失效")
+    ok_tree = ast.parse(ok_log_sample)
+    assert not _silent_swallow_violations(ok_tree, ok_log_sample), (
+        "pass+log() 处理器被误判为静默吞——扩面过宽")
 
 
 def test_user_facing_slash_commands_are_registered():
