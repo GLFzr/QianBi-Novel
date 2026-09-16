@@ -2,7 +2,7 @@
 
 > 状态：✅ 完成（2026-09-06）。方法：直接读 master 源码与官方文档（仓库 2026-08-13 建，最后 push 2026-09-04），非二手转述。
 > 用途：回填《长程压缩与cheap区间_v1.md》§3，并评估其 §4.3「接力压缩」设计。
-> 核心源文件：`packages/compaction/compaction-basic/src/{summarizer,config,region,index}.ts`、`docs/subsystems/compaction.md`。
+> 核心源文件（均在上游仓库 deepseek-ai/deepseek-harness）：`packages/compaction/compaction-basic/src/{summarizer,config,region,index}.ts`、[docs/subsystems/compaction.md](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/compaction.md)。
 
 ---
 
