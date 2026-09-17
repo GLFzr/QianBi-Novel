@@ -21,12 +21,19 @@ logger = logging.getLogger("qianbi.crash")
 CRASH_DIR = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "crashes")
 
 
-def dump_global(exc: BaseException, thread_name: str = "") -> str:
-    """全局崩溃现场落盘（脱敏）。返回 dump 路径（失败返回空串）"""
-    tb = traceback.format_exc()
+def dump_global(exc: BaseException, thread_name: str = "", tb=None) -> str:
+    """全局崩溃现场落盘（脱敏）。返回 dump 路径（失败返回空串）。
+
+    A-6：tb 由调用方（excepthook）显式传入并 format_exception——旧实现用
+    traceback.format_exc()，在钩子上下文里没有「正在处理的异常」，实测 dump
+    正文只有 `NoneType: None`，现场等于没存。"""
+    if tb is not None:
+        stack = "".join(traceback.format_exception(type(exc), exc, tb))
+    else:
+        stack = traceback.format_exc()
     body = (f"# 应用崩溃\n\n- 时间：{datetime.datetime.now():%Y-%m-%d %H:%M:%S}\n"
             f"- 线程：{thread_name or threading.current_thread().name}\n\n"
-            f"```\n{secrets.redact_text(tb)}\n```\n")
+            f"```\n{secrets.redact_text(stack)}\n```\n")
     try:
         os.makedirs(CRASH_DIR, exist_ok=True)
         path = os.path.join(CRASH_DIR, f"crash_{datetime.datetime.now():%Y%m%d_%H%M%S}.md")
@@ -56,7 +63,7 @@ class CrashReporter(QObject):
                 sys_excepthook(tp, val, tb)
                 return
             exc = val if isinstance(val, BaseException) else tp(val)
-            path = dump_global(exc)
+            path = dump_global(exc, tb=tb)   # A-6：把栈传进去（旧实现丢 tb）
             summary = secrets.redact_text(f"{tp.__name__}: {exc}")[:400]
             logger.error("未捕获异常（dump=%s）: %s", path, summary)
             self.crashHappened.emit(summary, path)
@@ -68,7 +75,8 @@ class CrashReporter(QObject):
                 sys_excepthook(args.exc_type, args.exc_value, args.exc_traceback)
                 return
             exc = args.exc_value if isinstance(args.exc_value, BaseException) else args.exc_type(args.exc_value)
-            path = dump_global(exc, thread_name=args.thread.name if args.thread else "")
+            path = dump_global(exc, thread_name=args.thread.name if args.thread else "",
+                               tb=args.exc_traceback)   # A-6
             summary = secrets.redact_text(f"{args.exc_type.__name__}: {exc}")[:400]
             logger.error("工作线程未捕获异常（dump=%s）: %s", path, summary)
             self.crashHappened.emit(summary, path)

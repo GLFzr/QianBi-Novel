@@ -2088,25 +2088,19 @@ class Bridge(QObject):
 
     @Slot(str, str)
     def emitCrash(self, summary: str, path: str):
-        """全局崩溃对话框（main.py CrashReporter 排队到主线程调用）"""
+        """全局崩溃回执（main.py CrashReporter 排队到主线程调用）。
+
+        A-6：旧实现构造 QMessageBox——QGuiApplication 进程里**构造即 native
+        abort**（RC=127，实测），崩溃兜底自己变成二次崩溃。降级为 日志 + toast
+        （含现场路径与报障包指路）；toast 若因界面已不可用而无效，日志仍留全量。"""
+        logger.error("未捕获异常回执：summary=%s dump=%s", summary, path)
         try:
-            from PySide6.QtWidgets import QMessageBox
-            from PySide6.QtGui import QGuiApplication
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowTitle("千笔一文 Novel — 遇到问题")
-            msg.setText("应用遇到未捕获的错误。现场已保存（含脱敏处理），已保存的稿件不受影响。")
-            msg.setDetailedText(f"{summary}\n\n现场文件：{path}")
-            b_logs = msg.addButton("打开日志目录", QMessageBox.ActionRole)
-            b_copy = msg.addButton("复制详情", QMessageBox.ActionRole)
-            msg.addButton("关闭", QMessageBox.RejectRole)
-            msg.exec()
-            if msg.clickedButton() is b_logs:
-                self.openLogDir()
-            elif msg.clickedButton() is b_copy:
-                QGuiApplication.clipboard().setText(f"{summary}\n{path}")
+            self.toast.emit(
+                "error",
+                f"应用遇到未捕获的错误，稿件不受影响。现场已保存：{path}；"
+                f"可在「导出」对话框生成报障包发给开发者（含日志，已脱敏）")
         except Exception as e:  # noqa: BLE001
-            logger.error("崩溃对话框失败: %s", e)
+            logger.error("崩溃 toast 失败（界面可能已不可用）: %s", e)
 
     # ========== Agent Console（T4.3 M1+M2：思考链留存 + 对话区落盘）==========
     # 设计依据 plan_agent_console_v3 §1.3；M3（阅读器收窄/门合并）另行排期。

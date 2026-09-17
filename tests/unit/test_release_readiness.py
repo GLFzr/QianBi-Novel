@@ -83,16 +83,41 @@ def test_singleinstance_lock_name():
 
 
 def test_crash_dump_global_redacted(tmp_path, monkeypatch):
+    """A-6：崩溃 dump 必须含**完整栈**——走 sys.excepthook 驱动（生产同款路径）。
+
+    旧测试写在 except 块里调 dump_global(e)——format_exc() 靠「正在处理的异常」
+    才有内容，测试里恰好有、生产钩子里没有 ⇒ dump 实测只有 NoneType: None 而
+    测试恒绿。现改为直接调钩子（与生产同形：tp/val/tb 三参），旧实现在此必红。"""
+    import glob
+    import os
+    import sys
     import app.crash as cr
     monkeypatch.setattr(cr, "CRASH_DIR", str(tmp_path))
-    try:
+    reporter = cr.CrashReporter()
+    reporter.install()
+    assert sys.excepthook is not None
+
+    def _boom():
         raise ValueError('LLM fail api_key": "sk-secret99999999"')
+
+    tb = None
+    try:
+        _boom()
     except ValueError as e:
-        path = cr.dump_global(e, "worker-1")
+        tb = e.__traceback__
+    path = cr.dump_global(tb.tb_frame.f_locals.get("e", ValueError("x")), "worker-1", tb=tb)
     assert path
     text = open(path, encoding="utf-8").read()
+    # 完整栈：有 traceback 头、有抛出点文件行——旧实现这里是 NoneType: None
+    assert "Traceback (most recent call last)" in text, (
+        "崩溃 dump 缺完整栈（只有 NoneType: None）——A-6 回归")
+    assert "_boom" in text and "raise ValueError" in text, "dump 栈缺抛出点帧"
     assert "ValueError" in text and "secret99999999" not in text
     assert "worker-1" in text
+    # 钩子链路同验：sys.excepthook 也要把 tb 传进去
+    sys.excepthook(ValueError, ValueError('x"sk-secret99999999"'), tb)
+    dumps = sorted(glob.glob(os.path.join(str(tmp_path), "crash_*.md")))
+    assert dumps and "Traceback" in open(dumps[-1], encoding="utf-8").read()
 
 
 def test_save_config_keeps_runtime_key_and_disk_clean(tmp_path, monkeypatch):

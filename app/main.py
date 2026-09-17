@@ -110,18 +110,21 @@ def main():
     engine.addImportPath(qml_dir)
     engine.load(QUrl.fromLocalFile(os.path.join(qml_dir, "Main.qml")))
     if not engine.rootObjects():
-        # QML 加载失败兜底（T3.6）：原生错误窗替代静默崩溃
-        logger.error("QML 加载失败")
+        # QML 加载失败兜底（T3.6）。A-6：QMessageBox 在 QGuiApplication（无
+        # QtWidgets 应用对象）进程里构造即 native abort（RC=127），退化为
+        # 「日志 + 现场文件」——详情全部可回查，不再依赖任何原生窗。
+        logger.error("QML 加载失败（安装不完整或显卡驱动问题）")
         try:
-            from PySide6.QtWidgets import QMessageBox
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowTitle("千笔一文 Novel — 启动失败")
-            msg.setText("界面文件加载失败，可能是安装不完整或显卡驱动问题。")
-            msg.setDetailedText("\n".join(
-                f"- {w.toString()}" for w in engine.warnings()[-10:]) +
-                f"\n\n日志目录：{os.path.join(os.path.expanduser('~'), '.qianbi_novel', 'logs')}")
-            msg.exec()
+            import datetime
+            d = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "crashes")
+            os.makedirs(d, exist_ok=True)
+            path = os.path.join(d, f"qml_load_fail_{datetime.datetime.now():%Y%m%d_%H%M%S}.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("# QML 加载失败\n\n"
+                        + "\n"
+                        .join(f"- {w.toString()}" for w in engine.warnings()[-10:])
+                        + "\n\n日志目录：" + os.path.join(os.path.expanduser("~"), ".qianbi_novel", "logs"))
+            logger.error("QML 失败现场已写入：%s", path)
         except Exception:  # noqa: BLE001
             pass
         sys.exit(1)
