@@ -45,6 +45,14 @@ body:
     validations:
       required: true
   - type: textarea
+    id: bundle
+    attributes:
+      label: 报障包附件
+      description: >
+        应用内「导出 → 一键报障包」生成的 zip 直接拖到这里（含对话记录与日志，
+        Key 已自动脱敏；不愿附书稿选「仅日志」档）。GitHub 单文件上限 25MB。
+      placeholder: 把 zip 拖到这里
+  - type: textarea
     id: what
     attributes:
       label: 发生了什么

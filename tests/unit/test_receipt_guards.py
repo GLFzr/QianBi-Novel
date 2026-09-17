@@ -95,6 +95,7 @@ EVIDENCE_CALLEES = {
     "save_review_findings": "审校结论 v2 写状态盘（_on_cw_review_done，WP-13）",
     "_keep_aside": "坏批注库留证 .corrupt 落盘（_read_store 损坏隔离，WP-13）",
     "create_bundle": "报障包 zip 落盘（report_bundle.create_bundle 写完才发回执，WP-28）",
+    "_make_bug_report": "报障包 zip 落盘（体内经 report_bundle.create_bundle，含正文/仅日志两档，A-9）",
     # —— 内存生效类（界面/模型态，无盘语义但状态真实切换） ——
     "cwProsePolished": "共写去味信号驱动编辑器（内存生效）",
 }
