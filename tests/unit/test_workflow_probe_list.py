@@ -29,8 +29,6 @@ WF = os.path.join(ROOT, ".github", "workflows", "tests.yml")
 CI_EXEMPT_PROBES = {
     "probe_format_guard": "helper 库（format_or_die 被 30+ 探针 import）",
     "probe_guard": "helper 库（arm_config_guard 被新探针挂载）",
-    "probe_agent_relay": "需真 Key（LLM 调用）",
-    "probe_cw_dialogue": "需真 Key（LLM 调用）",
     "probe_official_flash": "需真 Key（LLM 调用）",
     "probe_models": "需真 Key（LLM 调用）",
     "probe_review_gold": "需真 Key（opt-in 金标回放）",
@@ -89,6 +87,33 @@ def _disk_runner_probes():
     return names, imported
 
 
+# 豁免的源码标记（机器可验）：真 Key / 金标 opt-in / 需打包产物。
+# 白名单条目源码里一个标记都没有 = 给离线探针开后门 ⇒ 红
+#（A-4 复验动作：把 probe_word_block 这类离线探针塞进白名单必红）
+_EXEMPT_MARKERS = ("QIANBI_TEST_KEY", "DEEPSEEK_API_KEY", "QIANBI_GOLD_PROBE",
+                   "--exe", "_MEIPASS")
+
+
+def _probe_source(name):
+    return open(os.path.join(ROOT, "tests", name + ".py"), encoding="utf-8").read()
+
+
+def test_whitelist_entries_are_genuinely_not_offline():
+    """A-4：白名单不许给离线探针开后门。每条豁免（helper 库除外）的源码必须
+    含真 Key / 金标 / 打包产物至少一种标记；v3 曾把可离线全绿的
+    probe_agent_relay / probe_cw_dialogue 误挂「需真 Key」——这类误分类在
+    本断言下会当场红。"""
+    _disk, imported = _disk_runner_probes()
+    offenders = []
+    for n, reason in CI_EXEMPT_PROBES.items():
+        if n in imported:
+            continue   # helper 库：不单独运行，豁免天经地义
+        src = _probe_source(n)
+        if not any(m in src for m in _EXEMPT_MARKERS):
+            offenders.append(f"{n}（理由={reason}，但源码无任何豁免标记）")
+    assert not offenders, "白名单给离线探针开后门：" + "；".join(offenders)
+
+
 def test_workflow_probe_list_matches_reality():
     src = open(WF, encoding="utf-8").read()
     assert "run_probe_fleet.py" in src or "probe_" in src, "工作流里没有探针名单"
@@ -119,7 +144,7 @@ def test_workflow_probe_list_matches_reality():
 def test_workflow_probe_list_excludes_key_required_probes():
     """CI 无 API Key：已知需真 Key 的探针不得进名单（否则 CI 恒红或诱人登记豁免）。"""
     src = open(WF, encoding="utf-8").read()
-    for banned in ("probe_agent_relay", "probe_cw_dialogue", "probe_official_flash",
+    for banned in ("probe_official_flash",
                    "probe_models", "probe_review_gold", "probe_flash_reasoning",
                    "probe_thinking_param", "probe_max_thinking", "probe_outline_batch"):
         assert banned not in src, f"{banned} 需真 Key/参数，不得进 CI 名单"
