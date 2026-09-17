@@ -303,3 +303,54 @@ def test_update_check_does_not_emit_from_bare_thread():
                      _src("app/ui/bridge.py"), re.S).group(1)
     assert "threading.Thread" not in body
     assert "_UpdateWorker" in body
+
+
+# ---- WP-21：迁移落盘钉「写盘次数」而非内容幂等 ----
+# v3 复验变异：把 config.py 的 `if _n06_first_load:` 改成 `if True:` ⇒ 内容不变
+# 的重复写盘在字节比对下永远绿。落盘预算必须按次数钉：
+#   正常 config（迁移已做）：load_config 全程 0 次 save_config；
+#   老值 1 无标记：首次 load 恰好 1 次（唯一白名单=N-06 标记落盘），二次 load 0 次。
+# 任何其他迁移路径偷写盘，同样在这里红。
+
+def _count_saves(monkeypatch):
+    calls = []
+    real = cfg_mod.save_config
+
+    def counting(cfg):
+        calls.append(1)
+        return real(cfg)
+
+    monkeypatch.setattr(cfg_mod, "save_config", counting)
+    return calls
+
+
+def test_load_config_save_budget_normal_config_is_zero(tmp_path, monkeypatch):
+    """正常 config（N-06 迁移已完成）：读配置不许写盘。
+    变异「if True: 每次 load 都 save」与「其他迁移路径偷写盘」都在这条红。"""
+    from app import secrets as secrets_mod
+    cfg = json.loads(json.dumps(cfg_mod.DEFAULT_CONFIG))
+    cfg[cfg_mod._N06_MARKER_KEY] = True
+    raw = json.dumps(cfg, ensure_ascii=False)
+    _use_tmp_config(tmp_path, monkeypatch, raw)
+    calls = _count_saves(monkeypatch)
+    cfg_mod.load_config()
+    assert calls == [], (
+        f"load_config 对迁移已完成的 config 落盘了 {len(calls)} 次——"
+        "写盘预算被破坏（WP-21：只有 N-06 首载标记允许写，且仅一次）")
+
+
+def test_load_config_save_budget_legacy_is_exactly_one_then_zero(tmp_path, monkeypatch):
+    """老值 1 无标记：首次 load 恰好 1 次写盘（N-06 标记），二次 load 0 次。
+    `if True:` 变异会让第二次 load 再写 ⇒ calls 变 2 ⇒ 红。"""
+    from app import secrets as secrets_mod
+    cfg = json.loads(json.dumps(cfg_mod.DEFAULT_CONFIG))
+    cfg["gates"]["review_max_rounds"] = 1
+    raw = json.dumps(cfg, ensure_ascii=False)
+    _use_tmp_config(tmp_path, monkeypatch, raw)
+    calls = _count_saves(monkeypatch)
+    cfg_mod.load_config()
+    assert len(calls) == 1, f"首载迁移应恰好落盘 1 次，实测 {len(calls)} 次"
+    cfg_mod.load_config()
+    assert len(calls) == 1, (
+        f"二次 load_config 又落了盘（累计 {len(calls)} 次）——"
+        "迁移不幂等于写盘次数：if True: 式无条件落盘被 WP-21 预算锁抓住")

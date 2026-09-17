@@ -80,19 +80,21 @@ def _terminal_exit_call(tree):
 
 
 def _pass_branch_is_zero(call_node):
-    """终端退出调用的 PASS 分支必须退 0。
+    """终端退出调用必须「双向」满足 R10：PASS 退 0 且 FAIL 退非 0。
 
     可静态判定的形态：
-    - 常量参数：必须为 0/None/False（无条件非零常量 = PASS 必非零，违规）
+    - 裸常量参数（含 0）：一律违规——`sys.exit(0)` 恒 0 意味着 FAIL 也退 0
+      （v3 复验变异），`sys.exit(2)` 恒非 0 意味着 PASS 也非 0；成功/失败必须
+      由失败派生表达式决定
     - 双分支均为常量的条件表达式：两值必须恰含一个 0（如 `1 if fail else 0`）；
-      两分支同值非零（`1 if ok else 1`，把 PASS 分支改成 1 的变异形态）即违规
+      两分支同值（`1 if ok else 1` / `0 if ok else 0`）即违规
     其余（名字/调用/运算）视为失败派生，静态不可判但约定存在。
     """
     if not call_node.args:
         return True
     arg = call_node.args[0]
     if isinstance(arg, ast.Constant):
-        return arg.value in (0, None, False)
+        return False
     if isinstance(arg, ast.IfExp):
         consts = {b.value for b in (arg.body, arg.orelse) if isinstance(b, ast.Constant)}
         # 双分支均为常量：必须恰含一个 0（`1 if fail else 0` 合法；
@@ -128,22 +130,22 @@ def test_probe_exit_contract(path):
         pytest.skip("helper 模块（被其他探针 import，不单独运行）")
 
     terminal = _terminal_exit_call(tree)
-    if terminal is None:
-        if _has_exec_tail(tree):
-            all_calls = _exit_calls(tree.body)
-            assert all_calls, (
-                f"{rel}: 末条顶层语句是 app.exec() 但全文件没有任何显式退出码约定"
-                "（R10：结论为 PASS 时必须显式 sys.exit(0)）")
-            assert _pass_branch_is_zero(all_calls[-1]), (
-                f"{rel}: 事件循环内的退出调用 PASS 分支非 0（R10 违规）")
-            pytest.skip("Qt 定时器模式：退出约定在事件循环槽内（app.exec() 收尾）")
-        pytest.fail(
-            f"{rel}: 末条顶层语句没有显式退出码约定（R10：结论为 PASS 时必须显式 "
-            "sys.exit(0)、FAIL 时非零；缺约定会让 Qt 静态析构期 fastfail 决定退码）")
+    if terminal is None and _has_exec_tail(tree):
+        # Qt 定时器模式：退出约定在事件循环槽内（app.exec() 收尾）——
+        # v3 WP-24：不再一 skip 了事，槽内最后一个退出调用按同一套双向规则检
+        all_calls = _exit_calls(tree.body)
+        assert all_calls, (
+            f"{rel}: 末条顶层语句是 app.exec() 但全文件没有任何显式退出码约定"
+            "（R10：PASS 退 0 且 FAIL 退非 0）")
+        terminal = all_calls[-1]
+
+    assert terminal is not None, (
+        f"{rel}: 末条顶层语句没有显式退出码约定（R10：PASS 退 0 且 FAIL 退非 0；"
+        "缺约定会让 Qt 静态析构期 fastfail 决定退码）")
 
     assert _pass_branch_is_zero(terminal), (
-        f"{rel}: 终端退出调用 {ast.unparse(terminal)} 的 PASS 分支非 0"
-        "（R10：PASS 却非零 = 违规）")
+        f"{rel}: 终端退出调用 {ast.unparse(terminal)} 不满足双向 R10"
+        "（PASS 退 0 且 FAIL 退非 0：裸常量恒值、两分支同值、PASS 分支非 0 均违规）")
 
 
 def test_check_layout_conclusion_line_and_exit_agree():
