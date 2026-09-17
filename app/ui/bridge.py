@@ -896,6 +896,28 @@ class _DownloadWorker(QThread):
 
 # ---------- 主桥 ----------
 
+def _guarded(fn):
+    """H-10/A-10：Slot 守护装饰器——槽内异常不再裸奔（统一 logger + toast）。
+
+    放在 @Slot 之下：@Slot 收到的就是包装后函数，Qt 注册不受影响。
+    槽内异常原样只记日志 + toast 提示，不再直接打进崩溃链。"""
+    import functools
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return fn(self, *args, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Slot %s 异常：%s", fn.__name__, e, exc_info=True)
+            try:
+                self.toast.emit("error", f"操作失败（{fn.__name__}）：{e}")
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+    wrapper._guarded = True
+    return wrapper
+
+
+
 class Bridge(QObject):
     # 属性变更信号
     bookTitleChanged = Signal()
@@ -1219,6 +1241,7 @@ class Bridge(QObject):
     # ============ 项目管理 ============
 
     @Slot(str, str, str, str, int, str, str, str, result=bool)
+    @_guarded
     def newProject(self, location, name, genre, platform, totalWan, idea, presetId="",
                    worldbookFile=""):
         location, name = location.strip(), name.strip()
@@ -1259,6 +1282,7 @@ class Bridge(QObject):
         return True
 
     @Slot(str)
+    @_guarded
     def openProject(self, path):
         if not path:
             return
@@ -1339,6 +1363,7 @@ class Bridge(QObject):
     # ============ 流水线控制 ============
 
     @Slot()
+    @_guarded
     def startPipeline(self):
         logger.info("[dbg] startPipeline invoked, proj=%s running=%s", self.proj, self._running)
         if self._demo.active:
@@ -1388,6 +1413,7 @@ class Bridge(QObject):
         self.orch.start()
 
     @Slot()
+    @_guarded
     def pausePipeline(self):
         if self.orch and self._running:
             self.orch.pause()
@@ -1397,6 +1423,7 @@ class Bridge(QObject):
             self.toast.emit("info", "已暂停：本次调用跑完后停在步骤边界")
 
     @Slot()
+    @_guarded
     def resumePipeline(self):
         if self.orch and self._running:
             self.orch.resume()
@@ -1405,6 +1432,7 @@ class Bridge(QObject):
             self.toast.emit("info", "已继续写作")
 
     @Slot()
+    @_guarded
     def stopPipeline(self):
         if not (self.orch and self._running):
             return
@@ -1435,15 +1463,18 @@ class Bridge(QObject):
     WIRED_GATES = ("G1", "G2", "G3", "G4", "G5L", "G6", "G7", "G8", "G9")
 
     @Slot(result="QVariantList")
+    @_guarded
     def gateMetaList(self) -> list:
         return [dict(m) for m in self.GATE_META]
 
     @Slot(result=str)
+    @_guarded
     def gatePreset(self) -> str:
         """门预置：off=全放行（两按钮同关）/ step=逐步确认 / border=边界确认"""
         return str(self.cfg.get("writing", {}).get("gate_preset", "off"))
 
     @Slot(str)
+    @_guarded
     def setGatePreset(self, preset: str):
         if preset not in ("off", "border", "step"):
             return
@@ -1458,6 +1489,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"决策门已切换为「{names[preset]}」")
 
     @Slot(result=str)
+    @_guarded
     def runMode(self) -> str:
         # 项目级档位粘性优先：共写档状态 cw.mode == 'cw' 时即显示共写
         if self.proj:
@@ -1469,6 +1501,7 @@ class Bridge(QObject):
         return "auto"
 
     @Slot(str)
+    @_guarded
     def setRunMode(self, mode: str):
         m = mode if mode in ("auto", "cw") else "auto"
         cur = str(self.runMode())
@@ -1496,6 +1529,7 @@ class Bridge(QObject):
         self.runModeChanged.emit()
 
     @Slot(str, result=bool)
+    @_guarded
     def gateEnabled(self, key: str) -> bool:
         """勾选清单显示口径：step=全亮；border=按清单；off=全灭（与 orchestrator 同语义）"""
         w = self.cfg.get("writing", {})
@@ -1507,6 +1541,7 @@ class Bridge(QObject):
         return False
 
     @Slot(str, bool)
+    @_guarded
     def setGateEnabled(self, key: str, on: bool):
         """边界确认清单勾选（v1.2）：写共享 self.cfg 再落盘（与 orchestrator 同引用，即时生效）"""
         w = self.cfg.setdefault("writing", {})
@@ -1529,6 +1564,7 @@ class Bridge(QObject):
         self.gateDetail.emit(key, chapter, detail)
 
     @Slot(str, str)
+    @_guarded
     def resolveStepGate(self, action: str, idea: str):
         """决策条调用：action = next / return；idea 为可选的用户想法。
         idea 以 / 开头 = Agent 操作指令（只放 readonly 与回退映射——微循环在内存中
@@ -1574,12 +1610,14 @@ class Bridge(QObject):
     # ========== Token 用量统计（插件）==========
 
     @Slot(result="QVariantMap")
+    @_guarded
     def usageSummary(self) -> dict:
         """聚合视图：今日/本月/全部 的 tokens、调用数、成本、按模型分组"""
         from .. import usage as _usage
         return _usage.summary(cfg_mod.load_config())
 
     @Slot()
+    @_guarded
     def refreshUsage(self):
         self.usageChanged.emit()
         self.tokensChanged.emit()
@@ -1599,6 +1637,7 @@ class Bridge(QObject):
         return bool(cfg_mod.load_config().get("general", {}).get("onboarded", False))
 
     @Slot()
+    @_guarded
     def setOnboarded(self):
         # §11.1 写盘↔写内存一致：改共享 self.cfg 再落盘（旧实现 load_config 新字典）
         self.cfg.setdefault("general", {})["onboarded"] = True
@@ -1622,6 +1661,7 @@ class Bridge(QObject):
         return self._demo.auto_mode
 
     @Slot(result=bool)
+    @_guarded
     def demoStart(self) -> bool:
         if self._running:
             self.toast.emit("warn", "流水线运行中，先停止再进演示")
@@ -1632,23 +1672,28 @@ class Bridge(QObject):
         return True
 
     @Slot()
+    @_guarded
     def demoSkip(self):
         self._demo.skip()
         self.demoActiveChanged.emit()
 
     @Slot()
+    @_guarded
     def demoNext(self):
         self._demo.next()
 
     @Slot(str)
+    @_guarded
     def demoStepDone(self, step_id: str):
         self._demo.step_done(step_id)
 
     @Slot(str)
+    @_guarded
     def demoNotifyPanel(self, panel: str):
         self._demo.notify_panel(panel)
 
     @Slot("QVariant")
+    @_guarded
     def demoAttach(self, win):
         """Main.qml 把主窗口挂进来，供逐步截图（QIANBI_DEMO_SHOT_DIR）
 
@@ -1667,6 +1712,7 @@ class Bridge(QObject):
         return bool((cfg_mod.load_config().get("telemetry") or {}).get("enabled", False))
 
     @Slot(bool)
+    @_guarded
     def setTelemetryEnabled(self, on: bool):
         # §11.1：main.py 读的就是 self.cfg——必须改共享字典，回执才不说谎
         from .. import telemetry
@@ -1678,11 +1724,13 @@ class Bridge(QObject):
     # ---- 模型策略 / 连写（方案 B、F3）----
 
     @Slot(result="QVariantList")
+    @_guarded
     def modelPresetOptions(self):
         from .. import model_strategy
         return model_strategy.preset_options()
 
     @Slot(result=str)
+    @_guarded
     def exportBetaPack(self):
         """公测数据包导出（v0.18.4）：返回导出路径或错误说明"""
         try:
@@ -1695,11 +1743,13 @@ class Bridge(QObject):
             return f"导出失败：{e}"
 
     @Slot()
+    @_guarded
     def openBetaPackDir(self):
         from .. import telemetry
         self.openPath(telemetry.DIR)
 
     @Slot(str)
+    @_guarded
     def applyModelPreset(self, preset_id: str):
         # 运行中禁止重绑 self.cfg（静态审计发现的 #15 同族隐患）：
         # 此处 load_config() 会换新字典，orchestrator 仍持旧引用，本轮运行将看不到
@@ -1721,6 +1771,7 @@ class Bridge(QObject):
         return bool(self.cfg.get("writing", {}).get("auto_gate", False))
 
     @Slot(bool)
+    @_guarded
     def setAutoGate(self, on: bool):
         # v1.1 核实修复（#15）：写共享 self.cfg（orchestrator 持有同引用）再落盘，
         # 旧实现 load_config() 新字典导致本会话内开关对流水线无效、重启才生效
@@ -1735,6 +1786,7 @@ class Bridge(QObject):
         return bool(self.cfg.get("writing", {}).get("offpeak_run", False))
 
     @Slot(bool)
+    @_guarded
     def setOffpeakRun(self, on: bool):
         w = self.cfg.setdefault("writing", {})
         w["offpeak_run"] = bool(on)
@@ -1826,6 +1878,7 @@ class Bridge(QObject):
         return str(self._updates().get("dismissed_version") or "")
 
     @Slot(bool)
+    @_guarded
     def checkForUpdates(self, manual: bool):
         from .. import __version__, update_check as uc
         cfg = cfg_mod.load_config()
@@ -1868,6 +1921,7 @@ class Bridge(QObject):
                    max(self.UPDATE_INTERVAL_MIN_H, hours))
 
     @Slot(str)
+    @_guarded
     def setUpdateSettings(self, patch_json: str):
         """更新设置：QML 一次提交一份 JSON 补丁，键走白名单"""
         try:
@@ -1890,6 +1944,7 @@ class Bridge(QObject):
         self._patch_updates(**clean)
 
     @Slot(str)
+    @_guarded
     def openUpdateUrl(self, url: str):
         """打开清单里的链接。协议闸在这里，不在 QML——清单内容是外部输入"""
         from .. import update_check as uc
@@ -1901,6 +1956,7 @@ class Bridge(QObject):
     # ---- 出路一：离线导入清单（连不上 GitHub 的机器，1KB 文件可以拷）----
 
     @Slot(str, result="QVariantMap")
+    @_guarded
     def importManifestFile(self, path: str) -> dict:
         from .. import __version__, importdoc, update_check as uc
         data, reason = uc.load_manifest_file(importdoc.normalize_path(path))
@@ -1927,6 +1983,7 @@ class Bridge(QObject):
     # ---- 出路二：本机已有的安装包，对完哈希再谈安装 ----
 
     @Slot(str, result="QVariantMap")
+    @_guarded
     def checkLocalPackage(self, path: str) -> dict:
         from .. import importdoc, update_check as uc, update_install
         r = self._update_result
@@ -1944,6 +2001,7 @@ class Bridge(QObject):
         return dict(out)
 
     @Slot(result=str)
+    @_guarded
     def updateDownloadPath(self) -> str:
         from .. import update_check as uc
         return uc.updates_dir()
@@ -1951,6 +2009,7 @@ class Bridge(QObject):
     # ---- 出路三：在线一键（下载 → 校验 → 退出 → 拉起安装器）----
 
     @Slot()
+    @_guarded
     def startUpdateDownload(self):
         from .. import update_check as uc, update_install, update_mirrors
         r = self._update_result
@@ -2011,12 +2070,14 @@ class Bridge(QObject):
         self.updateStateChanged.emit()
 
     @Slot()
+    @_guarded
     def cancelUpdateDownload(self):
         if self._dl_worker is not None and self._dl_worker.isRunning():
             self._dl_worker.cancel()
             self.toast.emit("info", "正在取消（已下的部分留着，下次续传）")
 
     @Slot()
+    @_guarded
     def installUpdateNow(self):
         """让应用执行程序的唯一路径：三道门一道都不能少
 
@@ -2066,6 +2127,7 @@ class Bridge(QObject):
         os._exit(0)
 
     @Slot(str)
+    @_guarded
     def openPath(self, path: str):
         """打开目录/文件（资源管理器或默认程序）"""
         try:
@@ -2074,19 +2136,50 @@ class Bridge(QObject):
             self.toast.emit("warn", f"无法打开: {e}")
 
     @Slot()
+    @_guarded
     def openLogDir(self):
         from .. import logger
         self.openPath(logger.LOG_DIR)
 
     @Slot(result=str)
+    @_guarded
     def dataDirPath(self) -> str:
         return cfg_mod.CONFIG_DIR
 
     @Slot()
+    @_guarded
     def openDataDir(self):
         self.openPath(self.dataDirPath())
 
     @Slot(str, str)
+    def shutdown(self, timeout_ms: int = 4000):
+        """A-10/H-9：退出收尾——运行中关窗不再静默崩（实测 RC=127）。
+
+        仓库里探针用三处 os._exit 躲析构崩，产品主路径一直裸奔。这里：
+        停流水线 → 打断共写/反哺 worker → 限时等待线程收尾，让 Python 正常
+        退出而不是带着活线程进解释器析构。"""
+        logger.info("退出收尾开始（running=%s）", self._running)
+        try:
+            if self.orch is not None:
+                self.orch.stop()
+                if not self.orch.wait(timeout_ms):
+                    logger.warning("流水线线程 %dms 未收尾，terminate 兜底", timeout_ms)
+                    self.orch.terminate()
+                    self.orch.wait(1000)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("流水线收尾异常：%s", e)
+        for attr in ("_cw_worker", "_cw_sum_worker", "_backflow_worker"):
+            w = getattr(self, attr, None)
+            try:
+                if w is not None and w.isRunning():
+                    w.requestInterruption()
+                    if not w.wait(timeout_ms):
+                        logger.warning("%s 未在限时内收尾", attr)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("%s 收尾异常：%s", attr, e)
+        logger.info("退出收尾完成")
+
+    @_guarded
     def emitCrash(self, summary: str, path: str):
         """全局崩溃回执（main.py CrashReporter 排队到主线程调用）。
 
@@ -2184,6 +2277,7 @@ class Bridge(QObject):
         return self._console_expanded
 
     @Slot(bool)
+    @_guarded
     def setConsoleExpanded(self, on: bool):
         if self._console_expanded != bool(on):
             self._console_expanded = bool(on)
@@ -2192,6 +2286,7 @@ class Bridge(QObject):
             self.consoleChanged.emit()
 
     @Slot(bool)
+    @_guarded
     def setShowReasoning(self, on: bool):
         if self._get_show_reasoning() != bool(on):
             self.cfg.setdefault("general", {})["show_reasoning"] = bool(on)
@@ -2199,6 +2294,7 @@ class Bridge(QObject):
             self.consoleChanged.emit()
 
     @Slot(str)
+    @_guarded
     def consoleSubmit(self, text: str):
         """Console 输入框（M3 门合并前的对话通道雏形）：
         门等待中 → 作为「带想法继续」送入当前门；否则沉淀为「下一章」想法"""
@@ -2266,11 +2362,13 @@ class Bridge(QObject):
             self.ideaCountChanged.emit()
 
     @Slot(int)
+    @_guarded
     def rewriteChapter(self, num: int):
         """重写某章：删除正文文件后回到流水线（运行中不可操作）"""
         self._rewrite_chapter_common(num, "")
 
     @Slot(int, str)
+    @_guarded
     def rewriteChapterWithGuidance(self, num: int, guidance: str):
         """带用户指导重写：删除正文文件 + 登记指导语，续跑时注入正文 prompt"""
         self._rewrite_chapter_common(num, guidance)
@@ -2304,6 +2402,7 @@ class Bridge(QObject):
     # ============ 局部改写（选中文本 + 想法，不动流水线）============
 
     @Slot(str, str, str, str, str)
+    @_guarded
     def rewriteSelection(self, before: str, selected: str, after: str, idea: str, mode: str = "neighbor"):
         """AI 只改写选中段落：流式预览 → QML 应用/放弃
         mode: only=仅选中段 neighbor=带前后各一段 full=带全章 setting=全章+核心设定"""
@@ -2348,10 +2447,12 @@ class Bridge(QObject):
         self.toast.emit("error", f"局部改写失败: {msg}")
 
     @Slot(result=str)
+    @_guarded
     def selectionResult(self) -> str:
         return self._sel_result
 
     @Slot()
+    @_guarded
     def cancelSelectionRewrite(self):
         if self._sel_worker and self._sel_worker.isRunning():
             self._sel_worker.requestInterruption()
@@ -2361,11 +2462,13 @@ class Bridge(QObject):
     # ============ 创作想法提交（人和 AI 一起创作）============
 
     @Slot(str)
+    @_guarded
     def submitIdea(self, text: str):
         """写作中随时提交创作想法（默认注入下一章草稿 prompt）"""
         self.submitIdeaScoped(text, "next")
 
     @Slot(str, str)
+    @_guarded
     def submitIdeaScoped(self, text: str, scope: str):
         """scope: next=下一章 | 通用=通用想法 | 数字=指定第N章"""
         if not self.proj:
@@ -2384,6 +2487,7 @@ class Bridge(QObject):
     # ============ 章节查看/编辑（保存驱动版本语义）============
 
     @Slot(int)
+    @_guarded
     def openChapter(self, num: int):
         """打开章节到编辑器（工作副本：加载磁盘内容，无未保存修改）
         正文不存在时合成空打开（路径=无标题预期文件名），供补写缺失章节
@@ -2422,6 +2526,7 @@ class Bridge(QObject):
         return fallback
 
     @Slot(str)
+    @_guarded
     def markEditorDirty(self, text: str):
         """编辑器内容变化时由 QML 调用：比较磁盘基准，置未保存标记 + 启动防抖暂存"""
         dirty = text != self._chapter_text
@@ -2436,16 +2541,19 @@ class Bridge(QObject):
             self._draft_timer.stop()
 
     @Slot()
+    @_guarded
     def clearEditorDirty(self):
         """放弃未保存修改（QML 确认对话框「放弃」后调用）"""
         self._reset_editor_state()
 
     @Slot(str)
+    @_guarded
     def noteEditAction(self, source: str):
         """登记最近一次编辑动作来源（局部改写应用等），下次保存时作为版本来源标注"""
         self._last_edit_action = source or ""
 
     @Slot(str)
+    @_guarded
     def saveChapterText(self, text: str, quiet: bool = False):
         """保存驱动版本的唯一提交动作：
         ① 磁盘旧内容归档为新版本（内容有变化才产生）
@@ -2488,18 +2596,21 @@ class Bridge(QObject):
     # ============ 版本历史（保存驱动 · 查看/diff/回退）============
 
     @Slot(int, result="QVariantList")
+    @_guarded
     def versionsForChapter(self, num: int) -> list:
         if not self.proj:
             return []
         return versions.list_versions(self.proj, num)
 
     @Slot(int, int, result=str)
+    @_guarded
     def readVersion(self, num: int, v: int) -> str:
         if not self.proj:
             return ""
         return versions.read_version(self.proj, num, v)
 
     @Slot(int, result=str)
+    @_guarded
     def diskTextOf(self, num: int) -> str:
         """磁盘当前（已保存）内容，作为版本 diff 的参照"""
         if not self.proj:
@@ -2510,6 +2621,7 @@ class Bridge(QObject):
         return ""
 
     @Slot(int, int, result="QVariantList")
+    @_guarded
     def diffVersionWithDisk(self, num: int, v: int) -> list:
         """版本 v vs 磁盘当前内容（回退前预览）"""
         if not self.proj:
@@ -2520,6 +2632,7 @@ class Bridge(QObject):
     # ============ 草稿恢复（崩溃/意外退出后的未保存内容，仍算工作副本）============
 
     @Slot(result="QVariantMap")
+    @_guarded
     def recoverDraft(self) -> dict:
         """恢复最新未保存草稿到编辑器（工作副本，未保存；保存才成为版本）。
         返回 {num, text}；无草稿返回 {}。基准保持磁盘旧内容，dirty 置位。"""
@@ -2545,6 +2658,7 @@ class Bridge(QObject):
         return {"num": num, "text": content}
 
     @Slot()
+    @_guarded
     def discardDrafts(self):
         """丢弃全部未保存草稿（用户确认后）"""
         if self.proj:
@@ -2553,6 +2667,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "未保存草稿已丢弃")
 
     @Slot(str)
+    @_guarded
     def scanChapterText(self, text: str):
         if not text.strip():
             self._chapter_findings = []
@@ -2568,10 +2683,12 @@ class Bridge(QObject):
     # ============ 连接与模型 ============
 
     @Slot(str, result="QVariantMap")
+    @_guarded
     def getConnection(self, cid: str) -> dict:
         return dict(cfg_mod.find_connection(self.cfg, cid))
 
     @Slot("QVariantMap")
+    @_guarded
     def saveConnection(self, conn: dict):
         conn = dict(conn)
         cid = conn.get("id") or cfg_mod.new_connection_id()
@@ -2589,6 +2706,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"连接「{conn.get('name', '')}」已保存")
 
     @Slot(str)
+    @_guarded
     def deleteConnection(self, cid: str):
         conns = self.cfg.get("connections", [])
         if len(conns) <= 1:
@@ -2612,6 +2730,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "已删除连接「%s」%s" % (name, key_note))
 
     @Slot(str, str)
+    @_guarded
     def setSlot(self, slot: str, cid: str):
         self.cfg.setdefault("slots", {})[slot] = cid
         cfg_mod.save_config(self.cfg)
@@ -2620,6 +2739,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"{cfg_mod.SLOT_LABELS.get(slot, slot)} → {cfg_mod.find_connection(self.cfg, cid).get('name', '')}")
 
     @Slot("QVariantMap")
+    @_guarded
     def testConnectionDraft(self, conn: dict):
         """用表单当前内容直接测试（不要求先保存）"""
         conn = dict(conn)
@@ -2632,6 +2752,7 @@ class Bridge(QObject):
         w.start()
 
     @Slot(str)
+    @_guarded
     def testConnection(self, cid: str):
         conn = cfg_mod.find_connection(self.cfg, cid)
         if not conn:
@@ -2643,6 +2764,7 @@ class Bridge(QObject):
         w.start()
 
     @Slot(str)
+    @_guarded
     def fetchModels(self, cid: str):
         conn = cfg_mod.find_connection(self.cfg, cid)
         if not conn:
@@ -2656,6 +2778,7 @@ class Bridge(QObject):
     # ============ 队列与进度 ============
 
     @Slot()
+    @_guarded
     def refreshQueue(self):
         if not self.proj:
             self.chapterModel.set_items([])
@@ -2900,11 +3023,13 @@ class Bridge(QObject):
         self.pausedChanged.emit()
 
     @Slot(str, str)
+    @_guarded
     def showToast(self, level: str, msg: str):
         """QML 端复用全局 Toast"""
         self.toast.emit(level, msg)
 
     @Slot(result="QVariantList")
+    @_guarded
     def recentProjects(self) -> list:
         result = []
         for p in self.cfg.get("recent_projects", []):
@@ -2919,6 +3044,7 @@ class Bridge(QObject):
         return result
 
     @Slot(result="QVariantList")
+    @_guarded
     def connectionOptions(self) -> list:
         """供槽位下拉使用：[{id, name, boundSlots}]"""
         result = []
@@ -2933,6 +3059,7 @@ class Bridge(QObject):
     # ---- 发布物料：标签 + 简介（据大纲/设定生成）----
 
     @Slot(result=str)
+    @_guarded
     def blurbText(self) -> str:
         """已保存的发布物料内容（设定/简介与标签.md），未生成返回空串"""
         if not self.proj:
@@ -2940,6 +3067,7 @@ class Bridge(QObject):
         return project.read_file(os.path.join(self.proj, "设定", "简介与标签.md"))
 
     @Slot()
+    @_guarded
     def generateBlurb(self):
         """据题材定位 + 全书大纲 后台生成标签与简介；结果经 blurbGenerated 返回并自动保存"""
         if not self.proj:
@@ -2964,6 +3092,7 @@ class Bridge(QObject):
             self.toast.emit("error", f"发布物料生成失败: {text}")
 
     @Slot(result="QVariantList")
+    @_guarded
     def projectFiles(self) -> list:
         """列出项目内可编辑的 md 文件（设定/大纲/追踪），供「项目文件」面板浏览"""
         if not self.proj:
@@ -2982,6 +3111,7 @@ class Bridge(QObject):
         return result
 
     @Slot(str, result=str)
+    @_guarded
     def readProjectFile(self, rel: str) -> str:
         if not self.proj:
             return ""
@@ -2991,6 +3121,7 @@ class Bridge(QObject):
         return project.read_file(p)
 
     @Slot(str, str)
+    @_guarded
     def saveProjectFile(self, rel: str, text: str):
         if not self.proj:
             return
@@ -3003,6 +3134,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"已保存 {rel}")
 
     @Slot(str, result=str)
+    @_guarded
     def exportProject(self, fmt: str) -> str:
         """导出全本：txt（平台上传标准）或 epub（阅读器标准）。返回导出路径"""
         if not self.proj:
@@ -3026,6 +3158,7 @@ class Bridge(QObject):
             return ""
 
     @Slot(str)
+    @_guarded
     def openProjDebugDir(self, sub: str):
         """L2-17：归档安全网入口——打开当前项目的 pipeline_debug（rollback/agent_tools 归档）"""
         if not self.proj:
@@ -3038,11 +3171,13 @@ class Bridge(QObject):
     # ---- WP-27 对话全量落盘（R14②③：界面可发现 + 可关闭）----
 
     @Slot(result=bool)
+    @_guarded
     def dialogueLogOn(self) -> bool:
         from .. import dialogue_log
         return bool((self.cfg or {}).get("dialogue_log", {}).get("enabled", True))
 
     @Slot(result=str)
+    @_guarded
     def dialogueLogInfo(self) -> str:
         """对话记录现状一行（设置面板展示：在哪、多少、开没开）"""
         from .. import dialogue_log
@@ -3052,6 +3187,7 @@ class Bridge(QObject):
                 f"{st_['bytes'] // 1024} KB · {where}")
 
     @Slot(bool)
+    @_guarded
     def setDialogueLog(self, on: bool):
         self.cfg.setdefault("dialogue_log", {})
         self.cfg["dialogue_log"]["enabled"] = bool(on)
@@ -3062,6 +3198,7 @@ class Bridge(QObject):
                                if on else "对话记录已关闭：新调用不再落盘"))
 
     @Slot()
+    @_guarded
     def openDialogueDir(self):
         """打开当前书的对话记录目录（R14②：位置可发现）"""
         if not self.proj:
@@ -3073,6 +3210,7 @@ class Bridge(QObject):
         self.openPath(d)
 
     @Slot(str, result=str)
+    @_guarded
     def exportDialogue(self, kind: str) -> str:
         """WP-28：导出对话记录（jsonl=原始逐条 / txt=可读排版）→ 书根目录"""
         NL = chr(10)
@@ -3115,10 +3253,12 @@ class Bridge(QObject):
             return ""
 
     @Slot(result=str)
+    @_guarded
     def createBugReport(self) -> str:
         return self._make_bug_report(include_dialogue=True)
 
     @Slot(result=str)
+    @_guarded
     def createBugReportLogsOnly(self) -> str:
         """A-9：仅日志档——不含书稿正文（对话记录就是正文）"""
         return self._make_bug_report(include_dialogue=False)
@@ -3147,6 +3287,7 @@ class Bridge(QObject):
             return ""
 
     @Slot(result="QVariantList")
+    @_guarded
     def forcedLocksList(self) -> list:
         """L2-13：强锁审计痕回看（哪章被绕了哪条门）——界面终于有读者了"""
         if not self.proj:
@@ -3156,6 +3297,7 @@ class Bridge(QObject):
                 for k, v in sorted(fl.items(), key=lambda kv: int(kv[0]))][-50:]
 
     @Slot(result=str)
+    @_guarded
     def defaultBooksRoot(self) -> str:
         root = os.path.join(os.path.expanduser("~"), "Documents", "千笔一文")
         os.makedirs(root, exist_ok=True)
@@ -3169,12 +3311,14 @@ class Bridge(QObject):
     }
 
     @Slot(result="QVariantMap")
+    @_guarded
     def readerPrefs(self) -> dict:
         prefs = dict(self.READER_DEFAULTS)
         prefs.update(self.cfg.get("reader", {}))
         return prefs
 
     @Slot(str, "QVariant")
+    @_guarded
     def setReaderPref(self, key: str, value):
         self.cfg.setdefault("reader", {})[key] = value
         cfg_mod.save_config(self.cfg)
@@ -3217,12 +3361,14 @@ class Bridge(QObject):
             json.dump(data, f, ensure_ascii=False, indent=1)
 
     @Slot(int, result="QVariantMap")
+    @_guarded
     def readStore(self, num: int) -> dict:
         if not self.proj:
             return {"annotations": [], "bookmarks": [], "position": 0.0}
         return self._read_store(self.proj, num)
 
     @Slot(int, str, str, str, float)
+    @_guarded
     def addAnnotation(self, num: int, kind: str, quote: str, note: str, pos: float):
         """kind: highlight_yellow / highlight_green / highlight_red / comment（同引文同类型去重）"""
         if not self.proj:
@@ -3241,6 +3387,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "批注已保存" if note else "已高亮标注")
 
     @Slot(int, int)
+    @_guarded
     def removeAnnotation(self, num: int, idx: int):
         if not self.proj:
             return
@@ -3250,6 +3397,7 @@ class Bridge(QObject):
             self._write_store(self.proj, num, data)
 
     @Slot(int, str)
+    @_guarded
     def addReaderIdea(self, num: int, text: str):
         """阅读灵感标记 → 自动进创作笔记（关联章节），注入后续创作"""
         if not self.proj:
@@ -3264,6 +3412,7 @@ class Bridge(QObject):
             self.toast.emit("ok", "灵感已记入创作笔记，将注入后续章节")
 
     @Slot(int, float, str)
+    @_guarded
     def addBookmark(self, num: int, pos: float, label: str):
         if not self.proj:
             return
@@ -3276,6 +3425,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "已加书签（标注面板可查看跳转）")
 
     @Slot(int, int)
+    @_guarded
     def removeBookmark(self, num: int, idx: int):
         if not self.proj:
             return
@@ -3285,6 +3435,7 @@ class Bridge(QObject):
             self._write_store(self.proj, num, data)
 
     @Slot(int, float)
+    @_guarded
     def saveReadPosition(self, num: int, pos: float):
         if self.proj:
             data = self._read_store(self.proj, num)
@@ -3333,11 +3484,13 @@ class Bridge(QObject):
         return self._refresh_reader_chapters()
 
     @Slot(result="QVariantList")
+    @_guarded
     def refreshReaderChapterList(self) -> list:
         """显式刷新口（项目打开/章定稿/保存后由桥内调用）"""
         return self._refresh_reader_chapters()
 
     @Slot(int, result="QVariantMap")
+    @_guarded
     def readerChapter(self, num: int) -> dict:
         """阅读章节：优先磁盘已保存内容；无正文但编辑器正写此章时给工作副本/流式内容"""
         text = self.diskTextOf(num)
@@ -3348,6 +3501,7 @@ class Bridge(QObject):
                 "isLive": bool(num == self._cur_num and self._streaming)}
 
     @Slot(int, result=str)
+    @_guarded
     def readerChapterOutline(self, num: int) -> str:
         """本章细纲（阅读器 正文/细纲 切换用）；没有细纲文件时返回空串"""
         if not self.proj or not num:
@@ -3357,6 +3511,7 @@ class Bridge(QObject):
     # ============ 创作驾驶舱（M3 · 阶段卡片）============
 
     @Slot(result="QVariantList")
+    @_guarded
     def stageCards(self) -> list:
         """阶段卡片：设定/大纲/细纲/正文——状态 + 产物文件 + 完成度"""
         if not self.proj:
@@ -3399,6 +3554,7 @@ class Bridge(QObject):
         ]
 
     @Slot(str, str)
+    @_guarded
     def regenerateStage(self, key: str, guidance: str):
         """阶段重生成：删除阶段产物 → 点「开始」从该阶段续跑（guidance 可选注入）"""
         if self._running or not self.proj:
@@ -3681,6 +3837,7 @@ class Bridge(QObject):
     # ---- 档位切换（受控：仅阶段空闲）----
 
     @Slot(bool)
+    @_guarded
     def setCwMode(self, on: bool):
         if self._running:
             self.toast.emit("warn", "流水线运行中不能切换档位，请先停止")
@@ -3700,6 +3857,7 @@ class Bridge(QObject):
             self.toast.emit("ok", "已切换回自动档（共写产物原样保留）")
 
     @Slot(str)
+    @_guarded
     def selectCwStage(self, key: str):
         """回看导航：只能回到已到达的阶段（机器阶段不动），编辑器载入对应产物"""
         if not self._cw or key not in st.CW_STAGE_ORDER:
@@ -3715,6 +3873,7 @@ class Bridge(QObject):
     # ---- 对话（每轮输入 → 一次性 DialogueWorker）----
 
     @Slot(str, str)
+    @_guarded
     def submitCwMessage(self, text: str, mode: str = "discuss"):
         """mode：discuss（默认，确认/收敛，短回复）/ compose（直接产出草案）——
         v1.1 方案 A：作者发「嗯」不该收到一篇作文"""
@@ -3788,6 +3947,7 @@ class Bridge(QObject):
         self._spawn_cw_dialogue(text, stage, focus, mode=mode)
 
     @Slot()
+    @_guarded
     def generateCwDraft(self):
         """「生成草案」：跳过讨论直接按本阶段结构产出草案（撰写模式的零输入入口）"""
         stage = self._get_cw_stage_key()
@@ -3913,6 +4073,7 @@ class Bridge(QObject):
         self.cwBusyChanged.emit()
 
     @Slot()
+    @_guarded
     def cancelCwWorker(self):
         """取消在途共写请求（#8：中断尽力而为，结果丢弃）"""
         if not self._cw_busy:
@@ -3955,6 +4116,7 @@ class Bridge(QObject):
     # ---- 确定（总结定稿）/ 打回 / 回看世界书 ----
 
     @Slot()
+    @_guarded
     def confirmCwStage(self):
         """✓ 确定（#3/#4 修复：重入锁 + 空转写拦截）"""
         if not self.proj or not self._cw:
@@ -4017,6 +4179,7 @@ class Bridge(QObject):
     # ---- M3：单元细纲（单元范围/主题 + 滚动批次 + 确定细纲校验）----
 
     @Slot(int, int, str)
+    @_guarded
     def setCwUnitRange(self, start: int, targetEnd: int, topic: str):
         """登记单元范围/主题（±10 章约束在批次生成时校验）"""
         if not self.proj or not self._cw:
@@ -4031,6 +4194,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"单元已登记：第 {start} 章 ~ 第 {targetEnd} 章{hint}，点「确定」生成单元总纲")
 
     @Slot()
+    @_guarded
     def generateNextCwOutlines(self):
         """只滚动生成下一批细纲，阶段不动（#4：与「确定细纲」拆开的两个动作）"""
         if not self.proj or not self._cw:
@@ -4045,6 +4209,7 @@ class Bridge(QObject):
         self._start_cw_outline_batch(self._cw.load())
 
     @Slot("QVariantList")
+    @_guarded
     def showCwOutlineBatch(self, nums):
         """点某一批细纲的对话回执 → 编辑器切到**这一批**（#5：即使后面又生成了新批次）"""
         if not self.proj:
@@ -4136,6 +4301,7 @@ class Bridge(QObject):
     # ---- M4：章节确定锁定（两级提交：保存=临时草稿 / 章节确定=终稿锁定）----
 
     @Slot()
+    @_guarded
     def confirmChapterLocked(self):
         """✓ 章节内容确定 = 终稿锁定：内容不再改动，编辑器只读
 
@@ -4191,6 +4357,7 @@ class Bridge(QObject):
         self._do_lock_chapter(forced=False)
 
     @Slot()
+    @_guarded
     def forceConfirmChapterLocked(self):
         """强制锁定（用户在确认框选择「仍要锁定」）：未通过的闸门全部留审计痕
 
@@ -4303,6 +4470,7 @@ class Bridge(QObject):
             return
 
     @Slot(str)
+    @_guarded
     def runBackfill(self, numsCsv: str):
         """手动补跑反哺：章号逗号分隔（如 "4,5"），跳过已新鲜登记的章"""
         if not self.proj:
@@ -4334,6 +4502,7 @@ class Bridge(QObject):
         self.toast.emit("info", f"反哺补跑已排队：{len(todo)} 章（后台串行）")
 
     @Slot()
+    @_guarded
     def unlockChapter(self):
         """显式解锁：唯一放行通道"""
         if not self.proj or not self._cur_num:
@@ -4347,6 +4516,7 @@ class Bridge(QObject):
             self.toast.emit("info", "该章未锁定")
 
     @Slot()
+    @_guarded
     def readbackChapter(self):
         """手动「读一遍」：通读当前章改动，揣摩意图（无视改动量阈值）"""
         if not self.proj or not self._cur_num or not self._chapter_path:
@@ -4388,6 +4558,7 @@ class Bridge(QObject):
     # ---- 读改节流设置（设置面板）----
 
     @Slot(bool)
+    @_guarded
     def setReadbackOnSave(self, on: bool):
         self.cfg.setdefault("writing", {})["readback_on_save"] = bool(on)
         cfg_mod.save_config(self.cfg)
@@ -4395,6 +4566,7 @@ class Bridge(QObject):
         self.toast.emit("ok", on and "读改揣摩已开启（保存有变且达阈值时触发）" or "读改揣摩已关闭（可手动「读一遍」）")
 
     @Slot(int)
+    @_guarded
     def setReadbackMinDiff(self, v: int):
         self.cfg.setdefault("writing", {})["readback_min_diff"] = max(0, int(v))
         cfg_mod.save_config(self.cfg)
@@ -4430,11 +4602,13 @@ class Bridge(QObject):
         self.toast.emit("error", f"衔接比对失败：{msg}——可重试，或跳过比对直接锁定（会留痕）")
 
     @Slot()
+    @_guarded
     def retrySupervisor(self):
         if self._cur_num:
             self._start_cw_supervisor()
 
     @Slot()
+    @_guarded
     def forceLockChapter(self):
         """跳过衔接比对直接锁定（C2 出口）：比对不可用时不该卡死定稿——留痕可审计"""
         if not self.proj or not self._cur_num:
@@ -4457,6 +4631,7 @@ class Bridge(QObject):
         return (cw.get("stage_mode") or {}).get(self._get_cw_stage_key(), "discuss")
 
     @Slot(str)
+    @_guarded
     def setCwStageMode(self, mode: str):
         if not self.proj or mode not in ("discuss", "compose"):
             return
@@ -4466,6 +4641,7 @@ class Bridge(QObject):
         self._cw_save_state(state)
 
     @Slot()
+    @_guarded
     def proseToEditor(self):
         """C1：从最近一条 agent 正文回复提取正文 → 写进当前打开的章节（编辑器工作副本）"""
         if not self.proj or self._get_cw_stage_key() != st.STAGE_CW_PROSE or not self._cur_num:
@@ -4579,6 +4755,7 @@ class Bridge(QObject):
         self._spawn_cw_dialogue(text, st.STAGE_CW_PROSE, focus_chapter=num)
 
     @Slot()
+    @_guarded
     def dispatchCwReport(self):
         """报告区手动派活（不受自动轮次限制）：按最新报告的【改写指令】派写作 Agent
 
@@ -4614,6 +4791,7 @@ class Bridge(QObject):
         return bool(locked)
 
     @Slot()
+    @_guarded
     def clearCwReport(self):
         if not self._cw:
             return
@@ -4625,11 +4803,13 @@ class Bridge(QObject):
     # ---- M6：共写档手动查验（去AI味 / 审校；结果不落盘）----
 
     @Slot()
+    @_guarded
     def deslopCwProse(self):
         """共写正文手动去AI味：扫描 + 改写进编辑器工作副本（保存才落盘）"""
         self._start_cw_prose_check("deslop")
 
     @Slot()
+    @_guarded
     def reviewCwProse(self):
         """共写正文手动六维审校：结果登记 review_findings，复用问题对话框/待修汇总"""
         self._start_cw_prose_check("review")
@@ -4747,6 +4927,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "项目创建完成，进入「核心设定」：与设定 Agent 讨论后点确定")
 
     @Slot(str)
+    @_guarded
     def setCwPreset(self, preset_id: str):
         """共写档选题表单：选用题材预设（写入 state['cw']['preset'] 与 genre_preset）"""
         if not self.proj or not self._cw:
@@ -4829,6 +5010,7 @@ class Bridge(QObject):
             project.write_file(os.path.join(self.proj, rel), product)
 
     @Slot()
+    @_guarded
     def rollbackCwStage(self):
         if not self.proj or not self._cw:
             return
@@ -4842,6 +5024,7 @@ class Bridge(QObject):
         self._rollback_to(stage)
 
     @Slot(str)
+    @_guarded
     def rollbackCwStageTo(self, key: str):
         """打回到指定已到达阶段（#5：支持跨阶段打回）"""
         if not self.proj or not self._cw:
@@ -4868,6 +5051,7 @@ class Bridge(QObject):
                         + (f"级联失效并归档 {n} 个下游产物" if n else "本阶段产物将重议"))
 
     @Slot()
+    @_guarded
     def reopenCwWorldbook(self):
         """回看世界书（软切）：cw_unit / cw_prose 阶段入口，不级联删除"""
         if not self.proj or not self._cw:
@@ -4884,6 +5068,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "已回看世界书（软切，下游产物保留）：修订后点「确定」写回并返回原阶段")
 
     @Slot(str)
+    @_guarded
     def saveCwProduct(self, text: str):
         """共写档产物保存（编辑器直接改产物后保存修改：不走版本快照）"""
         if self._cw_batch_files:
@@ -4905,6 +5090,7 @@ class Bridge(QObject):
     # ============ 创作笔记（M3 · 想法 CRUD + 全局写作偏好）============
 
     @Slot(result="QVariantList")
+    @_guarded
     def ideasList(self) -> list:
         if not self.proj:
             return []
@@ -4912,6 +5098,7 @@ class Bridge(QObject):
         return list(reversed(st.norm_ideas(state)))   # 新的在前
 
     @Slot(str)
+    @_guarded
     def removeIdea(self, idea_id: str):
         if not self.proj:
             return
@@ -4922,6 +5109,7 @@ class Bridge(QObject):
         self.ideaCountChanged.emit()
 
     @Slot(str, str, str)
+    @_guarded
     def updateIdea(self, idea_id: str, text: str, scope: str):
         if not self.proj:
             return
@@ -4938,6 +5126,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "想法已更新")
 
     @Slot(str)
+    @_guarded
     def markIdeaApplied(self, idea_id: str):
         if not self.proj:
             return
@@ -4950,12 +5139,14 @@ class Bridge(QObject):
         self.ideaCountChanged.emit()
 
     @Slot(result="QVariantMap")
+    @_guarded
     def writingPrefs(self) -> dict:
         w = self.cfg.get("writing", {})
         return {"stylePref": w.get("style_pref", ""), "taboos": w.get("taboos", ""),
                 "pacePref": w.get("pace_pref", "")}
 
     @Slot(str, str, str)
+    @_guarded
     def saveGlobalPrefs(self, style: str, taboos: str, pace: str):
         """全局写作偏好：独立保存，注入所有章节正文 prompt（作者不改代码调全书文风）"""
         w = self.cfg.setdefault("writing", {})
@@ -4966,6 +5157,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "全局写作偏好已保存，将从下一章开始注入")
 
     @Slot(result="QVariantList")
+    @_guarded
     def qualityTrend(self) -> list:
         """质量历史趋势：近 20 章 [{num, words, blocking, advisory, status}]"""
         if not self.proj:
@@ -4992,6 +5184,7 @@ class Bridge(QObject):
         return out
 
     @Slot(result=str)
+    @_guarded
     def backupProject(self) -> str:
         """一键项目 zip 备份 → 项目同级目录（含设定/大纲/正文/追踪/版本/状态）"""
         if not self.proj:
@@ -5023,16 +5216,19 @@ class Bridge(QObject):
             self.logModel.append("warn", f"自动备份失败: {e}")
 
     @Slot(bool)
+    @_guarded
     def setAutoBackup(self, on: bool):
         self.cfg.setdefault("backup", {})["auto"] = bool(on)
         cfg_mod.save_config(self.cfg)
         self.toast.emit("ok", on and "已开启每日自动备份（打开项目时执行）" or "已关闭自动备份")
 
     @Slot(result=bool)
+    @_guarded
     def autoBackupEnabled(self) -> bool:
         return bool(self.cfg.get("backup", {}).get("auto"))
 
     @Slot(result="QVariantMap")
+    @_guarded
     def statsSummary(self) -> dict:
         """统计面板：章节数/全书字数/平均/今日增量/本周增量/累计 token/成本"""
         if not self.proj:
@@ -5071,17 +5267,20 @@ class Bridge(QObject):
     # ============ 题材预设（主干题材无关，题材差异走预设层）============
 
     @Slot(result="QVariantList")
+    @_guarded
     def genrePresets(self) -> list:
         from .. import presets as genre_presets
         return genre_presets.list_presets()
 
     @Slot(result=str)
+    @_guarded
     def projectPreset(self) -> str:
         if not self.proj:
             return ""
         return st.load_state(self.proj).get("genre_preset", "")
 
     @Slot(str)
+    @_guarded
     def setProjectPreset(self, preset_id: str):
         """切换题材预设：随时可切，下一章生成生效（正文/细纲/审校三处注入）"""
         if not self.proj:
@@ -5095,6 +5294,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"题材预设已切换为「{name}」，下一章生效")
 
     @Slot(str, result="QVariantMap")
+    @_guarded
     def importGenrePreset(self, path: str) -> dict:
         """导入预设文件（json）到用户预设目录"""
         from .. import presets as genre_presets
@@ -5108,6 +5308,7 @@ class Bridge(QObject):
     # ---- v2 题材预设库增强（plan v2 模块 A）----
 
     @Slot(result="QVariantList")
+    @_guarded
     def presetList(self) -> list:
         """v2 预设列表（含 v2 stage_hints 标记，供独立面板用）"""
         from .. import presets as genre_presets
@@ -5129,6 +5330,7 @@ class Bridge(QObject):
         return result
 
     @Slot(str, result="QVariantMap")
+    @_guarded
     def presetDetails(self, preset_id: str) -> dict:
         """v2 预设详情：含 6 阶段 hint + v1 共享字段（独立面板预览用）"""
         from .. import presets as genre_presets
@@ -5188,11 +5390,13 @@ class Bridge(QObject):
         return view
 
     @Slot(result=str)
+    @_guarded
     def currentTheme(self) -> str:
         """当前主题名（qianbi_night / qianbi_parchment / qianbi_plain）"""
         return self.cfg.get("ui_theme", "qianbi_night")
 
     @Slot(str)
+    @_guarded
     def setTheme(self, theme: str):
         """切换主题（实时写入 cfg 并发信号给 QML 重新加载 Theme.qml 单例）"""
         valid = ("qianbi_night", "qianbi_parchment", "qianbi_plain")
@@ -5211,6 +5415,7 @@ class Bridge(QObject):
     # ---- 章级生成配置快照（P2）：队列行右键「查看生成配置」----
 
     @Slot(int, result="QVariantMap")
+    @_guarded
     def chapterGenConfig(self, num: int) -> dict:
         """这一章生成时吃了什么：世界书激活清单、参数档、每次调用真实下发的采样
 
@@ -5272,11 +5477,13 @@ class Bridge(QObject):
         return {"found": True, "num": num, "sections": sections}
 
     @Slot(int)
+    @_guarded
     def showGenConfig(self, num: int):
         """队列行右键入口：章号随信号交给 QML 对话框，桥不持有对话框状态"""
         self.genConfigReady.emit(int(num or 0))
 
     @Slot(int, result="QVariantMap")
+    @_guarded
     def saveChapterPresetTemplate(self, num: int) -> dict:
         """「固化为模板」：这一章实际生效的组装参数 → 可复用预设（飞轮的写回端）
 
@@ -5304,6 +5511,7 @@ class Bridge(QObject):
     # ---- v2 6 维审校 issues（plan v2 模块 B）----
 
     @Slot(result="QVariantList")
+    @_guarded
     def reviewIssues(self) -> list:
         """当前章最近一次 6 维审校的 issues（UI ReviewIssueDialog 渲染用）"""
         if not self.proj:
@@ -5332,6 +5540,7 @@ class Bridge(QObject):
         return rf.get(latest_num, {}).get("items", [])
 
     @Slot(int, result="QVariantList")
+    @_guarded
     def reviewIssuesFor(self, num: int) -> list:
         """指定章的 issues（队列行「查看问题」入口），并记录对话框所属章号"""
         self._review_issue_num = int(num)
@@ -5341,6 +5550,7 @@ class Bridge(QObject):
         return rf.get(str(int(num)), {}).get("items", [])
 
     @Slot(int)
+    @_guarded
     def showReviewIssues(self, num: int):
         """章级问题入口：取该章 issues 并复用 onReviewIssuesChanged 打开对话框"""
         items = self.reviewIssuesFor(num)
@@ -5350,6 +5560,7 @@ class Bridge(QObject):
         self.reviewIssuesChanged.emit()
 
     @Slot(str)
+    @_guarded
     def resolveReviewIssue(self, choice: str):
         """用户在 ReviewIssueDialog 选择 A/B/C 后的回执
 
@@ -5386,6 +5597,7 @@ class Bridge(QObject):
             self._start_repair([cur])
 
     @Slot(result=str)
+    @_guarded
     def reviewVerdict(self) -> str:
         """当前问题对话框所属章节的登记裁决（供 badge 显示）"""
         if not self.proj or not self._review_issue_num:
@@ -5413,11 +5625,13 @@ class Bridge(QObject):
         return self._repair_status
 
     @Slot(result="QVariantList")
+    @_guarded
     def needsFixChapters(self) -> list:
         """全部待修章节（含各章阻塞/建议数与裁决，供汇总对话框渲染）"""
         return self._needs_fix_entries()
 
     @Slot("QVariant")
+    @_guarded
     def repairChapters(self, nums):
         """修复指定章节列表（对话框「修复本章」）"""
         try:
@@ -5427,6 +5641,7 @@ class Bridge(QObject):
         self._start_repair(lst)
 
     @Slot()
+    @_guarded
     def repairAll(self):
         """一键修复全部待修章节（逐章按登记的审校问题定向修）"""
         self._start_repair([e["num"] for e in self._needs_fix_entries()])
@@ -5486,21 +5701,25 @@ class Bridge(QObject):
     EDITOR_DEFAULTS = {"fontScale": 1.0, "narrow": True, "streamSmooth": False}
 
     @Slot(result="QVariantMap")
+    @_guarded
     def editorPrefs(self) -> dict:
         prefs = dict(self.EDITOR_DEFAULTS)
         prefs.update(self.cfg.get("editor", {}))
         return prefs
 
     @Slot(str, "QVariant")
+    @_guarded
     def setEditorPref(self, key: str, value):
         self.cfg.setdefault("editor", {})[key] = value
         cfg_mod.save_config(self.cfg)
 
     @Slot(result=int)
+    @_guarded
     def chapterWordTarget(self) -> int:
         return int(self.cfg.get("writing", {}).get("chapter_word_target", 3000))
 
     @Slot(int)
+    @_guarded
     def setChapterWordTarget(self, v: int):
         self.cfg.setdefault("writing", {})["chapter_word_target"] = max(500, int(v))
         cfg_mod.save_config(self.cfg)
@@ -5508,6 +5727,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"章节字数目标已设为 {max(500, int(v))} 字")
 
     @Slot(result=bool)
+    @_guarded
     def reviewEnabled(self) -> bool:
         return bool(self.cfg.get("gates", {}).get("review_enabled", True))
 
@@ -5517,6 +5737,7 @@ class Bridge(QObject):
         return str(self.cfg.get("gates", {}).get("review_mode") or "auto").strip().lower() == "manual"
 
     @Slot(bool)
+    @_guarded
     def setReviewManual(self, on: bool):
         self.cfg.setdefault("gates", {})["review_mode"] = "manual" if on else "auto"
         cfg_mod.save_config(self.cfg)
@@ -5524,6 +5745,7 @@ class Bridge(QObject):
         self.toast.emit("ok", "人工审校模式已" + ("开启：审校由你在门里完成（填阻断问题，AI 只负责修复）"
                                               if on else "关闭：恢复 AI 六维审校"))
     @Slot(bool)
+    @_guarded
     def setReviewEnabled(self, on: bool):
         self.cfg.setdefault("gates", {})["review_enabled"] = bool(on)
         cfg_mod.save_config(self.cfg)
@@ -5532,6 +5754,7 @@ class Bridge(QObject):
     # ---- 「正则」语义（M2：默认逻辑约束规则集；字面正则样本为备选，只影响解析与写入结构）----
 
     @Slot(result="QVariantList")
+    @_guarded
     def regexRuleList(self) -> list:
         """本书正则契约条目：[{index, rule, level, scope, pattern, mode, broken}]
 
@@ -5555,6 +5778,7 @@ class Bridge(QObject):
         return out
 
     @Slot(int, str, str, str)
+    @_guarded
     def updateRegexRule(self, index: int, rule: str, level: str, scope: str):
         """改一条契约（作者显式改，机器不再覆盖）"""
         if not self.proj:
@@ -5565,6 +5789,7 @@ class Bridge(QObject):
                                  else "该条目已不存在，请刷新后重试", ok)
 
     @Slot(int)
+    @_guarded
     def deleteRegexRule(self, index: int):
         if not self.proj:
             return
@@ -5577,10 +5802,12 @@ class Bridge(QObject):
         self.logModel.append("info", msg + "（自下一次生成起生效，已锁定章节不自动回改）")
 
     @Slot(result=str)
+    @_guarded
     def regexSemantics(self) -> str:
         return str(self.cfg.get("writing", {}).get("regex_semantics", "logic"))
 
     @Slot(str)
+    @_guarded
     def setRegexSemantics(self, mode: str):
         m = mode if mode in ("logic", "regex") else "logic"
         self.cfg.setdefault("writing", {})["regex_semantics"] = m
@@ -5601,6 +5828,7 @@ class Bridge(QObject):
             self.importStageChanged.emit()
 
     @Slot(str)
+    @_guarded
     def startImportDocument(self, path):
         """读外部文档并后台拆解；结果经 importPlanChanged 交给预览对话框"""
         from .. import importdoc
@@ -5663,6 +5891,7 @@ class Bridge(QObject):
                             % (len(plans), ("（%d 个未验真）" % bad) if bad else ""))
 
     @Slot(result="QVariantList")
+    @_guarded
     def importItems(self) -> list:
         """预览表（不含正文，正文按 index 用 importItemContent 取，避免整表来回拷）"""
         return [{"index": i, "key": p["key"], "label": p["label"], "num": p["num"],
@@ -5674,6 +5903,7 @@ class Bridge(QObject):
                 for i, p in enumerate(self._import_plans)]
 
     @Slot(result="QVariantList")
+    @_guarded
     def importBatches(self) -> list:
         """历史导入批次（新→旧），契约页据此提供整批撤销"""
         if not self.proj:
@@ -5682,6 +5912,7 @@ class Bridge(QObject):
         return importdoc.import_batches(self.proj)
 
     @Slot(str)
+    @_guarded
     def revertImport(self, batch_id: str):
         """按导入清单回滚一批：只删确定属于这批的行/分区/文件，作者改过的一律不动"""
         if not self.proj or not batch_id:
@@ -5695,6 +5926,7 @@ class Bridge(QObject):
         self._refresh_progress()
 
     @Slot(int, result=str)
+    @_guarded
     def importItemContent(self, index: int) -> str:
         i = int(index)
         if 0 <= i < len(self._import_plans):
@@ -5702,6 +5934,7 @@ class Bridge(QObject):
         return ""
 
     @Slot(int, bool)
+    @_guarded
     def setImportChecked(self, index: int, on: bool):
         """单项勾选不发 importPlanChanged——整表重建会把滚动位置弹回顶部"""
         i = int(index)
@@ -5709,12 +5942,14 @@ class Bridge(QObject):
             self._import_plans[i]["checked"] = bool(on)
 
     @Slot(bool)
+    @_guarded
     def setImportAllChecked(self, on: bool):
         for p in self._import_plans:
             p["checked"] = bool(on)
         self.importPlanChanged.emit()
 
     @Slot(result="QVariantMap")
+    @_guarded
     def importSummary(self) -> dict:
         from .. import importdoc
         plans = self._import_plans
@@ -5729,6 +5964,7 @@ class Bridge(QObject):
         }
 
     @Slot()
+    @_guarded
     def confirmImport(self):
         from .. import importdoc
         if self._import_busy or not self._import_plans:
@@ -5746,6 +5982,7 @@ class Bridge(QObject):
         self._refresh_progress()
 
     @Slot()
+    @_guarded
     def cancelImport(self):
         if self._import_worker is not None:
             self._import_worker.abort()
@@ -5754,6 +5991,7 @@ class Bridge(QObject):
     # ---- 导出（排版选项 + 预览 + 报告）----
 
     @Slot(str, str, int, result=str)
+    @_guarded
     def exportProjectOpts(self, fmt: str, sep: str, titleFmt: int) -> str:
         """导出全本（带排版选项）。返回导出路径，toast 附导出报告"""
         if not self.proj:
@@ -5775,6 +6013,7 @@ class Bridge(QObject):
             return ""
 
     @Slot(str, int, result=str)
+    @_guarded
     def exportPreviewText(self, sep: str, titleFmt: int) -> str:
         """导出排版预览（前两章实际效果）"""
         if not self.proj:
@@ -5783,6 +6022,7 @@ class Bridge(QObject):
         return export_mod.preview_txt(self.proj, sep=sep, title_fmt=int(titleFmt))
 
     @Slot(str)
+    @_guarded
     def revealPath(self, path: str):
         """在系统文件管理器中定位文件（Windows 用 explorer /select 选中）"""
         if not path:
@@ -5808,6 +6048,7 @@ class Bridge(QObject):
             self.toast.emit("error", f"无法打开文件管理器: {e}")
 
     @Slot(str)
+    @_guarded
     def copyText(self, text: str):
         """复制文本到系统剪贴板（发布物料粘贴到平台后台用）"""
         try:

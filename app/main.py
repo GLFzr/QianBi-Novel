@@ -133,6 +133,9 @@ def main():
     single._on_raise = lambda: (_raise_window_impl(win))
     bridge.mainWindowReady.emit()
 
+    # A-10/H-9：退出收尾——运行中关窗必须停线程后正常退（旧实测 RC=127）
+    app.aboutToQuit.connect(bridge.shutdown)
+
     telemetry.record(cfg, "version", version=__version__)
     sys.exit(app.exec())
 
