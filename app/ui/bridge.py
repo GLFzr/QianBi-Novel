@@ -2200,6 +2200,77 @@ class Bridge(QObject):
         except Exception as e:  # noqa: BLE001
             logger.error("崩溃 toast 失败（界面可能已不可用）: %s", e)
 
+    # ---- B-1(4) 主推档行动半径：v3 判「三面不接」删除的共写 Slot，随共写主推
+    #    复活并注册为 Agent UI 工具（agent_tools.UI_TOOLS + 派发分支）——
+    #    这次有真实消费者：Agent 话术可驱动（帮助文本与注册表对账护栏覆盖）
+    @Slot()
+    @_guarded
+    def runCanonAudit(self):
+        """F2 世界观对账：对本书全部已写章节跑设定清算（后台），报告落 追踪/"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        chapters = project.list_chapters(self.proj)
+        if not chapters:
+            self.toast.emit("warn", "本书还没有正文可对账")
+            return
+        self.toast.emit("info", f"世界观对账开始（{len(chapters)} 章，后台执行）…")
+        w = _CanonAuditWorker(self.proj, self.cfg, chapters, parent=self)
+        w.finished_ok.connect(lambda ok, msg: self.toast.emit(
+            "ok" if ok else "warn", "世界观对账完成：" + msg))
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        w.start()
+
+    @Slot(result=str)
+    @_guarded
+    def readFileText(self) -> str:
+        return self._chapter_text
+
+    @Slot()
+    @_guarded
+    def validateCwOutlines(self):
+        """校验本批细纲衔接；无阻塞 → 进入正文写作（「确定细纲」走的就是这条链）"""
+        if not self.proj or not self._cw:
+            return
+        if self._cw_busy:
+            self.toast.emit("warn", "AI 正在工作中，稍后再校验")
+            return
+        stage = self._get_cw_stage_key()
+        if stage != st.STAGE_CW_UNIT or self._cw_view != stage:
+            self.toast.emit("warn", "请先回到单元细纲阶段")
+            return
+        self._start_cw_outline_validation()
+
+    @Slot(str, str, str, int)
+    @_guarded
+    def saveCwIdeaInfo(self, genre: str, platform: str, idea: str, totalWan: int):
+        """共写档创建项目表单：写选题信息（确定前的可编辑阶段）"""
+        if not self.proj:
+            return
+        project.write_idea_info(self.proj, (genre or "").strip(),
+                                (platform or "").strip() or "番茄",
+                                (idea or "").strip(), int(totalWan or 0))
+        self._book_meta = " · ".join(p for p in [(genre or "").strip(),
+                                                 (platform or "").strip() or "番茄"] if p)
+        self.bookMetaChanged.emit()
+        self.toast.emit("ok", "选题信息已保存，点「确定」进入核心设定")
+
+    @Slot(str, str, result=bool)
+    @_guarded
+    def exportPreset(self, preset_id: str, out_path: str) -> bool:
+        """v2 导出预设到指定路径（无 UI 按钮时用 TUI 命令面板）"""
+        from .. import presets as genre_presets
+        if out_path.startswith("file:///"):
+            from PySide6.QtCore import QUrl
+            out_path = QUrl(out_path).toLocalFile()
+        ok = genre_presets.export_preset(preset_id, out_path)
+        if ok:
+            self.toast.emit("ok", f"预设「{preset_id}」已导出到 {out_path}")
+        else:
+            self.toast.emit("warn", f"预设「{preset_id}」导出失败：未找到")
+        return ok
+
     # ========== Agent Console（T4.3 M1+M2：思考链留存 + 对话区落盘）==========
     # 设计依据 plan_agent_console_v3 §1.3；M3（阅读器收窄/门合并）另行排期。
     _console_thinking = None      # {(slot, stage, num): [chunk]} 实例级惰性初始化
@@ -4016,6 +4087,19 @@ class Bridge(QObject):
         """L1-07：共写界面动作的派发面——Agent 话术真实驱动 dock 同款能力"""
         from ..core import agent_tools   # H-12：此前裸用未导入的全局名 ⇒ NameError
         label = agent_tools.UI_TOOLS[name]["label"]
+        # B-1(4)：主推档行动半径——共写能力注册为 Agent 工具后的派发分支
+        if name == "cw_canon_audit":
+            self.runCanonAudit(); return
+        if name == "cw_read_chapter":
+            text = self.readFileText()
+            self.logModel.append("info", f"当前章正文（前 400 字）：{text[:400]}")
+            return
+        if name == "cw_outline_validate":
+            self.validateCwOutlines(); return
+        if name == "cw_idea_save":
+            info = project.read_idea_info(self.proj)
+            self.saveCwIdeaInfo(info["genre"], info["platform"], info["idea"], info["total_words_wan"])
+            return
         if self._get_cw_mode() != "cw":
             self.toast.emit("warn", "「%s」是共写档动作：请先切到共写档" % label)
             return

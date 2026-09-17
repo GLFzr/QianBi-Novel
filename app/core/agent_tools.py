@@ -190,6 +190,11 @@ UI_TOOLS = {
     "cw_generate_draft": {"label": "生成共写草案", "level": "ui"},
     "cw_prose_to_editor": {"label": "草案落稿到编辑器", "level": "ui"},
     "cw_rollback_stage": {"label": "回退共写阶段", "level": "ui"},
+    # B-1(4)：主推档行动半径补齐——共写相关能力注册为 Agent 工具（复活 v3 删除的 Slot）
+    "cw_canon_audit": {"label": "世界观对账（后台跑，报告进追踪/）", "level": "ui"},
+    "cw_read_chapter": {"label": "读取当前章正文（进日志）", "level": "ui"},
+    "cw_outline_validate": {"label": "校验本批细纲衔接", "level": "ui"},
+    "cw_idea_save": {"label": "保存选题信息（按当前立项表单）", "level": "ui"},
 }
 
 TOOLS = {
