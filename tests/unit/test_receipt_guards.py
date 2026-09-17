@@ -119,6 +119,7 @@ EXEMPT = {
     ("bridge.py", "_on_sel_done"): "局部改写结果存 _sel_result 内存工作副本，用户点「应用」才经 saveChapterText 落盘；回执只说「可应用或放弃」未宣称已落盘",
     ("bridge.py", "_on_finished"): "停止/完本回执发出前，orchestrator.run 的每条终态路径都已 save_state 真实落盘（WP-25：else 停止与 PipelineStopped 两路径新增 load→save 往返；跨层钉死=test_stop_receipts_backed_by_persisted_stop，删任一终态落盘即红）；本函数是 UI 态收尾+转述",
     ("bridge.py", "confirmChapterLocked"): "「该章已终稿锁定」是早退分支的状态转述（锁由 _do_lock_chapter→set_chapter_locked 落盘）",
+    ("bridge.py", "emitCrash"): "「现场已保存」是跨函数转述：CrashReporter 钩子先 dump_global 落盘再排队本回执（钉死=test_release_readiness::test_crash_dump_global_redacted 的 hook 链路断言）；A-6 已弃 QMessageBox 防二次崩溃",
 }
 
 
