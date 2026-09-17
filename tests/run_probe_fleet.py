@@ -40,7 +40,7 @@ for name in PROBES:
     with open(log_path, "w", encoding="utf-8", errors="replace") as f:
         f.write(out)
     dt = time.time() - t0
-    m = re.findall(r"(PROBE_DONE \w+|TOTAL \d+ / \d+)", out)
+    m = re.findall(r"(PROBE_DONE \w+|TOTAL \d+ / \d+|LAYOUT_CHECK_DONE)", out)
     conclusion = m[-1] if m else "(无结论行)"
     results.append((name, rc, conclusion, dt))
     print(f"[fleet] {name}: rc={rc} {conclusion} ({dt:.0f}s) log={log_path}", flush=True)

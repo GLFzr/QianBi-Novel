@@ -260,6 +260,7 @@ QTimer.singleShot(600, step1_precheck)
 rc = app.exec()
 shutil.rmtree(PROJ, ignore_errors=True)
 sys.stdout.flush()
-# Qt/Python 静态析构期会 native fastfail（0xC0000409，检查项已全绿、输出已完整），
-# 直接 os._exit 让退出码等于「判定结果」而不是「析构是否活着」
+sys.stderr.flush()
+# A-2/A-10 同款对策：WP-23 新增步骤后 Qt 析构期偶发 access violation(0xC0000005)
+# 把 PASS 的退码改写成崩溃码——os._exit 跳过析构，退码=判定结果
 os._exit(0 if not check.failed and rc == 0 else 1)
