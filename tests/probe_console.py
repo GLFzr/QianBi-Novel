@@ -2,6 +2,12 @@
 """Agent Console 探针（T4.3 M1+M2）：离屏加载 Main.qml，验证 ConsoleDock 挂载、
 思考链分组留存、对话区镜像与输入路由（无需 API Key）"""
 import os, sys, tempfile
+# A-3：GBK 控制台下 print('≪') 会 UnicodeEncodeError 自崩（探针脆弱，非产品缺陷）
+# ——头部强制 UTF-8 输出，不再依赖外部环境变量
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # 隔离用户配置：测试不得写入 ~/.qianbi_novel（防书架被污染）
 _FH = tempfile.mkdtemp(prefix="qbn_console_fakehome_")

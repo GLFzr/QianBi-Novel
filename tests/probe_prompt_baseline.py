@@ -654,6 +654,7 @@ def main() -> int:
         print(f"WIRING FAIL {len(fails)} 处预设字段断链：")
         for ln in fails:
             print("  " + ln)
+        print("PROBE_DONE FAIL", flush=True)
         return 1
     print("WIRING PASS 预设字段全部落到承载它的 prompt")
 
@@ -669,10 +670,12 @@ def main() -> int:
     lines = _diff(old, entries)
     if not lines:
         print(f"PASS 零漂移（{len(entries)} 个装配调用与基线逐字一致）")
+        print("PROBE_DONE PASS", flush=True)
         return 0
     print(f"DRIFT {len(lines)} 处漂移：")
     for ln in lines[:60]:
         print("  " + ln)
+    print("PROBE_DONE FAIL", flush=True)
     return 1
 
 

@@ -78,6 +78,8 @@ def main() -> int:
         print("  FAIL " + h)
     for w in list(dict.fromkeys(WARN))[:5]:
         print("  WARN " + w)
+    # A-1：自报结论行与退码一致（R10 契约——fleet 判绿口径）
+    print("PROBE_DONE " + ("FAIL" if bad else "PASS"), flush=True)
     return 1 if bad else 0
 
 
