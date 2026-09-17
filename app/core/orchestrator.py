@@ -507,9 +507,16 @@ class Orchestrator(QThread):
                 self.log("ok", f"全书 {total} 章完本")
                 self.sig_finished.emit("done")
             else:
+                # WP-25：停止回执说「进度已保存」就要真的落盘——load→save 往返
+                # 同时验证状态文件可解析（用户随时可续跑的承诺有据可查）
+                state = st.load_state(self.proj)
+                st.save_state(self.proj, state)
                 self.sig_finished.emit("stopped")
         except PipelineStopped:
             self.log("info", "流水线已停止，进度已保存，可随时续跑")
+            # WP-25：同上——发「进度已保存」前先完成一次真实落盘（含可解析性验证）
+            state = st.load_state(self.proj)
+            st.save_state(self.proj, state)
             self.sig_finished.emit("stopped")
         except StageError as e:
             self._dump_failure(e)

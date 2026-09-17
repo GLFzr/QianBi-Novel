@@ -148,23 +148,30 @@ _N06_MARKER_KEY = "_n06_review_rounds_migrated"
 
 
 def _migrate_review_rounds(cfg: dict) -> dict:
-    """N-06 显式迁移（R12「保持升级前行为」支）：老 config 盘上的
-    review_max_rounds=1 是被旧读取点地板 max(...,3) 永久吃掉的出厂值——实际生效
-    的一直是 3；出厂改 3、地板改 1 之后若不迁移，升级会让修复环上限从 3 静默
-    掉到 1。「从未设过」与「主动设小」在 load 时点不可区分，用迁移时点解决：
-    首次载入落标记，标记之后用户显式改 1 即尊重用户（不再回填）。"""
+    """N-06 显式迁移（R12「保持升级前行为」支）：老 config 盘上被旧读取点地板
+    max(...,3) 永久吃掉的 review_max_rounds（<3 与不可解析值，含出厂 1 与用户
+    曾设的 2/0 等）实际生效一直是 3——升级后一律回填 3（v3 WP-26 选 (a)）。
+    「从未设过」与「主动设小」在 load 时点不可区分，用迁移时点解决：首次载入
+    落标记，标记之后用户显式改小即尊重用户（不再回填）。"""
     if cfg.get(_N06_MARKER_KEY):
         return cfg
     gates = cfg.get("gates")
-    if isinstance(gates, dict) and gates.get("review_max_rounds") == 1:
-        gates["review_max_rounds"] = 3
-        cfg[_N06_MARKER_KEY] = True
-        logging.getLogger("qianbi.config").info(
-            "N-06 迁移：盘上 review_max_rounds=1 是旧地板吃掉的出厂值（实际生效一直是"
-            " 3），已回填为 3；此后显式设 1 不再回填")
-        return cfg
-    # 值不是 1（新装出厂 3 / 用户自改过）：无需回填，但同样落标记，防止用户将来
-    # 显式设 1 时被误当成老出厂值
+    if isinstance(gates, dict):
+        # v3 WP-26 选 (a)：凡「旧地板 max(...,3) 会吃成 3」的值（int(v)<3 与不可解析
+        # 值），升级后一律回到 3——与升级前实际行为完全一致；≥3 的值原样保留
+        try:
+            old_eff = int(gates.get("review_max_rounds", 3))
+        except (TypeError, ValueError):
+            old_eff = 3   # 旧读取点对垃圾值抛 TypeError 后回落 3，同为「实际生效 3」
+        if old_eff < 3:
+            gates["review_max_rounds"] = 3
+            cfg[_N06_MARKER_KEY] = True
+            logging.getLogger("qianbi.config").info(
+                "N-06 迁移：盘上 review_max_rounds=%r 曾被旧地板 max(...,3) 吃掉（实际"
+                "生效一直是 3），已回填为 3；此后显式改小不再回填", gates.get("review_max_rounds"))
+            return cfg
+    # 值 ≥3 / 无 gates（新装出厂 3 / 用户自改过）：无需回填，但同样落标记，防止
+    # 用户将来显式设小被误当成老出厂值
     cfg[_N06_MARKER_KEY] = True
     return cfg
 

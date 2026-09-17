@@ -115,8 +115,7 @@ EXEMPT = {
     ("bridge.py", "_on_cw_deslop_done"): "去味效果在工作副本（cwProsePolished 信号驱动编辑器），内存生效类",
     # WP-13 扩面后新增（每条写明为什么免证据仍然不算说谎）：
     ("bridge.py", "_on_sel_done"): "局部改写结果存 _sel_result 内存工作副本，用户点「应用」才经 saveChapterText 落盘；回执只说「可应用或放弃」未宣称已落盘",
-    ("bridge.py", "_on_finished"): "流水线终态由 orchestrator/stages 逐检查点 save_state 落盘；本函数是 UI 态收尾+转述（「进度已保存」指 worker 已落盘的检查点）",
-    ("bridge.py", "_start_cw_outline_batch"): "「已全部生成」是存量状态转述（细纲由批 worker 经 _cw_save_state 落盘），本函数 batch 为空时零动作早退",
+    ("bridge.py", "_on_finished"): "停止/完本回执发出前，orchestrator.run 的每条终态路径都已 save_state 真实落盘（WP-25：else 停止与 PipelineStopped 两路径新增 load→save 往返；跨层钉死=test_stop_receipts_backed_by_persisted_stop，删任一终态落盘即红）；本函数是 UI 态收尾+转述",
     ("bridge.py", "confirmChapterLocked"): "「该章已终稿锁定」是早退分支的状态转述（锁由 _do_lock_chapter→set_chapter_locked 落盘）",
 }
 
@@ -433,3 +432,53 @@ def test_user_facing_slash_commands_are_registered():
     unknown = {k: v for k, v in found.items() if k not in registry and k not in allowlist}
     assert not unknown, (
         f"界面/README 提到未注册的 /命令：{unknown}——要么注册成工具，要么改文案（L1-04 家族）")
+
+
+def test_stop_receipts_backed_by_persisted_stop():
+    """WP-25：终态回执（done/stopped）发出前，同分支必须已有真实 save_state。
+
+    背景：_on_finished 豁免理由原写「checkpoint 逐检查点落盘」——checkpoint()
+    只做暂停/停止/离峰等待不落盘，被评审驳回。现每条终态路径在 emit 前显式
+    落盘（else 停止与 PipelineStopped 两路径为 WP-25 新增 load→save 往返），
+    本断言按 AST 钉死「发射终态信号的分支体内、emit 行之前必须有 save_state」：
+    删掉任一终态落盘（v3 复验动作：删 orchestrator.py:505 一带的 save_state）
+    即红。"""
+    orch_path = os.path.join(ROOT, "app", "core", "orchestrator.py")
+    src = open(orch_path, encoding="utf-8").read()
+    tree = ast.parse(src)
+    parent = {}
+    for p_ in ast.walk(tree):
+        for c in ast.iter_child_nodes(p_):
+            parent[c] = p_
+
+    def _stmt_list_of(node):
+        """emit 节点所在的可迭代语句体（If/Try/handler/函数体的 body 列表）"""
+        cur = node
+        while cur in parent:
+            holder = parent[cur]
+            for _f, v in ast.iter_fields(holder):
+                if isinstance(v, list) and cur in v:
+                    return holder, v, cur
+            cur = holder
+        return None, [], node
+
+    bad = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "emit"):
+            continue
+        if not node.args or not (isinstance(node.args[0], ast.Constant)
+                                 and node.args[0].value in ("done", "stopped")):
+            continue
+        # 只查 emit 直接所属的语句体（不向上爬升）——爬升会用其他分支的落盘
+        # 顶替本分支的（v3 复验变异 M1/M2 的第一次实现就是这么漏的）
+        _holder, body, _cur = _stmt_list_of(node)
+        saves = [st_.lineno for st_ in body
+                 if getattr(st_, "lineno", 0) < node.lineno
+                 and any(isinstance(c, ast.Call)
+                         and getattr(c.func, "attr", getattr(c.func, "id", "")) == "save_state"
+                         for c in ast.walk(st_))]
+        if not saves:
+            bad.append(f"orchestrator.py:{node.lineno} 终态 emit("
+                       f"{node.args[0].value}) 所在分支体内无先行的 save_state")
+    assert not bad, "终态回执缺真实落盘背书（WP-25）：" + "；".join(bad)

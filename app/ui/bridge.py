@@ -3993,7 +3993,7 @@ class Bridge(QObject):
         """确定单元后：滚动生成下一批 5 章细纲（helper 槽，≈200 字/章）"""
         batch = self._cw.next_outline_batch(state)
         if not batch:
-            self.toast.emit("info", "本单元细纲已全部生成，可直接修改或点「确定细纲」校验")
+            self.toast.emit("info", "本单元细纲到这里就齐了，可直接修改或点「确定细纲」校验")
             return
         unit = self._cw.unit(state)
         self._set_cw_busy(True)

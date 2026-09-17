@@ -68,13 +68,37 @@ def test_explicit_1_after_migration_respected(fake_home):
 
 
 def test_other_values_marked_but_not_rewritten(fake_home):
-    """非 1 的老值（用户自改）不回填，但落标记——防止日后显式设 1 被误迁"""
+    """≥3 的老值（用户自改或出厂）不回填，但落标记——防止日后显式设小被误迁"""
     _write_disk(fake_home, {"review_max_rounds": 5})
     cfg = cfg_mod.load_config()
     assert cfg["gates"]["review_max_rounds"] == 5
     assert cfg[cfg_mod._N06_MARKER_KEY] is True
     disk = json.loads((fake_home / "config.json").read_text(encoding="utf-8"))
     assert disk[cfg_mod._N06_MARKER_KEY] is True
+
+
+def test_all_floor_eaten_values_restored_to_3(fake_home):
+    """WP-26 选 (a)：凡曾被旧地板 max(...,3) 吃掉的数值（int(v)<3，含出厂 1 与
+    用户曾设的 2/0/"1"），升级后一律回填 3——与升级前实际行为完全一致。
+    不可解析值（"abc"/None）新旧读取点都回落 3，无需改写，只落标记。
+    复验动作（v3）：盘上写 0 跑升级 ⇒ 变 3。"""
+    from app.core.stages import _review_round_cap
+    for legacy in (0, -5, 2, "1"):
+        (fake_home / "config.json").unlink(missing_ok=True)
+        _write_disk(fake_home, {"review_max_rounds": legacy})
+        cfg = cfg_mod.load_config()
+        assert cfg["gates"]["review_max_rounds"] == 3, (
+            f"老值 {legacy!r}（旧地板下实际生效 3）升级后应回填 3，实测 "
+            f"{cfg['gates']['review_max_rounds']}")
+        disk = json.loads((fake_home / "config.json").read_text(encoding="utf-8"))
+        assert disk["gates"]["review_max_rounds"] == 3 and disk[cfg_mod._N06_MARKER_KEY] is True
+    for garbage in ("abc", None):
+        (fake_home / "config.json").unlink(missing_ok=True)
+        _write_disk(fake_home, {"review_max_rounds": garbage})
+        cfg = cfg_mod.load_config()
+        assert _review_round_cap(cfg["gates"]) == 3, (
+            f"不可解析值 {garbage!r} 新旧读取点都应回落 3")
+        assert cfg[cfg_mod._N06_MARKER_KEY] is True
 
 
 def test_migration_is_one_shot(fake_home):
