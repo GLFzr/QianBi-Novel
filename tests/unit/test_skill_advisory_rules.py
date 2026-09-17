@@ -162,3 +162,69 @@ def test_cliche_family_still_blocks_on_other_words():
     blocking = _blocking_of(deslop.scan_text(text))
     assert any(f.rule == "cliche-word" for f in blocking), \
         "一级禁用词其余词表行为回归（应仍 blocking）"
+
+
+# ---------- WP-15④ 补强（v3）：blocking 全族静默样张 + 公版语料 + 期望命中数 ----------
+
+def _blocking_rules(findings):
+    return {f.rule for f in findings if f.level == "blocking"}
+
+
+# 每条 blocking 规则族一条「人类会这么写、不该被拦」的静默样张
+#（不含任何该族触发形态；样张彼此独立，只断言本族静默）
+BLOCKING_QUIET_SAMPLES = {
+    "not-is-comparison": "他说自己不是本地人，口音带着北边的调子。",
+    "reverse-not-is": "这个办法是不对的，账目对不上就是证据。",
+    "negation-parade": "屋里没有开灯，桌上那碗面也坨了。",   # 单个「没有」，不成排比
+    "voice-contrast": "她的声音很轻，说到一半被风吹散了。",   # 轻声不接「却」
+    "flat-voice": "他把证件放在台子上，等对方核对。",
+    "trailer-ending": "老陈把伞收了，雨水顺着伞骨往下滴。",   # 不写「他不知道的是」
+    "trailer-summary": "案子结了，卷宗归了档，巷子又安静下来。",
+    "fate-summary": "他把票据一张一张码好，用夹子夹住。",
+    "em-dash": ("# 第1章 渡口\n" + "他从巷口走出来，街边的灯笼一盏一盏亮起。"
+                 + ("老者抬头看了他一眼，又低下头去搅动锅里的汤。他没有停留——沿着石板路一直往北，走过石桥，桥下的水声盖过了人语。"
+                 + "城门口的兵丁靠着墙打盹，谁也没注意这个背包袱的外乡人。他问了路，又往渡口去，渡船刚走，只能坐在石阶上等。"
+                 + "天色一点一点暗下来，河面起了雾。摆渡的老人冲他喊：再等等，还有一趟。他点点头，把包袱搂紧了些，继续坐着。"
+                 + "等船的人陆续多了，挑担子的、走亲的，各人想各人的事。")),  # 2 处破折号/0.5 千字=低密度 advisory（>6/千字才阻断）
+    "daizhe-adverb": "她拎着篮子出门，顺路把信投进了邮筒。",  # 无「，带着……」
+    "cliche-word": "老人把眼镜往上推了推，把报纸折好放进抽屉，起身去开窗。",
+}
+
+
+def test_blocking_families_have_quiet_samples():
+    """v3 语料补强①：每条 blocking 规则至少一条静默样张——
+    人类文风在这些族上必须零阻断（宁缺毋滥的反向门禁）。"""
+    for rule, sample in BLOCKING_QUIET_SAMPLES.items():
+        findings = deslop.scan_text(sample)
+        blocking = _blocking_rules(findings)
+        assert rule not in blocking, (
+            f"静默样张被拦：{rule} 在人类句式上产生 blocking——{[f.message for f in findings if f.rule == rule]}")
+
+
+def test_public_domain_excerpt_no_blocking():
+    """v3 语料补强②：用**人类写的**真实段落（公版语料固化入库）测不误报。
+
+    选段考证：紧接的下一段「没有影像，没有言辞」会被 negation-parade 命中——
+    人类经典文风在该族的误报真实存在（鲁迅也逃不过），已作为已知误报记录；
+    零误报判据取经验证的前两段，不夹带病文本。"""
+    path = os.path.join(ROOT, "tests", "fixtures", "corpus_min", "公版_故乡选段.txt")
+    text = open(path, encoding="utf-8").read()
+    blocking = _blocking_rules(deslop.scan_text(text))
+    assert not blocking, f"公版人类语料触发 blocking：{blocking}（词表口径过宽）"
+
+
+def test_recall_expected_hit_counts_pinned():
+    """v3 语料补强③：召回侧期望命中数写死——改词表/阈值必须红。"""
+    # 提示性冒号样张恰有 2 处触发（与 test_prompting_colon_recall 同文）
+    text = ("# 第1章 试探\n" + FILLER * 7
+            + "他把烟摁灭在缸里，说核心是：把成本降下来，别的都可以谈。"
+              "隔了很久又补一句，关键在于：时机一过，谁也别想再开这个口。"
+            + FILLER * 7)
+    hits = [f for f in deslop.scan_text(text) if f.rule == "prompting-colon"]
+    assert len(hits) == 2, f"提示性冒号期望 2 处命中，实测 {len(hits)}——词表/阈值漂移"
+    # 一级禁用词样张恰 2 处（一丝 + 不禁，各来自不同禁用组）
+    text2 = ("# 第1章 对峙\n"
+             "她眼中闪过一丝惊讶，随即低下头去，不禁攥紧了衣角。"
+             "窗外的雨没有停的意思。")
+    hits2 = [f for f in deslop.scan_text(text2) if f.rule == "cliche-word"]
+    assert len(hits2) == 3, f"一级禁用词期望 3 处命中（眼中闪过/一丝/不禁），实测 {len(hits2)}——禁用词表漂移"
