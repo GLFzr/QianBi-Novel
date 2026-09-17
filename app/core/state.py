@@ -4,6 +4,7 @@
 任何阶段失败/暂停/崩溃后，重新打开项目可从断点续跑。
 """
 import json
+import logging
 import os
 import tempfile
 import time
@@ -409,14 +410,19 @@ def ensure_cw(state: dict) -> dict:
 
 def set_guidance(proj: str, state: dict, num: int, text: str):
     """登记某章的重写指导（写入 state 并落盘）"""
-    state.setdefault("pending_guidance", {})[num] = text
+    # H-4：键统一 str——旧实现 set 用 int、take 用 str(num)，JSON 往返后
+    # int 键恒变 str，登记的指导永远取不回（静默丢失）
+    state.setdefault("pending_guidance", {})[str(num)] = text
     save_state(proj, state)
 
 
 def take_guidance(state: dict, num: int) -> str:
     """取走某章的待用指导（消费即删除）"""
     pg = state.get("pending_guidance") or {}
-    return pg.pop(str(num), "")
+    # H-4：str 键为主，兼容内存中尚存的 int 键（旧版本登记、未经落盘往返）
+    if str(num) in pg:
+        return pg.pop(str(num))
+    return pg.pop(num, "") if isinstance(num, int) else ""
 
 
 def add_idea(proj: str, state: dict, text: str, scope: str = "next"):
@@ -490,8 +496,23 @@ def load_state(proj: str) -> dict:
                 data = json.load(f)
             for k, v in data.items():
                 state[k] = v
-        except Exception:
-            pass
+        except Exception as e:
+            # A-8/C-3：状态文件损坏必须**保现场**——旧实现直接 pass，下次
+            # save_state 会把唯一现场覆盖掉（实测截断 88 章存档永久丢失）。
+            # 抄 volume_session._keep_aside：坏文件追加式留证 + 大声提示
+            import datetime
+            try:
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                with open(path, "rb") as rf:
+                    raw = rf.read()
+                with open(f"{path}.corrupt-{ts}", "ab") as af:
+                    af.write((f"==== corrupt @ {ts}: {e} ====\n").encode("utf-8"))
+                    af.write(raw)
+                logging.getLogger("qianbi.state").error(
+                    "state.json 解析失败（%s），坏文件已留证 %s.corrupt-%s；"
+                    "本次按默认状态继续——确认无误后可参照留证手工恢复", e, path, ts)
+            except Exception:  # noqa: BLE001
+                logging.getLogger("qianbi.state").error("state.json 损坏且留证失败：%s", e)
     validate_state(state)   # T3.2：损坏早报错，不静默降级
     ensure_cw(state)
     return state
