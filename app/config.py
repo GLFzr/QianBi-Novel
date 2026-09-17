@@ -98,7 +98,7 @@ DEFAULT_CONFIG = {
     #   整卷作废重建（卷级冻结头字节变化），需开新卷
     "deslop": {"rules_source": "lieflat", "rules_render": "lean"},
     "writing": {"chapter_word_target": 3000, "default_genre": "", "default_platform": "番茄",
-                "run_mode": "auto",             # auto=全自动 / cw=共写（v1.2 两档制；共写为项目粘性，一般不写此处）
+                "run_mode": "cw",               # B-1（v4 用户裁决）：默认共写档，只作用新装/未表态项目；老用户盘上的 "auto" 原样保留（load 只补缺失键，R17）
                 "regex_semantics": "logic",     # 正则语义：logic=逻辑约束规则集（默认）/ regex=字面正则样本
                 "readback_on_save": True,       # 读改揣摩：保存有变时触发 1 次（复用 review 槽）
                 "readback_min_diff": 200,       # 最小改动量阈值（低于不触发；0=每次都触发）

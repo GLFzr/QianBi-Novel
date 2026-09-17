@@ -397,6 +397,20 @@ def cw_defaults() -> CWStateTD:
     }
 
 
+def raw_cw_mode(proj: str) -> str:
+    """读 state.cw.mode 的**落盘原值**——不经 ensure_cw 填默认。
+
+    B-1/R17：新项目创建时显式写入出厂档位；「从未表态」返回空串，
+    调用方据此保持升级前行为（自动档），绝不静默回填。"""
+    try:
+        with open(state_path(proj), "r", encoding="utf-8") as f:
+            cw = (json.load(f) or {}).get("cw") or {}
+        m = cw.get("mode")
+        return str(m) if m else ""
+    except Exception:
+        return ""
+
+
 def ensure_cw(state: dict) -> dict:
     """补齐 state['cw'] 缺省字段（旧项目无此键时使用）"""
     cw = state.get("cw")

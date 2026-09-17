@@ -1255,6 +1255,12 @@ class Bridge(QObject):
             return False
         project.write_idea_info(path, genre.strip(), platform.strip() or "番茄",
                                 idea.strip(), int(totalWan or 0))
+        # B-1/R17：新项目在**创建时**显式落出厂档位（cw）——吃默认发生在
+        # 创建时点并留盘，之后不再有任何静默改写
+        _st = st.load_state(path)
+        st.ensure_cw(_st)["mode"] = (
+            (self.cfg or {}).get("writing", {}).get("run_mode", "cw"))
+        st.save_state(path, _st)
         wb_msg = ""
         if str(worldbookFile or "").strip():
             from PySide6.QtCore import QUrl
@@ -1496,9 +1502,8 @@ class Bridge(QObject):
             state = st.load_state(self.proj)
             if st.ensure_cw(state).get("mode") == "cw":
                 return "cw"
-        # #16 不变式：config 的 run_mode 恒为 'auto'（cw 只存项目粘性）；
-        # 存量 'cw'（旧版遗留）一律 mask 成 auto 显示，防跨项目全局粘性
-        return "auto"
+        # B-1：无项目时读出厂默认（现为 cw）；项目内由 _get_cw_mode 按表态/出厂解析
+        return (self.cfg or {}).get("writing", {}).get("run_mode", "cw")
 
     @Slot(str)
     @_guarded
@@ -3599,9 +3604,15 @@ class Bridge(QObject):
     # ============ 共写档（co-write · M1：六阶段状态机 + 对话区 + 确定/打回/回看）============
 
     def _get_cw_mode(self) -> str:
-        if not self.proj:
+        # B-1/R17：项目**已表态**的档位原样尊重（含旧版显式 auto，绝不回填）；
+        # 未表态（state 无 cw.mode 的新项目）读出厂默认——出厂现在是 cw
+        if self.proj:
+            raw = st.raw_cw_mode(self.proj)
+            if raw:
+                return raw
+            # 从未表态的旧项目：保持升级前实际行为（自动档）——R17 禁止回填
             return "auto"
-        return st.ensure_cw(st.load_state(self.proj)).get("mode", "auto")
+        return (self.cfg or {}).get("writing", {}).get("run_mode", "cw")
 
     def _get_cw_stage_key(self) -> str:
         if not self.proj:
@@ -3841,6 +3852,7 @@ class Bridge(QObject):
     def setCwMode(self, on: bool):
         if self._running:
             self.toast.emit("warn", "流水线运行中不能切换档位，请先停止")
+            self.runModeChanged.emit()
             return
         if not self.proj or not self._cw:
             return
@@ -3852,9 +3864,11 @@ class Bridge(QObject):
         self._cw_refresh()
         self.refreshQueue()
         if on:
-            self.toast.emit("ok", "已切换到共写档：六阶段人机共写，每阶段讨论后点「确定」定稿")
+            self.toast.emit("ok", "已切换到共写档：六阶段人机共写，每阶段讨论后点「确定」定稿。"
+                                  "提示：自动档已有的世界书/正则/单元总纲不会被重复生成，共写会按阶段向你确认")
         else:
-            self.toast.emit("ok", "已切换回自动档（共写产物原样保留）")
+            self.toast.emit("ok", "已切换回自动档（共写产物原样保留）。"
+                                  "提示：共写档不登记总章数，批量跑之前请确认总章数，否则自动档没有写完判定")
 
     @Slot(str)
     @_guarded
