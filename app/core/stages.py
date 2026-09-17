@@ -2934,8 +2934,17 @@ def _chapter_review(ctx, num: int, prose: str, votes: int = None,
     try:
         v2 = review_with_votes(ctx, num, prose, votes,
                            done_votes=done_votes, vote_saver=vote_saver, session=session)
+    except PipelineStopped:
+        # A-7：用户停止不是审校失败——吞掉会把「停止」记成「审校通过」再定稿落库
+        raise
     except Exception as e:
-        ctx.log("warn", f"第 {num} 章 6 维审校调用失败（不阻断）：{e}")
+        # A-7/C-2：审校异常不许回空票（空票=假 PASS：上游按 verdict==""+无阻断
+        # 当「审校通过」定稿）。转人工留名，绝不静默造凭据
+        ctx.log("warn", f"第 {num} 章 6 维审校调用失败（{e}）→ 本章转人工，不按审校通过处理")
+        try:
+            st.mark_chapter_need_human(proj, st.load_state(proj), num)
+        except Exception:
+            ctx.log("warn", f"第 {num} 章 转人工标记写入失败（见上一条日志）")
         return [], [], ""
     ctx.review_v2 = v2   # 根因溯源复用验真后的 items，不重解析原始输出
     if v2.get("unreviewed"):
