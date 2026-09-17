@@ -103,9 +103,13 @@ def dehydrate(cfg: dict) -> dict:
 
 
 # 脱敏模式：json 键值对 / sk- 开头令牌 / Bearer
+# A-9 扩：Google AIza / JWT（MiniMax 等网关）/ 智谱双段式 id.secret
 _RE_JSON_KEY = re.compile(r"\"api_key\"\s*[:=]\s*\"[^\"]{4,}\"")
 _RE_SK = re.compile(r"\bsk-[A-Za-z0-9_-]{8,}")
 _RE_BEARER = re.compile(r"(?i)bearer\s+[a-z0-9._-]{8,}")
+_RE_GOOGLE = re.compile(r"AIza[0-9A-Za-z_\-]{30,}")
+_RE_JWT = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}")
+_RE_ZHIPU = re.compile(r"\b[0-9a-f]{16,32}\.[A-Za-z0-9]{16}\b")
 
 
 def redact_text(text: str) -> str:
@@ -115,4 +119,7 @@ def redact_text(text: str) -> str:
     text = _RE_JSON_KEY.sub('"api_key": "<REDACTED>"', text)
     text = _RE_SK.sub("sk-<REDACTED>", text)
     text = _RE_BEARER.sub("Bearer <REDACTED>", text)
+    text = _RE_GOOGLE.sub("AIza<REDACTED>", text)
+    text = _RE_JWT.sub("<REDACTED_JWT>", text)
+    text = _RE_ZHIPU.sub("<REDACTED_ZHIPU>", text)
     return text

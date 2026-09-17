@@ -82,3 +82,29 @@ def test_bundle_size_guards(tmp_path, monkeypatch):
     assert len(dlg) <= 2, f"对话分片 {len(dlg)} 个超过 keep_dialogue=2"
     assert log_data and len(log_data[0]) < 5000, "日志未做尾部截断"
     assert "截断".encode("utf-8") in log_data[0], "截断标记缺失"
+
+
+def test_logs_only_bundle_has_no_book_text(tmp_path, monkeypatch):
+    """A-9：仅日志档不得含任何书稿正文（对话记录=正文）。"""
+    proj, logs, cfg = _make_world(tmp_path, monkeypatch)
+    out_dir = tmp_path / "out"
+    path = report_bundle.create_bundle(proj, str(out_dir), cfg, logs,
+                                       include_dialogue=False)
+    with zipfile.ZipFile(path) as z:
+        names = z.namelist()
+        blob = "".join(z.read(n).decode("utf-8", "replace") for n in names)
+    assert not any(n.startswith("对话记录/") for n in names), "仅日志档混入了对话记录"
+    assert "写一章" not in blob, "仅日志档泄漏了 prompt（书稿正文）"
+
+
+def test_redact_extended_providers():
+    """A-9：脱敏正则补 Google AIza / JWT(MiniMax) / 智谱双段式。"""
+    from app.secrets import redact_text
+    text = ("key=AIzaSyA1234567890abcdefghijklmnopqrstuv 和 "
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4f"
+            " 以及 0123456789abcdef0123456789abcdef.abcdefghijklmnor")
+    out = redact_text(text)
+    assert "AIzaSyA" not in out and "AIza<REDACTED>" in out
+    assert "eyJhbGciOiJIUzI1NiJ9" not in out and "<REDACTED_JWT>" in out
+    assert "0123456789abcdef0123456789abcdef.abcdefghijklmnor" not in out
+    assert "<REDACTED_ZHIPU>" in out

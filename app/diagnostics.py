@@ -8,6 +8,8 @@ import datetime
 import os
 import traceback
 
+from . import secrets   # A-9：现场出口统一过脱敏（全仓此前唯一绕 redact 的出口）
+
 
 def dump_failure(proj: str, stage_key: str, chapter_num: int,
                  last_prompt: str, error: BaseException,
@@ -34,9 +36,11 @@ def dump_failure(proj: str, stage_key: str, chapter_num: int,
             "",
         ]
         if last_prompt:
-            lines += ["## 最后一次 LLM 请求 prompt", "", "```", last_prompt[:12000], "```", ""]
+            lines += ["## 最后一次 LLM 请求 prompt（已脱敏）", "", "```",
+                      secrets.redact_text(last_prompt[:12000]), "```", ""]
         if log_tail:
-            lines += ["## 日志尾部", "", "```"] + list(log_tail) + ["```", ""]
+            lines += ["## 日志尾部（已脱敏）", "", "```"] + [
+                secrets.redact_text(str(x)) for x in log_tail] + ["```", ""]
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
         return path

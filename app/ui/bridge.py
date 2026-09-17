@@ -3116,16 +3116,31 @@ class Bridge(QObject):
 
     @Slot(result=str)
     def createBugReport(self) -> str:
-        """WP-28：一键报障包（对话+日志+版本+脱敏配置摘要 → 单个 zip，已脱敏）"""
+        return self._make_bug_report(include_dialogue=True)
+
+    @Slot(result=str)
+    def createBugReportLogsOnly(self) -> str:
+        """A-9：仅日志档——不含书稿正文（对话记录就是正文）"""
+        return self._make_bug_report(include_dialogue=False)
+
+    def _make_bug_report(self, include_dialogue: bool) -> str:
+        """一键报障包（日志+版本+脱敏配置摘要；默认含对话记录=书稿正文）。
+
+        A-9：旧 toast 称「已脱敏」但包内 .dialogue 就是全书正文——话术必须
+        明示含稿；另有仅日志档（createBugReportLogsOnly）供不愿交稿的用户。"""
         import zipfile
         from .. import report_bundle
         out_dir = self.proj or cfg_mod.CONFIG_DIR
         try:
             path = report_bundle.create_bundle(
                 self.proj or "", out_dir, self.cfg or {},
-                os.path.join(cfg_mod.CONFIG_DIR, "logs"))
+                os.path.join(cfg_mod.CONFIG_DIR, "logs"),
+                include_dialogue=include_dialogue)
             n = len(zipfile.ZipFile(path).namelist())
-            self.toast.emit("ok", f"报障包已生成 → {path}（{n} 个文件，已脱敏，可直接发给开发者）")
+            content = ("含对话记录=书稿正文" if include_dialogue else "仅日志，不含书稿正文")
+            self.toast.emit(
+                "ok", f"报障包已生成 → {path}（{n} 个文件；{content}；"
+                      f"Key/凭据已脱敏。确认内容后再发给开发者）")
             return path
         except Exception as e:  # noqa: BLE001
             self.toast.emit("error", f"报障包生成失败: {e}")

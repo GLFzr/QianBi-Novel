@@ -1311,11 +1311,17 @@ ApplicationWindow {
                     onClicked: exportDialog.bundleResult = bridge.exportDialogue("txt")
                 }
                 AppButton {
-                    text: "一键报障包（脱敏）"
+                    text: "一键报障包（含书稿正文，Key 已脱敏）"
                     kind: "primary"
                     onClicked: exportDialog.bundleResult = bridge.createBugReport()
                     ToolTip.visible: hovered
-                    ToolTip.text: "对话+程序日志+版本+脱敏配置摘要打成一个 zip；Key 与家目录路径已脱敏"
+                    ToolTip.text: "对话记录就是书稿正文——不愿交稿请用「仅日志」档"
+                }
+                AppButton {
+                    text: "报障包（仅日志，不含书稿）"
+                    onClicked: exportDialog.bundleResult = bridge.createBugReportLogsOnly()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "只含程序日志+版本+脱敏配置摘要，不含任何书稿内容"
                 }
             }
             Text {

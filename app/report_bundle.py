@@ -59,8 +59,12 @@ def _tail_bytes(path: str, limit: int) -> bytes:
 
 
 def collect_sources(proj: str, cfg: dict, logs_dir: str,
-                    keep_dialogue: int = 20, max_log_bytes: int = 2 * 1024 * 1024) -> list:
-    """收集 (zip 内路径, bytes) 列表。对话=最近 keep_dialogue 个分片；日志=尾部截断"""
+                    keep_dialogue: int = 20, max_log_bytes: int = 2 * 1024 * 1024,
+                    include_dialogue: bool = True) -> list:
+    """收集 (zip 内路径, bytes) 列表。对话=最近 keep_dialogue 个分片；日志=尾部截断。
+
+    A-9：include_dialogue=False =「仅日志」档——对话记录就是书稿正文，
+    用户有权只发日志不含稿。"""
     out = []
     out.append(("版本.txt", _app_version().encode("utf-8")))
     summary = json.dumps(_config_summary(cfg), ensure_ascii=False, indent=2)
@@ -68,7 +72,7 @@ def collect_sources(proj: str, cfg: dict, logs_dir: str,
 
     # 对话记录（书内 .dialogue/，最新 N 个分片）
     d = os.path.join(proj or "", ".dialogue")
-    if os.path.isdir(d):
+    if include_dialogue and os.path.isdir(d):
         dlg = sorted((os.path.getmtime(os.path.join(d, fn)), fn)
                      for fn in os.listdir(d) if fn.endswith(".jsonl"))
         for _mt, fn in dlg[-keep_dialogue:]:
@@ -86,13 +90,15 @@ def collect_sources(proj: str, cfg: dict, logs_dir: str,
 
 
 def create_bundle(proj: str, out_dir: str, cfg: dict, logs_dir: str,
-                  keep_dialogue: int = 20, max_log_bytes: int = 2 * 1024 * 1024) -> str:
+                  keep_dialogue: int = 20, max_log_bytes: int = 2 * 1024 * 1024,
+                  include_dialogue: bool = True) -> str:
     """生成单个 zip，返回路径。真实产物（包内清单）见落地注记与探针。"""
     os.makedirs(out_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     path = os.path.join(out_dir, f"报障包_{stamp}.zip")
     items = collect_sources(proj, cfg, logs_dir,
-                            keep_dialogue=keep_dialogue, max_log_bytes=max_log_bytes)
+                            keep_dialogue=keep_dialogue, max_log_bytes=max_log_bytes,
+                            include_dialogue=include_dialogue)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for name, data in items:
             z.writestr(name, data)
