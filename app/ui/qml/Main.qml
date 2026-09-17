@@ -1178,6 +1178,7 @@ ApplicationWindow {
         property string sep: "blank"
         property int titleFmt: 0
         property string lastExport: ""
+        property string bundleResult: ""
 
         function refreshPreview() {
             previewArea.text = bridge.exportPreviewText(exportDialog.sep, exportDialog.titleFmt)
@@ -1293,6 +1294,42 @@ ApplicationWindow {
                     visible: previewArea.text === ""
                     text: "（预览）"
                     color: Theme.textTertiary
+                }
+            }
+            // WP-28：对话与程序日志出口 + 一键报障包（脱敏）
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                AppButton {
+                    text: "导出对话记录 (JSONL)"
+                    onClicked: exportDialog.bundleResult = bridge.exportDialogue("jsonl")
+                    ToolTip.visible: hovered
+                    ToolTip.text: "原始逐条 JSONL（每次调用一条，含重试与失败）"
+                }
+                AppButton {
+                    text: "导出对话记录 (可读TXT)"
+                    onClicked: exportDialog.bundleResult = bridge.exportDialogue("txt")
+                }
+                AppButton {
+                    text: "一键报障包（脱敏）"
+                    kind: "primary"
+                    onClicked: exportDialog.bundleResult = bridge.createBugReport()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "对话+程序日志+版本+脱敏配置摘要打成一个 zip；Key 与家目录路径已脱敏"
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: exportDialog.bundleResult !== ""
+                text: exportDialog.bundleResult === "" ? "" : "已生成：" + exportDialog.bundleResult
+                color: Theme.accent
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.Wrap
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: bridge.revealPath(exportDialog.bundleResult)
                 }
             }
             // 导出结果（成功后显示完整路径 + 文件管理器定位入口）

@@ -1272,6 +1272,11 @@ class Bridge(QObject):
 
     def _open_project(self, path: str, silent: bool = False):
         self.proj = path
+        # WP-27：对话全量落盘绑定到本书（R14②③：位置可发现/可关闭；默认开）
+        from .. import dialogue_log
+        _dlcfg = (self.cfg or {}).get("dialogue_log", {}) or {}
+        dialogue_log.configure(path, enabled=bool(_dlcfg.get("enabled", True)),
+                               keep_files=int(_dlcfg.get("keep_files", 40)))
         cfg_mod.push_recent_project(self.cfg, path)
         cfg_mod.save_config(self.cfg)
         project.ensure_tracking_files(path)
@@ -3035,6 +3040,102 @@ class Bridge(QObject):
         target = os.path.join(self.proj, "pipeline_debug", sub) if sub else             os.path.join(self.proj, "pipeline_debug")
         os.makedirs(target, exist_ok=True)
         self.openPath(target)
+
+    # ---- WP-27 对话全量落盘（R14②③：界面可发现 + 可关闭）----
+
+    @Slot(result=bool)
+    def dialogueLogOn(self) -> bool:
+        from .. import dialogue_log
+        return bool((self.cfg or {}).get("dialogue_log", {}).get("enabled", True))
+
+    @Slot(result=str)
+    def dialogueLogInfo(self) -> str:
+        """对话记录现状一行（设置面板展示：在哪、多少、开没开）"""
+        from .. import dialogue_log
+        st_ = dialogue_log.stats()
+        where = st_["dir"] if self.proj else "（未打开项目）"
+        return (f"{'已开启' if st_['enabled'] else '已关闭'} · {st_['files']} 个分片 · "
+                f"{st_['bytes'] // 1024} KB · {where}")
+
+    @Slot(bool)
+    def setDialogueLog(self, on: bool):
+        self.cfg.setdefault("dialogue_log", {})
+        self.cfg["dialogue_log"]["enabled"] = bool(on)
+        cfg_mod.save_config(self.cfg)
+        from .. import dialogue_log
+        dialogue_log.set_enabled(bool(on))
+        self.toast.emit("ok", ("对话记录已开启：每次调用存书内 .dialogue/（本地文件，不上网）"
+                               if on else "对话记录已关闭：新调用不再落盘"))
+
+    @Slot()
+    def openDialogueDir(self):
+        """打开当前书的对话记录目录（R14②：位置可发现）"""
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return
+        from .. import dialogue_log
+        d = dialogue_log.dialogue_dir()
+        os.makedirs(d, exist_ok=True)
+        self.openPath(d)
+
+    @Slot(str, result=str)
+    def exportDialogue(self, kind: str) -> str:
+        """WP-28：导出对话记录（jsonl=原始逐条 / txt=可读排版）→ 书根目录"""
+        NL = chr(10)
+        if not self.proj:
+            self.toast.emit("warn", "请先打开项目")
+            return ""
+        from .. import dialogue_log
+        d = dialogue_log.dialogue_dir()
+        files = sorted(fn for fn in os.listdir(d)) if os.path.isdir(d) else []
+        if not files:
+            self.toast.emit("warn", "还没有对话记录（先跑一次生成，或确认「对话记录」开关已开）")
+            return ""
+        import datetime as _dt
+        stamp = _dt.datetime.now().strftime("%Y%m%d_%H%M")
+        path = os.path.abspath(os.path.join(self.proj, f"导出_对话记录_{stamp}.{kind}"))
+        try:
+            if kind == "jsonl":
+                with open(path, "w", encoding="utf-8") as f:
+                    for fn in files:
+                        f.write(open(os.path.join(d, fn), encoding="utf-8").read())
+            else:
+                entries = []
+                for fn in files:
+                    for ln in open(os.path.join(d, fn), encoding="utf-8"):
+                        if not ln.strip():
+                            continue
+                        e = json.loads(ln)
+                        err = (NL + "错误：" + e["error"]) if e.get("error") else ""
+                        entries.append(
+                            "── [{ts}] 第{chapter}章 {phase} · {slot}/{model} · {outcome}"
+                            "（第{attempt}次，{latency_s}s）──" + NL
+                            + "提问：" + e.get("prompt", "") + NL
+                            + "回复：" + e.get("reply", "") + err)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write((NL + NL).join(entries) + NL)
+            self.toast.emit("ok", f"已导出对话记录 → {path}（{os.path.getsize(path) // 1024} KB）")
+            return path
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"对话记录导出失败: {e}")
+            return ""
+
+    @Slot(result=str)
+    def createBugReport(self) -> str:
+        """WP-28：一键报障包（对话+日志+版本+脱敏配置摘要 → 单个 zip，已脱敏）"""
+        import zipfile
+        from .. import report_bundle
+        out_dir = self.proj or cfg_mod.CONFIG_DIR
+        try:
+            path = report_bundle.create_bundle(
+                self.proj or "", out_dir, self.cfg or {},
+                os.path.join(cfg_mod.CONFIG_DIR, "logs"))
+            n = len(zipfile.ZipFile(path).namelist())
+            self.toast.emit("ok", f"报障包已生成 → {path}（{n} 个文件，已脱敏，可直接发给开发者）")
+            return path
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", f"报障包生成失败: {e}")
+            return ""
 
     @Slot(result="QVariantList")
     def forcedLocksList(self) -> list:

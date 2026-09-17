@@ -88,6 +88,9 @@ DEFAULT_CONFIG = {
               "review_votes_recheck": 1,
               "review_pass_fast": True},  # 修复环复扫投票数（控成本）
     "llm": {"max_retries": 2, "backoff_base": 2.0},
+    # WP-27 对话全量落盘（R14：默认开=用户指派；本地 .dialogue/ JSONL，不上网；
+    # enabled=False 即整体停写；keep_files=滚动分片上限，总量硬上界见 app/dialogue_log.py）
+    "dialogue_log": {"enabled": True, "keep_files": 40},
     # 去 AI 味规则源（lieflat-less-ai-tone 集成，方案 docs/lieflat-less-ai-tone-integration-plan.md）
     # rules_source: "lieflat"=vendor skill 并集（缺省）/ "builtin"=内置 10 条原则
     # rules_render: "lean"=裁示例只留触发标记+改法（缺省，token 成本低）/ "full"=带 ❌/✅ 示例

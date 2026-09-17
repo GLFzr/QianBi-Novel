@@ -341,6 +341,36 @@ Item {
                     onToggled: bridge.setOffpeakRun(checked)
                 }
 
+                // WP-27 对话全量落盘（R14②③④：可发现/可关闭/文案与 PRIVACY.md 同步）
+                AppCheck {
+                    id: dialogueLogCheck
+                    Layout.fillWidth: true
+                    text: "对话记录：把每一次 AI 调用（含完整提问、回复、成败与重试）存到本书 .dialogue/ 目录——只在本地，不上网"
+                    checked: bridge.dialogueLogOn()
+                    font.pixelSize: Theme.fsTiny
+                    onToggled: bridge.setDialogueLog(checked)
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text {
+                        Layout.fillWidth: true
+                        text: bridge.dialogueLogInfo()
+                        color: Theme.textTertiary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsTiny
+                        wrapMode: Text.Wrap
+                    }
+                    AppButton {
+                        text: "打开对话记录"
+                        kind: "ghost"
+                        height: 26
+                        onClicked: bridge.openDialogueDir()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "打开本书的 .dialogue/ 目录（JSONL，可用记事本打开）"
+                    }
+                }
+
                 // 主控制
                 RowLayout {
                     Layout.fillWidth: true

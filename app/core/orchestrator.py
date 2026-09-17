@@ -452,6 +452,9 @@ class Orchestrator(QThread):
                 self._cur_stage = st.STAGE_PROSE
                 self.sig_stage.emit(st.STAGE_PROSE)
                 self.sig_chapter_started.emit(num)
+                # WP-27：章号上下文——本轮此后所有 LLM 调用的对话记录都带此章号
+                from .. import dialogue_log
+                dialogue_log.set_chapter(num)
                 # 取走用户为该章登记的重写指导（消费即删，写入正文 prompt）
                 state = st.load_state(self.proj)
                 guidance = st.take_guidance(state, num)

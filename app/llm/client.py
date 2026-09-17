@@ -13,6 +13,8 @@ import time
 
 import httpx
 
+from .. import dialogue_log   # WP-27：对话全量落盘（每次 HTTP 请求一条）
+
 logger = logging.getLogger("qianbi.llm")
 
 
@@ -359,6 +361,18 @@ class LLMClient:
                                       temperature=temperature)
         t0 = time.monotonic()
         last_err = None
+        _dl_done = {"n": 0}   # WP-27：本尝试已记过一条（保证 一请求=一记录）
+
+        def _dl(outcome, reply="", usage=None, err="", note=""):
+            if _dl_done["n"] >= attempt + 1:
+                return
+            _dl_done["n"] = attempt + 1
+            dialogue_log.record_chat(
+                client=self, phase=phase, outcome=outcome, prompt=prompt,
+                system=system, reply=reply, usage=usage, error=err, note=note,
+                attempt=attempt + 1, degraded=self.last_degraded,
+                latency=time.monotonic() - t0, stream=False)
+
         for attempt in range(self.max_retries + 1):
             try:
                 with httpx.Client(timeout=self.timeout) as client:
@@ -369,6 +383,7 @@ class LLMClient:
                         retryable=_status_retryable(resp.status_code))
                     if err.retryable:
                         last_err = err
+                        _dl(f"http_{resp.status_code}", err=str(err), note="retryable")
                     else:
                         # 网关明确点名「不支持某参数」：剥掉它（记入能力备忘录）再发一次；
                         # 认不出可剥参数照原样抛出——降级不许把真错误吞成静默重试。
@@ -376,9 +391,11 @@ class LLMClient:
                         if fixed is None:
                             self.last_error = str(err)
                             self.last_latency = time.monotonic() - t0
+                            _dl(f"http_{resp.status_code}", err=str(err), note="fatal")
                             raise err
                         payload = fixed
                         last_err = err
+                        _dl(f"http_{resp.status_code}", err=str(err), note="downgraded")
                 else:
                     data = resp.json()
                     content = ""
@@ -397,6 +414,7 @@ class LLMClient:
                             f"模型返回空内容 (finish_reason={finish})", retryable=True)
                         # W-4：这一发的 token 是真花了的（usage 已在响应里），先记账
                         self._charge_failed_attempt(data.get("usage"), t0, phase, "empty")
+                        _dl('ok_empty', usage=data.get('usage') or {}, note=f'finish_reason={finish}')
                         if payload.get("thinking") and not self.last_degraded:
                             # thinking 模式偶发"只思考不输出"：本次调用内关闭 thinking 重发
                             # （退化标记至多触发一次，不再递归重开一整轮重试预算）。
@@ -421,15 +439,20 @@ class LLMClient:
                     logger.info("LLM ok model=%s prompt_tokens=%s completion_tokens=%s latency=%.1fs",
                                 self.model, usage.get("prompt_tokens", 0),
                                 usage.get("completion_tokens", 0), self.last_latency)
+                    _dl("ok", reply=content, usage=usage)
                     return content.strip()
             except httpx.TimeoutException:
                 last_err = LLMError("请求超时，请检查网络或增大 timeout", retryable=True)
+                _dl("timeout", err=str(last_err))
             except httpx.RequestError as e:
                 last_err = LLMError(f"网络错误: {e}", retryable=True)
+                _dl("network", err=str(last_err))
             except (KeyError, IndexError) as e:
                 last_err = LLMError(f"API 响应格式异常: {e}", retryable=False)
+                _dl("error", err=str(last_err))
             except LLMError as e:
                 if not e.retryable:
+                    _dl("error", err=str(e))
                     raise
                 last_err = e
             if attempt < self.max_retries:
@@ -439,6 +462,7 @@ class LLMClient:
                 time.sleep(delay)
         self.last_error = str(last_err)
         self.last_latency = time.monotonic() - t0
+        _dl("error", err=str(last_err), note="retries-exhausted")
         raise last_err
 
     def chat_stream(self, prompt: str, system: str = "", temperature: float = None,
@@ -497,6 +521,18 @@ class LLMClient:
 
         t0 = time.monotonic()
         last_err = None
+        _dl_done = {"n": 0}   # WP-27：本尝试已记过一条（保证 一请求=一记录）
+
+        def _dl(outcome, reply="", usage=None, err="", note=""):
+            if _dl_done["n"] >= attempt + 1:
+                return
+            _dl_done["n"] = attempt + 1
+            dialogue_log.record_chat(
+                client=self, phase=phase, outcome=outcome,
+                prompt=self.last_prompt, reply=reply, usage=usage, error=err,
+                note=note, attempt=attempt + 1, degraded=self.last_degraded,
+                latency=time.monotonic() - t0, stream=True)
+
         for attempt in range(self.max_retries + 1):
             parts = []   # 每次尝试重置：断流重试不得拼接两次的部分内容
             stream_usage = None   # 末 chunk 的 usage（include_usage）
@@ -515,6 +551,8 @@ class LLMClient:
                                 f"API 返回 {resp.status_code}: {body_text[:500]}",
                                 retryable=_status_retryable(resp.status_code))
                             last_err = err
+                            _dl(f"http_{resp.status_code}", err=body_text[:500],
+                                note="retryable" if err.retryable else "fatal-or-downgrade")
                             if not err.retryable:
                                 fixed = self._downgrade(payload, body_text)
                                 if fixed is None:
@@ -562,6 +600,7 @@ class LLMClient:
                     # 空内容分支 continue 重开连接，把重试预算烧光。
                     # W-4：中止≠免费——末块 usage 已到就如实记一发（没到就不编）。
                     self._charge_failed_attempt(stream_usage, t0, phase, "abort")
+                    _dl("abort", reply="".join(parts), usage=stream_usage)
                     stream_usage = None
                     break
                 if not "".join(parts).strip():
@@ -569,6 +608,7 @@ class LLMClient:
                     last_err = LLMError("模型返回空内容 (stream)", retryable=True)
                     self._charge_failed_attempt(stream_usage, t0, phase, "empty")
                     stream_usage = None
+                    _dl('ok_empty', usage=stream_usage)
                     if payload.get("thinking") and not self.last_degraded:
                         # thinking 偶发"只思考不输出"（reasoning_content 有流、content 全空）：
                         # 本次调用内关闭 thinking 重发（退化标记至多一次，不再递归重开重试
@@ -588,13 +628,17 @@ class LLMClient:
                 self.last_latency = time.monotonic() - t0
                 self._record_usage(stream_usage or {}, self.last_latency,
                                    phase=phase)   # 插件：用量统计
+                _dl("ok", reply="".join(parts), usage=stream_usage)
                 break
             except httpx.TimeoutException:
                 last_err = LLMError("请求超时，请检查网络或增大 timeout", retryable=True)
+                _dl("timeout", err=str(last_err))
             except httpx.RequestError as e:
                 last_err = LLMError(f"网络错误: {e}", retryable=True)
+                _dl("network", err=str(last_err))
             except LLMError as e:
                 if not e.retryable:
+                    _dl("error", err=str(e))
                     raise
                 last_err = e
             except Exception as e:
@@ -602,6 +646,7 @@ class LLMClient:
                 # 但 on_chunk 已投递给 UI 的旧增量无法回收——UI 流式区在重试期间可能短暂
                 # 显示重复尾巴，最终落盘内容以本函数返回值为准（正确）。
                 last_err = LLMError(f"流式读取中断: {e}", retryable=True)
+                _dl("stream_error", err=str(last_err))
             if self.last_aborted:
                 # 用户主动中断：不再消耗重试预算（W-4：已到手的 usage 照样记账）
                 self._charge_failed_attempt(stream_usage, t0, phase, "abort")
@@ -615,6 +660,9 @@ class LLMClient:
                     break
         content = "".join(parts).strip()
         self.last_latency = time.monotonic() - t0
+        if last_err and not content:
+            # 最终防线前的如实落账（重试耗尽仍无内容）；dl_done 保证本尝试不重记
+            _dl("error", err=str(last_err), note="retries-exhausted")
         if self.last_aborted:
             # 已收增量交回调用方处置（core 据此抛 PipelineStopped），不当成错误
             return content

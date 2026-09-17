@@ -356,6 +356,9 @@ class ReadbackWorker(QThread):
         self.result_text = ""
 
     def run(self):
+        # WP-27：章号上下文——本 worker 的 LLM 调用记录带此章号
+        from .. import dialogue_log
+        dialogue_log.set_chapter(getattr(self, "num", 0))
         from ..core import versions as ver_mod
         try:
             diffs = ver_mod.diff_texts(self.old_text, self.new_text)
@@ -406,6 +409,9 @@ class SupervisorWorker(QThread):
         self.result_text = ""
 
     def run(self):
+        # WP-27：章号上下文——本 worker 的 LLM 调用记录带此章号
+        from .. import dialogue_log
+        dialogue_log.set_chapter(getattr(self, "num", 0))
         from . import memory
         try:
             prev_ending = "（本章为第一章）"
@@ -614,6 +620,9 @@ class CwProseCheckWorker(QThread):
         self.after_counts = (0, 0)
 
     def run(self):
+        # WP-27：章号上下文——本 worker 的 LLM 调用记录带此章号
+        from .. import dialogue_log
+        dialogue_log.set_chapter(getattr(self, "num", 0))
         try:
             if self.mode == "deslop":
                 self._run_deslop()
@@ -711,6 +720,9 @@ class MemoryBackflowWorker(QThread):
         self.report = ""
 
     def run(self):
+        # WP-27：章号上下文——本 worker 的 LLM 调用记录带此章号
+        from .. import dialogue_log
+        dialogue_log.set_chapter(getattr(self, "num", 0))
         try:
             self._run_backflow()
         except Exception as e:  # noqa: BLE001

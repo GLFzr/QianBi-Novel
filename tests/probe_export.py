@@ -174,6 +174,37 @@ def step6_backup():
         check("备份含正文与状态", any("正文" in n for n in names)
               and any("pipeline_state" in n for n in names))
         os.remove(out)  # 清理（在 tests_output 下）
+    QTimer.singleShot(100, step7_dialogue_report)
+
+
+def step7_dialogue_report():
+    """WP-28：对话记录两类出口 + 一键报障包（脱敏）"""
+    from app import dialogue_log
+    from app.llm.client import LLMClient
+    dialogue_log.configure(PROJ, enabled=True, keep_files=5)
+    dialogue_log.set_chapter(1)
+    cli = LLMClient("https://api.example.com", "sk-exportprobe-fake-key-000000", "probe-model")
+    dialogue_log.record_chat(client=cli, phase="draft", outcome="ok",
+                             prompt="探针提问：写一句话。", reply="探针回复：好的。",
+                             usage={"total_tokens": 7})
+    j = b.exportDialogue("jsonl")
+    check("对话记录 JSONL 导出", bool(j) and os.path.isfile(j)
+          and "探针提问" in open(j, encoding="utf-8").read())
+    t = b.exportDialogue("txt")
+    check("对话记录可读 TXT 导出", bool(t) and os.path.isfile(t)
+          and "回复：" in open(t, encoding="utf-8").read())
+    rp = b.createBugReport()
+    check("一键报障包生成", bool(rp) and os.path.isfile(rp) and rp.endswith(".zip"))
+    if rp and os.path.isfile(rp):
+        names = zipfile.ZipFile(rp).namelist()
+        blob = "".join(zipfile.ZipFile(rp).read(n).decode("utf-8", "replace") for n in names)
+        check("报障包含对话+日志+版本+配置摘要",
+              any(n.startswith("对话记录/") for n in names)
+              and any(n.startswith("日志/") for n in names)
+              and any("版本" in n for n in names)
+              and any("配置摘要" in n for n in names))
+        check("报障包脱敏：假 Key 不入包",
+              "sk-exportprobe-fake-key-000000" not in blob)
     QTimer.singleShot(100, step7_reveal)
 
 
