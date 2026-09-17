@@ -2833,6 +2833,18 @@ def _author_review_entry(ctx, num: int, prose: str, *,
     gates_cfg = gates_cfg or {}
     gr = gr if gr is not None else gates.GateResult()
     pre = prose if pre_review_prose is None else pre_review_prose
+    # H-5：gate_preset=off（出厂默认）+ 人工审校 = 组合非法——ctx.gate("G8")
+    # 会被门预置自动放行返回空串 ⇒ 循环首轮就落一条伪「作者已放行」、六维
+    # 审校零执行。明确拒绝并指路，转人工，绝不静默造凭据
+    if not getattr(ctx, "gate_enabled", lambda k: True)("G8"):
+        ctx.log("error",
+                f"第 {num} 章 人工审校与门预置组合非法：决策门不含 G8（出厂 gate_preset=off）。"
+                "两条路：①设置→决策门 勾上 G8；②审校模式改回 auto。本章转人工，不落「作者已放行」")
+        try:
+            st.mark_chapter_need_human(proj, st.load_state(proj), num)
+        except Exception:  # noqa: BLE001
+            ctx.log("warn", f"第 {num} 章 转人工标记写入失败")
+        return [], [], "", prose
     _wc_items, _wc_blocking, _wc_verdict = gates.word_count_precheck(proj, num, prose, ctx.cfg)
     wc_note = f"（字数提示：{_wc_blocking[0]}）" if _wc_verdict else ""
     manual_rounds = 0

@@ -3976,7 +3976,17 @@ class Bridge(QObject):
     def _parse_instruction_llm_safe(self, text: str):
         try:
             from ..core import agent_tools as _at
-            client = self.router.client(cfg_mod.SLOT_HELPER) if getattr(self, "router", None) else None
+            from ..llm.router import ModelRouter
+            # H-12：Bridge 此前根本没有 self.router（只有 Worker 类有）——
+            # 自然语言兜底的 LLM 解析恒死。懒建一次（有项目带预设参数层）
+            if getattr(self, "router", None) is None:
+                if self.proj:
+                    import importlib
+                    _stages = importlib.import_module("app.core.stages")
+                    self.router = ModelRouter(self.cfg, **_stages.preset_param_layers(self.proj))
+                else:
+                    self.router = ModelRouter(self.cfg)
+            client = self.router.client(cfg_mod.SLOT_HELPER)
             if client is None:
                 return None
             return _at.parse_instruction_llm(text, client, default_chapter=int(self._cur_num or 0))
@@ -3990,6 +4000,7 @@ class Bridge(QObject):
 
     def _ui_tool_dispatch(self, name: str):
         """L1-07：共写界面动作的派发面——Agent 话术真实驱动 dock 同款能力"""
+        from ..core import agent_tools   # H-12：此前裸用未导入的全局名 ⇒ NameError
         label = agent_tools.UI_TOOLS[name]["label"]
         if self._get_cw_mode() != "cw":
             self.toast.emit("warn", "「%s」是共写档动作：请先切到共写档" % label)
