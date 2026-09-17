@@ -25,7 +25,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 
 from app.core import co_dialogue, gates, state as st
-from app import project
+from app import mustscan, project
 from app.ui.bridge import Bridge
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -182,7 +182,49 @@ def step4_force_dialog():
     check("重复强锁不留重复痕", "4" in state.get("forced_locks", {}))
     if dlg:
         dlg.metaObject().invokeMethod(dlg, "close")
-    QTimer.singleShot(200, step5_stale)
+    QTimer.singleShot(200, step4b_contract_multi)
+
+
+def step4b_contract_multi():
+    """WP-23：锁门详情的分母必须是真的——契约路径造 ≥2 条阻断。
+
+    字数闸门物理上只产 1 条 blocking（word 夹具区分不了「全量」与「首条」），
+    可区分的是正则契约路径：正文同时命中 2 条 must 禁用规则。
+    断言 len(violations)==阻断条数——「改回首条」与「删掉第二条规则」都红。"""
+    rules = ("- 禁止出现违背物理的瞬移描写：`一眨眼就到了|瞬间移动到`｜level：must｜mode：forbid\n"
+             "- 禁止主角直接喊出功法名：`大罗金仙诀|九转玄功`｜level：must｜mode：forbid\n")
+    project.write_file(os.path.join(PROJ, "设定", "正则.md"),
+                       "# 本书正则契约\n" + rules)
+    long_prose = ("# 第5章 契约试炼\n\n" + (
+        "他从巷口走出来，街边的灯笼一盏一盏亮起，卖馄饨的摊子冒着热气。"
+        "老者抬头看了他一眼，又低下头去搅动锅里的汤。他没有停留，"
+        "沿着石板路一直往北，走过桥，桥下的水流很急，拍在石头上碎成沫子。"
+        "城门口的兵丁懒散地靠着墙，长枪斜在肩上，谁也没注意到他的影子被灯光拉得很长。") * 24)
+    long_prose += "情急之下他施展大罗金仙诀，一眨眼就到了城门另一侧。"
+    project.write_file(project.get_chapter_path(PROJ, 5, "契约试炼"), long_prose)
+    from app.core import gates as _gates
+    _wi, _wb, _wv = _gates.word_count_precheck(PROJ, 5, long_prose, b.cfg)
+    check("第 5 章字数达标（不触发字数闸门，确保走契约路径）",
+          _wv == "" and not _wb)
+    _items, c_blocking, c_verdict = mustscan.contract_precheck(PROJ, 5, long_prose)
+    check("夹具确实命中 2 条 must 契约（分母真实性：删掉第二条规则本条即红）",
+          c_verdict == "REJECT" and len(c_blocking) == 2)
+    b._cur_num = 5
+    b._chapter_text = long_prose
+    before = len(LOCK_BLOCKED_DETAIL)
+    b.confirmChapterLocked()
+    detail = LOCK_BLOCKED_DETAIL[-1][1] if len(LOCK_BLOCKED_DETAIL) > before else {}
+    check("契约 ≥2 条阻断 → 详情全清单逐条携带（violations 改回首条即红）",
+          len(detail.get("violations", [])) == len(c_blocking)
+          and all(any(t in v for v in detail.get("violations", []))
+                  for t in ("一眨眼就到了", "大罗金仙诀")))
+    check("旧 lockBlocked 信号与详情同发（contract 类型、条数一致）",
+          bool(LOCK_BLOCKED) and LOCK_BLOCKED[-1][4] == "contract"
+          and bool(detail.get("violations")))
+    check("章 5 未被静默锁定", not project.is_chapter_locked(PROJ, 5))
+    project.write_file(os.path.join(PROJ, "设定", "正则.md"), "")   # 还原空契约
+    project.write_file(os.path.join(PROJ, "设定", "正则.md"), "")   # 还原空契约
+    QTimer.singleShot(150, step5_stale)
 
 
 def step5_stale():
