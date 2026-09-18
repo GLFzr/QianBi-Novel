@@ -307,5 +307,6 @@ bad = sum(len(v.get("h_overflow", [])) + len(v.get("v_overflow", [])) + len(v.ge
 _rc0 = (2 if (bad or FAILS or QML_ERRS) else rc)  # WP-06：QML 错误必须进退码（曾 FAIL 却退 0）
 # A-10 延伸（v4 复验）：结论已打印；先跑完 atexit（probe_guard 真 config 还原），再躲 Qt 静态析构 fastfail
 import atexit as _ax
+sys.stdout.flush(); sys.stderr.flush()  # os._exit 不冲缓冲：不 flush 结论行会被吃掉
 _ax._run_exitfuncs()
 os._exit(_rc0)

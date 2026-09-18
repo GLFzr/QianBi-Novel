@@ -315,5 +315,6 @@ QTimer.singleShot(700, step1)
 _EXIT = {'rc': 0}
 app.exec()
 import atexit as _ax
+sys.stdout.flush(); sys.stderr.flush()  # os._exit 不冲缓冲：不 flush 结论行会被吃掉
 _ax._run_exitfuncs()
 os._exit(_EXIT['rc'])

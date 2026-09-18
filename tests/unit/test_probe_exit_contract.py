@@ -184,6 +184,8 @@ def test_exec_style_probes_exit_safely():
         tail = "".join(src.splitlines(True)[-8:])
         if "os._exit(" not in tail:
             bad.append(n + "（尾部无 os._exit：退码交给 Qt 析构期）")
+        if "sys.stdout.flush()" not in tail:
+            bad.append(n + "（os._exit 前未 flush：缓冲里的结论行会被整块吃掉）")
         elif "_run_exitfuncs" not in tail and "atexit" in src:
             bad.append(n + "（os._exit 前未跑 atexit：会跳掉真 config 还原）")
     assert not bad, "退出码收尾纪律违规：" + "; ".join(bad)

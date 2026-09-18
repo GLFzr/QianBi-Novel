@@ -203,5 +203,6 @@ bad = sum(len(v.get("clipped", [])) + len(v.get("overlaps", [])) for v in REPORT
 # A-10 延伸（v4 复验）：Qt 静态析构期会 fastfail（0xC0000409/127），而结论已打印完，
 # 退码必须由我们决定；但 atexit 上挂着 probe_guard 的真 config 还原，先跑完它再硬退。
 import atexit as _ax
+sys.stdout.flush(); sys.stderr.flush()  # os._exit 不冲缓冲：不 flush 结论行会被吃掉
 _ax._run_exitfuncs()
 os._exit(2 if bad else rc)  # noqa

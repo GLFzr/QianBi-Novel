@@ -120,5 +120,6 @@ _rc = app.exec()
 _rc0 = (1 if getattr(check, 'failed', False) else 0)  # N-31：失败非零退码
 # A-10 延伸（v4 复验）：结论已打印；先跑完 atexit（probe_guard 真 config 还原），再躲 Qt 静态析构 fastfail
 import atexit as _ax
+sys.stdout.flush(); sys.stderr.flush()  # os._exit 不冲缓冲：不 flush 结论行会被吃掉
 _ax._run_exitfuncs()
 os._exit(_rc0)
