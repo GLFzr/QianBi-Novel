@@ -64,11 +64,12 @@ FAILS = 0
 for stage, label in [(st.STAGE_CW_CORE, "核心设定"), (st.STAGE_CW_OUTLINE, "剧情总大纲")]:
     proj = make_cw_project(stage)
     b.proj = proj
-    b._cw = CoWriting(proj) if not hasattr(b, "_cw") else b._cw
-    try:
+    # Bridge 的 _cw 初值是 None（打开项目时才建）；hasattr 判"存在"会一直沿用 None
+    if getattr(b, "_cw", None) is None:
+        b._cw = CoWriting(proj)
+    else:
         b._cw.proj = proj
-    except Exception:                                  # noqa: BLE001
-        pass
+    assert b._cw is not None and getattr(b, "proj", "") == proj
     expected = CoWriting(proj).advance(json.loads(json.dumps(
         {"cw": {"mode": "cw", "stage": stage, "project": {"genre": "都市"}, "transcript": {}}})))
     b._on_cw_sum_done(summary_with_handoff())
