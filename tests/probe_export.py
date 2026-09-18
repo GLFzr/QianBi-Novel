@@ -193,6 +193,13 @@ def step7_dialogue_report():
     t = b.exportDialogue("txt")
     check("对话记录可读 TXT 导出", bool(t) and os.path.isfile(t)
           and "回复：" in open(t, encoding="utf-8").read())
+    # 报障包的日志段依赖 logger 真的往 CONFIG_DIR/logs 写了盘。W-04 起探针 CONFIG_DIR
+    # 重定向到空临时目录（旧探针悄悄蹭了用户真家目录里现成的日志）——这里自建前置条件：
+    # 初始化文件日志并落一条，验证"有日志时包内含 日志/"这条接线，不靠环境里恰好存在的日志。
+    from app import logger as _lg
+    import logging as _logging
+    _lg.setup_logging()
+    _logging.getLogger("qianbi.probe.export").warning("探针写入一条日志，验证报障包日志段")
     rp = b.createBugReport()
     check("一键报障包生成", bool(rp) and os.path.isfile(rp) and rp.endswith(".zip"))
     if rp and os.path.isfile(rp):

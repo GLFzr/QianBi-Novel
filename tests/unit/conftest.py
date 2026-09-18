@@ -24,6 +24,16 @@ try:
 except Exception:  # pragma: no cover - 隔离失败必须响，不许静默
     raise
 
+# ---- Keyring 围栏（W-04）----
+# config 落盘已进临时目录，但 save_config→dehydrate→store_secret 仍会按 secrets.SERVICE
+# 写 Windows 凭据管理器——那是 QIANBI_CONFIG_DIR 管不到的系统级状态。09-18 实测：单测种子里
+# 带真实样式的 Key 会被脱水进用户真 Keyring。把 SERVICE 指到测试专用命名空间，用户三条真 Key 不动。
+try:
+    from app import secrets as _sec
+    _sec.SERVICE = "QianBiNovel/connections.__unittest__"
+except Exception:  # pragma: no cover
+    raise
+
 
 def qianbi_isolated_dir():
     """给锁测试用：当前单测进程的配置落盘目标。"""

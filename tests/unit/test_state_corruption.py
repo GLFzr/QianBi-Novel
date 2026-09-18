@@ -49,4 +49,6 @@ def test_guidance_roundtrip_key_consistency(tmp_path):
     disk = json.load(open(os.path.join(proj, "pipeline_state.json"), encoding="utf-8"))
     st2 = state.load_state(proj)
     assert state.take_guidance(st2, 4) == "第四章收在钩子上"
-    assert disk["pending_guidance"].get("4") is None or True   # 已被取走，只验不崩
+    # H-4 真正的落盘形状：以字符串键 "4" 存（JSON 往返后 int 4 才取得回）；取走即删（再取为空）
+    assert disk["pending_guidance"]["4"] == "第四章收在钩子上"
+    assert state.take_guidance(st2, 4) == "", "指导未被消费即删除——会重复投递"

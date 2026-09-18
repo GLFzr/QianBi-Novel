@@ -35,6 +35,13 @@ def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
     /干净机必然不存在 ⇒ os.path.exists 假 ⇒ 静默少打三份，MIT 分发落空。
     现在缺任何一份即抛错中止，不许静默出包。"""
     root = root or ROOT
+    # N-21 门禁前置：三份承诺文档在**开包之前**逐一校验，缺任何一份即抛错中止。
+    # 旧实现在 with ZipFile(...,"w") 之后才校验 ⇒ 缺文档时 zip 已被创建、dist 已写入，
+    # 盘上留下一个"看似完整实则缺 MIT 三文档"的半成品孤儿——门禁必须 fail-fast、零产物。
+    for doc in PORTABLE_DOCS:
+        if not os.path.exists(os.path.join(root, doc)):
+            raise FileNotFoundError(
+                f"N-21 门禁：便携包承诺文档缺失 {doc}（拒绝静默出包）")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for dp, _, fs in os.walk(dist_dir):
             for f in fs:
@@ -42,11 +49,7 @@ def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
                 z.write(full, os.path.relpath(full, dist_dir))
         z.writestr(readme_name, readme_bytes)
         for doc in PORTABLE_DOCS:
-            src = os.path.join(root, doc)
-            if not os.path.exists(src):
-                raise FileNotFoundError(
-                    f"N-21 门禁：便携包承诺文档缺失 {doc}（拒绝静默出包）")
-            z.write(src, doc)
+            z.write(os.path.join(root, doc), doc)
     return zip_path
 
 

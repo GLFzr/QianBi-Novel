@@ -63,7 +63,10 @@ def main() -> int:
     def stage() -> str:
         return b._get_cw_stage_key() if b.proj else "?"
 
-    def pump_until(desc, cond, timeout=420.0):
+    def pump_until(desc, cond, timeout=None):
+        # W-06：超时降为可配（环境变量），默认从 7 分钟收到 4 分钟
+        if timeout is None:
+            timeout = float(os.environ.get("QBN_WALK_TIMEOUT", "240"))
         t0 = time.time()
         while time.time() - t0 < timeout:
             app.processEvents()
@@ -77,19 +80,43 @@ def main() -> int:
         s = b._cw.load()
         return len((st.ensure_cw(s).get("transcript", {}).get(stage(), []) or []))
 
-    def wait_reply(desc):
+    def _receipt_since(idx) -> str:
+        """自 idx 起最新一条 warn/error 回执。W-06：一次「正常拒收」也是终态——
+        旧判据只认阶段变化/新 assistant 行，把拒收当卡死白等到超时。"""
+        for t in reversed(TOASTS[idx:]):
+            if t.startswith("[warn]") or t.startswith("[error]"):
+                return t
+        return ""
+
+    def wait_reply(desc, action):
+        # W-06：基线取在触发动作**之前**——拒收（含表单未填）在 submit 内同步就 toast 并 return，
+        # 若基线取在动作之后就把这条回执漏在窗口外，照样空等到超时。
+        t0i = len(TOASTS)
         n0 = asst_len()
-        ok = pump_until(desc + "（等 AI 回复）",
-                        lambda: (not b._cw_busy) and asst_len() > n0, 420)
+        action()
+        arrived = pump_until(
+            desc + "（等 AI 回复/拒收回执）",
+            lambda: (not b._cw_busy) and (asst_len() > n0 or bool(_receipt_since(t0i))))
+        r = _receipt_since(t0i)
+        ok = arrived and asst_len() > n0 and not r     # 有 warn/error＝这次被拒，判 FAIL 带原因
         print(("OK  " if ok else "FAIL ") + desc +
-              f" | 转写 assistant {n0}->{asst_len()} | 累计调用 {_call_count(proj)}")
+              f" | 转写 assistant {n0}->{asst_len()}" +
+              (f" | 回执拒收: {r}" if r else (" | 超时" if not arrived else "")) +
+              f" | 累计调用 {_call_count(proj)}")
         return ok
 
-    def wait_confirm(prev_stage, desc):
-        ok = pump_until(desc + "（等总结定稿/阶段推进）",
-                        lambda: (not b._cw_busy) and stage() != prev_stage, 420)
+    def wait_confirm(prev_stage, desc, action):
+        t0i = len(TOASTS)
+        action()
+        arrived = pump_until(
+            desc + "（等总结定稿/阶段推进/拒收回执）",
+            lambda: (not b._cw_busy) and (stage() != prev_stage or bool(_receipt_since(t0i))))
+        r = _receipt_since(t0i)
+        ok = arrived and stage() != prev_stage and not r
         print(("OK  " if ok else "FAIL ") + desc +
-              f" | 阶段 {prev_stage} -> {stage()} | 累计调用 {_call_count(proj)}")
+              f" | 阶段 {prev_stage} -> {stage()}" +
+              (f" | 回执拒收: {r}" if r else (" | 超时" if not arrived else "")) +
+              f" | 累计调用 {_call_count(proj)}")
         return ok
 
     if cmd == "status":
@@ -105,25 +132,22 @@ def main() -> int:
 
     if cmd == "confirm":
         prev = stage()
-        b.confirmCwStage()
         if prev == st.STAGE_CW_PROJECT:
+            b.confirmCwStage()
             ok = pump_until("立项确认", lambda: stage() != prev, 60)
             print(("OK  " if ok else "FAIL ") + f"立项确认 | 阶段 -> {stage()}")
         else:
-            wait_confirm(prev, f"确认 {prev}")
+            wait_confirm(prev, f"确认 {prev}", lambda: b.confirmCwStage())
         for t in TOASTS[-3:]:
             print("  toast", t)
         return 0
 
     if cmd == "discuss":
-        prev_n = _call_count(proj)
-        b.submitCwMessage(args[0], "discuss")
-        wait_reply(f"讨论@{stage()}")
+        wait_reply(f"讨论@{stage()}", lambda: b.submitCwMessage(args[0], "discuss"))
         return 0
 
     if cmd == "draft":
-        b.generateCwDraft()
-        wait_reply(f"草案@{stage()}")
+        wait_reply(f"草案@{stage()}", lambda: b.generateCwDraft())
         return 0
 
     if cmd == "unit":
@@ -133,8 +157,7 @@ def main() -> int:
         return 0
 
     if cmd == "outlines":
-        b.generateNextCwOutlines()
-        wait_reply("生成下一批细纲")
+        wait_reply("生成下一批细纲", lambda: b.generateNextCwOutlines())
         return 0
 
     if cmd == "open":

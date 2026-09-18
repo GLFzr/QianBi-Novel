@@ -160,8 +160,11 @@ def _preset_id(proj: str) -> str:
 # 创作相位（prose/outline/review）不内置——思考档位留给 genre/连接配置。
 BUILTIN_PHASE_PARAMS = {
     # outline：细纲排期是结构化设计任务，low 档推理足够（v4 默认 high 是 outline
-    # 38k 输出/笔的主因）；档位由能力对照验证兜底，genre 显式配置可压过
-    "outline":         {"reasoning_effort": "low"},
+    # 38k 输出/笔的主因）；档位由能力对照验证兜底，genre 显式配置可压过。
+    # W-02：DeepSeek 只在思考模式下接受 reasoning_effort——只写 effort 不写 thinking
+    # 会让整条降档配置空转（请求体既无 thinking 也无 effort，outline 照跑默认高思考）。
+    # 补 thinking:enabled 才能让 low 档真正下发；不支持该参数的网关由 _downgrade 剥除兜底。
+    "outline":         {"thinking": "enabled", "reasoning_effort": "low"},
     "tracking":        {"thinking": "disabled", "max_tokens": 8192},
     "chapter_summary": {"thinking": "disabled", "max_tokens": 2048},
     "global_summary":  {"thinking": "disabled", "max_tokens": 2048},

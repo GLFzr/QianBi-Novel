@@ -62,6 +62,35 @@ _UNSUPPORTED_HINT_KEYS = STAGE_PARAM_KEYS[1:] + ("thinking", "reasoning_effort",
 # W-7：「配了 effort 却没开思考」的告警去重（进程内；组合级，换相位/档位会再提示一次）
 _EFFORT_DROPPED_WARNED = set()
 
+# W-01：思考模型「只思考不吐正文」自愈的能力表。空内容自愈的旧判据是
+# payload.get("thinking")——只问「我方是否发了 thinking 键」，不问「模型是否在想」，
+# 于是 DeepSeek 默认开思考、产品连接又不下发 thinking 键的相位（prose/core/volume/
+# worldbook…）永远不自愈，只会原样重发同一发（v15 每章 6 笔空流×3 的真凶）。
+# 下列常量把「怎么关这个渠道的思考」按 provider 分开，见 _escalate_after_empty。
+_THINKING_PARAM_HOSTS = ("deepseek",)  # 顶层 thinking={"type":"disabled"} 是确定有效的降档
+_ESCALATE_CEILING = 32768              # 抬高 max_tokens 的硬顶：给它把思考跑完再吐正文的空间
+
+
+def _host_of(url: str) -> str:
+    """base_url → 主机名（去 schema、去端口、去路径、小写）。用于分渠道判能力。"""
+    u = (url or "").lower()
+    if "://" in u:
+        u = u.split("://", 1)[1]
+    u = u.split("/", 1)[0]
+    if u.startswith("["):        # IPv6 字面量 [::1]:port
+        return u.split("]", 1)[0].lstrip("[")
+    return u.split(":", 1)[0]
+
+
+def _is_local_template_host(host: str) -> bool:
+    """本机推理网关（llama.cpp / vLLM / LM Studio）：关思考走 chat_template_kwargs。"""
+    return host in ("127.0.0.1", "localhost", "::1", "0.0.0.0", "::")
+
+
+def _is_thinking_param_host(host: str) -> bool:
+    """支持顶层 thinking 参数的云端网关（当前只有 DeepSeek 官方）。"""
+    return any(t in host for t in _THINKING_PARAM_HOSTS)
+
 
 def _cache_split(usage: dict, tin: int) -> tuple:
     """一次响应的 usage → (hit, miss)。W-5 口径：**"报了 0"与"没报"不是同一件事**。
@@ -345,6 +374,41 @@ class LLMClient:
         self.last_sampling = {k: payload[k] for k in SAMPLING_TRACE_KEYS if k in payload}
         return payload
 
+    def _escalate_after_empty(self, payload: dict, finish: str = ""):
+        """W-01：空内容后，按渠道能力算出「下一次该发什么」——保证与本次**不同**。
+
+        判据从「我方是否发了 thinking 键」改成「这个渠道能不能关思考 / 该关没关」。
+        阶梯一次只走一格，靠请求体自身内容自限（改过的格不会再触发），天然收敛，不额外
+        撑开重试预算：
+          1) 我方显式开了思考 → 关掉 + 撤 effort（DeepSeek 确定有效）；
+          2) DeepSeek 默认开思考、我方没发 thinking 键 → 这次显式下发 disabled；
+             （prose/core/volume/worldbook 等相位正落在这里，旧自愈对它们完全失效）
+          3) 本机推理网关 → 下发 chat_template_kwargs.thinking=false；
+          4) 没有更便宜的关思考手段时抬 max_tokens 到硬顶，给思考跑完再吐正文的空间。
+        无可升级时返回 (None, "")，调用方按普通重试/抛错处理。
+        """
+        host = _host_of(self.base_url)
+        th = payload.get("thinking")
+        if isinstance(th, dict) and th.get("type") != "disabled":
+            nxt = dict(payload)
+            nxt["thinking"] = {"type": "disabled"}
+            nxt.pop("reasoning_effort", None)
+            return nxt, "关闭思考（thinking=disabled）"
+        if "thinking" not in payload and _is_thinking_param_host(host):
+            nxt = dict(payload)
+            nxt["thinking"] = {"type": "disabled"}
+            return nxt, "对 DeepSeek 显式下发 thinking=disabled"
+        if _is_local_template_host(host) and "chat_template_kwargs" not in payload:
+            nxt = dict(payload)
+            nxt["chat_template_kwargs"] = {"thinking": False}
+            return nxt, "对本地下发 chat_template_kwargs.thinking=false"
+        mt = payload.get("max_tokens")
+        if isinstance(mt, int) and mt < _ESCALATE_CEILING:
+            nxt = dict(payload)
+            nxt["max_tokens"] = min(mt * 2, _ESCALATE_CEILING)
+            return nxt, f"抬高 max_tokens {mt}→{nxt['max_tokens']}"
+        return None, ""
+
     def chat(self, prompt: str, system: str = "", temperature: float = None,
              *, phase: str = "") -> str:
         """单轮对话，分级重试（网络/超时/429/5xx 指数退避），返回文本内容"""
@@ -415,19 +479,17 @@ class LLMClient:
                         # W-4：这一发的 token 是真花了的（usage 已在响应里），先记账
                         self._charge_failed_attempt(data.get("usage"), t0, phase, "empty")
                         _dl('ok_empty', usage=data.get('usage') or {}, note=f'finish_reason={finish}')
-                        if payload.get("thinking") and not self.last_degraded:
-                            # thinking 模式偶发"只思考不输出"：本次调用内关闭 thinking 重发
-                            # （退化标记至多触发一次，不再递归重开一整轮重试预算）。
-                            # v16 5.1：必须显式 disabled——传空串 thinking 键整体不下发，
-                            # 模型默认思考开，降级重发等于空操作（v15 每章 6 笔空流×3 的真凶）
+                        nxt, why = self._escalate_after_empty(payload, finish)
+                        if nxt is not None and nxt != payload:
+                            # 空内容多半是「思考把 max_tokens 吃光 / 只思考不输出」：按渠道能力
+                            # 换一发**不同**的请求体（旧自愈只在发过 thinking 键时才动，对
+                            # DeepSeek 默认开思考的相位形同虚设，且会原样重发同一发白烧预算）。
                             logger.warning(
-                                "模型返回空内容(finish_reason=%s)，降级重发（thinking=disabled）",
-                                finish)
+                                "模型返回空内容(finish_reason=%s)，第 %s 次降级重发：%s",
+                                finish, attempt + 1, why)
                             self.last_degraded = True
-                            payload = self._build_payload(
-                                messages, stream=False, phase=phase,
-                                temperature=temperature, thinking="disabled",
-                                reasoning_effort="")
+                            payload = nxt
+                            self._retry_wait(attempt, None, last_err)
                             continue
                         if attempt < self.max_retries:
                             self._retry_wait(attempt, None, last_err)
@@ -609,15 +671,15 @@ class LLMClient:
                     self._charge_failed_attempt(stream_usage, t0, phase, "empty")
                     stream_usage = None
                     _dl('ok_empty', usage=stream_usage)
-                    if payload.get("thinking") and not self.last_degraded:
-                        # thinking 偶发"只思考不输出"（reasoning_content 有流、content 全空）：
-                        # 本次调用内关闭 thinking 重发（退化标记至多一次，不再递归重开重试
-                        # 预算）。v16 5.1：显式 disabled，空串=键不下发=空操作
-                        logger.warning("流式返回空内容，降级重发（thinking=disabled）")
+                    nxt, why = self._escalate_after_empty(payload, "")
+                    if nxt is not None and nxt != payload:
+                        # 流式全程无正文（reasoning_content 有流、content 全空＝思考吃光预算）：
+                        # 与 chat 同一套按渠道能力的升级，第二次必发不同请求体，不再原样重烧。
+                        logger.warning("流式返回空内容，第 %s 次降级重发：%s", attempt + 1, why)
                         self.last_degraded = True
-                        payload = self._build_payload(
-                            messages, stream=True, phase=phase, temperature=temperature,
-                            thinking="disabled", reasoning_effort="")
+                        payload = nxt
+                        if not self._retry_wait(attempt, abort, last_err):
+                            break
                         continue
                     if attempt < self.max_retries:
                         if not self._retry_wait(attempt, abort, last_err):

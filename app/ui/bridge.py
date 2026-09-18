@@ -3346,11 +3346,16 @@ class Bridge(QObject):
         明示含稿；另有仅日志档（createBugReportLogsOnly）供不愿交稿的用户。"""
         import zipfile
         from .. import report_bundle
+        from .. import logger as _lg
         out_dir = self.proj or cfg_mod.CONFIG_DIR
+        # 日志目录以 logger 实际落盘处为准（LOG_DIR 在 import 期定死）：报障包若自己再按
+        # cfg_mod.CONFIG_DIR 现算，遇到 CONFIG_DIR 被改（探针进程隔离会重定向）就会与 logger
+        # 写盘处错位、把日志整段漏出包外。单一真相源。
+        logs_dir = getattr(_lg, "LOG_DIR", os.path.join(cfg_mod.CONFIG_DIR, "logs"))
         try:
             path = report_bundle.create_bundle(
                 self.proj or "", out_dir, self.cfg or {},
-                os.path.join(cfg_mod.CONFIG_DIR, "logs"),
+                logs_dir,
                 include_dialogue=include_dialogue)
             n = len(zipfile.ZipFile(path).namelist())
             content = ("含对话记录=书稿正文" if include_dialogue else "仅日志，不含书稿正文")
@@ -4023,7 +4028,16 @@ class Bridge(QObject):
             self.toast.emit("warn", "正在回看历史阶段，点当前阶段卡片回到讨论")
             return
         if stage == st.STAGE_CW_PROJECT:
-            self.toast.emit("warn", "创建项目阶段请填写左侧选题表单后点「确定」")
+            # 尺5：拒收不许把用户这句话吞掉——先留痕（用户条 + Agent 拒因）再提示，
+            # 否则「我说了话，它没反应」且事后翻对话也找不到自己那句。
+            state = self._cw.load()
+            co_dialogue.transcript_append(state, stage, "user", text)
+            co_dialogue.transcript_append(
+                state, stage, "agent",
+                "这一步我不接自由文本：请先在左侧填写并确认「选题」表单，"
+                "之后我会在「核心设定」阶段继续和你讨论。")
+            self._cw_save_state(state)
+            self.toast.emit("warn", "创建项目阶段请先填左侧选题表单再点「确定」（你这句话已记入对话）")
             return
         state = self._cw.load()
         co_dialogue.transcript_append(state, stage, "user", text)
@@ -4037,7 +4051,14 @@ class Bridge(QObject):
         """「生成草案」：跳过讨论直接按本阶段结构产出草案（撰写模式的零输入入口）"""
         stage = self._get_cw_stage_key()
         if stage == st.STAGE_CW_PROJECT:
-            self.toast.emit("warn", "创建项目阶段请填写左侧选题表单后点「确定」")
+            # 尺5：同样先留痕再拒（点了按钮却"没反应"也要在对话里翻得到）
+            state = self._cw.load()
+            co_dialogue.transcript_append(state, stage, "user", "（点击「生成草案」）")
+            co_dialogue.transcript_append(
+                state, stage, "agent",
+                "创建项目阶段没有草案模板：请先在左侧填写并确认「选题」表单。")
+            self._cw_save_state(state)
+            self.toast.emit("warn", "创建项目阶段请先填左侧选题表单再点「确定」（点击已记入对话）")
             return
         request = prompts.CW_DRAFT_REQUESTS.get(stage)
         if not request:

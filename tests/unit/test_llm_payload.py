@@ -213,6 +213,91 @@ def test_last_degraded_resets_per_call(http):
     assert c.chat("q") == "y" and c.last_degraded is False
 
 
+# ---------- 3b. W-01 空内容自愈：按渠道能力升级，禁止原样重发同一发 ----------
+# 旧判据 `payload.get("thinking")` 只问「我方是否发了 thinking 键」，不问「模型是否在想」。
+# 于是 DeepSeek 默认开思考 + 产品连接不下发 thinking 键的相位（prose/core/volume/worldbook）
+# 永远不自愈，只会原样重发同一发白烧重试预算（v15 每章 6 笔空流×3 的真凶）。
+# 以下每一例都在旧代码下会红：升级要么不触发、要么发出与第一次逐字相同的请求体。
+
+def test_deepseek_default_thinking_empty_escalates_to_disabled(http):
+    """DeepSeek 我方没发 thinking 键≠它没在思考：空内容必须补发 thinking=disabled"""
+    recorder = http([_content_resp("", finish="length"), _content_resp("正文")])
+    c = lc.LLMClient("https://api.deepseek.com/v1", "sk", "deepseek-chat",
+                     max_retries=2, backoff_base=0)
+    assert c.chat("p", phase="prose") == "正文"
+    assert "thinking" not in recorder.calls[0]                      # 我方本来没发
+    assert recorder.calls[1]["thinking"] == {"type": "disabled"}    # 旧码这格 KeyError→红
+    assert c.last_degraded is True
+
+
+def test_deepseek_default_thinking_empty_stream_escalates(http):
+    """流式同一条判据：prose 走 chat_stream，必须与 chat 一起修好"""
+    recorder = http([_content_resp(""), _content_resp("流式正文")])
+    c = lc.LLMClient("https://api.deepseek.com/v1", "sk", "deepseek-chat",
+                     max_retries=2, backoff_base=0)
+    assert c.chat_stream("p", phase="prose") == "流式正文"
+    assert "thinking" not in recorder.calls[0]
+    assert recorder.calls[1]["thinking"] == {"type": "disabled"}
+
+
+def test_local_thinking_model_empty_escalates_template_kwargs(http):
+    """LM Studio/llama.cpp：顶层 thinking 不认，关思考走 chat_template_kwargs.thinking=false"""
+    recorder = http([_content_resp("", finish="length"), _content_resp("正文")])
+    c = lc.LLMClient("http://127.0.0.1:1234/v1", "sk", "prism-ml/bonsai-27b",
+                     max_tokens=2048, max_retries=2, backoff_base=0)
+    assert c.chat("p", phase="core_setting") == "正文"
+    assert "chat_template_kwargs" not in recorder.calls[0]
+    assert recorder.calls[1]["chat_template_kwargs"] == {"thinking": False}
+
+
+def test_generic_host_empty_escalates_max_tokens(http):
+    """没有更便宜的关思考手段时，抬 max_tokens 给思考跑完再吐正文的空间"""
+    recorder = http([_content_resp("", finish="length"), _content_resp("正文")])
+    c = lc.LLMClient("https://gateway.invalid/v1", "sk", "thinker",
+                     max_tokens=2048, max_retries=2, backoff_base=0)
+    assert c.chat("p") == "正文"
+    assert recorder.calls[0]["max_tokens"] == 2048
+    assert recorder.calls[1]["max_tokens"] == 4096
+
+
+def test_max_tokens_escalation_capped(http):
+    """已在天花板→无从升级，走普通重试预算并抛错，不无限重烧、不突破上限"""
+    recorder = http([_content_resp("", finish="length")])
+    c = lc.LLMClient("https://gateway.invalid/v1", "sk", "m", max_tokens=32768,
+                     max_retries=2, backoff_base=0)
+    with pytest.raises(lc.LLMError):
+        c.chat("p")
+    assert len(recorder.calls) == 3
+    assert all(b["max_tokens"] == 32768 for b in recorder.calls)
+
+
+@pytest.mark.parametrize("base_url,extra", [
+    ("https://api.deepseek.com/v1", {}),
+    ("http://127.0.0.1:1234/v1", {"max_tokens": 2048}),
+    ("https://gateway.invalid/v1", {"max_tokens": 2048}),
+    ("https://gateway.invalid/v1", {"thinking": "enabled", "reasoning_effort": "high"}),
+])
+def test_empty_never_resends_identical_payload(http, base_url, extra):
+    """V5 核心验收：任何渠道空内容后，第二发请求体必与第一发不同（旧码三类里两红）"""
+    recorder = http([_content_resp("", finish="length"), _content_resp("正文")])
+    c = lc.LLMClient(base_url, "sk", "m", max_retries=2, backoff_base=0, **extra)
+    assert c.chat("p", phase="prose") == "正文"
+    assert len(recorder.calls) == 2
+    assert recorder.calls[0] != recorder.calls[1], "空内容自愈禁止原样重发同一发"
+
+
+def test_host_of_parses_scheme_port_path():
+    assert lc._host_of("https://api.deepseek.com/v1") == "api.deepseek.com"
+    assert lc._host_of("http://127.0.0.1:1234/v1") == "127.0.0.1"
+    assert lc._host_of("http://LOCALHOST:1234") == "localhost"
+    assert lc._host_of("http://[::1]:1234/v1") == "::1"
+    assert lc._is_thinking_param_host("api.deepseek.com") is True
+    assert lc._is_thinking_param_host("127.0.0.1") is False
+    assert lc._is_local_template_host("127.0.0.1") is True
+    assert lc._is_local_template_host("api.deepseek.com") is False
+
+
+
 # ---------- 4. 阶段标识透传 ----------
 
 def test_stages_stream_passes_phase():
@@ -526,6 +611,33 @@ def test_effort_still_sent_when_thinking_enabled():
                                                    "reasoning_effort": "low"}})
     p = c._build_payload([{"role": "user", "content": "x"}], stream=True, phase="canon_audit")
     assert p["thinking"] == {"type": "enabled"} and p["reasoning_effort"] == "low"
+
+
+# ---------- W-02：outline 降档配置必须真正随请求下发 ----------
+
+def test_outline_builtin_phase_ships_thinking_and_effort():
+    """内置表给 outline 配了 reasoning_effort:low（压 v4 默认 high 撑爆 38k 输出）——
+    但 DeepSeek 只在思考模式下吃 effort。旧配置只有 effort 没有 thinking，_build_payload
+    整段跳过 → 请求体既无 thinking 也无 effort，降档形同虚设。修复＝补 thinking:enabled。"""
+    import app.llm.client as lc
+    from app.core.stages import BUILTIN_PHASE_PARAMS
+    c = lc.LLMClient("https://api.deepseek.com/v1", "k", "deepseek-reasoner",
+                     stage_params=dict(BUILTIN_PHASE_PARAMS))
+    p = c._build_payload([{"role": "user", "content": "x"}], stream=False, phase="outline")
+    assert p["thinking"] == {"type": "enabled"}          # 旧配置这格 KeyError→红
+    assert p["reasoning_effort"] == "low"                # 旧配置这格 KeyError→红
+
+
+def test_no_builtin_phase_has_dead_reasoning_effort():
+    """整类防回归：内置表里凡设了 reasoning_effort 的相位必须同时 thinking:enabled，
+    否则那条降档/升档配置永不进体（DeepSeek 仅思考模式接受 effort）。"""
+    from app.core.stages import BUILTIN_PHASE_PARAMS
+    for ph, kv in BUILTIN_PHASE_PARAMS.items():
+        if "reasoning_effort" in kv:
+            assert kv.get("thinking") == "enabled", \
+                f"相位 {ph} 配了 reasoning_effort 却没开 thinking，配置空转"
+
+
 
 
 def test_audit_review_tier_default_high_and_overridable(tmp_path, monkeypatch):

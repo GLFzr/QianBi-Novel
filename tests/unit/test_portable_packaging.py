@@ -47,4 +47,7 @@ def test_missing_doc_aborts_loudly(tmp_path):
     with pytest.raises(FileNotFoundError) as ei:
         write_portable_zip(str(tmp_path / "p.zip"), dist, "r.txt", b"x", root=root)
     assert "N-21" in str(ei.value) and "PRIVACY.md" in str(ei.value)
-    assert not os.path.exists(str(tmp_path / "p.zip")) or True  # 半成品不作为产物校验
+    # 门禁前置后：缺文档时在开包前就中止，盘上不得留下半成品 zip（旧实现先开包，
+    # 缺文档的那次中止会留下一个已写入 dist 的孤儿 zip）
+    assert not os.path.exists(str(tmp_path / "p.zip")), \
+        "缺承诺文档却仍创建/留下了 zip 半成品——N-21 门禁未 fail-fast"

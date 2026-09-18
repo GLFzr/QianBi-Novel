@@ -118,8 +118,18 @@ def test_rotation_and_prune(book, monkeypatch):
                                  reply="回", usage={"total_tokens": 1})
     d = dialogue_log.dialogue_dir(book)
     files = [fn for fn in os.listdir(d) if fn.endswith(".jsonl")]
-    assert len(files) <= 3, f"分片 {len(files)} 个超过 keep_files=3——滚动上限失效"
-    assert all(os.path.getsize(os.path.join(d, fn)) >= 0 for fn in files)
+    # 12 条 × ~450B 在 max_bytes=400 下：既会轮转（>1 片）又会被剪到 keep_files=3
+    assert 1 < len(files) <= 3, f"分片 {len(files)} 个——12 条应触发轮转(>1)且不超 keep_files=3"
+    total = 0
+    for fn in files:
+        p = os.path.join(d, fn)
+        size = os.path.getsize(p)
+        assert 0 < size <= 900, f"{fn} 分片 {size}B 越界(0,阈值400+单条约450]：轮转未生效则单片暴涨"
+        lines = [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()]
+        assert 1 <= len(lines) <= 3, f"{fn} 落 {len(lines)} 条，超单片应有量级"
+        assert all(r["outcome"] == "ok" for r in lines)
+        total += len(lines)
+    assert 1 <= total <= 12, f"存活记录 {total} 条越界（12 请求含剪枝应 ∈(0,12]）"
 
 
 def test_disabled_means_no_writes(tmp_path):

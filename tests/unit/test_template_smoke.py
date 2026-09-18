@@ -22,7 +22,10 @@ def _kw_source(anchor: str) -> str:
     assert i > 0, "生产调用点未找到：" + anchor
     j = max(src.rfind("kw = dict(", 0, i), src.rfind("tail_kw = dict(", 0, i))
     assert j >= 0, "kwargs 构造段未找到"
-    return src[j:i]
+    seg = src[j:i]
+    assert "dict(" in seg and len(seg) > 20, \
+        "定位到的构造段异常（未真正命中 kwargs 构造，槽位对账会假绿）"
+    return seg
 
 
 def test_deslop_pinned_slots_match_production():

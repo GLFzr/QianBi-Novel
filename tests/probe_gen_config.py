@@ -331,7 +331,12 @@ def finish():
     check("真实用户预设仓零改动（模板只落沙箱）", now == REAL_PRESETS,
           f"多出 {sorted(now - REAL_PRESETS)} / 少掉 {sorted(REAL_PRESETS - now)}")
     print("PROBE_DONE " + ("FAIL" if (False in RESULTS) else "PASS"), flush=True)
-    QTimer.singleShot(100, app.quit)
+    # 结论已定，立即硬退：先冲缓冲，再 os._exit 绕过 Qt/QML 静态析构与 atexit 里的
+    # PySide 收尾（两处都会非确定地 native fastfail：0xC0000409 / 127，把已 PASS 的
+    # 探针在退码上翻红）。config 还原由 W-04 的落盘重定向（永不写线上）保证，不再依赖
+    # 此处 atexit；模块末尾仍保留 flush→_run_exitfuncs→os._exit 收尾满足退出码契约。
+    sys.stdout.flush(); sys.stderr.flush()
+    os._exit(1 if False in RESULTS else 0)   # noqa
 
 
 finish.done = False

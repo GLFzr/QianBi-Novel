@@ -41,7 +41,7 @@ def test_audit_extractors_placeholder_free_and_in_template():
                               outline_brief="O", prev_ending="P",
                               next_opening="N", prose="PROSE")
     assert head in out and tail in out, ".format 渲染必须逐字还原静态段（剥除前提）"
-    assert "{{" not in out.replace("}}", "") or True  # schema 自带收尾双括号，不检查
+    assert "{{" not in out, "渲染后仍含 {{ ——format 转义未折叠，静态段/占位符纪律破"
 
 
 def test_tracking_static_head_generic_wording_and_marker():

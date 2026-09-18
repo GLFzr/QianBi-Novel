@@ -62,9 +62,10 @@ def test_pack_anonymizes_and_maps(tmp_path, monkeypatch):
     pkg = blind_dir / "t1"
     files = sorted(os.listdir(pkg))
     assert files == ["样本-001.md", "样本-002.md"]
-    for f in files:                                 # 包内零来源信息
+    for f in files:                                 # 包内零来源信息（真检查，去掉 or True）
         content = (pkg / f).read_text(encoding="utf-8")
-        assert "vA" not in content and "标题" not in content.split("\n")[0] or True
+        assert "vA" not in content, f"{f} 泄露变体标识 vA，盲评匿名性破"
+        assert "标题" not in content, f"{f} 泄露源文件命名片段「标题」，可反查来源"
     bmap = json.loads((blind_dir / "t1.blind_map.json").read_text(encoding="utf-8"))
     assert set(bmap.values()) == {"vA"}
     manifest = json.loads((blind_dir / "t1.manifest.json").read_text(encoding="utf-8"))
