@@ -5086,6 +5086,14 @@ class Bridge(QObject):
             nxt = self._cw.advance(state)
             self.toast.emit("ok", "「%s」已确定定稿，进入「%s」"
                             % (st.CW_STAGE_LABELS.get(stage, stage), st.CW_STAGE_LABELS.get(nxt, nxt)))
+        # v5 修（本机走查实测）：上面已 _cw_save_state 落过盘，而 advance()/confirm_reopen_return()
+        # 只改内存 ⇒ 阶段指针从不持久。现象＝toast 说「已进入剧情总大纲」而盘上 cw.stage
+        # 仍是 cw_core。指针变更后必须再落一次，否则界面与 state.json 各说一套。
+        try:
+            self._cw_save_state(state)
+        except Exception as e:  # noqa: BLE001
+            self.toast.emit("error", "阶段指针保存失败（%s）：界面显示的下一阶段未落盘，请重试" % e)
+            return
         self._cw_view = self._get_cw_stage_key()
         self._cw_open_product(self._get_cw_stage_key())
         self._cw_refresh()
