@@ -144,4 +144,8 @@ _rc = app.exec()
 # WP-06：结论行统一 PROBE_DONE（旧 PROBE_OK 在判定前打印、失败也打 = 假绿标记，删除）
 print("PROBE_DONE " + ("FAIL" if USAGE_FAILS else "PASS")
       + ("" if not USAGE_FAILS else ("：" + "；".join(USAGE_FAILS))), flush=True)
-sys.exit(1 if USAGE_FAILS else 0)
+# A-10 延伸（v4 复验）：Qt 静态析构期会 fastfail（0xC0000409/127），而结论已打印完，
+# 退码必须由我们决定；但 atexit 上挂着 probe_guard 的真 config 还原，先跑完它再硬退。
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(1 if USAGE_FAILS else 0)  # noqa

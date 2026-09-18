@@ -287,4 +287,8 @@ def step7_qml():
 QTimer.singleShot(600, step1_full_chain)
 rc = app.exec()
 shutil.rmtree(PROJ, ignore_errors=True)
-sys.exit(0 if not check.failed and rc == 0 else 1)
+# A-10 延伸（v4 复验）：Qt 静态析构期会 fastfail（0xC0000409/127），而结论已打印完，
+# 退码必须由我们决定；但 atexit 上挂着 probe_guard 的真 config 还原，先跑完它再硬退。
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(0 if not check.failed and rc == 0 else 1)  # noqa

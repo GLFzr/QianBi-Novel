@@ -156,3 +156,34 @@ def test_check_layout_conclusion_line_and_exit_agree():
     terminal = _terminal_exit_call(tree)
     assert terminal is not None, "check_layout.py 末尾必须有显式退出码约定"
     assert _pass_branch_is_zero(terminal)
+
+def _ci_probe_names():
+    import re
+    wf = os.path.join(os.path.dirname(TESTS_DIR), ".github", "workflows", "tests.yml")
+    if not os.path.exists(wf):
+        return []
+    m = re.search(r"run_probe_fleet\.py(.*)", open(wf, encoding="utf-8").read())
+    return sorted(set(re.findall(r"probe_[a-z0-9_]+", m.group(1)))) if m else []
+
+
+def test_exec_style_probes_exit_safely():
+    """v4 复验（主代理实测两例）：调 app.exec() 的探针收尾必须"先跑完 atexit 再 os._exit"。
+
+    缺 os._exit → Qt 静态析构 fastfail 决定退码（probe_gen_config 在 offscreen 下
+    三次里两次 rc=127，舰队判红而结论行写着 PASS）；
+    缺 _run_exitfuncs → 跳过 probe_guard 挂在 atexit 上的真 config 还原
+    （probe_word_block 实测把 e4f8a2… 改成 62871a…，用户线上配置被探针留在脏值）。"""
+    bad = []
+    for n in _ci_probe_names():
+        path = os.path.join(TESTS_DIR, n + ".py")
+        if not os.path.exists(path):
+            continue
+        src = open(path, encoding="utf-8").read()
+        if "app.exec()" not in src:
+            continue
+        tail = "".join(src.splitlines(True)[-8:])
+        if "os._exit(" not in tail:
+            bad.append(n + "（尾部无 os._exit：退码交给 Qt 析构期）")
+        elif "_run_exitfuncs" not in tail and "atexit" in src:
+            bad.append(n + "（os._exit 前未跑 atexit：会跳掉真 config 还原）")
+    assert not bad, "退出码收尾纪律违规：" + "; ".join(bad)

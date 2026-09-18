@@ -187,7 +187,13 @@ def _migrate_run_mode(cfg: dict) -> dict:
     旧 step_confirm=true → preset=border + list=[G9]（每章定稿停，语义原样）。
     """
     w = cfg.get("writing")
-    if not isinstance(w, dict) or "gate_preset" in w:
+    if not isinstance(w, dict):
+        return cfg
+    if "gate_preset" in w:
+        # R17 支点（主代理 09-18 变异复现）：已迁移过的 config 若缺 run_mode，
+        # 缺省合并会把出厂 "cw" 塞给存量用户 ⇒ 静默翻档。此处显式落 auto。
+        if "run_mode" not in w:
+            w["run_mode"] = "auto"
         return cfg
     legacy = str(w.get("run_mode", "auto"))
     union = sorted(set(w.get("gate_hard") or []) | set(w.get("gate_soft") or []))

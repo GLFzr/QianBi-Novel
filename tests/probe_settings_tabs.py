@@ -112,4 +112,8 @@ TAB_FAILS = True   # N-31：默认失败，判定步骤跑完才置真值（防�
 QTimer.singleShot(900, step0)
 QTimer.singleShot(60000, app.quit)  # 看门狗：任何步骤抛异常也不挂死
 _rc = app.exec()
-sys.exit(1 if TAB_FAILS else 0)  # N-31：失败非零退码
+_rc0 = (1 if TAB_FAILS else 0)  # N-31：失败非零退码
+# A-10 延伸（v4 复验）：结论已打印；先跑完 atexit（probe_guard 真 config 还原），再躲 Qt 静态析构 fastfail
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(_rc0)

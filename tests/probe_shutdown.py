@@ -110,4 +110,7 @@ sys.stdout.flush()
 sys.stderr.flush()
 check("退出码 0", rc == 0)
 print("PROBE_DONE " + ("FAIL" if FAILED["n"] else "PASS"), flush=True)
+sys.stdout.flush(); sys.stderr.flush()
+import atexit as _ax  # v4复验：arm_config_guard 的真 config 还原挂在 atexit，os._exit 会跳掉它
+_ax._run_exitfuncs()
 os._exit(0 if rc == 0 and not FAILED["n"] else 1)   # 同仓库对策：躲析构 fastfail

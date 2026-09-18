@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 
-PROBES = sys.argv[1:]
+PROBES = [os.path.basename(str(x)).replace('.py','') for x in sys.argv[1:]]  # 裸名与带路径两种写法都吃（取 basename 去扩展名）
 if not PROBES:
     print("用法: python tests/run_probe_fleet.py <probe...>", flush=True)
     sys.exit(2)

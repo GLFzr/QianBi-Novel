@@ -155,8 +155,13 @@ def finish():
         ok = ok and passed
     print("TOTAL", f"{sum(1 for _, p in results if p)} / {len(results)}")
     shutil.rmtree(TMP, ignore_errors=True)
-    sys.exit(0 if ok else 1)
+    _EXIT['rc'] = 0 if ok else 1   # v4复验：不在 Qt 槽里抛 SystemExit（穿 C++ 帧展开正是 fastfail 来源）
+    app.quit()
 
 
 QTimer.singleShot(700, step1)
+_EXIT = {'rc': 0}
 app.exec()
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(_EXIT['rc'])

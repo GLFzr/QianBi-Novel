@@ -216,4 +216,8 @@ QTimer.singleShot(900, start)
 QTimer.singleShot(120000, app.quit)
 rc = app.exec()
 errs = [w for w in WARN if "ReferenceError" in w or "TypeError" in w or "Unable to assign" in w]
-sys.exit(2 if errs else rc)
+# A-10 延伸（v4 复验）：Qt 静态析构期会 fastfail（0xC0000409/127），而结论已打印完，
+# 退码必须由我们决定；但 atexit 上挂着 probe_guard 的真 config 还原，先跑完它再硬退。
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(2 if errs else rc)  # noqa

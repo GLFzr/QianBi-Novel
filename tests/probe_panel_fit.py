@@ -304,4 +304,8 @@ QTimer.singleShot(900, start)
 QTimer.singleShot(90000, app.quit)
 rc = app.exec()
 bad = sum(len(v.get("h_overflow", [])) + len(v.get("v_overflow", [])) + len(v.get("squashed", [])) + len(v.get("offside", [])) for v in REPORT.values())
-sys.exit(2 if (bad or FAILS or QML_ERRS) else rc)   # WP-06：QML 错误必须进退码（曾 FAIL 却退 0）
+_rc0 = (2 if (bad or FAILS or QML_ERRS) else rc)  # WP-06：QML 错误必须进退码（曾 FAIL 却退 0）
+# A-10 延伸（v4 复验）：结论已打印；先跑完 atexit（probe_guard 真 config 还原），再躲 Qt 静态析构 fastfail
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(_rc0)

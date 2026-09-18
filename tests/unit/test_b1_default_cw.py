@@ -103,3 +103,18 @@ def test_open_project_never_writes_mode(tmp_path):
     b._get_cw_stage_key()
     after = (proj / "pipeline_state.json").read_text(encoding="utf-8")
     assert after == before, "仅读档位就改写了 state 文件（R17 违规）"
+
+def test_migration_always_lands_explicit_run_mode():
+    """R17 支点：两条迁移出口都必须显式落 run_mode，否则出厂 cw 会经 merge 覆盖存量用户。
+
+    主代理 09-18 变异：把 `w["run_mode"] = "auto"` 注释掉，其余五条用例全绿——本条补上。"""
+    legacy = {"writing": {"run_mode": "step", "gate_hard": ["G2"], "gate_soft": ["G1"]}}
+    out = cfg_mod._migrate_run_mode(legacy)
+    assert out["writing"].get("run_mode") == "auto", "四档迁移出口没落 run_mode（出厂 cw 会漏进来）"
+
+
+def test_migrated_config_missing_run_mode_gets_auto():
+    """畸形/半迁移 config：有 gate_preset 却没有 run_mode ⇒ 必须补 auto，不能留给出厂 cw。"""
+    out = cfg_mod._migrate_run_mode({"writing": {"gate_preset": "off", "gate_list": []}})
+    assert out["writing"].get("run_mode") == "auto", (
+        "已迁移 config 缺 run_mode 时未补齐 ⇒ DEFAULT_CONFIG 的 cw 会在 merge 阶段静默翻档")

@@ -348,4 +348,8 @@ QTimer.singleShot(600, step1_wiring)
 QTimer.singleShot(45000, watchdog)
 _rc = app.exec()
 # N-31：失败必须非零退码（原 sys.exit(app.exec()) 恒 0，失败被吞）
-sys.exit(1 if False in RESULTS else 0)
+# A-10 延伸（v4 复验）：Qt 静态析构期会 fastfail（0xC0000409/127），而结论已打印完，
+# 退码必须由我们决定；但 atexit 上挂着 probe_guard 的真 config 还原，先跑完它再硬退。
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(1 if False in RESULTS else 0)  # noqa

@@ -234,4 +234,8 @@ app.exec()
 # WP-06：结论行统一 PROBE_DONE + 退码在事件循环外取（挂死根因=WP-03 前的
 # readerChapterList() 调用式 TypeError 打断 finish 调度链，app.exec 永不退出）
 print("PROBE_DONE " + ("PASS" if FINISHED["ok"] else "FAIL"), flush=True)
-sys.exit(0 if FINISHED["ok"] else 1)
+# A-10 延伸（v4 复验）：Qt 静态析构期会 fastfail（0xC0000409/127），而结论已打印完，
+# 退码必须由我们决定；但 atexit 上挂着 probe_guard 的真 config 还原，先跑完它再硬退。
+import atexit as _ax
+_ax._run_exitfuncs()
+os._exit(0 if FINISHED["ok"] else 1)  # noqa
