@@ -84,6 +84,18 @@ def wait_until(fn, timeout_ms, then):
     tick()
 
 
+def step0_wait_project():
+    # _open_project 是异步加载：慢 runner 上事件未回来时 hasProject 仍 False，
+    # openReader 会走「请先打开项目」早退——先等加载完成再进场（本地快所以从未暴露）
+    def tick(left):
+        if b.hasProject or left <= 0:
+            print(f"DIAG hasProject={b.hasProject} chapters={len(b.readerChapterList)}", flush=True)
+            step1_open()
+        else:
+            QTimer.singleShot(100, lambda: tick(left - 100))
+    tick(10000)
+
+
 def step1_open():
     win.setProperty("activePanel", "chapters")
     win.openReader()
@@ -144,7 +156,7 @@ def step4_closed():
     QTimer.singleShot(100, app.quit)
 
 
-QTimer.singleShot(600, step1_open)
+QTimer.singleShot(600, step0_wait_project)
 _rc = app.exec()
 _rc0 = (1 if getattr(check, 'failed', False) else 0)  # N-31：失败非零退码
 # A-10 延伸（v4 复验）：结论已打印；先跑完 atexit（probe_guard 真 config 还原），再躲 Qt 静态析构 fastfail
