@@ -472,6 +472,7 @@ Dialog {
     FileDialog {
         id: manifestDialog
         objectName: "updateManifestDialog"
+        // U-14 复核：FileDialog 无 enter/exit 属性（compile 抓红），出入场由系统接管
         title: "导入版本清单 latest.json"
         nameFilters: ["JSON 清单 (*.json)", "所有文件 (*)"]
         onAccepted: bridge.importManifestFile(String(selectedFile))

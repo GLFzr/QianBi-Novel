@@ -57,6 +57,7 @@ Dialog {
     FileDialog {
         id: fileDlg
         objectName: "importFileDialog"
+        // U-14 复核：FileDialog 无 enter/exit 属性（compile 抓红），出入场由系统接管
         title: "选择要导入的文档"
         nameFilters: ["文本文档 (*.txt *.md)", "所有文件 (*)"]
         onAccepted: bridge.startImportDocument(selectedFile.toString())

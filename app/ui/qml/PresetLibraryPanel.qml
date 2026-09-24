@@ -389,6 +389,8 @@ Item {
     FileDialog {
         id: presetFileDlg
         objectName: "presetFileDlg"
+        // U-14 复核：QtQuick.Dialogs 的 FileDialog 不派生自 Controls Dialog，
+        // 无 enter/exit 属性（变异被 probe_qml_compile 抓红）；原生对话框出入场由系统接管。
         title: "选择预设文件（JSON）"
         nameFilters: ["预设文件 (*.json)"]
         onAccepted: {

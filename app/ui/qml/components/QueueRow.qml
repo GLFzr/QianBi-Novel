@@ -105,6 +105,12 @@ Rectangle {
             else if (mouse.button === Qt.RightButton)
                 contextMenu.popup()
         }
+        // U-20：右键菜单无任何视觉入口，hover 说清操作方式
+        ToolTip.visible: mouseArea.containsMouse
+        ToolTip.text: row.state === "writing"
+                      ? "本章生成中 · 右键可重写"
+                      : "左键打开本章 · 右键：重写 / 带指导重写 / 查看问题"
+        ToolTip.delay: 500
     }
     Menu {
         id: contextMenu

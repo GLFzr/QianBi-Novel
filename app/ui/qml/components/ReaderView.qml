@@ -526,6 +526,8 @@ Rectangle {
         padding: 0
         background: Rectangle { radius: 14; color: reader.th.card; border.width: 1; border.color: reader.th.border }
         enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal } }
+        // U-14：入场已有、出场缺失，补齐同范式淡出
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast } }
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 16

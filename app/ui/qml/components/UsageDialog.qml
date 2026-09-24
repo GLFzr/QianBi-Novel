@@ -35,6 +35,21 @@ Dialog {
 
     property var data: ({})
 
+    // U-20：按模型行数据（柱状图与明细共用；data 变更即重算）
+    readonly property var modelRows: {
+        var m = (data.all || {}).by_model || {}
+        var rows = []
+        for (var k in m) rows.push({ model: k, v: m[k] })
+        return rows
+    }
+    // 全部模型 token 总量（柱高占比分母；防零除）
+    readonly property int totalTokens: {
+        var t = 0
+        for (var i = 0; i < modelRows.length; i++)
+            t += (modelRows[i].v["in"] || 0) + (modelRows[i].v["out"] || 0)
+        return t
+    }
+
     onOpened: reload()
     function reload() {
         data = bridge.usageSummary()
@@ -84,13 +99,93 @@ Dialog {
         }
 
         Text {
+            visible: usageDialog.modelRows.length > 0
             text: "按模型明细（全部）"
             color: Theme.textTertiary
             font.pixelSize: Theme.fsMicro
             font.family: Theme.uiFont
         }
+
+        // U-20：用量柱状图（在 Dialog 内、非 delegate：柱体走 accent→accentSoft 渐变）
+        // 竖柱高度 = 该模型 token 总量占全部的比例；hover 出精确数值
+        Rectangle {
+            visible: usageDialog.modelRows.length > 0
+            Layout.fillWidth: true
+            height: 110
+            radius: Theme.rCard
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.border
+            clip: true
+
+            Row {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 6
+                Repeater {
+                    model: usageDialog.modelRows
+                    delegate: Item {
+                        required property var modelData
+                        width: parent.width / Math.max(1, usageDialog.modelRows.length) - 6
+                        height: parent.height
+
+                        // 柱体：顶部 accent → 底部 accentSoft 垂直渐变
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 18
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Math.max(10, parent.width - 12)
+                            height: Math.max(3, (parent.height - 26)
+                                             * ((modelData.v["in"] || 0) + (modelData.v["out"] || 0))
+                                             / Math.max(1, usageDialog.totalTokens))
+                            radius: Theme.rSm
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Theme.accent }
+                                GradientStop { position: 1.0; color: Theme.accentSoft }
+                            }
+                        }
+                        // 柱底模型名（非数字，按红线不用 fsMicro）
+                        Text {
+                            anchors.bottom: parent.bottom
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width
+                            text: modelData.model
+                            color: Theme.textTertiary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsTiny
+                            elide: Text.ElideMiddle
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        // hover 命中域取整列（柱体细，小目标难点中）
+                        MouseArea {
+                            id: usageBarHot
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            ToolTip.visible: usageBarHot.containsMouse
+                            ToolTip.text: modelData.model
+                                          + " · 入 " + usageDialog.fmt(modelData.v["in"])
+                                          + " · 出 " + usageDialog.fmt(modelData.v["out"])
+                                          + " · " + usageDialog.fmt(modelData.v.calls) + " 次"
+                                          + " · 占 " + Math.round(((modelData.v["in"] || 0) + (modelData.v["out"] || 0))
+                                              / Math.max(1, usageDialog.totalTokens) * 100) + "%"
+                        }
+                    }
+                }
+            }
+        }
+
+        // U-20：空数据态（从未有用量记录时不再留一块死黑）
+        AppEmptyState {
+            visible: usageDialog.modelRows.length === 0
+            Layout.fillWidth: true
+            iconName: "inbox"
+            title: "还没有用量记录"
+            hint: "发起一次写作 / 扫描后，这里会按模型显示 token 用量柱状图"
+        }
+
         ListView {
             id: modelList
+            visible: usageDialog.modelRows.length > 0
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(modelCount() * 44 + 8, 200)
             clip: true

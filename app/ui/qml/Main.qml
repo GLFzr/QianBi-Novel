@@ -578,7 +578,7 @@ ApplicationWindow {
                         ToolTip.text: "局部改写选中段落 · Ctrl+E"
                     }
                     Rectangle { width: 1; height: 18; color: Theme.border
-                                Layout.alignment: Qt.AlignVCenter }   // U-19：主操作分组
+                                Layout.alignment: Qt.AlignVCenter }   // U-19：分组①检视打磨｜②章节与文件
                     AppButton {
                         iconName: "save"
                         text: bridge.editorDirty ? "● 保存" : "保存"
@@ -674,12 +674,18 @@ ApplicationWindow {
                             exportDialog.refreshPreview()
                             exportDialog.open()
                         }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "导出全本（txt/md，排版选项与即时预览，导出后见报告）"   // U-20：图标钮必配提示
                     }
+                    Rectangle { width: 1; height: 18; color: Theme.border
+                                Layout.alignment: Qt.AlignVCenter }   // U-19：分组②章节与文件｜③视图切换
                     AppButton {
                         text: bridge.showReasoning ? "隐藏思考" : "显示思考"
                         kind: "ghost"
                         checkable: false
                         onClicked: bridge.setShowReasoning(!bridge.showReasoning)
+                        ToolTip.visible: hovered
+                        ToolTip.text: "显示 / 隐藏编辑器下方的「AI 思考过程」栏（仅本地可见，不影响生成）"   // U-20
                     }
                 }
             }
@@ -942,6 +948,8 @@ ApplicationWindow {
                         kind: "ghost"
                         height: 24
                         onClicked: bridge.scanChapterText("")
+                        ToolTip.visible: hovered
+                        ToolTip.text: "清除 AI 味扫描结果条"   // U-20：裸「×」必配提示
                     }
                 }
             }

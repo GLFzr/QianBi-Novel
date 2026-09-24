@@ -91,6 +91,10 @@ ComboBox {
     }
 
     popup: Popup {
+        // U-14：弹层入场补齐（下拉只做淡入，不缩放，避免跳字）
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
         y: ctl.height + 4
         width: Math.max(ctl.width, 180)
         padding: 4

@@ -346,6 +346,7 @@ Item {
     FileDialog {
         id: worldbookDialog
         objectName: "worldbookFileDialog"
+        // U-14 复核：FileDialog/FolderDialog 无 enter/exit 属性（compile 抓红），出入场由系统接管
         title: "导入原作世界书"
         nameFilters: ["世界书 / 设定文本 (*.json *.md *.txt)", "所有文件 (*)"]
         onAccepted: {
