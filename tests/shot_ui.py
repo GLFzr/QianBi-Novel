@@ -62,7 +62,7 @@ if stack is None:
     stack = win.findChild(QQuickItem, "panelStack")
 assert stack, "panelStack not found"
 
-pages = [("1_bookshelf", 0), ("2_pipeline", 1), ("3_chapters", 2), ("4_settings", 3)]
+pages = [("1_bookshelf", 0), ("2_pipeline", 1), ("3_chapters", 2), ("4_settings", 6)]  # panelStack 现为 7 页：0 书架/1 流水线/2 章节/3 契约/4 灵感/5 预设库/6 设置
 results = []
 
 

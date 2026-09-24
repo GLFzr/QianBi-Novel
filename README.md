@@ -17,7 +17,7 @@
 > 问题与建议提 [Issue](https://github.com/GLFzr/QianBi-Novel/issues/new/choose)（有模板），
 > 长讨论与晒书去 [Discussions](https://github.com/GLFzr/QianBi-Novel/discussions)。
 
-![30 秒看懂：一条会点亮的流水线](docs/hero.gif)
+![共写首屏：六阶段对话式写作（v0.20 起的默认档）](docs/hero_cw.png)
 
 > **作者的话**：我认为写作 Agent 的终局不是「更会写的模型」，而是**会拒绝的流水线** ——
 > 所以它可能是未来最好用的那一个。这不是跑分结论，而是一个工程判断：模型会换代，
