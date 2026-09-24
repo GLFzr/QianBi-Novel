@@ -21,7 +21,9 @@ from PySide6.QtQml import QQmlApplicationEngine
 from app.ui.bridge import Bridge
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROJ = os.path.abspath(os.path.join(ROOT, "tests_output", "m1_proj"))
+# 独占项目路径：m1_proj 被 panel_fit/settings_tabs/ui_gallery 多支探针共用，舰队字母序
+# panel_fit 先跑会留下无章节布局，本探针 isdir 跳夹具 ⇒ 章表恒空（solo 必过/舰队必挂）
+PROJ = os.path.abspath(os.path.join(ROOT, "tests_output", "m1_proj_reader_close"))
 
 WARNINGS = []
 
@@ -47,11 +49,12 @@ win = engine.rootObjects()[0]
 # 自备一次性项目：过去靠「本机恰好有 tests_output/m1_proj」才能过——干净 runner 上
 # _open_project 静默失败 ⇒ openReader 走「请先打开项目」早退，opacity 永远 0（CI 三轮红的根因）
 from app import project as _proj
-if not os.path.isdir(PROJ):
+if not _proj.is_project(PROJ):
     # create_project(root, name) 会在 root/name 下建四目录——想在 PROJ 处得到项目根，
-    # 必须以 PROJ 的父目录为 root（传错一层会让 runner 上项目结构半残、章表恒空）
+    # 必须以 PROJ 的父目录为 root（传错一层会让项目结构半残、章表恒空）
     _proj.create_project(os.path.dirname(PROJ), os.path.basename(PROJ))
     _proj.write_idea_info(PROJ, "悬疑脑洞", "番茄", "探针夹具", 10)
+if not _proj.list_chapters(PROJ):
     _ch = _proj.get_chapter_path(PROJ, 1, "第一章")
     _proj.write_file(_ch, "# 第一章\n\n阅读器探针夹具正文，与被断言的开关行为无关。")
 b._open_project(PROJ, silent=True)
