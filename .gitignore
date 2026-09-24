@@ -29,8 +29,10 @@ projects/
 .workbuddy/
 pb.txt
 
-# 示例书只作本地调试用，不随仓库发布
-examples/
+# 示例书数据（本地调试产物）不入库；examples/ 下的说明文档放行
+examples/*
+!examples/README.md
+!examples/minimal-book.md
 
 # ---- IDE / 系统 ----
 .idea/
