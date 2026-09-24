@@ -48,6 +48,7 @@ assert KEY, "未找到 OpenCode Go Key（设 QIANBI_TEST_KEY 或 ~/.qianbi_novel
 
 THINKING = os.environ.get("QIANBI_TEST_THINKING", "enabled")   # 百炼兼容端不支持该参数时置空
 EFFORT = os.environ.get("QIANBI_TEST_EFFORT", "max")
+MAX_TOKENS = int(os.environ.get("QIANBI_TEST_MAX_TOKENS", "65536"))  # 百炼 qwen-flash 上限 32768
 CHAPTER_WORDS = 2000            # 每章目标字数（与示例细纲一致）
 TOTAL_WORDS_TARGET = 100000     # 累计 10 万字达标
 
@@ -79,11 +80,11 @@ def main():
         "connections": [
             {"id": "t-write", "name": f"{MODEL}（写作槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
-             "temperature": 0.7, "max_tokens": 65536, "timeout": 900,
+             "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": 900,
              "thinking": THINKING, "reasoning_effort": EFFORT},
             {"id": "t-helper", "name": f"{MODEL}（辅助槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
-             "temperature": 0.7, "max_tokens": 65536, "timeout": 900,
+             "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": 900,
              "thinking": THINKING, "reasoning_effort": EFFORT},
         ],
         "slots": {"writing": "t-write", "helper": "t-helper", "review": "t-helper"},
