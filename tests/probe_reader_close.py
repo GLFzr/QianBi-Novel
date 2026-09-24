@@ -48,7 +48,9 @@ win = engine.rootObjects()[0]
 # _open_project 静默失败 ⇒ openReader 走「请先打开项目」早退，opacity 永远 0（CI 三轮红的根因）
 from app import project as _proj
 if not os.path.isdir(PROJ):
-    _proj.create_project(PROJ, "阅读器探针书")
+    # create_project(root, name) 会在 root/name 下建四目录——想在 PROJ 处得到项目根，
+    # 必须以 PROJ 的父目录为 root（传错一层会让 runner 上项目结构半残、章表恒空）
+    _proj.create_project(os.path.dirname(PROJ), os.path.basename(PROJ))
     _proj.write_idea_info(PROJ, "悬疑脑洞", "番茄", "探针夹具", 10)
     _ch = _proj.get_chapter_path(PROJ, 1, "第一章")
     _proj.write_file(_ch, "# 第一章\n\n阅读器探针夹具正文，与被断言的开关行为无关。")
