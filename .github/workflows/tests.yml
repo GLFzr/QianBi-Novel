@@ -50,3 +50,12 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python tests/run_probe_fleet.py probe_about_ui probe_agent_relay probe_backflow_chain probe_cw_dialogue probe_blurb probe_chapter_lock probe_chapter_lock_cross_mode probe_co_outline_parse probe_conn_delete probe_console probe_contract_ui probe_cw_batch_ui probe_cw_refusal_trace probe_cw_stage_persist probe_cw_state probe_cw_to_auto_compat probe_export probe_gate_flow probe_gate_ui probe_gen_config probe_import_ui probe_missing_chapter probe_needs_fix probe_outline_confirm probe_panel_fit probe_prompt_baseline probe_qml_compile probe_reader_close probe_settings_overlap probe_settings_tabs probe_shutdown probe_ui_gallery probe_update_ui probe_usage_dialog probe_wb_import probe_word_block probe_worldbook_activation probe_worldbook_format probe_worldbook_format_co
+
+      # 失败现场上传：红了看不到 traceback 的时代结束（A-2 精神，舰队日志完整留档）
+      - name: 上传探针舰队现场日志（仅失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-logs
+          path: .tmp_fleet_logs/
+          retention-days: 7

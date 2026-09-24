@@ -85,7 +85,15 @@ def step1_open():
 
 def step2_check_open():
     r = find_reader()
-    check("打开后 opacity==1", abs(float(r.property("opacity")) - 1.0) < 0.01)
+    val = float(r.property("opacity"))
+    check("打开后 opacity==1", abs(val - 1.0) < 0.01)
+    if abs(val - 1.0) >= 0.01:
+        # 现场诊断：runner 上若动画未驱动，这里能看到真实卡值与可见性
+        print(f"DIAG opacity={val} visible={r.property('visible')} "
+              f"readers={len([c for c in r.findChildren(object) if True])} "
+              f"motion={bool(r.property('visible'))}", flush=True)
+        print(f"DIAG windowVisible={win.property('visibility') is not None} "
+              f"winExpose={win.isExposed() if hasattr(win, 'isExposed') else 'n/a'}", flush=True)
     r.setProperty("drawerOpened", True)
     QTimer.singleShot(100, lambda: wait_until(
         lambda: any(getattr(c, "objectName", lambda: "")() == "" and "QQuickRectangle" in c.metaObject().className()
