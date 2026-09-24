@@ -130,12 +130,107 @@ def do_check_repo() -> int:
     return 0
 
 
+# ---- Q4 私钥备份（2026-09-25 收口裁决：本地口令加密，不上传任何云服务） ----
+# 格式：magic(7) + version(1) + salt(16) + nonce(12) + AESGCM(密文)
+# 口令不经 KDF 以外任何路径落盘；备份文件本身没有口令就是随机字节，
+# 拷去 U 盘/网盘都是安全的——这也是它存在的意义：原机磁盘没了还能签。
+BACKUP_MAGIC = b"QBNKEY1"
+
+
+def _derive(passphrase: bytes, salt: bytes) -> bytes:
+    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+    kdf = Scrypt(salt=salt, length=32, n=2 ** 15, r=8, p=1)
+    return kdf.derive(passphrase)
+
+
+def _ask_passphrase(twice: bool) -> bytes:
+    import getpass
+    p1 = getpass.getpass("备份口令（为空则放弃）：")
+    if not p1:
+        raise SystemExit("未输入口令，已取消")
+    if twice:
+        p2 = getpass.getpass("再输一遍：")
+        if p1 != p2:
+            raise SystemExit("两次输入不一致，已取消")
+    return p1.encode("utf-8")
+
+
+def do_backup(key_path: str, out_path: str) -> int:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    if not os.path.isfile(key_path):
+        print("KEY_MISSING", key_path)
+        return 1
+    pem = open(key_path, "rb").read()
+    salt, nonce = os.urandom(16), os.urandom(12)
+    key = _derive(_ask_passphrase(twice=True), salt)
+    blob = (BACKUP_MAGIC + b"" + salt + nonce
+            + AESGCM(key).encrypt(nonce, pem, None))
+    assert_outside_repo(out_path)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(blob)
+    try:
+        os.chmod(out_path, 0o600)
+    except OSError:
+        pass
+    print("已写入加密备份：%s（%d 字节）" % (out_path, len(blob)))
+    print("自校验：", end="")
+    rc = do_restore(out_path, expect_pub_of=key_path)
+    if rc == 0:
+        print("这一个文件可以拷去 U 盘/网盘——没有口令它只是随机字节。")
+        print("原机磁盘损坏时：python scripts/update_keys.py --restore --backup <该文件> --out <私钥路径>")
+    return rc
+
+
+def _read_backup(path: str) -> bytes:
+    blob = open(path, "rb").read()
+    if blob[:7] != BACKUP_MAGIC:
+        raise SystemExit("不是本工具生成的备份文件（magic 不符）：%s" % path)
+    salt, nonce, body = blob[8:24], blob[24:36], blob[36:]
+    key = _derive(_ask_passphrase(twice=False), salt)
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    try:
+        return AESGCM(key).decrypt(nonce, body, None)
+    except Exception:
+        raise SystemExit("解密失败：口令不对或文件损坏（不区分这两种情况）")
+
+
+def do_restore(backup_path: str, out_path: str = "", expect_pub_of: str = "") -> int:
+    import io as _io
+    pem = _read_backup(backup_path)
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+    try:
+        priv = load_pem_private_key(pem, password=None)
+    except Exception:
+        raise SystemExit("备份里不是可用的 Ed25519 私钥 PEM")
+    entry = pubkey_entry(priv)
+    print('备份对应公钥 {"kid": "%s", "pub": "%s"}' % (entry["kid"], entry["pub"]))
+    if expect_pub_of and os.path.isfile(expect_pub_of):
+        cur = pubkey_entry(load_private(expect_pub_of))
+        print("与当前私钥一致" if cur == entry else "警告：与当前私钥不一致（旧密钥的备份？）")
+    if out_path:
+        assert_outside_repo(out_path)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(out_path, "wb") as f:
+            f.write(pem)
+        try:
+            os.chmod(out_path, 0o600)
+        except OSError:
+            pass
+        print("已还原私钥到：%s" % out_path)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--gen", action="store_true", help="生成密钥对（已存在则不覆盖）")
     ap.add_argument("--force", action="store_true", help="配合 --gen：覆盖现有私钥")
     ap.add_argument("--show", action="store_true", help="打印现有私钥对应的公钥行")
     ap.add_argument("--check-repo", action="store_true", help="扫描仓库确认没被跟踪的私钥")
+    ap.add_argument("--backup", action="store_true", help="把现有私钥做口令加密备份（Q4）")
+    ap.add_argument("--restore", action="store_true", help="从备份校验/还原私钥")
+    ap.add_argument("--backup-file", default="", help="备份文件路径（--backup 默认 <私钥>.backup）")
+    ap.add_argument("--out", default="", help="--restore 时把私钥写到这个路径（缺省只校验不落盘）")
     ap.add_argument("--key", default=os.path.join(default_dir(), "ed25519.key"),
                     help="私钥路径（默认仓库外）")
     a = ap.parse_args()
@@ -145,6 +240,10 @@ def main() -> int:
         return do_gen(a.key, a.force)
     if a.show:
         return do_show(a.key)
+    if a.backup:
+        return do_backup(a.key, a.backup_file or (a.key + ".backup"))
+    if a.restore:
+        return do_restore(a.backup_file, out_path=a.out)
     ap.print_help()
     return 2
 
