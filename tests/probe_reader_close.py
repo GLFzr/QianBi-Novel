@@ -97,6 +97,8 @@ def step2_check_open():
     val = float(r.property("opacity"))
     check("打开后 opacity==1", abs(val - 1.0) < 0.01)
     if abs(val - 1.0) >= 0.01:
+        for _w in WARNINGS[-15:]:
+            print("DIAG qml>", _w, flush=True)
         # 现场诊断：runner 上若动画未驱动，这里能看到真实卡值与可见性
         print(f"DIAG opacity={val} visible={r.property('visible')} "
               f"readers={len([c for c in r.findChildren(object) if True])} "
