@@ -23,7 +23,8 @@ import subprocess
 import sys
 import zipfile
 
-PORTABLE_DOCS = ("LICENSE", "THIRD-PARTY-LICENSES.md", "PRIVACY.md")
+# PRIVACY.md 在仓库的 docs/ 下（与 :354 的 out_dir 拷贝清单同源）；zip 内落根目录
+PORTABLE_DOCS = ("LICENSE", "THIRD-PARTY-LICENSES.md", "docs/PRIVACY.md")
 
 
 def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
@@ -49,7 +50,7 @@ def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
                 z.write(full, os.path.relpath(full, dist_dir))
         z.writestr(readme_name, readme_bytes)
         for doc in PORTABLE_DOCS:
-            z.write(os.path.join(root, doc), doc)
+            z.write(os.path.join(root, doc), os.path.basename(doc))
     return zip_path
 
 
