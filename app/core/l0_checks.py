@@ -103,6 +103,44 @@ def payoff_promise(outline: str) -> str:
     return p
 
 
+def beat_findings(outline: str, prose: str) -> list:
+    """爽点节拍兑现检查（B1 扩展，0.20.0）：细纲 `- 本章爽点节拍：` 三拍字段 →
+    正文推迟语式（复用 payoff 的 B01 金标形态）+ 三拍结构完整性。
+
+    - 召回：正文检出推迟语式 → fail候选（承诺了节拍却推迟 = 雷集金标）；
+    - 放行：节拍行缺失 / 显式「本章无节拍」空档 → 不评不判（引擎关闭的旧细纲
+      没有该行，本检查恒空 ⇒ 账本对照块字节不变）；
+    - 结构：节拍行缺「结算」段 → 核对（证据供给，由审校裁决，不判 fail）。
+    fail-open：任何解析异常返回空。
+    """
+    try:
+        from .satisfaction import beat_declared, beat_of_outline
+        beat = beat_of_outline(outline)
+        if not beat_declared(beat):
+            return []
+        findings = []
+        for p in _DEFER_PHRASES:
+            pos = (prose or "").find(p)
+            if pos >= 0:
+                findings.append({
+                    "level": "fail候选", "check": "爽点节拍",
+                    "text": "细纲承诺三拍节拍「%s…」，正文检出推迟语式「%s」。"
+                            "节拍是本章写作契约，被推迟请裁决。" % (beat[:40], p),
+                    "quote": prose[max(0, pos - 20):pos + len(p) + 20],
+                })
+                break
+        if all(seg in beat for seg in ("压抑", "反转")) and "结算" not in beat:
+            findings.append({
+                "level": "核对", "check": "爽点节拍",
+                "text": "节拍行只有压抑/反转、缺「结算」段——请确认收益兑现是否"
+                        "真的落在本章，还是被无声推迟。",
+                "quote": "",
+            })
+        return findings
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def clock_findings(outline: str, prose: str) -> list:
     """钟点复现：细纲明写的数字/中文钟点必须能在正文（跨写法归一后）找到"""
     findings = []
@@ -161,14 +199,25 @@ def build_v5_block(proj, num: int, prose: str,
         outline = (read_outline or (lambda: ""))()
         states = (read_states or (lambda: ""))()
         findings = (payoff_findings(outline, prose) + clock_findings(outline, prose)
-                    + taboo_findings(outline, prose))
+                    + taboo_findings(outline, prose) + beat_findings(outline, prose))
         checklist = state_checklist(states)
         promise = payoff_promise(outline)
-        if not findings and not checklist and not promise:
+        # B1：节拍承诺行同样供给审校做上下文（引擎关闭的旧细纲无此行 → 字节不变）
+        beat_line = ""
+        try:
+            from .satisfaction import beat_declared, beat_of_outline
+            _beat = beat_of_outline(outline)
+            if beat_declared(_beat):
+                beat_line = _beat
+        except Exception:  # noqa: BLE001
+            beat_line = ""
+        if not findings and not checklist and not promise and not beat_line:
             return ""
         out = ["【V5 账本对照·第%d章（程序确定性预检，逐条裁决，不得无视）】" % num]
         if promise:
             out.append("- [细纲爽点承诺] %s" % promise[:120])
+        if beat_line:
+            out.append("- [细纲爽点节拍] %s" % beat_line[:120])
         for f in findings[:6]:
             out.append("- [%s|%s] %s%s" % (f["level"], f["check"], f["text"],
                                            ("（原文：%s…）" % f["quote"][:40]) if f["quote"] else ""))

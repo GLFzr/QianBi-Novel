@@ -22,6 +22,8 @@ from .. import project, prompts, deslop, mustscan, wb
 from ..llm import clean_llm_output
 from ..prompts import scene_cards
 from . import gates, memory, scan, state as st, versions
+from .satisfaction import outline_directive as _satisfaction_outline_directive
+from .satisfaction import prose_beat_block as _satisfaction_prose_block
 from .shared_prefix import chapter_header, project_header
 from .. import presets as genre_presets
 
@@ -690,6 +692,49 @@ def _volume_prose_opening_values(*, num: int, word_target: int, next_brief: str,
     ])
 
 
+# ============ A8 开幕轮密度压缩（cost.a8_opening_compress，缺省关；L5-A1）============
+#
+# 台账背景：S4 已把 PROSE 指令库前置 system（s4_static_freeze/head_rebuild 模式下
+# 开幕轮只剩动态值），但在**未开 S4 的会话路径**（章会话缺省路径 / S1 卷会话），
+# 开幕轮仍整份重发 PROSE 模板体——其中 {style_discipline}/{regex_block}/
+# {worldbook_block} 三个槽位与 system 前缀（全局写作纪律/正则契约全文/世界书·常驻
+# 条目）逐字或信息级重复：每章开幕全价 miss 各付一次。A8 把这三个槽位收敛为短
+# 引用（S4 冻结做法延伸到开幕轮正文区），并让卷会话开幕的章头跳过与历史逐字重复
+# 的三节（最近章节摘要/上一章结尾/上一章开头——S4-b volume_mode 同款语义延伸到
+# 未开 S4 的卷会话）。章级动态变量（细纲/状态/时间线/伏笔/动态值）全部保留。
+#
+# 边界（诚实声明，写入测试与报告）：
+# - 台账 -5~8k tok/章 的估计来自 S4 立项时的开幕轮全量口径；S4 落地后其中指令体
+#   大头已由 s4_static_freeze 兑现，细纲引用化属 A12 已否证项（近场保留，不再动）
+#   ——A8 在不违反 A12、不与 S4 重复的前提下，剩余可去重空间以装配字节实测为准；
+# - 只作用会话路径（system 里确实有前缀可引用）；单轮路径无「开幕轮」概念，不动；
+# - S4/head_rebuild 模式的开幕轮已是压缩形态，本开关在该模式下无额外效果（no-op）。
+
+# 引用行措辞与 S4 指令库的替身句同款（volume_session._LIBRARY_REPLACEMENTS 先例）
+_A8_STYLE_REF = "（全局写作纪律以系统「全局写作纪律」节为准，逐条执行，此处不重复）"
+_A8_REGEX_REF = ("（正则约束以系统「正则契约（must 全文 · 违反即硬伤）」节为准，"
+                 "逐条执行，此处不重复）")
+_A8_WB_REF = ("（世界书事实基准以系统「世界书·常驻条目」节为准；余额/道具/伤势等"
+              "流水状态以「上一章结尾」与【角色状态】为准）")
+
+
+def _a8_compress_enabled(cfg: dict) -> bool:
+    """A8 开关读取：cost.a8_opening_compress（缺省 False，独立 A/B 开关）。"""
+    return bool(((cfg or {}).get("cost", {}) or {}).get("a8_opening_compress", False))
+
+
+def _a8_opening_prose_kw(prose_kw: dict) -> dict:
+    """A8 生效时的开幕轮 kwargs：三个与 system 前缀重复的指令性槽位 → 短引用。
+
+    纯函数、返回新 dict（不改调用方）；这是装配层字节差的唯一来源，单测直接
+    钉住它（off 时调用方根本不进来，prose_kw 原样）。
+    """
+    return dict(prose_kw,
+                style_discipline=_A8_STYLE_REF,
+                regex_block=_A8_REGEX_REF,
+                worldbook_block=_A8_WB_REF)
+
+
 def _dyn_directives(ctx, phase: str) -> str:
     """预设旗标 → prompt 尾部动态指令块（E1.2/O2）。
 
@@ -1153,7 +1198,9 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
         worldbook_block=wb_block_text,
         regex_block=rg_block_text,
         user_directive=carry_idea or "（无）",
-    ) + _dyn_directives(ctx, PHASE_OUTLINE)   # O2 长度预算（未配置=空串，基线字节不变）
+    # B1（writing.satisfaction_engine，缺省关）：爽点引擎开时细纲携带「本章爽点节拍」
+    # 三拍字段指令；关时为空串，装配字节与 0.19.x 逐字节一致。
+    ) + _satisfaction_outline_directive(ctx.cfg) + _dyn_directives(ctx, PHASE_OUTLINE)
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
         result = _stream(ctx, cfg_mod.SLOT_HELPER, prompt, label="细纲",
@@ -1262,7 +1309,8 @@ def _ensure_outline_in_session(ctx, session, num: int) -> bool:
             worldbook_block=mats["wb_block"],
             regex_block=mats["rg_block"],
             user_directive=ctx.consume_gate_idea() or "（无）",
-        ) + _dyn_directives(ctx, PHASE_OUTLINE)   # v14：length_budget 上限同样作用于会话内细纲
+        # B1（writing.satisfaction_engine，缺省关）：会话内细纲同样携带节拍字段指令
+        ) + _satisfaction_outline_directive(ctx.cfg) + _dyn_directives(ctx, PHASE_OUTLINE)
         turn = ("（作用域：仅依据系统设定基准与本会话历史生成本章细纲；"
                 "全书前缀/卷纲/细纲快照已在系统与历史中，不重复注入。）\n\n" + prompt.strip())
         ctx.last_prompt = turn
@@ -1707,6 +1755,13 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             "author_note": _author_note(proj),
         }
         _prose_directives = _dyn_directives(ctx, PHASE_PROSE)   # E1.2/O2（未配置=空串）
+        # B1（writing.satisfaction_engine，缺省关）：本章细纲携带真实节拍时，正文轮
+        # 注入「三拍必须兑现」指令块；无节拍章/引擎关闭 = 空串（装配字节不变）。
+        _beat_block = (_satisfaction_prose_block(outline)
+                       if bool(_w_cfg.get("satisfaction_engine", False)) else "")
+        # A8（cost.a8_opening_compress，缺省关）：开幕轮密度压缩——只作用于会话路径
+        # （开幕轮与 system 前缀重复的指令性槽位收敛为短引用）；关时逐字节不变。
+        _a8_on = _a8_compress_enabled(ctx.cfg)
         if _session_usable(session):
             # 章会话：正文写作是本会话首轮，回复固化为章正文轮。
             # S1 卷会话：本轮同时是「本章开幕轮」——开幕声明 + 章头并入同一
@@ -1727,7 +1782,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     used_setpieces=prose_kw["used_setpieces"],
                     craft_block=prose_kw["craft_block"],
                     author_note=prose_kw["author_note"],
-                    tic_blacklist=prose_kw["tic_blacklist"]) + _prose_directives
+                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _prose_directives
                 turn_text = session.open_chapter(
                     chapter_header(proj, num,
                                    volume_mode=not _w_cfg.get("head_rebuild", False),
@@ -1735,17 +1790,22 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     turn_text,
                     chapter_num=num, preface=_comp_preface)
             else:
+                if _a8_on:
+                    # A8：与 system 前缀重复的指令性槽位（纪律/正则/世界书常驻）
+                    # 收敛为短引用；卷会话（跨章历史已含前情正文）章头再跳三节。
+                    prose_kw = _a8_opening_prose_kw(prose_kw)
                 turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
-                    + _prose_directives
+                    + _beat_block + _prose_directives
                 if hasattr(session, "open_chapter"):
-                    turn_text = session.open_chapter(_chap_header(ctx, proj, num), turn_text,
-                                                     chapter_num=num,
-                                                     preface=_comp_preface)
+                    turn_text = session.open_chapter(
+                        _chap_header(ctx, proj, num, volume_mode=_a8_on), turn_text,
+                        chapter_num=num,
+                        preface=_comp_preface)
             ctx.last_prompt = turn_text
             prose = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, turn_text,
                                  label=f"草稿 第{num}章", phase=PHASE_PROSE)
         else:
-            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _prose_directives
+            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _prose_directives
             ctx.last_prompt = prompt
             prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章",
                             phase=PHASE_PROSE)

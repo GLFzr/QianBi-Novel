@@ -107,7 +107,15 @@ DEFAULT_CONFIG = {
                 "gate_preset": "off",
                 "gate_list": ["G2", "G5L", "G8", "G9"],   # 边界确认勾选清单（出厂=大节点：大纲/开写/审校/定稿）
                 "offpeak_run": False,           # 离峰挂机：peak 时段自动等待，off-peak 再跑
-                "chapter_session": True},       # 章会话消息栈：同章阶段共享前缀（关闭回退单轮）
+                "chapter_session": True,        # 章会话消息栈：同章阶段共享前缀（关闭回退单轮）
+                # B1 爽点引擎（0.20.0 L5-B1，缺省关）：开时细纲携带「本章爽点节拍」
+                # 三拍字段、正文轮注入兑现指令、L0 账本对照加节拍检查；关时所有
+                # 装配字节与 0.19.x 逐字节一致（变量隔离纪律）。
+                "satisfaction_engine": False},
+    # 成本实验开关区（A/B 用，缺省全关；开=请求体字节变化，做对照实验的公共前提
+    # 是「关态与旧版逐字节一致」）
+    "cost": {"a8_opening_compress": False},    # A8 开幕轮密度压缩（L5-A1）：与 system
+    # 前缀重复的指令性槽位收敛为短引用；仅会话路径生效，S4/head_rebuild 模式下无额外效果
     "last_project": "",
     "recent_projects": [],
     "general": {"onboarded": False,
