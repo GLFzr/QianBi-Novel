@@ -42,6 +42,12 @@ def _repo_files():
                 yield os.path.join(dp, fn)
 
 
+def _is_gitignored(rel: str) -> bool:
+    import subprocess
+    r = subprocess.run(["git", "check-ignore", "-q", rel], cwd=ROOT)
+    return r.returncode == 0
+
+
 def test_referenced_doc_and_test_paths_exist():
     # 两种"看似本仓路径、实为外链"的形态都跳过：
     # - 链接文本 [docs/x.md](https://…) —— (?!\]\(http
@@ -60,6 +66,8 @@ def test_referenced_doc_and_test_paths_exist():
                 continue
             target = os.path.join(ROOT, ref.replace("/", os.sep))
             if not os.path.exists(target):
+                if _is_gitignored(ref):
+                    continue  # 有意不入库的本地指针（如 docs/local/ 凭据备忘，R18）：干净 clone 必然没有，属设计而非断链
                 missing.append(f"{rel} → {ref}")
     # 豁免名单自身不许腐化：豁免的引用必须仍在某处被提及（否则豁免成了死条目）
     assert not missing, (

@@ -13,6 +13,12 @@ import subprocess
 import sys
 import time
 
+# runner 的 stdout 可能是 cp1252/charmap：驱动自身中文输出全部钉 utf-8（2026-09-25 CI 事故）
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except AttributeError:
+    pass
+
 PROBES = [os.path.basename(str(x)).replace('.py','') for x in sys.argv[1:]]  # 裸名与带路径两种写法都吃（取 basename 去扩展名）
 if not PROBES:
     print("用法: python tests/run_probe_fleet.py <probe...>", flush=True)
@@ -47,6 +53,11 @@ for name in PROBES:
     conclusion = m[-1] if m else "(无结论行)"
     results.append((name, rc, conclusion, dt))
     print(f"[fleet] {name}: rc={rc} {conclusion} ({dt:.0f}s) log={log_path}", flush=True)
+    if rc != 0 or conclusion == "(无结论行)":
+        tail = out.strip().splitlines()[-25:]   # 红探针现场直接进 Actions 日志（否则 CI 红了看不到 traceback）
+        print(f"--- {name}.log 尾段 ---", flush=True)
+        for line in tail:
+            print(f"  | {line}", flush=True)
 
 print("\n=== 舰队汇总 ===")
 bad = []

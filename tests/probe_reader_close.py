@@ -62,17 +62,36 @@ def check(name, ok):
 check.failed = False
 
 
+def wait_until(fn, timeout_ms, then):
+    """轮询到条件成立再走下一步（慢 runner 上淡入/淡出动画未必在固定 sleep 内播完）。"""
+    state = {"left": timeout_ms}
+
+    def tick():
+        if fn() or state["left"] <= 0:
+            then()
+        else:
+            state["left"] -= 50
+            QTimer.singleShot(50, tick)
+    tick()
+
+
 def step1_open():
     win.setProperty("activePanel", "chapters")
     win.openReader()
-    QTimer.singleShot(500, step2_check_open)
+    QTimer.singleShot(100, lambda: wait_until(
+        lambda: find_reader() is not None and abs(float(find_reader().property("opacity")) - 1.0) < 0.01,
+        5000, step2_check_open))
 
 
 def step2_check_open():
     r = find_reader()
     check("打开后 opacity==1", abs(float(r.property("opacity")) - 1.0) < 0.01)
     r.setProperty("drawerOpened", True)
-    QTimer.singleShot(300, step3_drawer)
+    QTimer.singleShot(100, lambda: wait_until(
+        lambda: any(getattr(c, "objectName", lambda: "")() == "" and "QQuickRectangle" in c.metaObject().className()
+                    and float(c.property("width") or 0) == 300 and bool(c.property("visible"))
+                    for c in r.findChildren(object)),
+        5000, step3_drawer))
 
 
 def step3_drawer():
@@ -89,7 +108,9 @@ def step3_drawer():
     check("抽屉可见", drawer is not None and bool(drawer.property("visible")))
     r.setProperty("drawerOpened", False)
     r.close()          # 与「退出」按钮同路径
-    QTimer.singleShot(500, step4_closed)
+    QTimer.singleShot(100, lambda: wait_until(
+        lambda: float(find_reader().property("opacity")) < 0.01,
+        5000, step4_closed))
 
 
 def step4_closed():
