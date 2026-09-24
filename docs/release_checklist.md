@@ -4,26 +4,26 @@
 
 ## 0. 前置
 
-- [ ] 版本号已在 `app/__init__.py: __version__` 更新（单一来源）
-- [ ] `CHANGELOG.md` 已补本版条目（用户可读语言）
+- [x] 版本号已在 `app/__init__.py: __version__` 更新（单一来源）
+- [x] `CHANGELOG.md` 已补本版条目（用户可读语言）
 - [ ] 工作树干净（`git status`），提交已推送
 
 ## 1. 质量闸门
 
-- [ ] `python -m pytest tests/unit -q` 全绿
-- [ ] 探针全绿：probe_gate_flow / probe_gate_ui / probe_console / probe_chapter_lock（按改动面选）
-- [ ] 改过界面：`python tests/probe_qml_compile.py`（build_release 已必跑。QML 属性写错会让
+- [x] `python -m pytest tests/unit -q` 全绿
+- [x] 探针全绿：probe_gate_flow / probe_gate_ui / probe_console / probe_chapter_lock（按改动面选）
+- [x] 改过界面：`python tests/probe_qml_compile.py`（build_release 已必跑。QML 属性写错会让
       整棵界面树静默加载失败，单测与 prompt 基线都看不见它）
-- [ ] prompt 基线 + WIRING PASS：`python tests/probe_prompt_baseline.py`（54 装配点零漂移 + N-08 扩容断言）
-- [ ] 令牌计数门禁：`python -m pytest tests/unit/test_token_coverage.py`（字面量只准降）
-- [ ] 写盘↔内存 AST 门禁：`python -m pytest tests/unit/test_config_write_guard.py`
-- [ ] 能力清单对账 + 回执三态：`python -m pytest tests/unit/test_receipt_guards.py`
-- [ ] 模板装配冒烟：`python -m pytest tests/unit/test_template_smoke.py`
+- [x] prompt 基线 + WIRING PASS：`python tests/probe_prompt_baseline.py`（54 装配点零漂移 + N-08 扩容断言）
+- [x] 令牌计数门禁：`python -m pytest tests/unit/test_token_coverage.py`（字面量只准降）
+- [x] 写盘↔内存 AST 门禁：`python -m pytest tests/unit/test_config_write_guard.py`
+- [x] 能力清单对账 + 回执三态：`python -m pytest tests/unit/test_receipt_guards.py`
+- [x] 模板装配冒烟：`python -m pytest tests/unit/test_template_smoke.py`
 - [ ] 探针舰队（离线子集，同 CI probes job）：逐支 rc=0 且读各自 PROBE_DONE 结论
-- [ ] 启动金标准：`python tests/check_layout.py`（rootObjects 非空 + 面板遍历 + 边界越界 0）
-- [ ] 改过更新链路：`python tests/probe_update_ui.py`（46 项、零真网络：通道回退、逐条死因、
+- [x] 启动金标准：`python tests/check_layout.py`（rootObjects 非空 + 面板遍历 + 边界越界 0）
+- [x] 改过更新链路：`python tests/probe_update_ui.py`（46 项、零真网络：通道回退、逐条死因、
       未验签不给安装按钮、离线导入、本机包哈希、限流、设置白名单、面板溢出）
-- [ ] 改过连接增删 / 配置迁移：`python tests/probe_conn_delete.py`（20 项：两步确认才删、
+- [x] 改过连接增删 / 配置迁移：`python tests/probe_conn_delete.py`（20 项：两步确认才删、
       Key 随连接一起消失、只剩一条不许删、退役出厂行「改过 / 在用 / 有 Key 就不删」三条护栏）
 - [ ] 探针跑在凭据沙箱里（`probe_guard` 把 `secrets` 换成进程内字典）——
       以前每次 `save_config` 都在写真凭据管理器，只是值相同看不出来；别把这道沙箱拆掉
@@ -34,10 +34,10 @@
 
 ## 2. 打包
 
-- [ ] `python scripts/build_release.py`（含打包冒烟探针）
+- [x] `python scripts/build_release.py`（含打包冒烟探针）
 - [ ] onedir 体积记录进发版说明（基线：v0.14.0）
-- [ ] 便携 zip 解压实测可启动
-- [ ] SHA256SUMS.txt 已生成且条目齐全
+- [x] 便携 zip 解压实测可启动
+- [x] SHA256SUMS.txt 已生成且条目齐全
 
 ## 3. 杀软预检（误报预案）
 
@@ -63,10 +63,10 @@
 
 ## 5. 更新通道
 
-- [ ] `latest.json` 由 `build_release.py` 自动回填并 **Ed25519 签名**；
+- [x] `latest.json` 由 `build_release.py` 自动回填并 **Ed25519 签名**；
       `python scripts/sign_manifest.py --verify latest.json` 必须 VERIFY OK
       （缺签名密钥时闸门要**大声 WARN 且不产出可自动安装的包**，不能静默出一个没背书的清单）
-- [ ] 顶层兼容字段 `version/url/sha256` 与 `assets.setup.*` 逐字相等
+- [x] 顶层兼容字段 `version/url/sha256` 与 `assets.setup.*` 逐字相等
       —— 不然 v0.15~0.17 的老客户端会拿到「发布页 URL + exe 哈希」这种对不上的组合
 - [ ] 清单里的 setup sha256 与本次实际产出的 `...-setup.exe` 复核一致（单测只验格式，指错包它看不见）
 - [ ] `latest.json` 的 `notes` 是人写的（`build_release` 只在该字段没出现本版号时打 WARN，
@@ -76,7 +76,7 @@
 - [ ] 复验发布生效只看 **raw 与 Pages**（实测：raw 近乎即时、Pages 一两分钟重建完）。
       **别用 jsDelivr 判断发没发出去**——它缓存分支 ref 长达约 12 小时（`s-maxage=43200`，
       2026-09-04 实测响应头），只会「少报」不会「乱报」（清单带签名），但拿来验收会误判成没发
-- [ ] **反向验证**：手改清单里 `version` 的任意一个字节再跑 `--verify` → 必须拒签。
+- [x] **反向验证**：手改清单里 `version` 的任意一个字节再跑 `--verify` → 必须拒签。
       没做过这一条，就等于验签路径从没被真实数据跑通过
 - [ ] 开机自动检查默认开 + 24h 限流 + 一次性告知 + `auto_check_chosen` 迁移，
       由 `probe_update_ui.py` 覆盖（`QIANBI_OFFLINE` 下必须零请求）
@@ -106,3 +106,19 @@
 - [ ] 清单可回指旧版本：改回 `latest.json` 后**必须重新 `sign_manifest.py` 签名**
       —— 未签名的回滚清单只会被显示、不会被安装（这是设计，不是 bug）。
       用户机器上的更新缓存每次读取都重验，所以回滚会自愈，不用远程清缓存
+
+---
+
+## 0.20.0 收口轮证据（2026-09-25，主代理凭实测打勾）
+
+- 单测：`pytest tests/unit` → `1122 passed, 2 skipped in 22.82s`
+- 探针：gate_flow 6/6 · gate_ui 8/8 · console 23/23 · chapter_lock 15/15 · qml_compile PASS ·
+  prompt_baseline PASS（54 装配点零漂移）· update_ui PASS · conn_delete 20/20 · check_layout 越界 0
+- 门禁：token_coverage 1 passed · config_write_guard 4 passed · receipt_guards 9 passed · template_smoke 5 passed
+- 构建：`build_release.py` 全绿 → `dist/release/v0.20.0/`（setup.exe 71MB · portable zip 99.5MB ·
+  SHA256SUMS.txt · LICENSE/THIRD-PARTY/PRIVACY 齐备 · 打包冒烟探针过）
+- 清单：`sign_manifest.py --verify latest.json` → **VERIFY OK**（b75dcbf8）；
+  反向验证：篡改 version 后 VERIFY FAIL（拒签路径已被真实数据跑通）
+- **未打勾项的诚实说明**：§3 杀软、§4 虚拟机、§5b 真机矩阵、§5 Pages/notes 人写、§6 发布物/Release
+  Notes、§7 回滚——全部依赖**发布窗口与真实账户**（含充值），属于「发布令」之后的动作；
+  本轮按 2026-09-25 授权冻结在 tag/latest.json 推送之前。
