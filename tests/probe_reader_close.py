@@ -43,6 +43,15 @@ if not engine.rootObjects():
         print("  QML>", w)
     sys.exit(1)
 win = engine.rootObjects()[0]
+
+# 自备一次性项目：过去靠「本机恰好有 tests_output/m1_proj」才能过——干净 runner 上
+# _open_project 静默失败 ⇒ openReader 走「请先打开项目」早退，opacity 永远 0（CI 三轮红的根因）
+from app import project as _proj
+if not os.path.isdir(PROJ):
+    _proj.create_project(PROJ, "阅读器探针书")
+    _proj.write_idea_info(PROJ, "悬疑脑洞", "番茄", "探针夹具", 10)
+    _ch = _proj.get_chapter_path(PROJ, 1, "第一章")
+    _proj.write_file(_ch, "# 第一章\n\n阅读器探针夹具正文，与被断言的开关行为无关。")
 b._open_project(PROJ, silent=True)
 
 
