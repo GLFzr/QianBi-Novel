@@ -37,6 +37,9 @@ for name in PROBES:
     except subprocess.TimeoutExpired as e:
         rc = "TIMEOUT"
         out = (e.stdout or b"").decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        # 超时现场 stderr 一并留档（A-2② 同款）：探针半途卡死时 traceback 往往只在 err 里
+        err = (e.stderr or b"").decode("utf-8", "replace") if isinstance(e.stderr, bytes) else (e.stderr or "")
+        out += err
     with open(log_path, "w", encoding="utf-8", errors="replace") as f:
         f.write(out)
     dt = time.time() - t0

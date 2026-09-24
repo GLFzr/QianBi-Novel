@@ -40,7 +40,9 @@ class SingleInstance(QObject):
         QLocalServer.removeServer(LOCK_NAME)
         self._server = QLocalServer(self)
         if not self._server.listen(LOCK_NAME):
-            logger.warning("单实例锁 listen 失败（%s），降级允许多开", self._server.errorString())
+            # 降级放行（可用性优先），但必须留痕：真机双实例写花 config.json 时无迹可循
+            logger.warning("单实例锁 listen 失败（%s），降级允许多开——可能有另一实例在跑，"
+                           "配置可能被并发写入", self._server.errorString())
         self._server.newConnection.connect(self._on_new_connection)
         return True
 

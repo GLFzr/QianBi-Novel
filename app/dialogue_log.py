@@ -19,6 +19,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from datetime import datetime, timezone
 
@@ -139,12 +140,17 @@ def _append(entry: dict) -> None:
 
 
 def _prune(d: str) -> None:
-    """R14⑤：分片数超上限删最旧（总量硬上界 = max_bytes × keep_files）"""
-    files = sorted(
-        (os.path.getsize(os.path.join(d, fn)), fn) for fn in os.listdir(d)
-        if fn.endswith(".jsonl"))
+    """R14⑤：分片数超上限删最旧（总量硬上界 = max_bytes × keep_files）。
+    最旧 = 分片序号最小：对话_YYYYMMDD.jsonl 是当天第 1 片，_N 后缀是第 N 片——
+    不按字节大小挑：小分片往往是刚开的新片，按大小删会把最新的先删掉。"""
+    def _seq(fn: str) -> tuple:
+        m = re.fullmatch(r"对话_(\d{8})(?:_(\d+))?\.jsonl", fn)
+        # 认不出的命名排最后（不碰来路不明的文件），本模块分片都走上面分支
+        return (m.group(1), int(m.group(2) or 1)) if m else ("99991231", 0)
+
+    files = sorted((fn for fn in os.listdir(d) if fn.endswith(".jsonl")), key=_seq)
     while len(files) > _STATE["keep_files"]:
-        _size, oldest = files.pop(0)
+        oldest = files.pop(0)
         try:
             os.remove(os.path.join(d, oldest))
         except OSError:

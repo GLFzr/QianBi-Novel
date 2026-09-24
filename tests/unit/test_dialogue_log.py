@@ -132,6 +132,26 @@ def test_rotation_and_prune(book, monkeypatch):
     assert 1 <= total <= 12, f"存活记录 {total} 条越界（12 请求含剪枝应 ∈(0,12]）"
 
 
+def test_prune_deletes_oldest_shard_not_smallest(book, monkeypatch):
+    """R14⑤ 方向钉：裁剪按分片序号删**最旧**——最旧片哪怕最大也先删、最新片哪怕
+    最小也保留（旧实现按字节升序删「最小」，删错方向会丢最新记录）。"""
+    d = dialogue_log.dialogue_dir(book)
+    os.makedirs(d, exist_ok=True)
+    shards = [("对话_20260101.jsonl", "x" * 300),     # 最旧 且 最大
+              ("对话_20260101_2.jsonl", "y" * 40),    # 最新 且 最小
+              ("对话_20260101_3.jsonl", "z" * 200)]
+    for fn, blob in shards:
+        with open(os.path.join(d, fn), "w", encoding="utf-8") as f:
+            f.write(blob + "\n")
+    monkeypatch.setitem(dialogue_log._STATE, "keep_files", 2)
+    dialogue_log._prune(d)
+    left = sorted(os.listdir(d))
+    assert "对话_20260101.jsonl" not in left, f"最旧分片未被删（剩 {left}）"
+    assert "对话_20260101_2.jsonl" in left, \
+        f"最小但最新的分片被误删——裁剪仍在按字节大小挑（剩 {left}）"
+    assert "对话_20260101_3.jsonl" in left
+
+
 def test_disabled_means_no_writes(tmp_path):
     """R14③：关闭后零写入（默认开由 test_default_on 钉住）。"""
     proj = tmp_path / "book"

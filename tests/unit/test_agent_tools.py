@@ -53,6 +53,15 @@ def test_parse_forced_prefix_is_exact():
     assert r[2] == "exact"
 
 
+def test_parse_rewrite_guidance_before_verb():
+    """动词在后的口语改写（「…重新来一遍」）：修改方向写在动词前也要带上——
+    「重来/重新来」分支的守卫钉（分支只接非「重写」话术与 / 强制，防双重截指导）"""
+    r = at.parse_instruction("这章开头太温了，直接从冲突切入重新来一遍")
+    assert r and r[0] == "rewrite_chapter", f"口语重来未解析：{r}"
+    assert "从冲突切入" in r[1]["guidance"]
+    assert at.parse_instruction("/这章开头太温了，重来")[2] == "exact"
+
+
 # ---------- 工具执行 ----------
 
 def _mk_proj(tmp_path):

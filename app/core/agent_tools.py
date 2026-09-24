@@ -234,7 +234,8 @@ def _to_int(s):
 def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
     """自然语言 → (tool, args, confidence)；None = 不是可识别的指令。
 
-    confidence: "exact"（/前缀或强动词命中）/ "guess"（弱信号，调用方可选择性确认）
+    confidence: "exact"（/前缀或强动词命中）/ "guess"（弱信号，调用方可选择性确认）。
+    除 TOOLS 六支外也产出 UI_TOOLS 共写动作名（无参数，由 bridge 派发面执行）。
     """
     t = (text or "").strip()
     forced = t.startswith("/")
@@ -280,8 +281,10 @@ def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
             return ("rewrite_chapter",
                     {"chapter": chapter_ref[0] or default_chapter, "guidance": guidance},
                     "exact" if forced else "guess")
+    # 动词在后的口语改写（「这章开头太温了，重来一遍」）。「重写」字样的话术由上一条
+    # 规则负责（动词后取指导），这里只接「重来/重新来」与 / 强制，防止双重截取指导。
     m = re.search(r"^(.{0,24}?)(?:重来|重新来|重写)(?:一遍|一次)?", t)
-    if m and has_chapter_ref and (forced or "重写" not in t or True):
+    if m and has_chapter_ref and (forced or "重写" not in t):
         # guidance 取「动词前的描述」（作者把修改方向写在前面：这章的开头太温了，直接从冲突切入重写一遍）
         guidance = re.sub(r"(?:刚才那章|这章|本章|最新(?:一)?章|现在的这章|上一章|第\s*[0-9一二两三四五六七八九十]+\s*章)[的]?",
                           "", m.group(1) or "").strip(" ，,。：:、")
@@ -327,6 +330,42 @@ def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
             (re.search(r"状态", t) and re.search(r"怎么样|如何|吗|？|\?", t)) or \
             (re.search(r"现在怎么样", t)):
         return ("status", {}, "exact" if forced else "guess")
+
+    # B-1(4)：共写 UI 工具的关键词接线。排在常规规则之后——「回退到去味之前」「重跑
+    # 第4章审校」这类流水线话术优先落老 TOOLS，走到这里的带共写词（阶段/当前章/对账/
+    # 落稿/细纲体检）才落共写动作。UI 工具无参数，命中即由调用方交 bridge 派发面，
+    # 阶段与档位由各分支自校。
+    # 世界观对账 / 设定一致性审查（后台跑，报告进追踪/）
+    if re.search(r"对账|(?:设定|世界观|一致性)[^。\n]{0,6}审查", t):
+        return ("cw_canon_audit", {}, "exact" if forced else "guess")
+    # 读取当前章正文进对话/日志（只认「当前章」——「看看第N章正文」仍落 read_chapter）
+    if re.search(r"(?:读(?:一下)?|看看?|给我看)\s*当前章"
+                 r"|当前章[^。\n]{0,8}(?:贴|发)(?:到|进|入)?[^。\n]{0,4}对话", t):
+        return ("cw_read_chapter", {}, "exact" if forced else "guess")
+    # 细纲衔接校验/体检（区别于 regen_outline 的「细纲重新生成」：校验不动文件）
+    if re.search(r"细纲[^。\n]{0,8}(?:校验|体检|衔接)|(?:校验|体检)[^。\n]{0,6}细纲", t):
+        return ("cw_outline_validate", {}, "exact" if forced else "guess")
+    # 保存选题信息（按当前立项表单）
+    if re.search(r"(?:记|存)[^。\n]{0,6}(?:选题|想法|备注)|选题备注", t):
+        return ("cw_idea_save", {}, "exact" if forced else "guess")
+    # 草案落稿到编辑器
+    if re.search(r"落稿|(?:把|将)\s*草案[^。\n]{0,8}(?:放进|放到|落到|送进|应用[到入])\s*编辑器", t):
+        return ("cw_prose_to_editor", {}, "exact" if forced else "guess")
+    # 共写正文三动作：去味 / 审校 / 生成草案。回退重跑与设置开关话术已被前面规则收走，
+    # 负向条件再挡一道（「回退到去味之前」「关闭人工审校」不许落成共写动作）
+    if re.search(r"去味|去\s*[aA][iI]\s*味", t) and \
+            not re.search(r"回退|退回|回到|重跑|重来|推倒|重写", t):
+        return ("cw_deslop", {}, "exact" if forced else "guess")
+    if re.search(r"审校|帮我审|审一下|审一遍", t) and \
+            not re.search(r"回退|退回|重跑|重来|推倒|重写"
+                          r"|开启|打开|关闭|关掉|停用|切回|切换|细纲", t):
+        return ("cw_review", {}, "exact" if forced else "guess")
+    if re.search(r"帮我写|写正文|(?:生成|出|写|来)\s*(?:[一个版本份]+\s*)?草案", t) and \
+            not re.search(r"重写|推倒|回退|退回", t):
+        return ("cw_generate_draft", {}, "exact" if forced else "guess")
+    # 回退共写阶段（选题/设定/细纲/正文……）：带「阶段」字样区别于流水线步骤回退
+    if re.search(r"(?:回退|退回|回到|返回)[^。\n]{0,8}阶段|上一阶段", t):
+        return ("cw_rollback_stage", {}, "exact" if forced else "guess")
 
     return None
 
@@ -380,6 +419,11 @@ _LLM_SYSTEM = """你是写作应用的指令解析器。把作者的一句话解
 - regen_outline {"chapter": int}  重新生成细纲
 - rewrite_chapter {"chapter": int, "guidance": str}  重写某章（guidance=作者给的修改方向）
 - set_setting {"key": "人工审校|连写|章会话|离峰|审校", "on": bool}  开关设置
+- 共写档界面动作（{} 无参数，只在作者明确要做这件事时输出）：
+  cw_deslop 正文去AI味 / cw_review 正文审校 / cw_generate_draft 生成共写草案 /
+  cw_prose_to_editor 草案落稿到编辑器 / cw_rollback_stage 回退共写阶段 /
+  cw_canon_audit 世界观对账 / cw_read_chapter 读当前章正文 /
+  cw_outline_validate 校验细纲衔接 / cw_idea_save 保存选题信息
 
 裁决规则：
 1. 作者想「看/了解」→ read_chapter 或 status；想「重跑某一步」→ rollback_step；
@@ -407,12 +451,15 @@ def parse_instruction_llm(text: str, client, default_chapter: int = 0) -> tuple 
             return None
         d = _json.loads(m.group(0))
         tool = str(d.get("tool") or "")
-        if tool not in TOOLS:
+        if tool not in TOOLS and tool not in UI_TOOLS:
             return None
         conf = float(d.get("confidence") or 0)
         if conf < 0.6:
             return None
         args = d.get("args") or {}
+        if tool in UI_TOOLS:
+            # B-1(4)：共写界面动作无参数，bridge 派发面按当前阶段自校
+            return (tool, {}, "llm")
         if tool == "rollback_step" and args.get("to_step") not in _STEP_ROLLBACK:
             return None
         if tool == "read_chapter" or tool == "regen_outline" or tool == "rewrite_chapter":
