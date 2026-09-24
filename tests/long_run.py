@@ -46,8 +46,8 @@ if not KEY:
         pass
 assert KEY, "未找到 OpenCode Go Key（设 QIANBI_TEST_KEY 或 ~/.qianbi_novel/config.json）"
 
-THINKING = "enabled"
-EFFORT = "max"
+THINKING = os.environ.get("QIANBI_TEST_THINKING", "enabled")   # 百炼兼容端不支持该参数时置空
+EFFORT = os.environ.get("QIANBI_TEST_EFFORT", "max")
 CHAPTER_WORDS = 2000            # 每章目标字数（与示例细纲一致）
 TOTAL_WORDS_TARGET = 100000     # 累计 10 万字达标
 
