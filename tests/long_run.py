@@ -29,7 +29,7 @@ from app.core import state as st
 from app.core.orchestrator import Orchestrator
 
 # ---------- 测试约定 ----------
-MODEL = "deepseek-v4-flash"
+MODEL = os.environ.get("QIANBI_TEST_MODEL", "deepseek-v4-flash")   # T3 裁决：官方渠道用 deepseek-chat
 BASE = os.environ.get("QIANBI_TEST_BASE", "https://opencode.ai/zen/go/v1")
 KEY = os.environ.get("QIANBI_TEST_KEY", "")
 if not KEY:
