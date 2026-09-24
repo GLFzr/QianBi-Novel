@@ -24,6 +24,32 @@ class LLMError(Exception):
         self.retryable = retryable  # 是否属于可重试错误
 
 
+class _SubscriberError(Exception):
+    """H-7：on_chunk/on_reasoning 订阅方（UI/管线）自身抛错的原样载体。
+
+    旧实现掉进流式循环的 except Exception 被洗成「流式读取中断」，按
+    max_retries 把同一份深栈原样重发——订阅方的 Python bug 烧的是真金。
+    这里原样上抛不重试，from 保留原因链。"""
+
+
+def _emit_to_subscriber(cb, text: str):
+    """订阅回调的隔离发射：订阅方异常包成 _SubscriberError 上抛，不在重试射程"""
+    try:
+        cb(text)
+    except Exception as e:
+        raise _SubscriberError(f"订阅方回调异常（不重试）: {e}") from e
+
+
+def _looks_like_dns_error(exc: BaseException) -> bool:
+    """httpx.ConnectError 是否由域名解析失败引起（Windows 11001/11003、
+    getaddrinfo、*nix 的 Name or service not known / Temporary failure in
+    name resolution 等措辞都归进来，供 test_connection 给出对症提示）"""
+    text = str(exc).lower()
+    markers = ("getaddrinfo", "name resolution", "name or service",
+               "nodename", "11001", "11003", "errno -2")
+    return any(m in text for m in markers)
+
+
 def check_base_url(url: str) -> str:
     """base_url 规则：以 # 结尾则原样使用；否则缺少 /vN 后缀时补 /v1"""
     url = (url or "").strip()
@@ -80,6 +106,17 @@ def _host_of(url: str) -> str:
     if u.startswith("["):        # IPv6 字面量 [::1]:port
         return u.split("]", 1)[0].lstrip("[")
     return u.split(":", 1)[0]
+
+
+def invalidate_capability(base_url: str = "", model: str = ""):
+    """按 (base_url, model) 清掉能力备忘录（H-7 失效入口）；两者皆空 = 整表清空。
+
+    备忘录是进程内探测结果，用户改好连接配置保存后必须重新下发——
+    bridge.saveConnection 调这里定点失效，否则本进程内仍按旧结论剥参数。"""
+    if not base_url and not model:
+        _UNSUPPORTED.clear()
+        return
+    _UNSUPPORTED.pop(((base_url or "").rstrip("/"), model or ""), None)
 
 
 def _is_local_template_host(host: str) -> bool:
@@ -284,6 +321,13 @@ class LLMClient:
             self.last_sampling.pop(k, None)   # 快照不能留「其实没下发」的参数
         logger.warning("模型 %s 不支持 %s，本进程内不再下发", self.model, "/".join(rejected))
         return {k: v for k, v in payload.items() if k not in rejected}
+
+    def invalidate_capability(self):
+        """清掉本 (base_url, model) 的能力备忘录（H-7 失效入口）。
+
+        备忘录按 (base_url, model) 进程内记忆「网关不支持某参数」；用户改好
+        配置点保存后必须重新下发——bridge.saveConnection 调这里定点失效。"""
+        invalidate_capability(self.base_url, self.model)
 
     def _overrides(self, phase: str) -> dict:
         """非显式参数覆盖层合并视图：预设全书基线打底 + 本阶段档压顶
@@ -654,9 +698,9 @@ class LLMClient:
                             if c:
                                 parts.append(c)
                                 if on_chunk:
-                                    on_chunk(c)
+                                    _emit_to_subscriber(on_chunk, c)
                             if r and on_reasoning:
-                                on_reasoning(r)
+                                _emit_to_subscriber(on_reasoning, r)
                 if self.last_aborted:
                     # 中断优先于空内容判定：否则「点停止时还没吐字」会掉进下面的
                     # 空内容分支 continue 重开连接，把重试预算烧光。
@@ -703,6 +747,10 @@ class LLMClient:
                     _dl("error", err=str(e))
                     raise
                 last_err = e
+            except _SubscriberError:
+                # H-7：订阅方（UI/管线）自己的 bug 原样上抛——不重试、不伪装成
+                # 「流式读取中断」，原因链见 _emit_to_subscriber
+                raise
             except Exception as e:
                 # 流中断（连接断开等）视为可重试。返回值已按"每次尝试重置 parts"防拼接；
                 # 但 on_chunk 已投递给 UI 的旧增量无法回收——UI 流式区在重试期间可能短暂
@@ -737,15 +785,34 @@ class LLMClient:
         return content
 
     def test_connection(self) -> str:
-        """测试连接，成功返回提示文本，失败抛 LLMError"""
-        url = self.base_url
+        """测试连接，成功返回提示文本，失败抛 LLMError。
+
+        H-8：空地址/非法协议/超时/DNS 失败四类连接错误在这里就地翻译成
+        可读中文——裸 httpx 异常穿到 _NetWorker（只认 LLMError）会让新用户
+        点「测试连接」直接崩掉。"""
+        url = (self.base_url or "").strip()
+        if not url:
+            raise LLMError("连接失败：接口地址为空——请先填写 Base URL（如 https://api.deepseek.com）")
         if "/v1" not in url:
             url = url.rstrip("/") + "/v1"
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        with httpx.Client(timeout=30) as client:
-            resp = client.get(f"{url}/models", headers=headers)
+        try:
+            with httpx.Client(timeout=30) as client:
+                resp = client.get(f"{url}/models", headers=headers)
+        except httpx.UnsupportedProtocol as e:
+            scheme = url.split(":", 1)[0] if ":" in url else "(无)"
+            raise LLMError(
+                f"连接失败：不支持「{scheme}:」协议——地址需以 http:// 或 https:// 开头") from e
+        except httpx.TimeoutException as e:
+            raise LLMError("连接失败：请求超时（30 秒无响应）——请检查网络，或地址/端口是否可达") from e
+        except httpx.ConnectError as e:
+            if _looks_like_dns_error(e):
+                raise LLMError(f"连接失败：域名解析失败（{url}）——请检查地址拼写与本机 DNS") from e
+            raise LLMError(f"连接失败：无法连接到 {url}——请检查地址与端口，或服务是否在线") from e
+        except httpx.RequestError as e:
+            raise LLMError(f"连接失败：网络错误（{e.__class__.__name__}）——请检查网络与代理设置") from e
         if resp.status_code != 200:
             raise LLMError(f"连接失败 {resp.status_code}: {resp.text[:300]}")
         return "连接成功"
@@ -763,7 +830,11 @@ class LLMClient:
                 resp = client.get(f"{url}/models", headers=headers)
             if resp.status_code != 200:
                 raise LLMError(f"拉取失败 {resp.status_code}: {resp.text[:300]}")
-            data = resp.json()
+            try:
+                data = resp.json()
+            except ValueError as e:
+                # H-8：代理门户/错误页劫持时 200 + HTML——裸 JSONDecodeError 同样会穿成崩溃
+                raise LLMError("拉取失败：接口返回的不是 JSON（地址可能被代理门户或错误页劫持）") from e
             models = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
             return sorted(models)
         except httpx.RequestError as e:

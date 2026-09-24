@@ -64,7 +64,6 @@ EVIDENCE_CALLEES = {
     # —— 导出/下载（真实产物落盘） ——
     "export": "导出动作",
     "export_project": "导出器落盘 txt/epub（WP-05 补）",
-    "export_preset": "预设导出器落盘（WP-05 补）",
     "export_beta_pack": "公测包落盘",
     "download": "下载器（网络动作+文件落盘）",
     "sha256": "指纹校验",
@@ -110,6 +109,8 @@ EVIDENCE_CALLEES = {
 #   回执函数已逐一核对：要么另有真实证据，要么进 EXEMPT 并写明理由）。
 # - "write"：保留——bridge.py 内 f.write 是遥测 JSONL 真落盘；文件句柄写入语义
 #   见条目注记。
+# - "export_preset"：N-13/WP-18 后续——exportPreset dead slot 已从 bridge 删除
+#   （全库零消费者），本名随之成为死名 ⇒ 删（预设库函数 presets.export_preset 保留）。
 EXEMPT = {
     # 豁免只能在「语义确实成立」时开并写明理由；不许用豁免绕过自己写错的代码。
     # WP-05 撤销 copyText 豁免：其理由建立在缺逗号导致 setText 不在证据集上，

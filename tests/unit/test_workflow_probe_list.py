@@ -148,3 +148,75 @@ def test_workflow_probe_list_excludes_key_required_probes():
                    "probe_models", "probe_review_gold", "probe_flash_reasoning",
                    "probe_thinking_param", "probe_max_thinking", "probe_outline_batch"):
         assert banned not in src, f"{banned} 需真 Key/参数，不得进 CI 名单"
+
+
+# ---- H-15：根目录 tests/test_*.py 收敛面（同探针名单的双向核对思路）----
+# 19 支根目录测试曾在 CI 外裸奔；现在 CI 逐支点名 + 这里双向核对：
+# 磁盘上每支根测试必须出现在 CI pytest 目标 ∪ 显式豁免，防名单静默缩面。
+
+ROOT_TESTS_DIR = os.path.join(ROOT, "tests")
+
+# 根测试显式豁免名单（每一支注明原因；豁免源码必须带自锁标记，见下）：
+CI_EXEMPT_ROOT_TESTS = {
+    "test_5ch_e2e": "需真实 API Key（QIANBI_E2E_REAL=1 显式门，模块级 pytest.skip 兜底；CI 无 Key 不进名单）",
+}
+# 豁免的源码标记（机器可验）：豁免条目源码里一个标记都没有 = 给离线可判用例开后门 ⇒ 红
+_ROOT_TEST_EXEMPT_MARKERS = ("QIANBI_E2E_REAL",)
+
+
+def _ci_pytest_targets(src):
+    """折叠容错抽取工作流里全部 `python -m pytest` 调用的目标路径集合（多调用取并集）。
+
+    手法同 _fleet_invocation_names：从命中行起吞并续行直到缩进回到块级；
+    去掉 - 开关（-q/--tb=short 等），只留路径。"""
+    targets = set()
+    lines = src.splitlines()
+    for i, ln in enumerate(lines):
+        if "python -m pytest" not in ln:
+            continue
+        base_indent = len(ln) - len(ln.lstrip())
+        buf = [ln]
+        for j in range(i + 1, len(lines)):
+            nxt = lines[j]
+            if not nxt.strip() or nxt.strip().startswith("#"):
+                continue
+            ind = len(nxt) - len(nxt.lstrip())
+            if ind <= base_indent and re.match(r"\s*[-\w]", nxt):
+                break  # 回到块级：续行结束
+            buf.append(nxt)
+        text = " ".join(b.strip() for b in buf)
+        after = text.split("python -m pytest", 1)[-1]
+        targets.update(t for t in after.split() if not t.startswith("-"))
+    return targets
+
+
+def test_workflow_collects_all_root_tests():
+    """H-15 护栏：磁盘上每支根目录 test_*.py 必须在 CI pytest 目标 ∪ 显式豁免里；
+    豁免名单自身不许腐化（豁免的名字必须真实存在）。从 CI 名单摘掉任何一支
+    已收录的根测试 ⇒ 本断言红（变异验证：删 tests/test_quality.py 即红）。"""
+    src = open(WF, encoding="utf-8").read()
+    targets = _ci_pytest_targets(src)
+    assert targets, "工作流里没有解析到任何 pytest 目标"
+    disk = {f[:-3] for f in os.listdir(ROOT_TESTS_DIR)
+            if f.startswith("test_") and f.endswith(".py")}
+    stale = sorted(n for n in CI_EXEMPT_ROOT_TESTS if n not in disk)
+    assert not stale, f"根测试豁免名单里有磁盘上已不存在的名字（名单腐化）：{stale}"
+    absent = sorted(n for n in disk - set(CI_EXEMPT_ROOT_TESTS)
+                    if f"tests/{n}.py" not in targets)
+    assert not absent, (
+        f"根目录测试被悄悄摘出 CI 名单：{absent}"
+        f"（豁免名单外的根测试必须在 CI 收敛面，防 H-15 复发）")
+
+
+def test_root_test_exemptions_are_genuinely_offline_unsafe():
+    """A-4 同族：根测试豁免不许给离线可判用例开后门。每条豁免的源码必须带
+    自锁标记（QIANBI_E2E_REAL 环境门等），否则红。"""
+    offenders = []
+    for n, reason in CI_EXEMPT_ROOT_TESTS.items():
+        path = os.path.join(ROOT_TESTS_DIR, n + ".py")
+        if not os.path.isfile(path):
+            continue   # 名单腐化由 test_workflow_collects_all_root_tests 判
+        src = open(path, encoding="utf-8").read()
+        if not any(m in src for m in _ROOT_TEST_EXEMPT_MARKERS):
+            offenders.append(f"{n}（理由={reason}，但源码无任何自锁标记）")
+    assert not offenders, "根测试豁免给离线可判用例开后门：" + "；".join(offenders)

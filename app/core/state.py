@@ -7,10 +7,18 @@ import json
 import logging
 import os
 import tempfile
+import threading
 import time
 from typing import TypedDict
 
 STATE_FILENAME = "pipeline_state.json"
+
+# H-4：save_state 会被 GUI 线程（add_idea/set_guidance 等 Slot）与流水线
+# worker 线程（checkpoint/append_history 等）并发调用——进程内锁串行化
+# 「校验→写临时→replace」整段，保证任一时刻盘上都是一份完整 JSON，
+# 不因写盘段交错产生截断/混写现场。跨线程 load→改→save 的丢失更新
+# 是另一层问题，不在此处展开（审查报告 H-4 归属说明）。
+_SAVE_LOCK = threading.Lock()
 
 # 总流水线阶段
 STAGE_INIT = "init"            # 立项（仅有选题信息）
@@ -535,31 +543,33 @@ def load_state(proj: str) -> dict:
 def save_state(proj: str, state: dict):
     """原子写入：先临时文件再替换，防中途崩溃损坏状态；写前最小键校验（T3.2）。
     os.replace 在 Windows 上会被杀软/索引器的瞬时文件锁拒绝（真机 WinError 5），
-    重试 3 次退避后再放弃。"""
+    重试 3 次退避后再放弃。H-4：整段在 _SAVE_LOCK 内串行，GUI↔worker 并发
+    save_state 不再可能交错写盘（见 _SAVE_LOCK 处注记）。"""
     validate_state(state)
     path = state_path(proj)
-    fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=proj)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
-        last_err = None
-        for attempt in range(3):
-            try:
-                os.replace(tmp, path)
-                last_err = None
-                break
-            except PermissionError as e:   # 瞬时文件锁：退避重试
-                last_err = e
-                time.sleep(0.2 * (attempt + 1))
-        if last_err is not None:
-            raise last_err
-    except Exception:
-        if os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-        raise
+    with _SAVE_LOCK:
+        fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=proj)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            last_err = None
+            for attempt in range(3):
+                try:
+                    os.replace(tmp, path)
+                    last_err = None
+                    break
+                except PermissionError as e:   # 瞬时文件锁：退避重试
+                    last_err = e
+                    time.sleep(0.2 * (attempt + 1))
+            if last_err is not None:
+                raise last_err
+        except Exception:
+            if os.path.exists(tmp):
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+            raise
 
 
 def append_history(proj: str, state: dict, record: dict):

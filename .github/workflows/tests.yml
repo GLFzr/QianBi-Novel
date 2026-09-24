@@ -24,6 +24,12 @@ jobs:
         run: pip install -r requirements.txt pytest
       - name: 离线单测（无需 API Key）
         run: python -m pytest tests/unit -q --tb=short
+      # H-15：根目录 tests/test_*.py 一并收敛进 CI（曾在 CI 外裸奔）。
+      # 逐支显式点名 + tests/unit/test_workflow_probe_list.py 双向核对：
+      # 磁盘上每支根测试必须在名单 ∪ 显式豁免里（豁免=test_5ch_e2e，需真 Key，
+      # 自带 QIANBI_E2E_REAL=1 环境门）；名单里摘掉任何一支即红。
+      - name: 离线根目录测试（H-15 收敛面）
+        run: python -m pytest tests/test_5ch_mock.py tests/test_audit_in_session.py tests/test_bench_queue.py tests/test_chapter_session.py tests/test_cisc_merge.py tests/test_offpeak_gate.py tests/test_phase_flags.py tests/test_planted_defects.py tests/test_prefix_lint.py tests/test_preset_v2.py tests/test_prompt_chapter_header.py tests/test_quality.py tests/test_review_v2.py tests/test_s4_static_freeze.py tests/test_scene_cards.py tests/test_span_edit.py tests/test_usage_reasoning.py tests/test_volume_session.py -q --tb=short
 
   probes:
     # N-30/N-20：探针舰队纳入 CI——离线可判子集，一份名单双处校验：

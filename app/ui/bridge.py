@@ -719,9 +719,9 @@ class _NetWorker(QThread):
         self.mode, self.conn = mode, conn
 
     def run(self):
-        client = LLMClient.from_connection(self.conn)
         cid = self.conn.get("id", "")
         try:
+            client = LLMClient.from_connection(self.conn)
             if self.mode == "test":
                 msg = client.test_connection()
                 self.test_done.emit(cid, True, msg)
@@ -730,6 +730,15 @@ class _NetWorker(QThread):
         except LLMError as e:
             if self.mode == "test":
                 self.test_done.emit(cid, False, str(e))
+            else:
+                self.models_done.emit(cid, [])
+        except Exception as e:  # noqa: BLE001
+            # H-8：任何未预期异常都不许穿透 QThread.run（叠加 C-1 = 进程直接消失）。
+            # 不吞栈：原样落日志；回执统一转 LLMError 形态给界面一行人话。
+            logger.error("连接测试/拉模型线程异常（mode=%s cid=%s）: %s",
+                         self.mode, cid, e, exc_info=True)
+            if self.mode == "test":
+                self.test_done.emit(cid, False, f"连接失败：{e.__class__.__name__}: {e}")
             else:
                 self.models_done.emit(cid, [])
 
@@ -2256,20 +2265,8 @@ class Bridge(QObject):
         self.bookMetaChanged.emit()
         self.toast.emit("ok", "选题信息已保存，点「确定」进入核心设定")
 
-    @Slot(str, str, result=bool)
-    @_guarded
-    def exportPreset(self, preset_id: str, out_path: str) -> bool:
-        """v2 导出预设到指定路径（无 UI 按钮时用 TUI 命令面板）"""
-        from .. import presets as genre_presets
-        if out_path.startswith("file:///"):
-            from PySide6.QtCore import QUrl
-            out_path = QUrl(out_path).toLocalFile()
-        ok = genre_presets.export_preset(preset_id, out_path)
-        if ok:
-            self.toast.emit("ok", f"预设「{preset_id}」已导出到 {out_path}")
-        else:
-            self.toast.emit("warn", f"预设「{preset_id}」导出失败：未找到")
-        return ok
+    # N-13/WP-18：exportPreset dead slot 已删（全库零消费者：QML/测试/Agent 三面
+    # 都不接，留着只会让面板假装有导出功能；预设库函数 presets.export_preset 保留）
 
     # ========== Agent Console（T4.3 M1+M2：思考链留存 + 对话区落盘）==========
     # 设计依据 plan_agent_console_v3 §1.3；M3（阅读器收窄/门合并）另行排期。
@@ -2777,6 +2774,14 @@ class Bridge(QObject):
         else:
             conns.append(conn)
         cfg_mod.save_config(self.cfg)
+        # H-7：能力备忘录按 (base_url, model) 记「网关不支持某参数」，改好连接
+        # 保存后必须定点失效，否则本进程内仍按旧结论剥参数（改了等于没改）
+        try:
+            from ..llm import client as _llm_client
+            _llm_client.invalidate_capability(conn.get("base_url", ""),
+                                              conn.get("model", ""))
+        except Exception as e:  # noqa: BLE001  失效入口绝不阻塞保存本身
+            logger.warning("能力备忘录失效失败（不影响保存）: %s", e)
         self.connectionModel.refresh()
         self.slotsTextChanged.emit()
         self.toast.emit("ok", f"连接「{conn.get('name', '')}」已保存")
@@ -3001,15 +3006,22 @@ class Bridge(QObject):
         self._streaming = False
         self._stream_stage_label = ""
         self._reasoning_live = False   # 思维链文本保留：章定稿正是用户要回看的时候
-        # 若当前编辑器正显示刚定稿的章：跟随磁盘新内容（工作副本干净，版本基准同步）
+        # 若当前编辑器正显示刚定稿的章：跟随磁盘新内容（工作副本干净，版本基准同步）。
+        # H-13：仅工作副本干净时跟随——用户手改未保存就静默覆盖 = 丢稿
+        #（与 _on_repair_chapter 的同款守卫一致）；此时不动编辑器，只提示去向。
         if self._cur_num == record.get("num") and self.proj:
-            for n, name, path in project.list_chapters(self.proj):
-                if n == record.get("num"):
-                    self._chapter_path = path
-                    self._chapter_text = project.read_file(path)
-                    self.chapterTextChanged.emit()
-                    self._reset_editor_state()
-                    break
+            if not self._editor_dirty:
+                for n, name, path in project.list_chapters(self.proj):
+                    if n == record.get("num"):
+                        self._chapter_path = path
+                        self._chapter_text = project.read_file(path)
+                        self.chapterTextChanged.emit()
+                        self._reset_editor_state()
+                        break
+            else:
+                self.toast.emit("info",
+                                f"第 {record.get('num')} 章已定稿，但编辑器有未保存手改，"
+                                "本次没有覆盖编辑器——处理手改后重开该章即可看到定稿")
         self.streamStageChanged.emit()
         self.reasoningChanged.emit()
         self.streamingChanged.emit()
@@ -3081,6 +3093,7 @@ class Bridge(QObject):
         self.reasoningLiveChanged.emit()
         self.streamingChanged.emit()
         self.gateClosed.emit()   # 真机缺陷②：失败后同样清决策条
+        self.refreshQueue()   # H-13：失败也要刷新队列（对照 _on_finished），否则队列卡「写作中」
         self.logModel.append("error", msg)
         self.toast.emit("error", msg)
         logger.error("流水线失败: %s", msg)

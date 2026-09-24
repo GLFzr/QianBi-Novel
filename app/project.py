@@ -11,6 +11,7 @@ import os
 import json
 import re
 import tempfile
+import time
 
 from . import wb
 
@@ -222,9 +223,36 @@ def read_file(path: str) -> str:
 
 
 def write_file(path: str, content: str):
+    """原子写盘（H-1）：正文定稿/追踪四文件/摘要与世界书都走这里——纯 open("w")
+    崩在半截会留下被 first_missing_chapter（只看文件名）判为「已写」的残稿，
+    该章永久跳过、下一章从残尾续写。与 state.save_state 同款方案：同目录临时
+    文件 → flush → os.replace 原子替换；Windows 上 os.replace 会被杀软/索引器
+    的瞬时文件锁拒绝（真机 WinError 5），重试 3 次退避后再放弃。"""
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+    fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+        last_err = None
+        for attempt in range(3):
+            try:
+                os.replace(tmp, path)
+                last_err = None
+                break
+            except PermissionError as e:   # 瞬时文件锁：退避重试
+                last_err = e
+                time.sleep(0.2 * (attempt + 1))
+        if last_err is not None:
+            raise last_err
+    except Exception:
+        # 失败不碰原文件：清掉临时文件后原样上抛，调用方的回读校验仍能兜住
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        raise
 
 
 def chapter_filename(num: int, title: str = "") -> str:
@@ -305,6 +333,15 @@ def nearest_chapter_before(proj: str, num: int):
 
 
 def get_chapter_path(proj: str, num: int, title: str = "") -> str:
+    """该章号已有正文文件时返回既有路径（H-3 同章双文件）。
+
+    定稿按模型现算标题拼文件名，标题一变就会在盘上留下
+    第005章.md + 第005章_NEW.md 双文件——list_chapters 双 num、编辑器命中旧稿、
+    导出重复计。与 bridge._canonical_chapter_path 同一守则，收敛到源头：
+    同章号复用既有文件名，标题只影响「该章还不存在时」的新文件名。"""
+    for n, _name, path in list_chapters(proj):
+        if n == num:
+            return path
     return os.path.join(proj, "正文", chapter_filename(num, title))
 
 
