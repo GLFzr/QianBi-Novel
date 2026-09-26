@@ -1,22 +1,22 @@
 {
-  "version": "0.19.9",
-  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.19.9",
-  "notes": "0.19.9（槽位绑定原样生效 · 输出治理收尾）：\n· 模型选择契约：槽位绑定原样生效——选了 Flash 一定是 Flash，选了 Pro 就用 Pro，杜绝一切静默换型\n· 出厂默认改 DeepSeek Flash（新装用户未做选择时替选推荐项，Pro 行需显式选择或开开关）\n· 审校空转消除：每章 1 笔空内容白付清零（约省 12% 跑次成本 + 228 秒）\n· 细纲批量部分返回自动补齐：消除尾段回退生成税\n· 正文长度硬上限：修复环（压缩/扩写）触发大幅减少\n· 新书试跑：28 笔全 Flash、零空转，¥0.79，新书前期成本较上版 -53%\n· 测试套件 1090→1100 件全部通过",
-  "sha256": "ea33e07c7c1a0ae0969275beadc53cc37900cd13c3d176b4a494847018956466",
-  "published": "2026-09-13",
+  "version": "0.20.0",
+  "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v0.20.0",
+  "notes": "0.20.0（共写默认档 · 两档制 · 大版本收口）——这一版工程量较大，隔了 12 天才发：\n· 共写档成为新装/新项目的默认写作方式（对话式六阶段，Agent 自然语言驱动）；老项目档位一律不变\n· 档位重构为「全自动 | 共写」两段切换；九个决策门全部接线，停靠时说清拦哪条/差多少/继续回退各怎样\n· 每次 AI 调用全量落盘到书内 .dialogue/（默认开、仅本地、可关）；一键导出脱敏报障包\n· 修复：测试连接崩溃、半截章（原子写盘）、审校假通过、思考模型空回复白花钱、状态文件损坏被覆写、运行中关窗\n· 实验开关（默认关）：爽点引擎 satisfaction_engine、开幕轮压缩 a8_opening_compress\n· MiSans 字体内置 + 界面质感升级 + 「减少动态」开关；README 截图全面重录\n· 单元测试 1122 项 + 探针舰队 49 支，CI 干净环境全量通过",
+  "sha256": "9c107e82610554c71fed70b689163fe7ac80bb3216c7ccc70ec06d09b8ac02e7",
+  "published": "2026-09-25",
   "assets": {
     "setup": {
-      "name": "QianBi-Novel-v0.19.9-setup.exe",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.9/QianBi-Novel-v0.19.9-setup.exe",
-      "sha256": "ea33e07c7c1a0ae0969275beadc53cc37900cd13c3d176b4a494847018956466",
-      "size": 53844174
+      "name": "QianBi-Novel-v0.20.0-setup.exe",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.20.0/QianBi-Novel-v0.20.0-setup.exe",
+      "sha256": "9c107e82610554c71fed70b689163fe7ac80bb3216c7ccc70ec06d09b8ac02e7",
+      "size": 71077986
     },
     "portable": {
-      "name": "QianBi-Novel-v0.19.9-portable.zip",
-      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.19.9/QianBi-Novel-v0.19.9-portable.zip",
-      "sha256": "18d08baefce381f4870b80d8c16be17ce7e8bd5b5b68701612f56eb53c5791df",
-      "size": 79257601
+      "name": "QianBi-Novel-v0.20.0-portable.zip",
+      "url": "https://github.com/GLFzr/QianBi-Novel/releases/download/v0.20.0/QianBi-Novel-v0.20.0-portable.zip",
+      "sha256": "e2c5322465552b2848279f7fa5217ccdaccfcae1abb1c1d7edcdbee043ca615d",
+      "size": 99547712
     }
   },
-  "sig": "D+6PMBrhEr2XJunYX+bHsAvnDa2zvs7Uxmc1gDfhWRWwFNcki2DZNoTRpTMN1pMCv8MqMJ+UeTzfWu6HZp8QAw=="
+  "sig": "Iam0XeM7wNuvz8BIo2pmLFPzlW/+sy58LYOyWqEp6D/tnHCF+b/nJz2IigQjTnnKlxHek2kXTCvU1zHsx1fGBw=="
 }
