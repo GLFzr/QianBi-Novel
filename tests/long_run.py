@@ -92,7 +92,12 @@ def main():
                   "word_tolerance": 0.1, "review_enabled": True, "review_max_rounds": 1},
         "llm": {"max_retries": 1, "backoff_base": 2.0},
         "writing": {"chapter_word_target": CHAPTER_WORDS, "default_genre": "",
-                    "default_platform": "番茄"},
+                    "default_platform": "番茄",
+                    # QIANBI_TEST_COST_STACK=1：开 0.19.5 全栈（卷会话/S4 冻结/台账补丁/审校前置）——
+                    # T3 判据（命中 ≥90%）按出货架构预注册；缺省不设时跑基线架构（v1 口径）
+                    **({"volume_session": True, "s4_static_freeze": True,
+                        "tracking_delta": True, "review_in_system": True}
+                       if os.environ.get("QIANBI_TEST_COST_STACK") == "1" else {})},
         "last_project": "",
         "recent_projects": [],
     }
