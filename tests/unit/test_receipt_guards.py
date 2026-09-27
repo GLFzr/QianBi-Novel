@@ -55,6 +55,7 @@ EVIDENCE_CALLEES = {
     "clear_drafts": "草稿清理（破坏性落盘）",
     "clear_drafts_all": "草稿全清（破坏性落盘）",
     "delete_secret": "密钥文件删除",
+    "send_to_recycle": "书稿目录移入回收站（0.20.1 删书，破坏性落盘）",
     "_write_store": "批注库落盘",
     "transcript_append": "共写转写追加落盘",
     "record": "事件/遥测记录器（本地落点）",

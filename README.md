@@ -386,7 +386,7 @@ python -m venv .venv
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_update_ui.py
-# …… 共 49 支 probe_*.py（探针舰队进 CI 门禁）+ 单测构成发布闸门；probe_models /
+# …… 共 50 支 probe_*.py（探针舰队进 CI 门禁）+ 单测构成发布闸门；probe_models /
 # probe_flash_reasoning 等少数几支是真实 LLM 实验，需要 QIANBI_TEST_KEY；probe_packaged
 # 由发布流水线带 --exe 调用，probe_ui_gallery 产出全量 UI 截图
 ```

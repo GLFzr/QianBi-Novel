@@ -3132,6 +3132,41 @@ class Bridge(QObject):
                 })
         return result
 
+    @Slot(str, str)
+    @_guarded
+    def deleteBook(self, path: str, mode: str) -> None:
+        """书架删书（0.20.1）。mode="shelf" 仅移出书架（保留文件）；mode="disk" 移入系统回收站。
+
+        纪律：永不永久删除；当前打开的书拒绝（先关闭）；非法目标拒绝；
+        回收站失败不改编组（书还在书架上），回执如实。
+        """
+        target = os.path.abspath(path)
+        if mode not in ("shelf", "disk"):
+            self.toast.emit("warn", f"未知的删除方式：{mode}")
+            return
+        if not project.is_project(target):
+            self.toast.emit("warn", "不是有效的书籍目录，已拒绝删除")
+            return
+        if os.path.normcase(target) == os.path.normcase(os.path.abspath(self.proj or "")):
+            self.toast.emit("warn", "这本书正在写作中，请先关闭项目再删除")
+            return
+        if mode == "disk":
+            from .. import trash
+            try:
+                trash.send_to_recycle(target)
+            except Exception as e:  # 回收站失败：书原样保留，如实回执
+                self.toast.emit("warn", f"移入回收站失败，书籍未被删除：{e}")
+                return
+        self.cfg["recent_projects"] = [
+            p for p in self.cfg.get("recent_projects", [])
+            if os.path.normcase(os.path.abspath(p)) != os.path.normcase(target)
+        ]
+        cfg_mod.save_config(self.cfg)
+        if mode == "disk":
+            self.toast.emit("ok", f"已移入系统回收站：{os.path.basename(target)}（可在回收站还原）")
+        else:
+            self.toast.emit("ok", f"已移出书架（文件保留在原位置）：{os.path.basename(target)}")
+
     @Slot(result="QVariantList")
     @_guarded
     def connectionOptions(self) -> list:

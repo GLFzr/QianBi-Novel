@@ -133,7 +133,16 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: bridge.openProject(modelData.path)
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: function (mouse) {
+                        if (mouse.button === Qt.RightButton) {
+                            deleteMenu.bookPath = modelData.path
+                            deleteMenu.bookName = modelData.name
+                            deleteMenu.popup()
+                        } else {
+                            bridge.openProject(modelData.path)
+                        }
+                    }
                 }
             }
 
@@ -191,6 +200,124 @@ Item {
         id: openFolderDialog
         title: "打开写作项目"
         onAccepted: bridge.openProject(selectedFolder.toString())
+    }
+
+    // 0.20.1 书架删书：右键菜单（第一步）→ 确认对话框（第二步）
+    Menu {
+        id: deleteMenu
+        objectName: "bookDeleteMenu"
+        property string bookPath: ""
+        property string bookName: ""
+        MenuItem {
+            text: "删除…"
+            onClicked: {
+                deleteDialog.bookPath = deleteMenu.bookPath
+                deleteDialog.bookName = deleteMenu.bookName
+                var all = bridge.recentProjects()
+                for (var i = 0; i < all.length; i++) {
+                    if (all[i].path === deleteMenu.bookPath) { deleteDialog.bookInfo = all[i]; break }
+                }
+                deleteDialog.open()
+            }
+        }
+    }
+
+    Dialog {
+        id: deleteDialog
+        objectName: "bookDeleteDialog"
+        property string bookPath: ""
+        property string bookName: ""
+        property var bookInfo: null
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
+        parent: Overlay.overlay
+        modal: true
+        width: 480
+        padding: 18
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
+        background: DialogBg {}
+        header: Text {
+            text: "删除这本书"
+            color: Theme.textPrimary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTitle
+            font.weight: Font.DemiBold
+            padding: 16
+        }
+        contentItem: Column {
+            spacing: 10
+            width: parent.width
+            Text {
+                width: parent.width
+                text: deleteDialog.bookName
+                color: Theme.textPrimary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+            }
+            Text {
+                width: parent.width
+                text: deleteDialog.bookPath
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsTiny
+                wrapMode: Text.WrapAnywhere
+            }
+            Text {
+                width: parent.width
+                visible: deleteDialog.bookInfo !== null
+                text: visible
+                     ? "这本书共 " + deleteDialog.bookInfo.chapters + " 章 · "
+                       + (deleteDialog.bookInfo.words / 10000).toFixed(1) + " 万字。选择删除方式："
+                     : ""
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.Wrap
+            }
+            Text {
+                width: parent.width
+                text: "· 仅移出书架：书架列表不再显示，书稿文件原样保留在电脑上。\n· 移入回收站：整个书稿目录移入 Windows 回收站，可在回收站还原（应用永不永久删除）。"
+                color: Theme.textSecondary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.Wrap
+            }
+            Row {
+                spacing: 8
+                anchors.right: parent.right
+                AppButton {
+                    text: "取消"
+                    onClicked: deleteDialog.close()
+                }
+                AppButton {
+                    objectName: "bookDeleteShelfBtn"
+                    text: "仅移出书架"
+                    onClicked: {
+                        bridge.deleteBook(deleteDialog.bookPath, "shelf")
+                        deleteDialog.close()
+                        shelf.refresh()
+                    }
+                }
+                AppButton {
+                    objectName: "bookDeleteDiskBtn"
+                    text: "移入回收站"
+                    kind: "danger"
+                    onClicked: {
+                        bridge.deleteBook(deleteDialog.bookPath, "disk")
+                        deleteDialog.close()
+                        shelf.refresh()
+                    }
+                }
+            }
+        }
     }
 
     Dialog {
