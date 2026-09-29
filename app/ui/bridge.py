@@ -970,6 +970,7 @@ class Bridge(QObject):
     gatePresetChanged = Signal()
     cwStageChanged = Signal()
     supervisorFailedChanged = Signal()         # C2：衔接比对失败 → 显示跳过锁定出口
+    supervisorAttentionChanged = Signal()      # F3：比对结论未收口（需调整/解析失败）→ 越权锁定出口
     cwBusyChanged = Signal()
     cwReportChanged = Signal()
     cwStreamingChanged = Signal()
@@ -1087,6 +1088,7 @@ class Bridge(QObject):
         self._cw_reply = ""                    # 本轮 agent 流式回复缓冲
         self._cw_mode = "discuss"              # 本轮回应模式（讨论/撰写，方案 A）
         self._cw_supervisor_failed = False     # C2：比对失败 → 允许「跳过比对并锁定」
+        self._cw_supervisor_attention = False  # F3：比对有结论但未收口（需调整/解析失败）
         self._cw_worker = None
         self._cw_sum_worker = None
         self._backflow_worker = None           # 剧情反哺 worker（helper 槽，后台串行）
@@ -4756,6 +4758,8 @@ class Bridge(QObject):
     def _start_cw_supervisor(self):
         self._set_cw_busy(True)
         self._cw_supervisor_failed = False
+        self._cw_supervisor_attention = False  # F3：起跑即清上一轮未收口态
+        self.supervisorAttentionChanged.emit()
         self.supervisorFailedChanged.emit()
         # 工作副本优先：定稿时编辑器未保存内容（_working_text）才是「待定稿」，
         # _chapter_text 是磁盘基准，只传它会在未保存时拿旧稿
@@ -4772,6 +4776,10 @@ class Bridge(QObject):
     @Property(bool, notify=supervisorFailedChanged)
     def supervisorFailed(self) -> bool:
         return self._cw_supervisor_failed
+
+    @Property(bool, notify=supervisorAttentionChanged)
+    def supervisorAttention(self) -> bool:
+        return self._cw_supervisor_attention
 
     def _on_cw_supervisor_error(self, msg: str):
         """比对失败不再静默卡死锁定（C2）：点亮「跳过比对并锁定」出口"""
@@ -4793,10 +4801,14 @@ class Bridge(QObject):
             return
         state = self._cw.load()
         cw = st.ensure_cw(state)
-        cw.setdefault("supervised", {})[str(self._cur_num)] = "skipped:" + time.strftime("%m-%d %H:%M")
+        # F3：留痕分口径——比对没跑成是 skipped，比对跑了但被无视是 overridden
+        prefix = "skipped:" if self._cw_supervisor_failed else "overridden:"
+        cw.setdefault("supervised", {})[str(self._cur_num)] = prefix + time.strftime("%m-%d %H:%M")
         st.save_state(self.proj, state)
         self._cw_supervisor_failed = False
+        self._cw_supervisor_attention = False
         self.supervisorFailedChanged.emit()
+        self.supervisorAttentionChanged.emit()
         self.confirmChapterLocked()
 
     @Property(str, notify=cwStageChanged)
@@ -4852,16 +4864,22 @@ class Bridge(QObject):
         num = self._cur_num
         state = self._cw.load()
         cw = st.ensure_cw(state)
-        cw.setdefault("supervised", {})[str(num)] = _dt.datetime.now().strftime("%m-%d %H:%M")
-        cw["report"] = {"ts": _dt.datetime.now().strftime("%m-%d %H:%M"),
-                        "num": num, "text": text}
+        ts = _dt.datetime.now().strftime("%m-%d %H:%M")
+        cw["report"] = {"ts": ts, "num": num, "text": text}
         if self._cw_cancelled:
-            # 已取消：报告照常落盘，但不触发自动派活
+            # 已取消：报告照常落盘，但不触发自动派活，也不置「已比对」痕（F3）
             self._cw_cancelled = False
             self._cw_save_state(state)
             self.cwReportChanged.emit()
             return
         needs_fix, directive = co_dialogue.parse_supervisor_report(text)
+        parse_ok = co_dialogue.supervisor_report_has_conclusion(text)
+        if parse_ok and not needs_fix:
+            # F3 结论门：只有「解析成功 ∧ 结论=通过」才算已比对；需调整/解析失败/取消
+            # 都不置痕——下次「确定」带着新文本重跑比对（改写→复检闭环）
+            cw.setdefault("supervised", {})[str(num)] = ts
+            self._cw_supervisor_attention = False
+            self.supervisorAttentionChanged.emit()
         auto_fix = cw.setdefault("auto_fix", {})
         used = int(auto_fix.get(str(num), 0))
         # 全自动流转：需调整 + 有改写指令 + 本章自动轮次未超上限（1 次/章，防互改死循环）
@@ -4869,7 +4887,9 @@ class Bridge(QObject):
             auto_fix[str(num)] = used + 1
             self._cw_save_state(state)
             self.cwReportChanged.emit()
-            # F2：toast 说清落稿动作与复检下一步——不再虚报「已改写完成」
+            # F3：需调整=结论未收口 → 点亮越权出口；F2：toast 说清落稿动作与复检下一步
+            self._cw_supervisor_attention = True
+            self.supervisorAttentionChanged.emit()
             self.toast.emit("info", f"主 Agent 判定第 {num} 章需调整，已自动派写作 Agent 改写（撰写模式）"
                                     "——产稿后在对话区点「提取正文到编辑器」落稿，改完再点「确定」复检")
             QTimer.singleShot(0, lambda n=num, d=directive, ts=cw["report"]["ts"]:
@@ -4877,9 +4897,21 @@ class Bridge(QObject):
             return
         self._cw_save_state(state)
         self.cwReportChanged.emit()
+        if not parse_ok:
+            # F3：解析失败按「未知」处理（对齐 parse_supervisor_report 文档自述语义），
+            # 不再折算为「比对完成」通过口径
+            self._cw_supervisor_attention = True
+            self.supervisorAttentionChanged.emit()
+            self.toast.emit("warn", f"主 Agent 报告没有可识别的结论行（第 {num} 章）——"
+                                    "请人工核对报告区内容；确认无误可点「无视报告并锁定」（留痕），"
+                                    "或点「重试比对」再跑一次")
+            return
         if needs_fix:
             reason = "改写指令缺失" if not directive else "已达自动轮次上限（1 次/章）"
-            self.toast.emit("warn", f"主 Agent 判定第 {num} 章需调整（{reason}）——报告区可手动派给写作 Agent")
+            self._cw_supervisor_attention = True
+            self.supervisorAttentionChanged.emit()
+            self.toast.emit("warn", f"主 Agent 判定第 {num} 章需调整（{reason}）——报告区可手动派给写作 Agent，"
+                                    "处理完再点「确定」复检；确认无需理会可点「无视报告并锁定」（留痕）")
             return
         self.toast.emit("ok", f"主 Agent 衔接比对完成（第 {num} 章，见报告区）"
                               "——确认无问题再点「确定」锁定")

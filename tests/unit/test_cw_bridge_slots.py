@@ -117,3 +117,74 @@ def test_f2_dispatch_sends_compose_mode(tmp_path):
     # compose 在 cw_prose 阶段挂正文提取契约，不含讨论禁产令
     block = cp.mode_block_for("cw_prose", "compose", "改写")
     assert "<<<正文>>>" in block and "禁止展开" not in block
+
+
+# ---------- F3：supervisor 报告结论门 ----------
+
+PASS = "### 主 Agent 报告\n- 衔接：OK\n- 结论：通过（无需改动）"
+NEEDS_FIX_NO_DIR = "- 结论：需调整（问题存在但未给指令）"
+NO_CONCLUSION = "自由发挥的一段报告，没有结论行。"
+
+
+def _seed_proj(tmp_path, name):
+    proj = str(tmp_path / name)
+    os.makedirs(os.path.join(proj, "正文"), exist_ok=True)
+    st.save_state(proj, {"current_chapter": 2, "total_chapters": 10})
+    return proj
+
+
+def test_f3_marker_only_on_parsed_pass(tmp_path):
+    """F3 护栏：痕只在「解析成功∧通过」写；需调整/解析失败不置痕——修复前恒置痕（红）"""
+    for text, want_marker in [(PASS, True), (NEEDS_FIX_NO_DIR, False), (NO_CONCLUSION, False)]:
+        proj = _seed_proj(tmp_path, f"p{int(want_marker)}{len(text)}")
+        fs = _SlotSelf(proj)
+        bmod.Bridge._on_cw_supervisor_done(fs, text)
+        supervised = st.ensure_cw(st.load_state(proj)).get("supervised", {})
+        assert bool(supervised.get("2")) is want_marker, f"{text[:12]}… 置痕={want_marker} 才对"
+
+
+def test_f3_parse_fail_not_pass_caliber(tmp_path):
+    """F3 护栏：无结论行 ≠「比对完成」口径；attention 点亮越权出口"""
+    fs = _SlotSelf(_seed_proj(tmp_path, "pf"))
+    bmod.Bridge._on_cw_supervisor_done(fs, NO_CONCLUSION)
+    assert fs._cw_supervisor_attention is True
+    toasts = " | ".join(str(c) for c in fs.toast.calls)
+    assert "结论行" in toasts and "衔接比对完成" not in toasts
+
+
+def test_f3_needs_fix_no_autolock_and_attention(tmp_path, monkeypatch):
+    """F3 护栏：需调整 → 无痕（不直通锁定）+ attention 亮 + 自动派单仍走（F2 compose）"""
+    fs = _SlotSelf(_seed_proj(tmp_path, "pn"))
+    fs.dispatched = []
+    fs._dispatch_cw_rewrite = lambda num, d, report_ts="": fs.dispatched.append((num, d))
+    monkeypatch.setattr(bmod.QTimer, "singleShot", lambda ms, fn: fn())
+    bmod.Bridge._on_cw_supervisor_done(fs, "- 结论：需调整\n- 【改写指令】改开头。")
+    assert not st.ensure_cw(st.load_state(fs.proj)).get("supervised", {}).get("2")
+    assert fs._cw_supervisor_attention is True and len(fs.dispatched) == 1
+
+
+def test_f3_force_lock_records_caliber(tmp_path):
+    """F3 护栏：越权/跳过留痕分口径 skipped / overridden"""
+    fs = _SlotSelf(_seed_proj(tmp_path, "pl"))
+    fs._chapter_text = "正文。" * 2000          # 过字数闸
+    fs._chapter_path = ""
+    fs.confirmChapterLocked = lambda: None      # 锁定闸本身另有测，此处只看痕
+    bmod.Bridge._on_cw_supervisor_error(fs, "401")
+    bmod.Bridge.forceLockChapter(fs)
+    assert st.ensure_cw(st.load_state(fs.proj))["supervised"]["2"].startswith("skipped:")
+    fs2 = _SlotSelf(_seed_proj(tmp_path, "pl2"))
+    fs2._chapter_text = "正文。" * 2000
+    fs2._chapter_path = ""
+    fs2.confirmChapterLocked = lambda: None
+    fs2._cw_supervisor_attention = True         # 比对跑了但被无视
+    bmod.Bridge.forceLockChapter(fs2)
+    assert st.ensure_cw(st.load_state(fs2.proj))["supervised"]["2"].startswith("overridden:")
+
+
+def test_supervisor_report_has_conclusion():
+    """F3 判定函数：有结论行=True（通过/需调整都算解析成功），无=False"""
+    assert co_dialogue.supervisor_report_has_conclusion(PASS) is True
+    assert co_dialogue.supervisor_report_has_conclusion(NEEDS_FIX_NO_DIR) is True
+    assert co_dialogue.supervisor_report_has_conclusion(NO_CONCLUSION) is False
+    assert co_dialogue.supervisor_report_has_conclusion("") is False
+    assert co_dialogue.supervisor_report_has_conclusion(None) is False

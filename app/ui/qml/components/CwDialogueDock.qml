@@ -145,28 +145,30 @@ Rectangle {
                     ToolTip.visible: hovered
                     ToolTip.text: "六维审校本章正文（读编辑器工作副本）——问题登记待修汇总，可一键修复"
                 }
-                // ---- C2：衔接比对失败 → 重试 / 跳过并锁定（留痕）----
+                // ---- C2/F3：比对失败或结论未收口 → 重试 / 越权锁定（留痕）----
                 AppButton {
                     text: "重试比对"
                     kind: "secondary"
                     height: 28
-                    visible: bridge.supervisorFailed && cwDock.viewIsCurrent
-                             && bridge.cwStageKey === "cw_prose"
+                    visible: (bridge.supervisorFailed || bridge.supervisorAttention)
+                             && cwDock.viewIsCurrent && bridge.cwStageKey === "cw_prose"
                     enabled: !cwDock.busy
                     onClicked: bridge.retrySupervisor()
                     ToolTip.visible: hovered
                     ToolTip.text: "重新做定稿前衔接比对"
                 }
                 AppButton {
-                    text: "跳过比对并锁定"
+                    text: bridge.supervisorFailed ? "跳过比对并锁定" : "无视报告并锁定（留痕）"
                     kind: "danger"
                     height: 28
-                    visible: bridge.supervisorFailed && cwDock.viewIsCurrent
-                             && bridge.cwStageKey === "cw_prose"
+                    visible: (bridge.supervisorFailed || bridge.supervisorAttention)
+                             && cwDock.viewIsCurrent && bridge.cwStageKey === "cw_prose"
                     enabled: !cwDock.busy
                     onClicked: bridge.forceLockChapter()
                     ToolTip.visible: hovered
-                    ToolTip.text: "比对服务不可用时的出口：直接锁定本章并在状态里留痕（skipped）"
+                    ToolTip.text: bridge.supervisorFailed
+                                  ? "比对服务不可用时的出口：直接锁定本章并在状态里留痕（skipped）"
+                                  : "作者越权出口：比对结论未收口仍要锁定，状态里留痕（overridden）"
                 }
                 Item { Layout.fillWidth: true }
                 Text {

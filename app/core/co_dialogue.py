@@ -478,6 +478,17 @@ def parse_supervisor_report(text: str) -> tuple:
     return needs_fix, directive
 
 
+def supervisor_report_has_conclusion(text: str) -> bool:
+    """报告里有没有可识别的「结论：」行（F3 结论门的解析成败判定）
+
+    parse_supervisor_report 找不到结论行返回 (False, "")，与「通过」同形；
+    调用方要设结论门就必须先用本函数判定解析是否成功（不改 parse 签名，
+    其 (False,"") 兜底被 test_barrier_removal 钉死）。
+    """
+    return any(re.match(r"^[-*]?\s*结论[：:]", ln.strip())
+               for ln in (text or "").splitlines())
+
+
 # ---------- M3：章细纲滚动生成（确定单元后，helper 槽，≈200 字/章）----------
 
 class OutlineBatchWorker(QThread):
