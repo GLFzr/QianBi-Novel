@@ -611,3 +611,94 @@ def _esc(t: str) -> str:
 # 前缀派生保证 rubric 单源：改 FINAL_REVIEW_PROMPT 的 checklist 时紧凑版自动跟随。
 FINAL_REVIEW_COMPACT = FINAL_REVIEW_PROMPT[:FINAL_REVIEW_PROMPT.find(REVIEW_PROTOCOL_MARKER)] \
     + _esc(REVIEW_COMPACT_PROTOCOL)
+
+
+# ========== B6（0.23.0）：review2 语义复核第二 pass ==========
+# 定位（T6 报告 §6.4）：主审校六维是「本章质量门」，review2 是**定稿后的第二遍
+# 语义一致性对账**——独立于六维，只回答一个问题：本章的事实/因果/时间线是否有
+# 硬伤。与 G 护栏分工：G1-G7+CW 是确定性规则校验（词表/字数/正则），review2 是
+# 语义校验（「性格前后矛盾/因果凭空」规则抓不住）。**只上报不写库**：输出仅转
+# 待确认卡片（与 C42 cards 同通道），不落任何账本。
+
+REVIEW2_PROMPT = """你是本书的「语义复核员（review2）」。主审校已经对第 {chapter_num} 章做完六维质量评审——你不重复它的职责、不评文笔、不评商业质量、不给修改建议。你只做一件事：**对照既有事实记录，复核本章的事实/因果/时间线是否存在硬伤**。
+
+## 本章正文
+{prose}
+
+## 事实账本摘要（已入账的事实/数值/承诺，复核基准一）
+{fact_ledger_summary}
+
+## 状态卡摘要（角色状态/关系/资源/时间的权威基准，复核基准二）
+{state_card_summary}
+
+## 复核判据（三条，逐条过）
+1. **事实**：本章陈述的事实（能力/数值/物件/身份/地点）与上方两份记录是否冲突？记录里没有的，不算硬伤（凭空新事物由主审校维 D 管）；记录里有的写反了，才算。
+2. **因果**：本章关键转折的前提是否被正文或记录支撑？"上次说过/上次发生过"若在正文与记录中都找不到出处，算硬伤；只在记录里找不到但正文前文有铺垫，不算。
+3. **时间线**：本章时间表述与时间锚点、既有日历口径是否自洽？分钟/小时级且不影响剧情理解的偏差不算。
+
+## 三态裁决（必须三选一，不得含糊）
+- **CLEAN（无硬伤）**：三条判据全部过，或仅有不构成硬伤的轻微瑕疵
+- **HARD_BUGS（硬伤清单）**：至少一条判据不过且你能指认冲突双方（记录说什么 vs 本章写什么）
+- **UNDECIDABLE（无法判定）**：两份复核基准缺失/为空，或冲突无法在现有信息下确证——**拿不准就选这档，不要猜**
+
+## 输出格式（严格遵守，只有这一种）
+===REVIEW2=== CLEAN
+===REVIEW2_ITEMS===
+（无）
+===END===
+
+===REVIEW2=== HARD_BUGS
+===REVIEW2_ITEMS===
+- 硬伤：冲突双方各引一句（记录原文 vs 本章原文），可附章号
+（每条硬伤一行，格式同上）
+===END===
+
+===REVIEW2=== UNDECIDABLE
+===REVIEW2_ITEMS===
+（一句话说明无法判定的原因）
+===END===
+
+你的输出**只上报、不写库**：程序只会把它转成待确认卡片交人工裁决，不会自动改任何记录。宁可 UNDECIDABLE，不可编造硬伤；宁可漏报轻微瑕疵，不可虚报冲突。只输出上述小节，不要解释、不要复述正文。"""
+
+
+def parse_review2(text: str) -> dict:
+    """review2 输出 → 三态解析（纯函数；stages 第二 pass 接线 TODO，B6 消费）。
+
+    返回 {"verdict": "clean|hard_bugs|undecidable|", "items": [str, ...]}：
+    - verdict 三态取小写；标记缺失/无法归一（畸形输出）→ ""（视为无效票，调用方
+      按未产出处理）；空输入 → ("", [])；
+    - items：===REVIEW2_ITEMS=== 段内的非空行（剥掉列表符号），最多 20 条防炸；
+    - 容错：状态词同时认英文 token 与中文别名（无硬伤/硬伤/无法判定）；
+      ===REVIEW2=== 与状态词被模型写到同一行或相邻行均可。
+    """
+    out = {"verdict": "", "items": []}
+    text = text or ""
+    if not text.strip():
+        return out
+    m = re.search(r"===\s*REVIEW2\s*===\s*(.*)", text)
+    if m:
+        head = m.group(1).strip()
+        if not head:
+            nxt = text[m.end():].lstrip().splitlines()
+            head = nxt[0].strip() if nxt else ""
+        token = head.split()[0].strip("：:，,。") if head else ""
+        token = _REVIEW2_TOKENS.get(token.upper().strip("：:，,。"), "") or \
+            _REVIEW2_TOKENS.get(token, "")
+        out["verdict"] = token
+    mi = re.search(r"===\s*REVIEW2_ITEMS\s*===(.*?)(?:===\s*END\s*===|$)", text, re.S)
+    if mi:
+        for line in mi.group(1).splitlines():
+            line = line.strip().lstrip("-*•· ").strip()
+            if line and line not in ("（无）", "(无)", "无"):
+                out["items"].append(line)
+            if len(out["items"]) >= 20:
+                break
+    return out
+
+
+# 状态词归一表（英文 token 为主，中文别名为容错兜底）
+_REVIEW2_TOKENS = {
+    "CLEAN": "clean", "无硬伤": "clean",
+    "HARD_BUGS": "hard_bugs", "HARDBUGS": "hard_bugs", "硬伤": "hard_bugs", "硬伤清单": "hard_bugs",
+    "UNDECIDABLE": "undecidable", "无法判定": "undecidable",
+}
