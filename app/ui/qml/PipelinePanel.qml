@@ -378,10 +378,13 @@ Item {
                     AppButton {
                         objectName: "startButton"
                         visible: !bridge.isRunning
-                        text: "开始"
+                        // QW-A2：共写档点「开始」必被拦——同位同尺寸换「去共写」CTA（定位当前阶段卡）；
+                        // 自动档文案/行为/objectName 全部不变（老用户回归面=0，演示脚本 target 同名）
+                        text: bridge.startCtaLabel !== "" ? bridge.startCtaLabel : "开始"
                         kind: "primary"
                         Layout.fillWidth: true
-                        onClicked: bridge.startPipeline()
+                        onClicked: bridge.startCtaLabel !== "" ? bridge.gotoCwStage()
+                                                               : bridge.startPipeline()
                     }
                     AppButton {
                         visible: bridge.isRunning && !bridge.isPaused && !bridge.isStopping

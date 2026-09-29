@@ -1089,6 +1089,7 @@ class Bridge(QObject):
         self._cw_mode = "discuss"              # 本轮回应模式（讨论/撰写，方案 A）
         self._cw_supervisor_failed = False     # C2：比对失败 → 允许「跳过比对并锁定」
         self._cw_supervisor_attention = False  # F3：比对有结论但未收口（需调整/解析失败）
+        self._goto_cw_hinted = False           # QW-A2：「去共写」CTA 首次点按才给六步总览
         self._cw_worker = None
         self._cw_sum_worker = None
         self._backflow_worker = None           # 剧情反哺 worker（helper 槽，后台串行）
@@ -1291,9 +1292,15 @@ class Bridge(QObject):
             st.save_state(path, state)
             preset_name = genre_presets.load_preset(presetId).get("name") or presetId
         self._open_project(path)
-        self.toast.emit("ok", f"项目《{name}》已创建"
-                        + (f"（题材预设「{preset_name}」）" if preset_name else "")
-                        + "，点击「开始」启动流水线")
+        # QW-A1：指路必须与档位一致——共写档点「开始」必被拦（1392），toast 不再指错门
+        if self._get_cw_mode() == "cw":
+            self.toast.emit("ok", f"项目《{name}》已创建"
+                            + (f"（题材预设「{preset_name}」）" if preset_name else "")
+                            + "。共写第一步：在共写区「选题」填一句话灵感，或直接用示例开写")
+        else:
+            self.toast.emit("ok", f"项目《{name}》已创建"
+                            + (f"（题材预设「{preset_name}」）" if preset_name else "")
+                            + "，点击「开始」启动流水线")
         if wb_msg:
             self.toast.emit("info", wb_msg.strip())
         return True
@@ -1404,6 +1411,9 @@ class Bridge(QObject):
             url = conn.get("base_url", "")
             if not conn.get("api_key") and "localhost" not in url and "127.0.0.1" not in url:
                 missing.append(f"{cfg_mod.SLOT_LABELS[slot]}（{conn.get('name', '')} 未填 API Key）")
+            # QW-A3：空模型与缺 Key 同列前置——别让第一次真实调用当探针（client.py 才报就晚了）
+            if not conn.get("model"):
+                missing.append(f"{cfg_mod.SLOT_LABELS[slot]}（{conn.get('name', '')} 未选模型）")
         if missing:
             self.toast.emit("warn", "请先在「连接与模型」配置：" + "、".join(missing))
             return
@@ -4010,6 +4020,25 @@ class Bridge(QObject):
         self._cw_open_product(key)
         self._cw_refresh()
 
+    @Property(str, notify=cwStageChanged)
+    def startCtaLabel(self) -> str:
+        """QW-A2：共写档「开始」按钮位置的 CTA 文案；自动档空串（按钮维持「开始」原样）"""
+        if self._get_cw_mode() != "cw":
+            return ""
+        return "去共写 · " + (self._get_cw_stage_label() or "选题")
+
+    @Slot()
+    @_guarded
+    def gotoCwStage(self):
+        """QW-A2：共写档 CTA——定位共写区当前阶段卡（复用回看导航），首次点按给六步总览"""
+        if self._get_cw_mode() != "cw":
+            return
+        self.selectCwStage(self._get_cw_stage_key())
+        if not self._goto_cw_hinted:
+            self._goto_cw_hinted = True
+            self.toast.emit("info", "共写六步在共写区：选题 → 核心设定 → 剧情总纲 → "
+                                    "世界书与正则 → 单元细纲 → 正文。每步你确认后才往下走")
+
     # ---- 对话（每轮输入 → 一次性 DialogueWorker）----
 
     @Slot(str, str)
@@ -4211,11 +4240,35 @@ class Bridge(QObject):
         self._cw_sync_messages()
         self.generalChanged.emit()
 
+    def _slot_readiness(self, slot: str) -> str:
+        """槽位就绪检查（QW-A5）：空串=就绪；否则人话缺因（供共写 LLM 起跑前拦截）。
+
+        配置类错误在成本为零的时刻暴露——绝不让第一次真实调用当探针。
+        软开局 M1 将复用同一判定（「未贴 Key 只允许走到卡片为止」）。
+        """
+        conn = cfg_mod.slot_connection(self.cfg or {}, slot)
+        label = cfg_mod.SLOT_LABELS.get(slot, slot)
+        if not conn:
+            return f"{label}还没配置连接——先到「设置 · 连接与模型」选一家服务商并粘贴 API Key"
+        url = conn.get("base_url", "")
+        if not conn.get("api_key") and "localhost" not in url and "127.0.0.1" not in url:
+            return f"{label}（{conn.get('name', '')}）还没填 API Key——先到「设置 · 连接与模型」粘贴"
+        if not conn.get("model"):
+            return (f"这条连接（{conn.get('name', '')}）还没选模型，"
+                    "先去 设置 · 连接与模型 选一个再继续（下拉候选或「拉取」）——"
+                    "本次没有产生任何 API 请求")
+        return ""
+
     def _spawn_cw_dialogue(self, text: str, stage: str, focus_chapter: int = 0,
                            mode: str = "discuss"):
         """起一次性 DialogueWorker（QML 输入入口与主 Agent 派单共用）"""
         self._cw_reply = ""
         self._cw_mode = mode if mode in ("discuss", "compose") else "discuss"
+        # QW-A5：起跑前拦截——配置类错误零成本暴露，构造 worker（及其客户端）之前就拦下
+        reason = self._slot_readiness(co_dialogue.dialogue_slot(stage, self._cw_mode))
+        if reason:
+            self.toast.emit("warn", reason)
+            return
         self._set_cw_busy(True)
         worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self,
                                             focus_chapter=focus_chapter, mode=self._cw_mode)
@@ -4345,6 +4398,11 @@ class Bridge(QObject):
             state = self._cw.load()
             if not co_dialogue.transcript_text(state, stage).strip():
                 self.toast.emit("warn", "对话区还没有讨论内容——先和 Agent 聊几句再点「确定」")
+                return
+            # QW-A5：总结调用起跑前拦截（零请求）
+            reason = self._slot_readiness(co_dialogue.dialogue_slot(stage, "compose"))
+            if reason:
+                self.toast.emit("warn", reason)
                 return
             self._set_cw_busy(True)
             worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
@@ -4756,6 +4814,11 @@ class Bridge(QObject):
     # ---- M5：主 Agent（Supervisor）——定稿前衔接比对 + 世界书变更影响提示 ----
 
     def _start_cw_supervisor(self):
+        # QW-A5：review 槽起跑前拦截（零请求）
+        reason = self._slot_readiness(cfg_mod.SLOT_REVIEW)
+        if reason:
+            self.toast.emit("warn", reason)
+            return
         self._set_cw_busy(True)
         self._cw_supervisor_failed = False
         self._cw_supervisor_attention = False  # F3：起跑即清上一轮未收口态

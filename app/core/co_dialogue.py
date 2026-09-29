@@ -239,6 +239,19 @@ def _preset_id(proj: str) -> str:
 
 # ---------- 一次性对话 worker ----------
 
+def dialogue_slot(stage: str, mode: str) -> str:
+    """(共写阶段, 回应模式) → 本次 LLM 调用实际消费的槽位
+
+    讨论模式（除世界书）走辅助槽（快、便宜——「发两三个字等半天」的一半代价
+    在槽位选错上）；其余走该阶段职责槽（CO_ROLES）。DialogueWorker.run、
+    SummarizeWorker.run 与 bridge 的起跑前拦截（QW-A5）共用——单一事实源防漂移。
+    """
+    role = prompts.CO_ROLES.get(stage) or {}
+    if mode == "discuss" and stage != st.STAGE_CW_WORLDBOOK:
+        return cfg_mod.SLOT_HELPER
+    return role.get("slot") or cfg_mod.SLOT_HELPER
+
+
 class DialogueWorker(QThread):
     """每轮用户输入 → 独立 worker：流式回传增量，完成即退出（不进 orchestrator）"""
     chunk = Signal(str)
@@ -280,12 +293,9 @@ class DialogueWorker(QThread):
                 user_message=self.user_text,
             )
             self.last_prompt = prompt
-            # 讨论走辅助槽（快、便宜），撰写走本阶段职责槽——
-            # 「发两三个字等半天」的一半代价在槽位选错上
-            if self.mode == "discuss" and self.stage != st.STAGE_CW_WORLDBOOK:
-                slot = cfg_mod.SLOT_HELPER
-            else:
-                slot = role["slot"]
+            # 槽位单一事实源（dialogue_slot）：讨论走辅助槽（快、便宜），
+            # 撰写/世界书走本阶段职责槽
+            slot = dialogue_slot(self.stage, self.mode)
             text = clean_llm_output(self.router.client(slot).chat_stream(
                 prompt, on_chunk=self.chunk.emit, on_reasoning=self.reasoning.emit))
             if not text.strip():
@@ -324,8 +334,7 @@ class SummarizeWorker(QThread):
                 transcript=transcript_text(state, self.stage),
             )
             self.last_prompt = prompt
-            role = prompts.CO_ROLES.get(self.stage)
-            slot = role["slot"] if role else cfg_mod.SLOT_HELPER
+            slot = dialogue_slot(self.stage, "compose")   # 总结走本阶段职责槽
             text = clean_llm_output(self.router.client(slot).chat(prompt))
             if not text.strip():
                 self.error.emit("总结为空，请先在对话区把关键决策聊清楚再点确定")
