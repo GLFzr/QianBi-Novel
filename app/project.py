@@ -419,18 +419,6 @@ REGEX_PATH = "设定/正则.md"
 WORLDBOOK_BACKFLOW_HEADING = "## 追加登记"
 
 
-# ---- C10b 拆环兼容壳（PEP 562）----
-# worldbook_text / worldbook_anchors 真身已迁 app/wb.py（wb→project 单向依赖，
-# project 不再 import wb——本壳是仅存的回边，且走 importlib 不入静态依赖图）。
-# TODO(S2)：co_dialogue.py 的 6 处 project.worldbook_* 调用改为 from ..wb import
-# 之后，删除本壳与 conftest/test 的迁移遗留。
-def __getattr__(name):
-    if name in ("worldbook_text", "worldbook_anchors"):
-        from importlib import import_module
-        return getattr(import_module("app.wb"), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 def regex_rules(proj: str, semantics: str = "logic") -> list:
     """「正则」抽象接口（方案 §4.1）：返回 [{rule, level: must/should, scope, pattern, mode}]
 

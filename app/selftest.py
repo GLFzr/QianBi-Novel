@@ -303,18 +303,18 @@ def _sec_assembly() -> list:
                                   {"text": r["text"], "activated": r["activated"],
                                    "dropped": r["dropped"], "budget": r["budget"]}))
         for budget in (900, 160):
-            anchors = project.worldbook_anchors(proj, num)
+            anchors = wb.worldbook_anchors(proj, num)
             r = wb.assemble(proj, num, budget, anchors=anchors)
             out.append(_entry("wb.assemble.anchors num=%s budget=%s" % (num, budget),
                               {"anchors": anchors, "text": r["text"],
                                "activated": r["activated"], "dropped": r["dropped"]}))
 
-    # —— 世界书/正则直读口（project 层向后兼容签名）——
+    # —— 世界书/正则直读口（wb 直读；签名向后兼容，条目标签保留旧名免基线漂移）——
     for budget in (2000, 600, 160):
         out.append(_entry("project.worldbook_text budget=%s num=2" % budget,
-                          project.worldbook_text(proj, budget,
-                                                 anchors=project.worldbook_anchors(proj, 2),
-                                                 num=2)))
+                          wb.worldbook_text(proj, budget,
+                                            anchors=wb.worldbook_anchors(proj, 2),
+                                            num=2)))
     for sem in ("logic", "regex"):
         out.append(_entry("project.regex_rules %s" % sem, project.regex_rules(proj, sem)))
         for cap in (1500, 120):

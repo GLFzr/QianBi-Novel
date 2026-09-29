@@ -20,7 +20,7 @@ import os
 import re
 
 # C10b 拆环（0.22.0）：本模块对 project 的三处延迟 import 升模块级——依赖方向
-# 定格为 wb→project 单向（project 侧的壳函数已迁入本模块，仅剩 PEP 562 兼容壳）。
+# 定格为 wb→project 单向（project 侧壳函数已迁入本模块，PEP 562 兼容壳已由 S2c 拆除）。
 from . import project
 
 # 专名：2-6 个汉字（可含中间圆点，兼容译名）
@@ -745,9 +745,8 @@ def constant_entries(proj: str, budget: int = 0) -> str:
     return "\n\n".join(out) + "\n"
 
 
-# ==================== 注入壳（C10b 自 app/project.py 迁入） ====================
-# project.worldbook_text / project.worldbook_anchors 的真身在这两个函数；project
-# 侧只剩 PEP 562 兼容壳（惰性回装，TODO(S2) 随 co_dialogue 改引后移除）。
+# ==================== 注入口（C10b 自 app/project.py 迁入） ====================
+# 世界书注入的两个直读口；S2c 已拆除 project 侧 PEP 562 兼容壳，消费方一律直引本模块。
 
 def worldbook_text(proj: str, max_chars: int = 2000, anchors: list = None,
                    num: int = 0) -> str:

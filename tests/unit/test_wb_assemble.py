@@ -176,13 +176,13 @@ def test_chapter_hit_outranks_plain_section(tmp_path):
     assert whys["南城"].startswith("本章命中")
 
 
-def test_shell_passes_num_to_kernel(tmp_path):
-    """兼容壳必须真的把 num 传下去（A5 教训：参数传了等于没传的断链）"""
+def test_worldbook_text_passes_num_to_kernel(tmp_path):
+    """worldbook_text 必须真的把 num 传下去（A5 教训：参数传了等于没传的断链）"""
     proj = _proj(tmp_path, doc=TWO_TOWN)
     project.write_file(project.get_outline_path(proj, 5),
                        "## 细纲第5章\n\n#### 人物关系和出场顺序\n\n- 出场顺序：南城\n")
-    assert "南城" in project.worldbook_text(proj, 45, anchors=[], num=5)
-    assert "南城" not in project.worldbook_text(proj, 45, anchors=[], num=1)
+    assert "南城" in wb.worldbook_text(proj, 45, anchors=[], num=5)
+    assert "南城" not in wb.worldbook_text(proj, 45, anchors=[], num=1)
 
 
 GROW = """## 世界书
@@ -322,12 +322,3 @@ def test_entry_id_stable_and_hash_tracks_content():
     a = _by_name(wb.parse(DOC))["陈更"]
     b = _by_name(wb.parse(DOC.replace("当铺学徒，能改写当票", "当铺学徒，能改当票")))["陈更"]
     assert a.id == b.id and a.content_hash != b.content_hash
-
-
-def test_worldbook_text_shell_matches_kernel(tmp_path):
-    proj = _proj(tmp_path)
-    doc = project.read_file(os.path.join(proj, project.WORLDBOOK_PATH))
-    for budget in (len(doc), 5000, 300, 1):
-        assert project.worldbook_text(proj, budget, anchors=[]) == \
-            wb.assemble(proj, budget=budget, anchors=[], doc=doc)["text"]
-    assert project.worldbook_text(proj, 300, anchors=[]).startswith("## 世界书")

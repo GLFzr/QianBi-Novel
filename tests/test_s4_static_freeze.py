@@ -29,6 +29,7 @@ if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
 from app import project as pj
+from app import wb
 from app.core import memory as mem
 from app.core import state as st
 from app.core.shared_prefix import chapter_header, project_header
@@ -212,7 +213,7 @@ def _expected_tracking_turn(proj, num):
         timeline=pj.read_file(pj.get_tracking_path(proj, "时间线"))[:1500],
         old_context=pj.read_file(pj.get_tracking_path(proj, "上下文"))[:1500]
         or "（尚无写作上下文）",
-        worldbook=pj.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+        worldbook=wb.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
         project_header=project_header(proj),
         chapter_header=chapter_header(proj, num))
 

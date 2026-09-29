@@ -12,9 +12,10 @@ import re
 
 from PySide6.QtCore import QThread, Signal
 
-from .. import config as cfg_mod
 from .. import project, prompts
 from ..llm import ModelRouter, clean_llm_output
+from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING
+from ..wb import worldbook_text
 from . import memory, state as st
 from .shared_prefix import project_header, chapter_header
 
@@ -55,10 +56,6 @@ def transcript_text(state: dict, stage: str, max_chars: int = TRANSCRIPT_MAX) ->
         prefix = "…（较早讨论已截断）\n\n"
         text = prefix + text[-(max_chars - len(prefix)):]
     return text
-
-
-def clear_transcript(state: dict, stage: str):
-    st.ensure_cw(state).setdefault("transcript", {})[stage] = []
 
 
 # ---------- 交接块（唯一生成者）----------
@@ -181,7 +178,7 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
     if stage == st.STAGE_CW_WORLDBOOK:
         core = rd("设定", "题材定位.md")[:2000] or "（无）"
         outline = rd("大纲", "大纲.md")[:2000] or "（无）"
-        wb = project.worldbook_text(proj, 1500)
+        wb = worldbook_text(proj, 1500)
         rg = project.regex_block(proj, "logic", 1200)
         return (f"【核心设定摘要】\n{core}\n\n【全书大纲摘要】\n{outline}\n\n"
                 f"【现有世界书】\n{wb}\n\n【现有正则】\n{rg}\n\n"
@@ -189,7 +186,7 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
                 + _grow(preset_id, "grow_regex_direction"))
     if stage == st.STAGE_CW_UNIT:
         outline = rd("大纲", "大纲.md")[:2000] or "（无）"
-        wb = project.worldbook_text(proj, 1200)
+        wb = worldbook_text(proj, 1200)
         rg = project.regex_block(proj, "logic", 1000)
         return (f"【全书大纲摘要】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
                 + _grow(preset_id, "grow_unit_logic"))
@@ -198,7 +195,7 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
         num = int(focus_chapter) if int(focus_chapter or 0) > 0 else project.next_chapter_num(proj)
         by_num = {n: p for n, _name, p in chapters}
         outline = rd("大纲", f"细纲_第{num:03d}章.md") or "（本章细纲尚未生成）"
-        wb = project.worldbook_text(proj, 1200, num=num)
+        wb = worldbook_text(proj, 1200, num=num)
         rg = project.regex_block(proj, "logic", 1000)
         prev_nums = [n for n in by_num if n < num]
         next_nums = [n for n in by_num if n > num]
@@ -248,8 +245,8 @@ def dialogue_slot(stage: str, mode: str) -> str:
     """
     role = prompts.CO_ROLES.get(stage) or {}
     if mode == "discuss" and stage != st.STAGE_CW_WORLDBOOK:
-        return cfg_mod.SLOT_HELPER
-    return role.get("slot") or cfg_mod.SLOT_HELPER
+        return SLOT_HELPER
+    return role.get("slot") or SLOT_HELPER
 
 
 class DialogueWorker(QThread):
@@ -385,7 +382,7 @@ class ReadbackWorker(QThread):
                 chapter_outline=outline,
             )
             self.last_prompt = prompt
-            text = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat(prompt))
+            text = clean_llm_output(self.router.client(SLOT_REVIEW).chat(prompt))
             if not text.strip():
                 self.error.emit("读改返回为空，请重试")
                 return
@@ -445,11 +442,11 @@ class SupervisorWorker(QThread):
                 chapter_outline=chapter_outline,
                 chapter_text=chapter_text or "（本章正文尚在工作副本中）",
                 next_outline_brief=next_brief,
-                worldbook_block=project.worldbook_text(self.proj, 1200, num=self.num),
+                worldbook_block=worldbook_text(self.proj, 1200, num=self.num),
                 regex_block=project.regex_block(self.proj, "logic", 1000),
             )
             self.last_prompt = prompt
-            text = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW).chat(prompt))
+            text = clean_llm_output(self.router.client(SLOT_REVIEW).chat(prompt))
             if not text.strip():
                 self.error.emit("主 Agent 报告为空，请重试")
                 return
@@ -537,7 +534,7 @@ class OutlineBatchWorker(QThread):
             prompt = prompts.CO_UNIT_OUTLINE_PROMPT.format(
                 unit_block=prompts.unit_text(self.unit),
                 handoff=prev_handoff(state, st.STAGE_CW_UNIT),
-                worldbook_block=project.worldbook_text(self.proj, 1500, num=self.batch[0]),
+                worldbook_block=worldbook_text(self.proj, 1500, num=self.batch[0]),
                 regex_block=project.regex_block(self.proj, "logic", 1200),
                 genre_block=genre_presets.genre_block(state.get("genre_preset", "")),
                 nearby_outlines="\n\n".join(nearby) or "（无相邻细纲）",
@@ -545,7 +542,7 @@ class OutlineBatchWorker(QThread):
                 start=self.batch[0], end=self.batch[-1], count=len(self.batch),
             )
             self.last_prompt = prompt
-            text = clean_llm_output(self.router.client(cfg_mod.SLOT_HELPER)
+            text = clean_llm_output(self.router.client(SLOT_HELPER)
                                     .chat_stream(prompt, on_chunk=lambda c: None))
             outlines = stages_mod.parse_outlines(text)
             valid = [o for o in outlines if o[0] in self.batch]
@@ -595,14 +592,14 @@ class ReviewOutlinesWorker(QThread):
                 prev_ending = project.read_file(prev[2])[-400:]
             prompt = prompts.CO_OUTLINE_REVIEW_PROMPT.format(
                 outlines=outlines,
-                worldbook_block=project.worldbook_text(self.proj, 1500,
+                worldbook_block=worldbook_text(self.proj, 1500,
                                                         num=(self.nums or [1])[0]),
                 regex_block=project.regex_block(self.proj, "logic", 1200),
                 previous_ending=prev_ending,
                 unit_block=prompts.unit_text(self.unit),
             )
             self.last_prompt = prompt
-            text = clean_llm_output(self.router.client(cfg_mod.SLOT_HELPER).chat(prompt))
+            text = clean_llm_output(self.router.client(SLOT_HELPER).chat(prompt))
             if not text.strip():
                 self.error.emit("校验返回为空，请重试")
                 return
@@ -675,7 +672,7 @@ class CwProseCheckWorker(QThread):
             chapter_header=chapter_header(self.proj, self.num),
         )
         self.last_prompt = prompt
-        rewritten = clean_llm_output(self.router.client(cfg_mod.SLOT_WRITING)
+        rewritten = clean_llm_output(self.router.client(SLOT_WRITING)
                                      .chat_stream(prompt, on_chunk=self.chunk.emit))
         if self.isInterruptionRequested():
             return
@@ -704,7 +701,7 @@ class CwProseCheckWorker(QThread):
             return
         prompt = stages_mod.build_final_review_prompt(self.proj, self.cfg, self.num, self.text)
         self.last_prompt = prompt
-        result = clean_llm_output(self.router.client(cfg_mod.SLOT_REVIEW)
+        result = clean_llm_output(self.router.client(SLOT_REVIEW)
                                   .chat_stream(prompt, on_chunk=self.chunk.emit,
                                                temperature=self.cfg.get("gates", {})
                                                .get("review_temperature", 0.2)))
@@ -768,7 +765,7 @@ class MemoryBackflowWorker(QThread):
         prompt = prompts.MEMORY_BACKFLOW_PROMPT.format(
             chapter_num=self.num,
             prose=self.prose[:8000],
-            worldbook=project.worldbook_text(self.proj, 2500, num=self.num) or "（世界书为空）",
+            worldbook=worldbook_text(self.proj, 2500, num=self.num) or "（世界书为空）",
             roster=stages_mod._roster(self.proj),
             character_state=project.read_file(
                 project.get_tracking_path(self.proj, "角色状态"))[:2000] or "（暂无）",
@@ -778,7 +775,7 @@ class MemoryBackflowWorker(QThread):
                 project.get_outline_path(self.proj, self.num))[:1200] or "（无本章细纲）",
         )
         self.last_prompt = prompt
-        result = clean_llm_output(self.router.client(cfg_mod.SLOT_HELPER).chat(prompt))
+        result = clean_llm_output(self.router.client(SLOT_HELPER).chat(prompt))
         if self.isInterruptionRequested():
             return
         if not result.strip():

@@ -39,7 +39,7 @@ from PySide6.QtGui import QGuiApplication  # noqa: E402
 app = QGuiApplication(sys.argv[:1])
 
 from app import config as cfg_mod  # noqa: E402
-from app import project, prompts  # noqa: E402
+from app import project, prompts, wb  # noqa: E402
 from app.core import orchestrator as orch_mod  # noqa: E402
 from app.core import state as st  # noqa: E402
 
@@ -454,14 +454,14 @@ def run_all(proj: str, cfg: dict, rec: Recorder) -> None:
 
     # 世界书直读口（预算/锚点行为也进基线）
     for budget, anchors in [(2000, None), (600, None),
-                            (2000, project.worldbook_anchors(proj, 1))]:
+                            (2000, wb.worldbook_anchors(proj, 1))]:
         rec.calls.append(("worldbook_text", f"budget={budget}",
-                          project.worldbook_text(proj, budget, anchors=anchors)))
+                          wb.worldbook_text(proj, budget, anchors=anchors)))
     # 截断路径（W1 装配内核）：预算小于全文才走按章激活，逐章差异必须进护栏
     for num in (1, 2, 3):
-        anchors = project.worldbook_anchors(proj, num)
+        anchors = wb.worldbook_anchors(proj, num)
         rec.calls.append(("worldbook_assemble", "budget=160 num=%d anchors=%s" % (num, anchors),
-                          project.worldbook_text(proj, 160, anchors=anchors, num=num)))
+                          wb.worldbook_text(proj, 160, anchors=anchors, num=num)))
 
 
 # ---------------- 基线读写与比对 ----------------

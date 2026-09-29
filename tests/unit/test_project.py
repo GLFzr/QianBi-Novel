@@ -2,7 +2,7 @@
 """project：目录结构、章节列表、终稿锁定、字数统计、正则规则解析"""
 import os
 
-from app import project
+from app import project, wb
 
 
 def _make_proj(tmp_path, name="测试书"):
@@ -120,12 +120,12 @@ def test_worldbook_text_section_budget_and_anchors(tmp_path):
         "## 追加登记\n- **柳三更**（人物）：灰袍灯客 ｜ 首见第4章\n"
     )
     project.write_file(os.path.join(proj, project.WORLDBOOK_PATH), doc)
-    out = project.worldbook_text(proj, max_chars=700)
+    out = wb.worldbook_text(proj, max_chars=700)
     assert "柳三更" in out                       # 反哺登记全留
     assert "点灯每日以三次为限" in out           # 规则节优先
     assert len(out) <= 780
     assert "灯盟据点在北城" not in out           # 预算不足时低优先节尾部被截
-    out2 = project.worldbook_text(proj, max_chars=700, anchors=["灯盟据点"])
+    out2 = wb.worldbook_text(proj, max_chars=700, anchors=["灯盟据点"])
     assert "灯盟据点在北城" in out2              # 锚点命中行挤进预算
 
 
@@ -145,13 +145,13 @@ def test_worldbook_anchors_from_roster_and_outline(tmp_path):
                        "## 细纲第4章 · 当票\n\n#### 人物关系和出场顺序\n\n"
                        "- 出场顺序：陈更、柳三更\n\n"
                        "#### 情节点序列\n\n1. 顾拾遗在北城当铺烧毁当票\n")
-    names = project.worldbook_anchors(proj, 4)
+    names = wb.worldbook_anchors(proj, 4)
     assert "陈更" in names and "顾拾遗" in names and "柳三更" in names
     assert "北城当铺" in names          # 真实细纲没有「角色：」字段，靠已知名命中
     for label in ("主要角色表", "实体登记", "出场顺序", "类型", "情节点", "人物",
                   "世界观", "角色", "定位"):
         assert label not in names, f"栏目标签污染锚点：{label}"
-    assert project.worldbook_anchors(proj, 0) == ["陈更", "顾拾遗"]   # 无章号只回角色表
+    assert wb.worldbook_anchors(proj, 0) == ["陈更", "顾拾遗"]   # 无章号只回角色表
 
 
 def test_idea_info_and_planned_chapters(tmp_path):

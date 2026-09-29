@@ -16,9 +16,9 @@ sys.path.insert(0, ROOT)
 
 from tests.unit.conftest import DEAD_FUNC_EVIDENCE  # noqa: E402
 
-# TODO(S2)：co_dialogue.py 是并行施工代理 S2 的领地（其 B1 清单含 clear_transcript
-# 的删除 + B2a 的 config import 改写）。S2 落地后把本文件从 SKIP_FILES 移除。
-SKIP_FILES = {"app/core/co_dialogue.py"}
+# SKIP_FILES：co_dialogue 的遗留条目已随 S2c 落地移除（clear_transcript 已删、
+# 槽位常量已改引 slots），当前无豁免文件；机制保留给后续死函数批次使用。
+SKIP_FILES = set()
 
 
 def _collect_texts():

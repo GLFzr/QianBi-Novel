@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 from probe_format_guard import format_or_die  # noqa: E402  (N-14 护栏)
 
-from app import project, prompts
+from app import project, prompts, wb
 from app.core import stages
 from app.core import co_dialogue
 from app.core import state as st
@@ -72,7 +72,7 @@ check("planned_chapters 读得字数", project.planned_chapters(proj, 3000) == 3
 project.write_file(os.path.join(proj, "设定", "世界书.md"), "## 世界书\n对等代价体系。")
 project.write_file(os.path.join(proj, "设定", "正则.md"),
                    "- 规则：改命必须索回代价｜level：must｜scope：全书")
-check("世界书块注入", "对等代价" in project.worldbook_text(proj))
+check("世界书块注入", "对等代价" in wb.worldbook_text(proj))
 check("正则块注入", "must" in project.regex_block(proj, "logic"))
 
 print("=== cw→自动档互续兼容探针 ===")

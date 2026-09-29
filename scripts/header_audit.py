@@ -169,7 +169,7 @@ BLOCK_PROBES = (
      "consumer": r"read_file\([^\n]*题材定位",
      "reinject": r"core_setting\s*=|core_text\s*=",
      "note": "头部只装 题材定位.md 前 1500 字符；独立读方多：stages 卷纲重读前 4000 字符、"
-             "enrich 重读前 1500 字符、project.worldbook_anchors 读角色表做锚点、"
+             "enrich 重读前 1500 字符、wb.worldbook_anchors 读角色表做锚点、"
              "canon_audit 读授权自创清单——内容被多处按需重读，头部副本有普适依据。"},
     {"key": "03 约束条款（金手指/红线/授权自创）",
      "concept": r"金手指约束|全局红线|授权自创|constraints_block",

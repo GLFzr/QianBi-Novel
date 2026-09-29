@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 from probe_format_guard import format_or_die  # noqa: E402  (N-14 护栏)
 
-from app import project, prompts
+from app import project, prompts, wb
 from app.prompts import scene_cards
 from app.core import stages
 
@@ -47,7 +47,7 @@ prose_prompt = format_or_die(prompts.PROSE_WRITING_PROMPT,
     foreshadows="伏笔", timeline="时间线", previous_excerpt="上文", style_sample="文风",
     user_guidance="指导", user_ideas="想法", word_target=3000,
     tic_blacklist="（无）", used_setpieces="（无）", genre_block="（通用）",
-    worldbook_block=project.worldbook_text(proj),
+    worldbook_block=wb.worldbook_text(proj),
     regex_block=project.regex_block(proj, "logic"),
     craft_block=scene_cards.craft_block(1, 10, "细纲"),
     author_note="每章至少一处可指认的物件反应",
@@ -65,7 +65,7 @@ review_prompt = format_or_die(prompts.REVIEW_PROMPT,
     prose="正文。力量体系：每次改写命运都必须付出对等代价。",
     core_setting="设定", global_summary="摘要", character_states="状态",
     foreshadows="伏笔", timeline="时间线", l0_findings="（无 L0 违规）",
-    worldbook_block=project.worldbook_text(proj),
+    worldbook_block=wb.worldbook_text(proj),
     regex_block=project.regex_block(proj, "logic"),
 )
 check("审校 prompt 注入世界书/正则", "力量体系" in review_prompt and "must" in review_prompt)
@@ -78,7 +78,7 @@ outline_prompt = format_or_die(prompts.CHAPTER_OUTLINE_PROMPT,
     previous_ending="上文结尾", foreshadows="伏笔", unit_contract="单元契约",
     genre_block="（通用）", global_summary="摘要", recent_summaries="近三章",
     character_states="角色状态",
-    worldbook_block=project.worldbook_text(proj),
+    worldbook_block=wb.worldbook_text(proj),
     regex_block=project.regex_block(proj, "logic"),
     user_directive="（无）",
 )
@@ -86,7 +86,7 @@ check("细纲 prompt 注入世界书/正则", "力量体系" in outline_prompt a
 
 # ---- ② 空串回退（旧项目无世界书/正则文件 → 占位不抛 KeyError）----
 proj_old = project.create_project(tempfile.mkdtemp(prefix="qbn_wbf_old_"), "旧项目")
-check("无文件世界书占位", "尚未生成世界书" in project.worldbook_text(proj_old))
+check("无文件世界书占位", "尚未生成世界书" in wb.worldbook_text(proj_old))
 check("无文件正则占位", "尚未生成正则" in project.regex_block(proj_old))
 p2 = format_or_die(prompts.PROSE_WRITING_PROMPT,
     project_header="《格式探针》", chapter_header="### 第1章 开场",
@@ -95,7 +95,7 @@ p2 = format_or_die(prompts.PROSE_WRITING_PROMPT,
     recent_summaries="", character_states="", foreshadows="", timeline="", previous_excerpt="",
     style_sample="", user_guidance="无特殊指导", user_ideas="（无）", word_target=3000,
     tic_blacklist="（无）", used_setpieces="（无）", genre_block="（通用）",
-    worldbook_block=project.worldbook_text(proj_old),
+    worldbook_block=wb.worldbook_text(proj_old),
     regex_block=project.regex_block(proj_old, "logic"),
     craft_block=scene_cards.craft_block(1, 0, ""), author_note="（本章无作者按）",
 )

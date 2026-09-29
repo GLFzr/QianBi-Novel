@@ -2,7 +2,7 @@
 """剧情反哺写回层：七段解析、世界书追加分区幂等（含实体演进/世界观揭示）、伏笔表增量补丁"""
 import os
 
-from app import project
+from app import project, wb
 from app.core import memory
 
 
@@ -130,7 +130,7 @@ def test_upsert_skips_names_already_in_worldbook(tmp_path):
 def test_worldbook_text_keeps_backflow_under_truncation(tmp_path):
     proj = _mk_proj(tmp_path, worldbook="## 世界书\n\n" + "正文占位。" * 400)
     memory.upsert_worldbook_entries(proj, 4, [("柳三更", "人物", "灰袍灯客")], [])
-    out = project.worldbook_text(proj, max_chars=2000)
+    out = wb.worldbook_text(proj, max_chars=2000)
     assert "柳三更" in out and len(out) <= 2100
     assert "…（截断）" in out
 

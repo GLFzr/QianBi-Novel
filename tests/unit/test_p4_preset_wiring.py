@@ -132,7 +132,7 @@ def test_worldbook_proposal_never_enters_activated_view(tmp_path, monkeypatch):
                        "# 世界书修正提案\n\n### 幽灵实体丙\n- 身份：提案里才有的角色\n"
                        "- 建议：正文已把陈更写成掌柜，请核对\n")
     for budget in (2000, 160):
-        assert "幽灵实体丙" not in project.worldbook_text(proj, budget, num=1)
+        assert "幽灵实体丙" not in wb.worldbook_text(proj, budget, num=1)
     doc = project.read_file(os.path.join(proj, project.WORLDBOOK_PATH))
     activated = wb.assemble(proj, num=1, doc=doc)
     assert "幽灵实体丙" not in activated["text"]

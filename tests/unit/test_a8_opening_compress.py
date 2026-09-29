@@ -134,7 +134,7 @@ def test_opening_turn_assembly_delta_meets_calibrated_floor():
     proj = _mk_proj(tempfile.mkdtemp(prefix="qbn_a8_delta_"))
     from app import wb as wb_mod
     wb_block = wb_mod.assemble(proj, num=2, budget=2000,
-                               anchors=project.worldbook_anchors(proj, 2))["text"]
+                               anchors=wb_mod.worldbook_anchors(proj, 2))["text"]
     kw_off = {
         "chapter_num": 2, "next_chapter_brief": "下一章预告文本。" * 6,
         "user_guidance": "无特殊指导", "user_ideas": "（无）", "word_target": 3000,
