@@ -1645,6 +1645,112 @@ class _MicroCycle:
             session.seed_prose(self.prose, chapter_num=num)
             ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
 
+    def _mc_draft(self) -> None:
+        """② 草稿生成（世界书块+阶段指导消费+会话/单轮正文轮；断点续跑时整段跳过）"""
+        if self.resume_at != "":
+            return
+        ctx = self.ctx
+        num = self.num
+        proj = self.proj
+        session = self.session
+        _comp_preface = self._comp_preface
+        _s4_freeze = self._s4_freeze
+        _w_cfg = self._w_cfg
+        outline = self.outline
+        next_brief = self.next_brief
+        draft_extra_ideas = self.draft_extra_ideas
+        ideas = self.ideas
+        guidance = self.guidance
+        chapter_words = self.chapter_words
+        ctx.step(num, st.STEP_DRAFT)
+        ctx.checkpoint()
+        wb_block, rg_block, wb_meta = _worldbook_regex_blocks(ctx, num)
+        _record_worldbook(ctx, PHASE_PROSE, wb_meta)
+        # 阶段重生成时 bridge 写入的「阶段指导」：消费即删，拼进本章写作指导
+        sg_path = os.path.join(proj, "追踪", "阶段指导.md")
+        stage_guidance = project.read_file(sg_path).strip()
+        if stage_guidance:
+            guidance = f"{guidance}\n{stage_guidance}".strip() if guidance else stage_guidance
+            try:
+                os.remove(sg_path)
+            except OSError:
+                pass
+        prose_kw = {
+            "chapter_num": num,
+            "next_chapter_brief": next_brief,
+            "user_guidance": _compose_guidance(guidance, ctx.cfg),
+            "user_ideas": chr(10).join(f"- {t}" for t in ((ideas or []) + draft_extra_ideas)) or "（无）",
+            "word_target": chapter_words,
+            "tic_blacklist": _tic_blacklist(proj),
+            "used_setpieces": _used_setpieces(proj),
+            "project_header": project_header(proj),
+            "chapter_header": _chap_header(ctx, proj, num),
+            "style_discipline": prompts.STYLE_DISCIPLINE,
+            "worldbook_block": wb_block,
+            "regex_block": rg_block,
+            "craft_block": scene_cards.craft_block(num, _total_chapters(proj, chapter_words), outline),
+            "author_note": _author_note(proj),
+        }
+        _prose_directives = _dyn_directives(ctx, PHASE_PROSE)   # E1.2/O2（未配置=空串）
+        # B1（writing.satisfaction_engine，缺省关）：本章细纲携带真实节拍时，正文轮
+        # 注入「三拍必须兑现」指令块；无节拍章/引擎关闭 = 空串（装配字节不变）。
+        _beat_block = (_satisfaction_prose_block(outline)
+                       if bool(_w_cfg.get("satisfaction_engine", False)) else "")
+        # A8（cost.a8_opening_compress，缺省关）：开幕轮密度压缩——只作用于会话路径
+        # （开幕轮与 system 前缀重复的指令性槽位收敛为短引用）；关时逐字节不变。
+        _a8_on = _a8_compress_enabled(ctx.cfg)
+        if _session_usable(session):
+            # 章会话：正文写作是本会话首轮，回复固化为章正文轮。
+            # S1 卷会话：本轮同时是「本章开幕轮」——开幕声明 + 章头并入同一
+            # user 轮（system 只含全书冻结前缀；章头逐卷只 miss 一次，此后
+            # 永久命中）。开幕声明显式锚定「本章正文以本次回复为准」。
+            if (_s4_freeze or _w_cfg.get("head_rebuild", False)) \
+                    and hasattr(session, "open_chapter"):
+                # head_rebuild：指令库已在冻结头里（获取分支构造），开幕同样走
+                # S4 组合（动态值 + 八节），否则指令体会双重出现。
+                # S4（v3 §3 指令库前置）：PROSE 指令体已模板化冻结进卷会话
+                # system（volume_system_text），开幕轮只带本章共享上下文
+                # （volume_mode 八节去三节，S4-b）+ 逐章动态值 + 一行指令库
+                # 执行指针。S1 卷会话/章会话/单轮走 else，请求体逐字节不变。
+                turn_text = _volume_prose_opening_values(
+                    num=num, word_target=chapter_words, next_brief=next_brief,
+                    user_guidance=prose_kw["user_guidance"],
+                    user_ideas=prose_kw["user_ideas"],
+                    used_setpieces=prose_kw["used_setpieces"],
+                    craft_block=prose_kw["craft_block"],
+                    author_note=prose_kw["author_note"],
+                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _prose_directives
+                turn_text = session.open_chapter(
+                    chapter_header(proj, num,
+                                   volume_mode=not _w_cfg.get("head_rebuild", False),
+                                   corpus_mode=_chap_cm(ctx)),
+                    turn_text,
+                    chapter_num=num, preface=_comp_preface)
+            else:
+                if _a8_on:
+                    # A8：与 system 前缀重复的指令性槽位（纪律/正则/世界书常驻）
+                    # 收敛为短引用；卷会话（跨章历史已含前情正文）章头再跳三节。
+                    prose_kw = _a8_opening_prose_kw(prose_kw)
+                turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
+                    + _beat_block + _prose_directives
+                if hasattr(session, "open_chapter"):
+                    turn_text = session.open_chapter(
+                        _chap_header(ctx, proj, num, volume_mode=_a8_on), turn_text,
+                        chapter_num=num,
+                        preface=_comp_preface)
+            ctx.last_prompt = turn_text
+            self.prose = _session_ask(ctx, session, SLOT_WRITING, turn_text,
+                                      label=f"草稿 第{num}章", phase=PHASE_PROSE)
+        else:
+            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _prose_directives
+            ctx.last_prompt = prompt
+            self.prose = _stream(ctx, SLOT_WRITING, prompt, label=f"草稿 第{num}章",
+                                 phase=PHASE_PROSE)
+        if not self.prose.strip():
+            raise StageError(f"第 {num} 章草稿生成失败：模型返回为空")
+        actual = project.count_chars(self.prose)
+        ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
+
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
@@ -1785,103 +1891,11 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                      resume_at=resume_at, saved_votes=saved_votes,
                      resume_prose=resume_prose, draft_rel=draft_rel)
     mc._mc_assemble()
+    mc._mc_draft()
     # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
-    outline = mc.outline
-    next_brief = mc.next_brief
-    draft_extra_ideas = mc.draft_extra_ideas
     prose = mc.prose
 
-    # ---- ② 草稿生成 ----
     if resume_at == "":
-        ctx.step(num, st.STEP_DRAFT)
-        ctx.checkpoint()
-        wb_block, rg_block, wb_meta = _worldbook_regex_blocks(ctx, num)
-        _record_worldbook(ctx, PHASE_PROSE, wb_meta)
-        # 阶段重生成时 bridge 写入的「阶段指导」：消费即删，拼进本章写作指导
-        sg_path = os.path.join(proj, "追踪", "阶段指导.md")
-        stage_guidance = project.read_file(sg_path).strip()
-        if stage_guidance:
-            guidance = f"{guidance}\n{stage_guidance}".strip() if guidance else stage_guidance
-            try:
-                os.remove(sg_path)
-            except OSError:
-                pass
-        prose_kw = {
-            "chapter_num": num,
-            "next_chapter_brief": next_brief,
-            "user_guidance": _compose_guidance(guidance, ctx.cfg),
-            "user_ideas": chr(10).join(f"- {t}" for t in ((ideas or []) + draft_extra_ideas)) or "（无）",
-            "word_target": chapter_words,
-            "tic_blacklist": _tic_blacklist(proj),
-            "used_setpieces": _used_setpieces(proj),
-            "project_header": project_header(proj),
-            "chapter_header": _chap_header(ctx, proj, num),
-            "style_discipline": prompts.STYLE_DISCIPLINE,
-            "worldbook_block": wb_block,
-            "regex_block": rg_block,
-            "craft_block": scene_cards.craft_block(num, _total_chapters(proj, chapter_words), outline),
-            "author_note": _author_note(proj),
-        }
-        _prose_directives = _dyn_directives(ctx, PHASE_PROSE)   # E1.2/O2（未配置=空串）
-        # B1（writing.satisfaction_engine，缺省关）：本章细纲携带真实节拍时，正文轮
-        # 注入「三拍必须兑现」指令块；无节拍章/引擎关闭 = 空串（装配字节不变）。
-        _beat_block = (_satisfaction_prose_block(outline)
-                       if bool(_w_cfg.get("satisfaction_engine", False)) else "")
-        # A8（cost.a8_opening_compress，缺省关）：开幕轮密度压缩——只作用于会话路径
-        # （开幕轮与 system 前缀重复的指令性槽位收敛为短引用）；关时逐字节不变。
-        _a8_on = _a8_compress_enabled(ctx.cfg)
-        if _session_usable(session):
-            # 章会话：正文写作是本会话首轮，回复固化为章正文轮。
-            # S1 卷会话：本轮同时是「本章开幕轮」——开幕声明 + 章头并入同一
-            # user 轮（system 只含全书冻结前缀；章头逐卷只 miss 一次，此后
-            # 永久命中）。开幕声明显式锚定「本章正文以本次回复为准」。
-            if (_s4_freeze or _w_cfg.get("head_rebuild", False)) \
-                    and hasattr(session, "open_chapter"):
-                # head_rebuild：指令库已在冻结头里（获取分支构造），开幕同样走
-                # S4 组合（动态值 + 八节），否则指令体会双重出现。
-                # S4（v3 §3 指令库前置）：PROSE 指令体已模板化冻结进卷会话
-                # system（volume_system_text），开幕轮只带本章共享上下文
-                # （volume_mode 八节去三节，S4-b）+ 逐章动态值 + 一行指令库
-                # 执行指针。S1 卷会话/章会话/单轮走 else，请求体逐字节不变。
-                turn_text = _volume_prose_opening_values(
-                    num=num, word_target=chapter_words, next_brief=next_brief,
-                    user_guidance=prose_kw["user_guidance"],
-                    user_ideas=prose_kw["user_ideas"],
-                    used_setpieces=prose_kw["used_setpieces"],
-                    craft_block=prose_kw["craft_block"],
-                    author_note=prose_kw["author_note"],
-                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _prose_directives
-                turn_text = session.open_chapter(
-                    chapter_header(proj, num,
-                                   volume_mode=not _w_cfg.get("head_rebuild", False),
-                                   corpus_mode=_chap_cm(ctx)),
-                    turn_text,
-                    chapter_num=num, preface=_comp_preface)
-            else:
-                if _a8_on:
-                    # A8：与 system 前缀重复的指令性槽位（纪律/正则/世界书常驻）
-                    # 收敛为短引用；卷会话（跨章历史已含前情正文）章头再跳三节。
-                    prose_kw = _a8_opening_prose_kw(prose_kw)
-                turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
-                    + _beat_block + _prose_directives
-                if hasattr(session, "open_chapter"):
-                    turn_text = session.open_chapter(
-                        _chap_header(ctx, proj, num, volume_mode=_a8_on), turn_text,
-                        chapter_num=num,
-                        preface=_comp_preface)
-            ctx.last_prompt = turn_text
-            prose = _session_ask(ctx, session, SLOT_WRITING, turn_text,
-                                 label=f"草稿 第{num}章", phase=PHASE_PROSE)
-        else:
-            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _prose_directives
-            ctx.last_prompt = prompt
-            prose = _stream(ctx, SLOT_WRITING, prompt, label=f"草稿 第{num}章",
-                            phase=PHASE_PROSE)
-        if not prose.strip():
-            raise StageError(f"第 {num} 章草稿生成失败：模型返回为空")
-        actual = project.count_chars(prose)
-        ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
-
         # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
         max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
         low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
