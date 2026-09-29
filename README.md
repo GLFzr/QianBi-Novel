@@ -17,7 +17,7 @@
 > 问题与建议提 [Issue](https://github.com/GLFzr/QianBi-Novel/issues/new/choose)（有模板），
 > 长讨论与晒书去 [Discussions](https://github.com/GLFzr/QianBi-Novel/discussions)。
 
-![共写首屏：六阶段对话式写作（v0.20 起的默认档）](docs/hero_cw.png)
+![自动档驾驶舱：阶段卡片 + 步骤闸门 + 质量趋势（整条流水线一览）](docs/hero_cw.png)
 
 > **作者的话**：我认为写作 Agent 的终局不是「更会写的模型」，而是**会拒绝的流水线** ——
 > 所以它可能是未来最好用的那一个。这不是跑分结论，而是一个工程判断：模型会换代，
@@ -176,7 +176,7 @@ SmartScreen 会拦一道蓝底提示。那是缺证书，不是文件坏了：�
 外加两个角色：**主 Agent（Supervisor）** 做跨章衔接比对与范围控制，
 **读改 Agent（Readback）** 揣摩你手改的意图并反推该改哪些上游。
 
-![自动档驾驶舱：阶段卡片 + 步骤闸门 + 质量趋势](docs/shot_pipeline.png)
+> 自动档驾驶舱截图见本页首屏（hero 位）——同一套界面，不重复贴图。
 
 ---
 
@@ -380,7 +380,8 @@ python -m venv .venv
 ```bash
 # 离线单测（无需 API Key，约 25 秒）
 .venv/Scripts/python -m pytest tests/unit -q --tb=no -p no:cacheprovider
-# → 1061 passed, 2 skipped（2026-09-25 实测，命令即口径）
+# → 收集 1244 项单测（2026-09-29 实测 --collect-only 口径，命令即口径；
+#   scripts/check_docs.py 会实跑复核，数字腐烂即红）
 
 # 离线探针舰队：真实 Bridge + QML 无头驱动，覆盖闸门/锁定/反哺/接力/导入/导出/更新等链路
 .venv/Scripts/python tests/probe_agent_relay.py
