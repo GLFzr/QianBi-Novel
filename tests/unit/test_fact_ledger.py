@@ -164,6 +164,76 @@ def test_ingest_from_extraction_skip_paths(tmp_path):
     assert rep and rep["kept"] == 1
 
 
+# ---------------- D3 源身份钉死（0.23.0）----------------
+
+def test_source_autofill_on_ingest(tmp_path):
+    """入账自动填写 source 三件套：正文全文 sha256 短12位 + 代际水位 + 来源标注"""
+    import hashlib
+    proj = _proj(tmp_path)
+    rep = fl.ingest_facts(proj, 3, [dict(GOOD1), dict(GOOD2)], CH3,
+                          gen_watermark="ch3-v2", confirmed_by="it:finalize")
+    assert rep["kept"] == 2
+    for row in fl.read_ledger(proj):
+        src = row["source"]
+        assert src["prose_sha256"] == hashlib.sha256(
+            CH3.encode("utf-8")).hexdigest()[:12], "哈希=入账所锚定正文的全文摘要"
+        assert len(src["prose_sha256"]) == 12
+        assert src["gen_watermark"] == "ch3-v2"
+        assert src["confirmed_by"] == "it:finalize"
+
+
+def test_source_autofill_defaults(tmp_path):
+    """缺省通道：confirmed_by 不传 → "extraction"（抽取闸门缺省通道）；水位未知如实留空"""
+    proj = str(tmp_path / "d")
+    os.makedirs(proj)
+    fl.ingest_facts(proj, 3, [dict(GOOD1)], CH3)
+    src = fl.read_ledger(proj)[0]["source"]
+    assert src["confirmed_by"] == "extraction" and src["gen_watermark"] == ""
+    assert fl.ingest_from_extraction(
+        str(tmp_path / "e"), 3, None, CH3) is None   # 挂点签名扩展不破原语义
+    os.makedirs(str(tmp_path / "e"))
+    rep = fl.ingest_from_extraction(str(tmp_path / "e"), 3,
+                                    json.dumps({"facts": [GOOD1]}, ensure_ascii=False),
+                                    CH3, gen_watermark="w9", confirmed_by="cw")
+    assert rep and rep["kept"] == 1
+    assert fl.read_ledger(str(tmp_path / "e"))[0]["source"]["gen_watermark"] == "w9"
+
+
+def test_source_missing_rejected(tmp_path, caplog):
+    """新条目必须带齐 source 三键：调用方显式给了残缺 source → 逐条拒收并告警；
+    未带 source 的条目不受影响（自动填写路径）"""
+    proj = _proj(tmp_path)
+    bad_empty = dict(GOOD1, source="")                       # 空串
+    bad_partial = dict(GOOD2, source={"prose_sha256": "abc"})  # 缺水位与来源
+    with caplog.at_level("WARNING", logger="qianbi.fact_ledger"):
+        rep = fl.ingest_facts(proj, 3, [bad_empty, bad_partial, dict(NOISY)], CH3)
+    assert rep["rejected"] == 2 and rep["kept"] == 1, "残缺 source 只拒自身，不连坐"
+    assert all("source" in it["reason"] for it in rep["rejected_items"])
+    assert any("源身份" in r.message for r in caplog.records), "拒收必须告警"
+    rows = fl.read_ledger(proj)
+    assert len(rows) == 1 and rows[0]["claim"] == NOISY["claim"]
+    assert fl.source_of(rows[0]) is not None, "入账的那条照常自动填写了 source"
+
+
+def test_legacy_rows_without_source_tolerated(tmp_path):
+    """旧条目（无 source 字段）容忍读取：source_of → None；照常参与去重与追加"""
+    proj = _proj(tmp_path)
+    legacy = {"chapter": 3, "claim": "旧格式条目", "evidence": GOOD1["evidence"],
+              "anchored": "strict", "ts": "2025-01-01 00:00:00"}   # 无 source
+    os.makedirs(os.path.dirname(fl.ledger_path(proj)), exist_ok=True)
+    with open(fl.ledger_path(proj), "a", encoding="utf-8") as f:
+        f.write(json.dumps(legacy, ensure_ascii=False) + "\n")
+    rows = fl.read_ledger(proj)
+    assert len(rows) == 1 and fl.source_of(rows[0]) is None, "旧条目容忍读取"
+    rep = fl.ingest_facts(proj, 3, [dict(GOOD2)], CH3)   # 新条目照常入账
+    assert rep["kept"] == 1
+    rows = fl.read_ledger(proj)
+    assert fl.source_of(rows[0]) is None and fl.source_of(rows[1]) is not None
+    rep2 = fl.ingest_facts(proj, 3, [{"claim": "旧格式条目",
+                                      "evidence": GOOD1["evidence"]}], CH3)
+    assert rep2["duplicates"] == 1 and rep2["kept"] == 0, "旧条目仍参与去重"
+
+
 # ---------------- 挂点钉（解线即红） ----------------
 
 def test_wiring_hooks_in_sources():

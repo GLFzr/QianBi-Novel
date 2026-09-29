@@ -15,14 +15,21 @@ ctx.fact_extraction（暂无生产者，缺省跳过）、反哺侧只做账本 
 （对接 CW-G6 backflow_is_fresh 的「锁定⇒账本行必须存在」前置）——均 fail-open。
 
 产物：`追踪/事实账本.jsonl`（append-only，每行一条 {chapter, claim, evidence,
-anchored, ts}，中文直存；按「章号+归一化 claim+归一化 evidence」去重）。
+anchored, ts, source}，中文直存；按「章号+归一化 claim+归一化 evidence」去重）。
+D3 源身份钉死（0.23.0，对位 AINW 五重钉死的落地增量）：新条目一律携带 source
+三件套——{prose_sha256（入账所锚定正文的全文 sha256 短 12 位）, gen_watermark
+（代际/版本号，调用方传入，未知如实留空）, confirmed_by（来源标注）}；入账时自动
+计算填写。读取侧向后兼容：无 source 的旧条目容忍读取（source_of 返回 None）；
+新条目必须带齐三键——调用方显式给了残缺 source 的条目逐条拒收并告警。
 账本**绝不进 state['cw']**（worker 线程 load→save 已是丢失更新窗口，账本进
 state 会放大——卡9 原文裁决）；本模块自身零 LLM、零网络、fail-open。
 """
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
+import logging
 import os
 import re
 import unicodedata
@@ -47,6 +54,11 @@ _EVIDENCE_MAX = 500
 _QUOTE_TRANS = str.maketrans("", "", "“”‘’「」『』…—·–\"'")
 
 _TS_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# D3 源身份三件套键（新条目 source 字段必须带齐；旧条目无此字段容忍读取）
+SOURCE_KEYS = ("prose_sha256", "gen_watermark", "confirmed_by")
+
+logger = logging.getLogger("qianbi.fact_ledger")
 
 
 def _now_str() -> str:
@@ -161,6 +173,36 @@ def ledger_path(proj: str) -> str:
     return os.path.join(proj, "追踪", LEDGER_FILENAME)
 
 
+# ---------------- D3 源身份钉死（0.23.0）----------------
+
+def build_source(chapter_text: str, gen_watermark: str = "",
+                 confirmed_by: str = "") -> dict:
+    """入账条目的源身份三件套（ingest_facts 自动计算填写）：
+      - prose_sha256：入账所锚定的本章正文全文 sha256 短 12 位——正文手改一个字
+        即可对出「这条账不是对这份正文记的」（AINW 内容哈希钉死的对位物）；
+      - gen_watermark：代际/版本号（章节定稿版本号或抽取代际；调用方传入，
+        未知如实留空——不猜）；
+      - confirmed_by：来源标注（谁入的账：抽取相位名/人工通道名；空时落
+        "extraction"=抽取闸门缺省通道）。
+    """
+    return {"prose_sha256": hashlib.sha256((chapter_text or "").encode("utf-8")).hexdigest()[:12],
+            "gen_watermark": str(gen_watermark or ""),
+            "confirmed_by": str(confirmed_by or "").strip() or "extraction"}
+
+
+def _source_complete(src) -> bool:
+    """调用方显式提供的 source 是否三键齐全且类型合法（新条目入账硬门槛）"""
+    return (isinstance(src, dict)
+            and all(str(src.get(k) or "").strip() for k in SOURCE_KEYS))
+
+
+def source_of(row: dict):
+    """读条目 source 字段：无 source（或非 dict）的**旧条目**返回 None——向后兼容
+    容忍读取，消费方据此走 legacy 路径；新条目一律三键齐全。"""
+    src = (row or {}).get("source")
+    return src if isinstance(src, dict) else None
+
+
 def read_ledger(proj: str) -> list:
     """全量读账本（jsonl 逐行 json，坏行跳过）。缺失/损坏 → []（fail-open）。"""
     rows = []
@@ -186,16 +228,21 @@ def _row_key(chapter: int, claim: str, evidence: str) -> tuple:
     return (int(chapter), normalize(claim), normalize(evidence))
 
 
-def ingest_facts(proj: str, num: int, facts: list, chapter_text: str) -> dict:
+def ingest_facts(proj: str, num: int, facts: list, chapter_text: str, *,
+                 gen_watermark: str = "", confirmed_by: str = "") -> dict:
     """逐条锚定 + 逐条拒收 + append 入账（核心入口，纯确定性）。
 
     逐条拒收：锚定失败只拒该条，同批其余事实照常入账（原型结论——整笔拒绝
     在真实数据连坐丢 124 条真事实）。同章同事实（去重键相同）跳过不重复入账。
+    D3 源身份：入账行自动携带 source 三件套（build_source 按本章正文全文哈希
+    + gen_watermark/confirmed_by 参数构建）；调用方在事实条目上**显式**给了
+    source 的，必须三键齐全——残缺即该条拒收并告警（新条目必须带，缺→拒收）。
     返回报告 {total, kept, strict, norm, rejected, duplicates, rejected_items}。
     """
     num = int(num)
     facts = facts or []
     norm_text = normalize(chapter_text or "")
+    src = build_source(chapter_text, gen_watermark, confirmed_by)
     existing = {_row_key(r.get("chapter", -1), str(r.get("claim") or ""),
                          str(r.get("evidence") or ""))
                 for r in read_ledger(proj)}
@@ -205,6 +252,15 @@ def ingest_facts(proj: str, num: int, facts: list, chapter_text: str) -> dict:
         if not isinstance(fct, dict):
             rejected += 1
             rejected_items.append({"claim": "", "reason": "条目非对象"})
+            continue
+        # D3：显式给了 source 的条目必须身份齐全（缺→拒收并告警；未给的走自动填写）
+        if "source" in fct and not _source_complete(fct.get("source")):
+            claim_bad = str(fct.get("claim") or "").strip()
+            rejected += 1
+            rejected_items.append({"claim": claim_bad[:60],
+                                   "reason": "缺 source 源身份字段（新条目必须带齐 "
+                                             f"{'/'.join(SOURCE_KEYS)}）"})
+            logger.warning("事实账本拒收缺源身份条目（第%s章）：%s", num, claim_bad[:60])
             continue
         claim = str(fct.get("claim") or "").strip()
         evidence = str(fct.get("evidence") or "").strip()
@@ -220,7 +276,7 @@ def ingest_facts(proj: str, num: int, facts: list, chapter_text: str) -> dict:
             continue
         existing.add(key)
         lines.append(json.dumps({"chapter": num, "claim": claim, "evidence": evidence,
-                                 "anchored": lvl, "ts": _now_str()},
+                                 "anchored": lvl, "ts": _now_str(), "source": dict(src)},
                                 ensure_ascii=False))
         kept += 1
         if lvl == "strict":
@@ -236,11 +292,13 @@ def ingest_facts(proj: str, num: int, facts: list, chapter_text: str) -> dict:
             "rejected": rejected, "duplicates": dups, "rejected_items": rejected_items}
 
 
-def ingest_from_extraction(proj: str, num: int, raw, chapter_text: str):
+def ingest_from_extraction(proj: str, num: int, raw, chapter_text: str, *,
+                           gen_watermark: str = "", confirmed_by: str = ""):
     """finalize/反哺挂点的串装入口：抽取结果 → 解析 → 锚定入账。
 
     raw 为空（None/空白串/解析零条）→ 返回 None（调用方整段跳过——fail-open，
-    本卡抽取闸门未接入时的常态路径）。
+    本卡抽取闸门未接入时的常态路径）。gen_watermark/confirmed_by 透传
+    ingest_facts（D3 源身份钉死；调用方持有章节版本号/相位名时传入）。
     """
     if raw is None:
         return None
@@ -249,7 +307,8 @@ def ingest_from_extraction(proj: str, num: int, raw, chapter_text: str):
     facts, _parse_rej = extract_facts(num, raw)
     if not facts:
         return None
-    return ingest_facts(proj, num, facts, chapter_text)
+    return ingest_facts(proj, num, facts, chapter_text,
+                        gen_watermark=gen_watermark, confirmed_by=confirmed_by)
 
 
 def ledger_is_fresh(proj: str, num: int, *, chapter_path: str) -> bool:
