@@ -23,7 +23,7 @@ from .. import project, prompts, deslop, mustscan, wb
 from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
 from ..prompts import bridge_codes, scene_cards
-from . import deslop_metrics, gates, memory, scan, state as st, versions  # S6a：度量层下沉 core
+from . import deslop_metrics, gates, memory, scan, state as st, tracking_store, versions  # S6a：度量层下沉 core
 from .chapter_directive import (FIELD_ORDER as _CD_FIELD_ORDER,       # A1（0.23.0）章纲合同
                                 parse_directive as _parse_directive,
                                 to_prompt_block as _to_prompt_block,
@@ -841,6 +841,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
                 client = ctx.router.client(
                     genre_presets.stage_slot(_preset_id(ctx.proj), phase) or slot)
                 ctx.last_prompt = req
+                _snap_prompt(ctx, phase)   # E1：修订相位最终装配 prompt 快照
                 raw = clean_llm_output(client.chat_turn(
                     session.snapshot() + [{"role": "user", "content": req}],
                     on_chunk=ctx.stream_chunk, phase=phase,
@@ -852,6 +853,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
             else:
                 req = template.format(**kw_span) + "\n\n" + span_edit.OUTPUT_CONTRACT
                 ctx.last_prompt = req
+                _snap_prompt(ctx, phase)   # E1：修订相位最终装配 prompt 快照
                 raw = clean_llm_output(_stream(ctx, slot, req, label=label,
                                                phase=phase))
             spans = span_edit.parse_spans(raw)
@@ -882,6 +884,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
     # —— 全量路径（改造前原语义）——
     prompt = template.format(**kw)
     ctx.last_prompt = prompt
+    _snap_prompt(ctx, phase)   # E1：修订相位最终装配 prompt 快照（会话路径随后被 turn_text 覆盖）
     if use_sess:
         _session_seed(session, prose)
         turn_text = prompts.session_turn_text(template).format(**kw)
@@ -892,6 +895,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
             else:
                 ctx.log("warn", f"{label or phase} 会话轮未匹配到静态指令段（模板变了？），本轮保留全文指令")
         ctx.last_prompt = turn_text
+        _snap_prompt(ctx, phase)   # E1：会话轮为最终装配形态（最新一份）
         return _session_ask(ctx, session, slot, turn_text, label=label,
                             phase=phase, stream=stream, temperature=temperature)
     return _stream(ctx, slot, prompt, label=label, phase=phase)
@@ -979,6 +983,7 @@ def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
     t_before = session.turn_count()
     try:
         ctx.last_prompt = req
+        _snap_prompt(ctx, PHASE_DESLOP, num)   # E1：定点修复轮最终装配 prompt 快照
         raw = _session_ask(ctx, session, SLOT_WRITING, req,
                            label=f"去味定点修复 第{num}章", phase=PHASE_DESLOP, stream=True)
         spans = _parse_pinned_output(raw)
@@ -1595,7 +1600,7 @@ def _compaction_step(ctx, proj: str, num: int, session):
     return session, preface
 
 
-# ---- A1（0.23.0）章纲合同的模块级助手 ----
+# ---- A1/E1（0.23.0）章纲合同与 prompt 快照的模块级助手 ----
 
 def _directive_contract_block(directive) -> str:
     """A1：ChapterDirective → 正文轮合同块；None / 零识别字段 → 空串。
@@ -1638,6 +1643,31 @@ def _coverage_finding(missing: list) -> str:
     return ("[大纲覆盖] 必须覆盖节点缺失 %d 项：%s——正文未命中节点要件，"
             "须在本章正文补演该节点（缺失清单见上，逐项兑现）"
             % (len(missing), listed))
+
+
+def _snap_prompt(ctx, kind: str, num: int = 0) -> None:
+    """E1 prompt 快照接口：kind → 最终装配 prompt（ctx.prompt_snapshots，内存最新一份）。
+
+    ctx.prompt_snapshots 由 chapter_microcycle 章入口清零（ctx 是跨章单例，
+    同 ctx.review_v2 清零纪律）；配置 debug.prompt_snapshot_dir 时同步落盘
+    <章号三位>_<kind>.md（默认 off）。全程 fail-open，绝不阻断流水线。
+    """
+    try:
+        snaps = getattr(ctx, "prompt_snapshots", None)
+        if not isinstance(snaps, dict):
+            snaps = {}
+            ctx.prompt_snapshots = snaps
+        snaps[kind] = getattr(ctx, "last_prompt", "") or ""
+        d = ((getattr(ctx, "cfg", None) or {}).get("debug", {}) or {}) \
+            .get("prompt_snapshot_dir") or ""
+        if d:
+            n = int(num or getattr(ctx, "prompt_snapshot_ch", 0) or 0)
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "%03d_%s.md" % (n, kind)), "w",
+                      encoding="utf-8") as f:
+                f.write(snaps[kind])
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @dataclass
@@ -1875,11 +1905,13 @@ class _MicroCycle:
                         chapter_num=num,
                         preface=_comp_preface)
             ctx.last_prompt = turn_text
+            _snap_prompt(ctx, PHASE_PROSE, num)   # E1：草稿轮最终装配 prompt 快照
             self.prose = _session_ask(ctx, session, SLOT_WRITING, turn_text,
                                       label=f"草稿 第{num}章", phase=PHASE_PROSE)
         else:
             prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _directive_block + _prose_directives
             ctx.last_prompt = prompt
+            _snap_prompt(ctx, PHASE_PROSE, num)   # E1：草稿轮最终装配 prompt 快照
             self.prose = _stream(ctx, SLOT_WRITING, prompt, label=f"草稿 第{num}章",
                                  phase=PHASE_PROSE)
         if not self.prose.strip():
@@ -2093,7 +2125,8 @@ class _MicroCycle:
         self.skip_scan_deslop = self.resume_at in ("deslop", "review", "finalize")
         self.blocking, self.advisory = ([], []) if self.skip_scan_deslop else ([], [])
         ctx.step(num, st.STEP_SCAN)
-        self.blocking, self.advisory = ([], []) if self.skip_scan_deslop else gates.scan_deslop(self.prose)
+        self.blocking, self.advisory = ([], []) if self.skip_scan_deslop \
+            else gates.scan_deslop(self.prose, proj=self.proj)   # P4/C1b：书级白名单接线
         gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
         # 卡6S：改前基线度量读数（纯本地零 token，随章记录落盘；去味收尾会覆盖为定稿读数）
         try:
@@ -2204,7 +2237,7 @@ class _MicroCycle:
                                     f"剩余轮次 {max_deslop_rounds - rounds}）")
                     _round_tics = list(dict.fromkeys(
                         _round_tics + _high_freq_new_trigrams(pre_round_prose, rewritten)))
-                    self.blocking, self.advisory = gates.scan_deslop(self.prose)
+                    self.blocking, self.advisory = gates.scan_deslop(self.prose, proj=proj)
                     gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
                     continue
             if rewritten.strip():
@@ -2213,7 +2246,7 @@ class _MicroCycle:
                     _round_tics + _high_freq_new_trigrams(pre_round_prose, rewritten)))
             elif _session_usable(session):
                 session.rollback_to(t_round)   # 空改写稿不采纳 → 历史不留坏正文轮
-            self.blocking, self.advisory = gates.scan_deslop(self.prose)
+            self.blocking, self.advisory = gates.scan_deslop(self.prose, proj=proj)
             gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
         gr.deslop_rounds_used = rounds
         if self.blocking:
@@ -2247,7 +2280,7 @@ class _MicroCycle:
                                             f"（新增 {len(_mk_now - _mk_pre)} 条）——请人工复核正则规则")
                     except Exception:  # noqa: BLE001
                         pass
-                self.blocking, self.advisory = gates.scan_deslop(self.prose)
+                self.blocking, self.advisory = gates.scan_deslop(self.prose, proj=proj)
                 gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
                 gr.deslop_rounds_used = 0
             if self.blocking:
@@ -2373,6 +2406,7 @@ class _MicroCycle:
                             upstream_anchors=anchors,
                         )
                         ctx.last_prompt = root_prompt
+                        _snap_prompt(ctx, PHASE_ROOT_CAUSE, num)   # E1：根因溯源轮快照
                         root_result = clean_llm_output(
                             ctx.router.client(SLOT_REVIEW).chat_stream(
                                 root_prompt, on_chunk=ctx.stream_chunk,
@@ -2496,6 +2530,16 @@ class _MicroCycle:
             versions.snapshot(proj, num, prose, versions.SOURCE_FINALIZE)
         elif old_text and old_text != prose:
             versions.snapshot(proj, num, old_text, versions.SOURCE_REREWRITE)
+            # B4（0.23.0）伏笔推进回补接线（WA4 补链）：章重写（旧稿在场且内容
+            # 有变）时撤销本章按旧稿登记的伏笔推进——后续章已接续推进/已回收的
+            # 不动状态，该章 advances 日志清零使重定稿可重登记（幂等键释放）。
+            try:
+                _rolled = tracking_store.rollback_foreshadow_advances(proj, num)
+                if _rolled:
+                    ctx.log("info", f"第 {num} 章 重写回补：撤销伏笔推进 {len(_rolled)} 条"
+                                    f"（{'、'.join(_rolled[:5])}）")
+            except Exception as e:  # noqa: BLE001
+                ctx.log("warn", f"第 {num} 章 伏笔推进回补失败（不阻断）：{e}")
         project.write_file(chapter_path, prose)
 
         # 追踪四文件
@@ -2582,12 +2626,14 @@ class _MicroCycle:
                                  chapter_header=_chap_header(ctx, proj, num))
                 merged_prompt = prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT.format(**merged_kw)
                 ctx.last_prompt = merged_prompt
+                _snap_prompt(ctx, PHASE_CH_SUMMARY, num)   # E1：摘要轮快照（合并路径）
                 if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
                     _session_seed(session, prose)
                     turn_text = prompts.session_turn_text(
                         prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT,
                         prose_sentinel="{prose_excerpt}").format(**merged_kw)
                     ctx.last_prompt = turn_text
+                    _snap_prompt(ctx, PHASE_CH_SUMMARY, num)   # E1：会话轮为最终装配形态
                     _raw_m = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                                           phase=PHASE_CH_SUMMARY, stream=False)
                 else:
@@ -2603,6 +2649,7 @@ class _MicroCycle:
                     prose_excerpt=excerpt, project_header=project_header(proj),
                     chapter_header=_chap_header(ctx, proj, num))
                 ctx.last_prompt = summary_prompt
+                _snap_prompt(ctx, PHASE_CH_SUMMARY, num)   # E1：摘要轮快照（两段式路径）
                 if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
                     _session_seed(session, prose)
                     turn_text = prompts.session_turn_text(
@@ -2610,6 +2657,7 @@ class _MicroCycle:
                         chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
                         project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
                     ctx.last_prompt = turn_text
+                    _snap_prompt(ctx, PHASE_CH_SUMMARY, num)   # E1：会话轮为最终装配形态
                     chapter_summary = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                                                    phase=PHASE_CH_SUMMARY, stream=False
                                                    ).splitlines()[0].strip()
@@ -2639,6 +2687,7 @@ class _MicroCycle:
                         chapter_header=_chap_header(ctx, proj, num),
                         project_header=project_header(proj))
                     ctx.last_prompt = global_prompt
+                    _snap_prompt(ctx, PHASE_G_SUMMARY, num)   # E1：全局摘要轮快照
                     if _use_session(ctx, session, SLOT_HELPER, PHASE_G_SUMMARY):
                         # W-2 ②-c：既有全局摘要＝上一章本相位自己的回复，多半已逐字节固化在
                         # 栈里（t3b 实测 ~2.4k han 字/章、类内重复率 95%）。**可证才替换**：
@@ -2653,6 +2702,7 @@ class _MicroCycle:
                             chapter_num=num, chapter_summary=chapter_summary,
                             chapter_header=_chap_header(ctx, proj, num), project_header=project_header(proj))
                         ctx.last_prompt = turn_text
+                        _snap_prompt(ctx, PHASE_G_SUMMARY, num)   # E1：会话轮为最终装配形态
                         new_global = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                                                   phase=PHASE_G_SUMMARY, stream=False)
                     else:
@@ -2728,6 +2778,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 无重置——断路/人工/字数拦截章的 finalize 会吃到上一章 B_PAYOFF 裁决，
     # 误记「兑现/空头支票」。章入口强制清零。
     ctx.review_v2 = None
+    # E1（0.23.0）prompt 快照：ctx 跨章单例同纪律，章入口清零（内存只留本章
+    # 最新一份 kind→prompt）；prompt_snapshot_ch 供修订相位快照落盘取章号。
+    ctx.prompt_snapshots = {}
+    ctx.prompt_snapshot_ch = int(num)
     proj = ctx.proj
     # 用量行归属章号：T 轮的逐章曲线一直靠"prose 每章恰一次"反推，就是缺这一格
     from .. import usage as _usage
