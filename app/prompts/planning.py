@@ -20,6 +20,42 @@ _END_HOOK_FIELD = ("- 章尾钩子：（具体内容一句概括；钩型：" + 
                    "——七选一，须与词表判据相符；期待度：强/中/弱；"
                    "低压生活/信息整理章可写「无」+读者往下看的理由；与下一章如何承接）")
 
+# A1 章纲合同（ChapterDirective · 17 字段）注入块——细纲从自由 markdown 升级为
+# 可校验合同（0.23.0 A1）。**钉定渲染副本**纪律：planning 不能模块级 import
+# app.core.*（app/core/__init__ 拉起 orchestrator→anomaly_persist→volume_session
+# →app.prompts 半初始化窗口，实测 ImportError），故单一出处定在
+# app/core/chapter_directive.FIELD_SPECS（directive_contract_menu() 渲染），
+# 本块保存逐字节一致的渲染副本，test_chapter_directive 钉等价——改 FIELD_SPECS
+# 必须同步重渲染本块。块内禁止 ASCII 花括号（拼接进 .format() 模板）。
+DIRECTIVE_CONTRACT_MENU_BLOCK = """## 章纲合同（ChapterDirective · 17 字段，机器可校验）
+细纲不只是给写作看的散文，更是一份**可校验合同**。每章在叙事栏目之外，必须再附
+一个 `#### 章纲合同（chapter_directive）` 小节：用 ```json 代码块按以下 17 字段输出
+（键名用英文键、值可用中文；列表字段用数组；不适用或未定的可选字段写 null；
+合同之外的补充字段允许附加，解析端容错保留）。该合同会被程序逐字段解析校验，
+缺必填字段按不合格处理：
+""" + """- 目标（goal，必填）：本章核心目标/核心事件：谁要对谁做什么（一句话）
+- 阻力（obstacles，可选）：主要阻力与对抗方（谁/什么在拦）
+- 代价（cost，可选）：推进或失败的代价（压力来源）
+- 时间锚点（time_anchor，必填）：本章故事时间（「主线第 X 日」口径，与已有章节对齐）
+- 跨度（chapter_span，可选）：本章覆盖的故事时间跨度/章长方向
+- 倒计时（countdown，可选）：本章处于哪个 D-N 倒计时/期限压力下（无则写无）
+- 承接节点（cbn，必填）：CBN：本章开头节点，1 个，必须承接上章 CEN
+- 推进节点（cpns，必填）：CPNs：中段推进节点 2-4 个，按时间序
+- 章末节点（cen，必填）：CEN：章末节点，1 个，落到章末未闭合问题
+- 必须覆盖节点（must_cover_nodes，必填）：大纲即法律的核对清单：本章必演节点（≤4，正文缺失即拒收依据）
+- 本章禁区（forbidden_zones，可选）：硬禁区：本章不得出现的内容（≤5；含禁止提前释放项）
+- 章末未闭合问题（chapter_end_open_question，必填）：本章留给下一章的未闭合问题
+- 钩型（hook_type，必填）：章尾钩型：七型受控词表之一（判据见 hook_vocab）
+- 钩子强度（hook_strength，必填）：期待度：强/中/弱（审校 F 维回写为权威值）
+- 关键实体（key_entities，可选）：本章关键实体/出场角色（占位符防线按此求交）
+- 主线归属（strand，可选）：本章服务的主线/支线/感情线归属
+- 反派层级（antagonist_tier，可选）：本章对手层级（压强标定）""" + """
+节点三件套约定（格式「主体 | 动作/变化 | 对象/结果」）：承接节点（CBN）每章 1 个、
+必须承接上一章的章末节点（CEN）；推进节点（CPNs）2-4 个按时间序；章末节点（CEN）
+1 个，落点必须与「章末未闭合问题」一致。必须覆盖节点 ≤4、本章禁区 ≤5，
+只写硬禁区。相邻章 CEN→CBN 承接必须成立。
+"""
+
 # ========== Phase 1-2：核心设定 ==========
 
 CORE_SETTING_PROMPT = """{project_header}
@@ -202,7 +238,8 @@ CHAPTER_OUTLINE_PROMPT = ("""{project_header}
 凡属"首次"的事件——金手指首次使用、规则首次显形、核心关系首次建立——必须在某章的情节点序列里有
 【正拍】情节点（密，≥250字），禁止以"某某之后"开章承接、禁止压缩为起因背景。本批细纲如覆盖任何首次事件，须标注【正拍】。
 """
-    + HOOK_VOCAB_BLOCK + """
+    + DIRECTIVE_CONTRACT_MENU_BLOCK + """
+""" + HOOK_VOCAB_BLOCK + """
 
 ## 输出格式：每章一个细纲，用 `===第N章===` 作为章节分隔符
 
@@ -254,6 +291,23 @@ CHAPTER_OUTLINE_PROMPT = ("""{project_header}
 - 结尾设定：（收束落到什么具体动作或画面；未解决问题；下一章推动力）
 """
     + _END_HOOK_FIELD + """
+
+#### 章纲合同（chapter_directive）
+```json
+{{"chapter_num": N,
+  "goal": "…", "obstacles": "…", "cost": "…",
+  "time_anchor": "主线第 X 日…", "chapter_span": "…", "countdown": "…",
+  "cbn": "主体 | 动作/变化 | 对象/结果",
+  "cpns": ["主体 | 动作/变化 | 对象/结果", "…"],
+  "cen": "主体 | 动作/变化 | 对象/结果",
+  "must_cover_nodes": ["…"], "forbidden_zones": ["…"],
+  "chapter_end_open_question": "…",
+  "hook_type": "七型之一", "hook_strength": "强/中/弱",
+  "key_entities": ["…"], "strand": "…", "antagonist_tier": "…"}}
+```
+（17 字段说明见上方「章纲合同」节；叙事栏目与合同字段必须互相一致——
+合同里的 must_cover_nodes 必须被上方情节点序列覆盖，cbn/cen 必须与
+承接锚点、结尾设定对得上。）
 
 （格式同上：为本批剩余每一章各输出一个 ===第N章=== 小节，直到本批末章）
 
