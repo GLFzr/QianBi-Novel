@@ -156,8 +156,9 @@ def test_union_static_segment_snapshot(lieflat_cache):
 def _derived_rule_families():
     """从代码派生全部规则 ID（R11：期望清单不许手写在测试里）。
 
-    收集 app/deslop.py 里 add("rule-id", …) 首参与 Finding(rule="rule-id", …)
-    的全部字面量——删掉/改名任一规则，派生集合即缩，快照比对必红。
+    收集 app/deslop.py 里 add("rule-id", …) / add_span("rule-id", …) 首参与
+    Finding(rule="rule-id", …) 的全部字面量——删掉/改名任一规则，派生集合即缩，
+    快照比对必红。（C16b：add_span 为聚合型 finding 的新增登记口，与 add 同源。）
     """
     import ast as _ast
     src = open(os.path.join(ROOT, "app", "deslop.py"), encoding="utf-8").read()
@@ -166,7 +167,8 @@ def _derived_rule_families():
     for node in _ast.walk(tree):
         if isinstance(node, _ast.Call):
             fname = getattr(node.func, "id", getattr(node.func, "attr", ""))
-            if fname == "add" and node.args and isinstance(node.args[0], _ast.Constant):
+            if fname in ("add", "add_span") and node.args \
+                    and isinstance(node.args[0], _ast.Constant):
                 ids.add(node.args[0].value)
         if isinstance(node, _ast.keyword) and node.arg == "rule" \
                 and isinstance(node.value, _ast.Constant):

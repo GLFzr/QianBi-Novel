@@ -48,6 +48,25 @@ REVIEW_AXIS = {
     "trailer-ending": "semantic", "trailer-summary": "semantic",
     "fate-summary": "semantic", "abstract-summary-tic": "semantic",
     "reasoning-chain": "semantic", "brake-standalone-para": "semantic",
+    # ---- C16b/C1a 增量 17 条（oh-story 11 条直译 + humanizer/R1-R6 移植）二轴登记
+    # （对齐 oh-story REVIEW_CLASSES；无上游分类的按同族规则归类）----
+    "negation-pair-tic": "semantic",        # 「没A，也没B」否定对偶（上游 semantic）
+    "stock-reaction-tic": "semantic",       # 身体反应可能承担物理后果（上游 semantic）
+    "action-list-tic": "semantic",          # 功能性动作编排可保留（上游 semantic）
+    "system-notice-formality-tic": "semantic",   # 系统文本本可公文腔（上游 semantic）
+    "overcompressed-prose-tic": "semantic", # 短段过密可能是节奏选择（上游 semantic）
+    "low-connective-density-tic": "semantic",    # 连接词补不补看读感（上游 semantic）
+    "formulaic-parallelism": "semantic",    # 工整并列可能承担辩解（上游 semantic）
+    "cliche-density-tic": "mechanical",     # 固定词表密度（上游 mechanical）
+    "forced-triad": "semantic",             # 三连同质与否需语义判（humanizer #6）
+    "sentence-opening-run": "mechanical",   # 纯统计句首复读（humanizer #7）
+    "idealized-persona-simile": "mechanical",    # 拟人化喻体词表（lieflat 7.3×）
+    "adjacent-sentence-isomorph": "semantic",    # 结构同款需读语境（lieflat 2.0×）
+    "zero-subject-comment": "mechanical",   # 词表+回指字面可判（lieflat 4.4×）
+    "vague-rider": "mechanical",            # 空转伴随状语词表（humanizer #15）
+    "closer-recap-tic": "semantic",         # 点题句复述判断（humanizer #2）
+    "sendoff-para": "semantic",             # 送别段/升华段（humanizer #13）
+    "recap-opening": "semantic",            # 章首复述前情（humanizer #26）
 }
 
 # 节奏统计口径
@@ -70,6 +89,58 @@ _QUOTE_SPAN_RE = re.compile(r"[「“][^」”]+[」”]")
 
 # 引号强调滥用（叙述里短词加引号）
 QUOTE_EMPHASIS = re.compile(r'[“"][^“”"\n]{1,4}[”"]')
+
+# ---- 引号掩码基建（C16b/C1a，oh-story check-ai-patterns.js maskQuoted 直译）----
+# 成对引号（台词/系统播报/弹幕/【】面板）字符对，mask_quoted / strip_quoted /
+# quoted_ranges 共用一份来源。引号片段一律不跨行（字符类里排掉 \n）：正文漏一个
+# 收引号很常见（多段台词只在末段收尾、全半角引号混用都会漏），若允许跨行配对，
+# 一个未闭合的开引号会把后面成百上千字全算成「引号内」，把整段叙述静默豁免掉。
+_QUOTE_PAIRS = [("「", "」"), ("『", "』"), ("【", "】"), ("“", "”"),
+                ("‘", "’"), ('"', '"'), ("'", "'")]
+
+
+def _quote_source(open_ch: str, close_ch: str) -> str:
+    def esc(t: str) -> str:
+        return t.replace("\\", "\\\\")
+    return "%s[^%s\\n]*%s" % (esc(open_ch), esc(close_ch), esc(close_ch))
+
+
+_QUOTE_SPAN_RES = [re.compile(_quote_source(o, c)) for o, c in _QUOTE_PAIRS]
+
+
+def mask_quoted(text: str) -> str:
+    """成对引号片段（含引号）替换为等长「？」占位：既豁免引号内台词/播报，又保住
+    原文偏移量，供逐处规则定位与截取原文摘录（strip_quoted 会移位，不适合定位）。
+
+    占位字符用「？」而不是「。」：占位既要截断各规则的 [^。！？!?…] 否定类
+    （？与句号在每条规则的否定类里等效），又不能落在任何规则的接受位——句号占位
+    会替 trailer-summary 的句末 [。！] 伪造出终止符。等长替换，偏移与摘录窗口不漂移。
+    """
+    out = text
+    for pat in _QUOTE_SPAN_RES:
+        out = pat.sub(lambda m: "？" * len(m.group(0)), out)
+    return out
+
+
+def strip_quoted(text: str) -> str:
+    """去掉成对引号内的片段（台词/系统播报），只留引号外叙述。
+
+    密度型规则的分母与命中计数用：纯对话/弹幕成片短句是体裁正常形态（豁免），
+    但「叙述 + 引号内物件/短台词」混合行的引号外叙述仍参与统计。
+    """
+    out = text
+    for pat in _QUOTE_SPAN_RES:
+        out = pat.sub("", out)
+    return out
+
+
+def quoted_ranges(text: str) -> list:
+    """引号内片段（含引号本身）的 [start, end) 区间列表（不跨行），供逐位置豁免判定。"""
+    ranges = []
+    for pat in _QUOTE_SPAN_RES:
+        for m in pat.finditer(text):
+            ranges.append((m.start(), m.end()))
+    return ranges
 
 # 视线词族（密度型，2026-08 真机语料分析：残留 AI 味第一名——凝视循环镜头单一）
 GAZE_MARKERS = re.compile(r"盯着|看向|望向|注视|目光")

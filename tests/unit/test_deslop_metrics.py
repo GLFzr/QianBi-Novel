@@ -99,7 +99,8 @@ def test_metrics_match_hand_computation():
     assert c["simile-marker-density"] == 4
     assert c["trailer-ending"] == 1
     assert c["trailer-summary"] == 1
-    assert c["abstract-summary-tic"] == 6   # 这一刻…明白 ×2 + 从这一刻开始 ×2 + 命运齿轮 ×2
+    assert c["abstract-summary-tic"] == 7   # 这一刻…明白 ×2 + 从这一刻开始 ×2 + 命运齿轮 ×2
+    #                                        + 新的开始 ×1（C16b/A9 并入 oh-story 增补分支）
     assert c["fate-summary"] == 6
     assert c["brake-sentence"] == 1         # 聚合型 finding
     assert c["brake-standalone-para"] == 1
