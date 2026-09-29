@@ -712,7 +712,7 @@ ApplicationWindow {
                             exportDialog.open()
                         }
                         ToolTip.visible: hovered
-                        ToolTip.text: "导出全本（txt/md，排版选项与即时预览，导出后见报告）"   // U-20：图标钮必配提示
+                        ToolTip.text: "导出全本（txt/epub，排版选项与即时预览，导出后见报告）"   // U-20：图标钮必配提示；A11/w1_ux：对话框实为 txt/epub 两档（app/export.py export_project），虚标 md 删除
                     }
                     Rectangle { width: 1; height: 18; color: Theme.border
                                 Layout.alignment: Qt.AlignVCenter }   // U-19：分组②章节与文件｜③视图切换

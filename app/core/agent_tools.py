@@ -304,9 +304,12 @@ def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
     # 看某章正文（含口语：「看下第2章写成什么样了」「看看最新这章」）。
     # 负向条件：带「注意…写法/改」等修改意图后缀的是写作讨论（「重新读一遍第二章，
     # 注意时间线的写法」），不是查看指令——否则 D 类误触发。
+    # A11/w1_ux 缺口①：「当前章」话术不在此吃——本规则读的是磁盘定稿，
+    # 共写编辑器里尚未落盘的草案读不到；「看看当前章正文」等归下方 cw_read_chapter
+    # （与该规则注释「只认当前章」的意图对齐）。
     m = re.search(r"(?:看看?下?|读(?:一下)?|给我看)\s*%s\s*的?\s*(?:正文|内容|写成什么样)?" % _CH_NUM, t)
     _talk_about_writing = re.search(r"注意|写法|要改|应该改|改得|改一下", t)
-    if m and not (guess_talk := _talk_about_writing and not forced) and \
+    if m and "当前章" not in t and not (guess_talk := _talk_about_writing and not forced) and \
             (forced or re.search(r"看看?下?|读|给我看", t)) and \
             ("正文" in t or "内容" in t or "什么样" in t or forced
              or chapter_ref[0] is not None or chapter_ref[1]):
@@ -352,8 +355,9 @@ def parse_instruction(text: str, default_chapter: int = 0) -> tuple:
     if re.search(r"落稿|(?:把|将)\s*草案[^。\n]{0,8}(?:放进|放到|落到|送进|应用[到入])\s*编辑器", t):
         return ("cw_prose_to_editor", {}, "exact" if forced else "guess")
     # 共写正文三动作：去味 / 审校 / 生成草案。回退重跑与设置开关话术已被前面规则收走，
-    # 负向条件再挡一道（「回退到去味之前」「关闭人工审校」不许落成共写动作）
-    if re.search(r"去味|去\s*[aA][iI]\s*味", t) and \
+    # 负向条件再挡一道（「回退到去味之前」「关闭人工审校」不许落成共写动作）。
+    # A11/w1_ux 缺口④：动词与宾语隔「一下」的口语（「去一下AI味」）也接住
+    if re.search(r"去(?:\s*一下)?\s*(?:[aA][iI]\s*)?味", t) and \
             not re.search(r"回退|退回|回到|重跑|重来|推倒|重写", t):
         return ("cw_deslop", {}, "exact" if forced else "guess")
     if re.search(r"审校|帮我审|审一下|审一遍", t) and \

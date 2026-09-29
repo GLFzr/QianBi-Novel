@@ -4232,21 +4232,26 @@ class Bridge(QObject):
         """L1-07：共写界面动作的派发面——Agent 话术真实驱动 dock 同款能力"""
         from ..core import agent_tools   # H-12：此前裸用未导入的全局名 ⇒ NameError
         label = agent_tools.UI_TOOLS[name]["label"]
-        # B-1(4)：主推档行动半径——共写能力注册为 Agent 工具后的派发分支
+        # B-1(4)：主推档行动半径——共写能力注册为 Agent 工具后的派发分支。
+        # A11/w1_ux 附加行（自动档 Console 话术错位）：阶段绑定的 校验细纲/存选题
+        # 两支归入下方共写档守卫——自动档说「细纲体检」曾被回共写话术
+        # 「请先回到单元细纲阶段」、「记一下选题想法」被回「点确定进入核心设定」
+        # （自动档没有这些按钮）；统一改为档位指路。世界观对账/读当前章两支
+        # 跨档可用（对项目章节操作，不依赖共写阶段机），维持直派。
         if name == "cw_canon_audit":
             self.runCanonAudit(); return
         if name == "cw_read_chapter":
             text = self.readFileText()
             self.logModel.append("info", f"当前章正文（前 400 字）：{text[:400]}")
             return
+        if self._get_cw_mode() != "cw":
+            self.toast.emit("warn", "「%s」是共写档动作：请先切到共写档" % label)
+            return
         if name == "cw_outline_validate":
             self.validateCwOutlines(); return
         if name == "cw_idea_save":
             info = project.read_idea_info(self.proj)
             self.saveCwIdeaInfo(info["genre"], info["platform"], info["idea"], info["total_words_wan"])
-            return
-        if self._get_cw_mode() != "cw":
-            self.toast.emit("warn", "「%s」是共写档动作：请先切到共写档" % label)
             return
         stage = self._get_cw_stage_key()
         try:
