@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""卡6S deslop 度量层（app/deslop_metrics.py + deslop.py 复活/GateResult 扩展）
+"""卡6S deslop 度量层（app/core/deslop_metrics.py，S6a 下沉 + deslop.py 复活/GateResult 扩展）
 
 - ≥10 类合成毒文本被 scan_text 命中（本套种了 20+ 类，断言 ≥10 稳过）
 - compute_metrics 与手算一致：AID=Σ(命中×权重)/千字、分规则 count/per_kilo/review
@@ -14,7 +14,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from app import deslop
-from app import deslop_metrics
+from app.core import deslop_metrics
 from app.core import gates
 
 _FILLER = "他沿着河堤慢慢走，水面浮着零星的灯光，远处偶尔传来一声船笛，风把凉意送到领口里。"

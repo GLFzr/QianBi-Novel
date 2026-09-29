@@ -19,11 +19,11 @@ from contextlib import contextmanager as _contextmanager
 from dataclasses import dataclass, field
 
 from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
-from .. import project, prompts, deslop, deslop_metrics, mustscan, wb
+from .. import project, prompts, deslop, mustscan, wb
 from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
 from ..prompts import bridge_codes, scene_cards
-from . import gates, memory, scan, state as st, versions
+from . import deslop_metrics, gates, memory, scan, state as st, versions  # S6a：度量层下沉 core
 from .satisfaction import outline_directive as _satisfaction_outline_directive
 from .satisfaction import prose_beat_block as _satisfaction_prose_block
 from .satisfaction import ledger_row as _sat_ledger_row
@@ -2438,7 +2438,8 @@ class _MicroCycle:
         # 不自动写库、不占 cw["report"] 单槽（state.py 三共抢教训）。
         try:
             from . import maintenance
-            _mt = maintenance.run_checks(proj, num)
+            # S6a：project 模块经参数注入（maintenance 不再上探 app-top）
+            _mt = maintenance.run_checks(proj, num, proj_io=project)
             if _mt:
                 ctx.log("info", f"第 {num} 章 写后维护四查：待确认卡 "
                                 f"{len(_mt.get('cards') or [])} 张——"
@@ -2779,13 +2780,16 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
 
 # ============ 审校（v1 一致性检查 + v2 6 维最终审核）============
 
-def review_l0_block(proj: str, num: int, prose: str) -> str:
+def review_l0_block(proj: str, num: int, prose: str, cfg: dict = None) -> str:
     """L0 确定性预检组装（流水线/修复复审/共写审校三注入点共用）
 
     专名/跨章复读/数值账/章末弱钩/题材禁词 → 格式化注入审校 prompt；
     再接本书正则 must 的确定性命中（app/mustscan）。后者是契约违规的
     第二层处置：不另起一个自动重试环（那会和 ±20% 字数纪律互相拉扯出振荡），
     直接交给既有审校反馈环——它带着全量上下文改，且本就有三轮熔断。
+
+    cfg：应用配置透传（V5 爽点账本开关门控——S6a 参数注入，l0_checks 不再
+    上探 app-top 读 config；缺省 None＝开关缺省 on）。
     """
     prev = project.nearest_chapter_before(proj, num)
     prev_prose = (project.read_file(prev[2]) if prev else "") or ""
@@ -2805,7 +2809,7 @@ def review_l0_block(proj: str, num: int, prose: str) -> str:
     # 清单（证据供给）。确定性正则，fail-open，绝不阻断。
     from .l0_checks import build_v5_block
     _v5 = build_v5_block(
-        proj, num, prose,
+        proj, num, prose, cfg=cfg,
         read_outline=lambda: project.read_file(project.get_outline_path(proj, num)),
         read_states=lambda: project.read_file(project.get_tracking_path(proj, "角色状态")))
     if _v5:
@@ -2847,7 +2851,7 @@ def build_final_review_prompt(proj: str, cfg: dict, num: int, prose: str,
         worldbook_block=wb_block,
         regex_block=rg_block,
         genre_review_extra=_genre_review_extra(proj),
-        l0_findings=review_l0_block(proj, num, prose),
+        l0_findings=review_l0_block(proj, num, prose, cfg),
     )
 
 
@@ -3065,7 +3069,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         worldbook_block=wb_block,
         regex_block=rg_block,
         genre_review_extra=_genre_review_extra(ctx.proj),
-        l0_findings=review_l0_block(ctx.proj, num, prose),
+        l0_findings=review_l0_block(ctx.proj, num, prose, ctx.cfg),
     )
     # 调整四（writing.review_compact，缺省关）：票输出走紧凑 JSON 协议——
     # rubric 前缀与长文版逐字节共用，只换输出协议；解析失败自动回退长文重投。

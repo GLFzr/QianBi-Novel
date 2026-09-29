@@ -24,8 +24,11 @@ import json
 import os
 import re
 
-from .. import project
 from . import tracking_store
+
+# S6a：原 from .. import project 上探边拆除（C42-2 引入的 core->app-top 违规）——
+# run_checks 所需的读文件/章节枚举/细纲路径改由调用方以 proj_io（project 模块）
+# 注入（参数注入），异常仍由 run_checks 自身兜底 fail-open。
 
 # 新实体候选排除表（原型 _STOP 的修正版：原型把词表写成了一个无空格长串导致
 # 集合退化为单元素——移植时拆成真词表）
@@ -299,27 +302,29 @@ def sidecar_path(proj: str, num: int) -> str:
     return os.path.join(proj, "追踪", "维护四查_第%03d章.json" % int(num))
 
 
-def run_checks(proj: str, num: int) -> dict:
+def run_checks(proj: str, num: int, *, proj_io) -> dict:
     """四查编排入口（finalize 挂点调用）：读项目 → 四域检查 → 待确认卡片 →
     checklist → 落 sidecar 追踪/维护四查_第NNN章.json。返回完整报告 dict。
 
+    - proj_io：project 模块（read_file/list_chapters/get_outline_path）——S6a
+      参数注入，路径类依赖不上探 app-top，由调用方（stages 本就持有 project）传入；
     - 章节缺失/异常 → {}（调用方跳过，fail-open，绝不阻断定稿）；
     - **不读写 pipeline_state**（不碰 cw["report"] 单槽——三共抢教训）；
     - 追踪/角色状态.json、伏笔表.json 由 tracking_store 惰性播种（既有一惯例）。
     """
     try:
         num = int(num)
-        chapters = [(int(c), project.read_file(p))
-                    for c, _name, p in project.list_chapters(proj)]
+        chapters = [(int(c), proj_io.read_file(p))
+                    for c, _name, p in proj_io.list_chapters(proj)]
         chapters = sorted([(c, t) for c, t in chapters if t])
         if not chapters or not any(c == num for c, _t in chapters):
             return {}
         names = list((tracking_store.load_characters(proj) or {}).get("order") or [])
-        roster_text = project.read_file(os.path.join(proj, "设定", "题材定位.md"))
+        roster_text = proj_io.read_file(os.path.join(proj, "设定", "题材定位.md"))
         rows = (tracking_store.load_foreshadow(proj) or {}).get("rows") or []
-        outline_doc = project.read_file(project.get_outline_path(proj, num))
-        prev_outline_doc = project.read_file(project.get_outline_path(proj, num - 1))
-        fallback_doc = "" if outline_doc.strip() else project.read_file(
+        outline_doc = proj_io.read_file(proj_io.get_outline_path(proj, num))
+        prev_outline_doc = proj_io.read_file(proj_io.get_outline_path(proj, num - 1))
+        fallback_doc = "" if outline_doc.strip() else proj_io.read_file(
             os.path.join(proj, "大纲", "大纲.md"))
         clauses = _outline_clauses(outline_doc, fallback_doc, num)
         report = {

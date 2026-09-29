@@ -163,7 +163,9 @@ def _state_card_block(proj: str, num: int) -> str:
     if not STATE_CARD_ENABLED:
         return ""
     try:
-        card = (build_state_card(proj, num, budget=STATE_CARD_BUDGET) or "").strip()
+        # S6a：project 模块经参数注入（state_card 不再上探 app-top）
+        card = (build_state_card(proj, num, budget=STATE_CARD_BUDGET,
+                                 proj_io=project) or "").strip()
     except Exception:  # noqa: BLE001
         return ""
     return "【续写状态卡】\n%s" % card if card else ""
@@ -680,7 +682,7 @@ class CwProseCheckWorker(QThread):
 
     def _run_deslop(self):
         from .. import deslop
-        from .. import deslop_metrics
+        from . import deslop_metrics   # S6a：度量层下沉 core（原 app-top 上探边拆除）
         from . import gates
         from . import stages as stages_mod
         blocking, advisory = gates.scan_deslop(self.text)
@@ -845,12 +847,16 @@ class MemoryBackflowWorker(QThread):
         # C42/P1（卡9）：反哺落账后同步校验事实账本 freshness——对接 CW-G6
         # backflow_is_fresh 的「锁定⇒账本行必须存在」对账前置。抽取闸门未接入
         # 时本章无账本行为预期态：只在报告尾附提示，不判失败（fail-open）。
+        # （S6a：正文路径在此解析后传入——fact_ledger 参数注入，不再自探 project）
         try:
             from . import fact_ledger
-            if (st.backflow_is_fresh(self.proj, st.load_state(self.proj), self.num)
-                    and not fact_ledger.ledger_is_fresh(self.proj, self.num)):
-                self.report += (f"\n事实账本：第{self.num}章暂无新鲜账本行"
-                                f"（抽取闸门接入前为预期态，CW-G6 对账项）")
+            if st.backflow_is_fresh(self.proj, st.load_state(self.proj), self.num):
+                _chap = next((p for c, _n, p in project.list_chapters(self.proj)
+                              if c == self.num), "")
+                if not fact_ledger.ledger_is_fresh(self.proj, self.num,
+                                                   chapter_path=_chap):
+                    self.report += (f"\n事实账本：第{self.num}章暂无新鲜账本行"
+                                    f"（抽取闸门接入前为预期态，CW-G6 对账项）")
         except Exception:  # noqa: BLE001
             pass
         self.done.emit(self.num, report)

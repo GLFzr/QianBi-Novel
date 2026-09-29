@@ -8,7 +8,7 @@
                 可配置。语义是「读感代理指标」，不承诺对外检测率（诚实边界——
                 对外只走送检包+人工回填，绝不编数字）。
 2. by_rule      分规则命中表：{rule: {count, per_kilo, level, review}}。聚合底座是
-                deslop.summarize_findings（卡6S 将其从死函数复活为本表基础）；
+                summarize_findings（卡6S 将其从死函数复活为本表基础）；
                 review = mechanical（词表/标点/长度统计等表面模式）|
                 semantic（句式修辞关系判断），28 个 rule id 全登记。
 3. rhythm       句长均值/方差、段长均值/方差、单句短段占比、连续短段最大游程
@@ -18,10 +18,15 @@
 
 附 special（专项密度）与 guard（改写质量护栏；需要改前文本的项由
 compute_guard 单独计算，卡7 的 new_must_violations 同走 guard 出口）。
+
+S6a 下沉：本模块原在 app-top（app/deslop_metrics.py），co_dialogue/stages 两个
+core 消费方各自多背一条 core->app-top 上探边；度量层本是「文本进 dict 出」的纯
+函数层（text_metrics 同款），落 core 后消费边转 core→core。随迁四件与扫描共用
+的纯底座（QUOTE_EMPHASIS/GAZE_MARKERS/BRAKE_MARKERS/in_dialogue/
+summarize_findings，原定义在 app/deslop.py——deslop 反向自本模块导入，特征
+登记处单一真源，app-top→core 合法方向），本模块对 app 零依赖。
 """
 import re
-
-from . import deslop
 
 AID_WEIGHTS = {"blocking": 3.0, "advisory": 1.0}
 
@@ -61,6 +66,42 @@ _DIALOG_TAG_RE = re.compile(r"[「“][^」”]*[」”]\s*[，,]?\s*(?:他|她|
                             r"(?:低声|轻声|沉声|冷声|笑道|问道)?(?:说|道|问|答|喊|嚷|嘀咕|开口)")
 _QUOTE_SPAN_RE = re.compile(r"[「“][^」”]+[」”]")
 
+# ---- 与 deslop 扫描共用的纯底座（原定义在 app/deslop.py，S6a 随迁单一真源）----
+
+# 引号强调滥用（叙述里短词加引号）
+QUOTE_EMPHASIS = re.compile(r'[“"][^“”"\n]{1,4}[”"]')
+
+# 视线词族（密度型，2026-08 真机语料分析：残留 AI 味第一名——凝视循环镜头单一）
+GAZE_MARKERS = re.compile(r"盯着|看向|望向|注视|目光")
+
+# 否定刹车句族（"没有动/没有回头/没有说话"——短促否定节奏指纹）
+BRAKE_MARKERS = re.compile(r"没有[动说气回头停开口接答理翻]")
+
+
+def in_dialogue(text: str, pos: int) -> bool:
+    """判断位置是否在对话引号内（粗略：统计前面中文引号的开合）"""
+    before = text[:pos]
+    opens = before.count("“") + before.count("「")
+    closes = before.count("”") + before.count("」")
+    return opens > closes
+
+
+def summarize_findings(findings: list) -> dict:
+    """按 (rule, level) 聚合统计：{(rule, level): {rule, level, count, message, fix_hint}}
+
+    卡6S 度量层已复活：compute_metrics 以本函数为分规则命中表的聚合底座
+    （B1 死函数豁免登记随复活摘除）。S6a 起真身在本模块，app/deslop 反向导入
+    转发（调用面不变）。
+    """
+    stats = {}
+    for f in findings:
+        key = (f.rule, f.level)
+        if key not in stats:
+            stats[key] = {"rule": f.rule, "level": f.level, "count": 0,
+                          "message": f.message, "fix_hint": f.fix_hint}
+        stats[key]["count"] += 1
+    return stats
+
 
 def visible_chars(text: str) -> int:
     """可见字数（与 project.count_chars 同口径：去空白与 markdown 标记）"""
@@ -94,7 +135,7 @@ def compute_metrics(text: str, findings: list, weights: dict = None) -> dict:
 
     # 2) 分规则命中表（复活 summarize_findings 作聚合底座）
     merged = {}
-    for st in deslop.summarize_findings(findings or []).values():
+    for st in summarize_findings(findings or []).values():
         entry = merged.setdefault(st["rule"], {"count": 0, "level": "advisory",
                                                "review": REVIEW_AXIS.get(st["rule"],
                                                                          "mechanical")})
@@ -137,12 +178,12 @@ def compute_metrics(text: str, findings: list, weights: dict = None) -> dict:
     }
 
     # 专项密度（D1/D2/B6/C11 的读数，只进指标不设规则）
-    gaze_hits = len(deslop.GAZE_MARKERS.findall(body))
-    brake_hits = len(deslop.BRAKE_MARKERS.findall(body))
+    gaze_hits = len(GAZE_MARKERS.findall(body))
+    brake_hits = len(BRAKE_MARKERS.findall(body))
     quote_spans = _QUOTE_SPAN_RE.findall(body)
     tag_hits = len(_DIALOG_TAG_RE.findall(body))
-    emph_hits = len([m for m in deslop.QUOTE_EMPHASIS.finditer(body)
-                     if not deslop._in_dialogue(body, m.start())])
+    emph_hits = len([m for m in QUOTE_EMPHASIS.finditer(body)
+                     if not in_dialogue(body, m.start())])
     special = {
         "dialog_tag_ratio": round(tag_hits / len(quote_spans), 3) if quote_spans else 0.0,
         "gaze_per_kilo": round(gaze_hits / kilo, 3) if kilo > 0 else 0.0,

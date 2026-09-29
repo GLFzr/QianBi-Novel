@@ -27,7 +27,8 @@ import os
 import re
 import unicodedata
 
-from .. import project
+# S6a：原 from .. import project 上探边拆除（C42-1 引入的 core->app-top 违规）——
+# ledger_is_fresh 所需的本章正文路径改由调用方解析传入（参数注入）。
 
 # 未来抽取闸门的 LLM 输出 schema 约定（本卡只消费该形态，不负责产生它）
 FACTS_SCHEMA_HINT = (
@@ -251,10 +252,14 @@ def ingest_from_extraction(proj: str, num: int, raw, chapter_text: str):
     return ingest_facts(proj, num, facts, chapter_text)
 
 
-def ledger_is_fresh(proj: str, num: int) -> bool:
+def ledger_is_fresh(proj: str, num: int, *, chapter_path: str) -> bool:
     """账本新鲜（对接 state.backflow_is_fresh 同口径）：「锁定⇒本章账本行必须
     存在」的对账前置。本章已有账本行，且最新落账时间不早于正文文件 mtime
     （正文未在账本落账后再被改动）。无行/无正文/时间戳解析失败 → False。
+
+    chapter_path：本章正文文件路径（调用方以 project.list_chapters 解析传入——
+    S6a 参数注入，路径类依赖不上探 app-top；空串=无正文 → False，与原查无此章
+    同语义）。
     """
     try:
         num = int(num)
@@ -268,7 +273,7 @@ def ledger_is_fresh(proj: str, num: int) -> bool:
                 ts = p
         if ts is None:
             return False
-        path = next((p for c, _n, p in project.list_chapters(proj) if c == num), "")
+        path = chapter_path or ""
         if not path or not os.path.exists(path):
             return False
         return os.path.getmtime(path) <= ts.timestamp()

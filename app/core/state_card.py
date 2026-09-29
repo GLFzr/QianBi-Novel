@@ -20,9 +20,12 @@ import logging
 import os
 import re
 
-from .. import project
 from . import memory as _memory
 from . import tracking_store
+
+# S6a：原 from .. import project 上探边拆除（卡9-P2 引入的 core->app-top 违规）——
+# 文件读取/章节枚举/正则契约取块改由调用方以 proj_io（project 模块）注入，
+# 各私有助手首参透传；全部包在既有 fail-open try/except 内，语义不变。
 
 log = logging.getLogger("qianbi.state_card")
 
@@ -35,9 +38,9 @@ _PLACEHOLDER_RE = re.compile(r"^（?暂无）?$|^（?无）?$")
 _NEAR_RE = re.compile(r"^剩(\d+)章$")
 
 
-def _rd(proj: str, *parts: str) -> str:
+def _rd(proj_io, proj: str, *parts: str) -> str:
     try:
-        return project.read_file(os.path.join(proj, *parts))
+        return proj_io.read_file(os.path.join(proj, *parts))
     except Exception:  # noqa: BLE001
         return ""
 
@@ -49,44 +52,44 @@ def _clean(s: str) -> str:
     return "" if _PLACEHOLDER_RE.match(t) else t
 
 
-def _chapters_upto(proj: str, num: int, cap: int = CAP_RECENT) -> list:
+def _chapters_upto(proj_io, proj: str, num: int, cap: int = CAP_RECENT) -> list:
     """小于 num 的最近 cap 章 [(n, text)]（升序）"""
     out = []
     try:
-        for n, _name, path in project.list_chapters(proj):
+        for n, _name, path in proj_io.list_chapters(proj):
             if n < num:
-                out.append((n, project.read_file(path) or ""))
+                out.append((n, proj_io.read_file(path) or ""))
     except Exception:  # noqa: BLE001
         return []
     return out[-cap:]
 
 
-def _outline_doc(proj: str, num: int) -> str:
-    return _rd(proj, "大纲", "细纲_第%03d章.md" % num) or \
-        _rd(proj, "大纲", "细纲_第%d章.md" % num)
+def _outline_doc(proj_io, proj: str, num: int) -> str:
+    return _rd(proj_io, proj, "大纲", "细纲_第%03d章.md" % num) or \
+        _rd(proj_io, proj, "大纲", "细纲_第%d章.md" % num)
 
 
 # ---------------- 七栏数据域（全部 fail-open） ----------------
 
-def _sec_position(proj: str, num: int) -> list:
+def _sec_position(proj_io, proj: str, num: int) -> list:
     n_last = 0
     try:
-        n_last = max((c[0] for c in project.list_chapters(proj)), default=0)
+        n_last = max((c[0] for c in proj_io.list_chapters(proj)), default=0)
     except Exception:  # noqa: BLE001
         pass
     if n_last and num <= n_last:
         pos = "已定稿至第%d章；当前焦点第%d章（重写/补写）。" % (n_last, num)
     else:
         pos = "已定稿至第%d章；下一章第%d章。" % (n_last, num)
-    brief = _clean(_rd(proj, "追踪", "上下文.md"))[:100]
+    brief = _clean(_rd(proj_io, proj, "追踪", "上下文.md"))[:100]
     if brief:
         pos += "进度速记：%s" % brief
     return [pos]
 
 
-def _sec_promise(proj: str, num: int) -> list:
+def _sec_promise(proj_io, proj: str, num: int) -> list:
     """细纲 核心事件/主线推进 + 章末钩子 + 字数目标；缺失回退大纲.md 第N章条目"""
-    doc = _outline_doc(proj, num)
+    doc = _outline_doc(proj_io, proj, num)
     promise, hook, target = "", "", ""
     if doc.strip():
         for key in _OUTLINE_FIELDS:
@@ -103,7 +106,7 @@ def _sec_promise(proj: str, num: int) -> list:
         if m:
             target = m.group(1)
     if not promise:
-        for ln in _rd(proj, "大纲", "大纲.md").splitlines():
+        for ln in _rd(proj_io, proj, "大纲", "大纲.md").splitlines():
             s = ln.strip()
             if re.search(r"第%d章" % num, s) and s.startswith(("-", "*")):
                 promise = _clean(re.sub(r"^[-*]\s*", "", s))
@@ -138,7 +141,7 @@ def _sec_foreshadow(ranked: list, stress: bool = False) -> list:
     return out
 
 
-def _sec_roles(proj: str, num: int, stress: bool = False) -> tuple:
+def _sec_roles(proj_io, proj: str, num: int, stress: bool = False) -> tuple:
     """(items, zero_mention_names)——角色按近 3 章出场频次排序（坑②：只认 sidecar 登记名）
 
     stress=True 解除结构性上限（模拟 200 章长篇追踪涨满，卡片的真实对手）。
@@ -149,7 +152,7 @@ def _sec_roles(proj: str, num: int, stress: bool = False) -> tuple:
         return [], []
     chars = data.get("characters") or {}
     order = data.get("order") or list(chars)
-    recent = _chapters_upto(proj, num)
+    recent = _chapters_upto(proj_io, proj, num)
     recent_text = "".join(t for _n, t in recent)
     scored = []
     for name in order:
@@ -169,9 +172,9 @@ def _sec_roles(proj: str, num: int, stress: bool = False) -> tuple:
     return items, zero
 
 
-def _sec_must(proj: str) -> list:
+def _sec_must(proj_io, proj: str) -> list:
     try:
-        block = project.regex_block(proj, "logic", 1500, levels=("must",))
+        block = proj_io.regex_block(proj, "logic", 1500, levels=("must",))
     except Exception:  # noqa: BLE001
         return []
     if not block or block.startswith("（本书"):
@@ -179,12 +182,12 @@ def _sec_must(proj: str) -> list:
     return [ln.strip() for ln in block.splitlines() if ln.strip()]
 
 
-def _sec_recent(proj: str, num: int, stress: bool = False) -> list:
+def _sec_recent(proj_io, proj: str, num: int, stress: bool = False) -> list:
     try:
         if stress:
             # 压力模式：全部摘要入卡（200 章书的追踪涨满形态）
             lines = []
-            for line in _rd(proj, "追踪", "章节摘要.md").splitlines():
+            for line in _rd(proj_io, proj, "追踪", "章节摘要.md").splitlines():
                 if re.match(r"^\s*-\s*第\d+章", line):
                     lines.append(line.strip())
             return lines
@@ -221,7 +224,7 @@ def _sec_risks(ranked: list, zero_roles: list, num: int, has_outline: bool) -> l
 
 # ---------------- 组装与预算裁剪 ----------------
 
-def _build_sections(proj: str, num: int, stress: bool = False) -> list:
+def _build_sections(proj_io, proj: str, num: int, stress: bool = False) -> list:
     """→ [(标题, 优先级, items)]；数字大者先丢，P0 永不丢"""
     ranked = []
     try:
@@ -229,16 +232,16 @@ def _build_sections(proj: str, num: int, stress: bool = False) -> list:
         ranked = tracking_store.foreshadow_urgency({"rows": rows}, num - 1)
     except Exception:  # noqa: BLE001
         ranked = []
-    roles, zero_roles = _sec_roles(proj, num, stress)
-    outline = _outline_doc(proj, num)
+    roles, zero_roles = _sec_roles(proj_io, proj, num, stress)
+    outline = _outline_doc(proj_io, proj, num)
     return [
-        ("当前位置", 0, _sec_position(proj, num)),
-        ("下一章承诺", 0, _sec_promise(proj, num)),
+        ("当前位置", 0, _sec_position(proj_io, proj, num)),
+        ("下一章承诺", 0, _sec_promise(proj_io, proj, num)),
         ("活跃伏笔(作者真相)", 1, _sec_foreshadow(ranked, stress)),
         ("连贯性风险", 3, _sec_risks(ranked, zero_roles, num, bool(outline.strip()))),
         ("核心角色状态", 2, roles),
-        ("长期约束(正则must)", 4, _sec_must(proj)),
-        ("近三章速记(读者已知)", 5, _sec_recent(proj, num, stress)),
+        ("长期约束(正则must)", 4, _sec_must(proj_io, proj)),
+        ("近三章速记(读者已知)", 5, _sec_recent(proj_io, proj, num, stress)),
     ]
 
 
@@ -275,19 +278,23 @@ def _trim_to_budget(sections: list, budget: int, num: int) -> tuple:
 
 
 def build_state_card_detail(proj: str, num: int, *, budget: int = BYTE_BUDGET,
-                            stress: bool = False) -> tuple:
+                            stress: bool = False, proj_io) -> tuple:
     """(card, audit)——audit 为逐项裁剪记录（常规书为空，压力样本才非空）
 
     stress=True 解除结构性上限（角色 6/伏笔 8/近章 3），移植原型的压力形态：
     200 章长篇追踪涨满后由 12KB 硬上限与优先级裁剪器兜底。
+
+    proj_io：project 模块（read_file/list_chapters/regex_block）——S6a 参数注入，
+    路径类依赖不上探 app-top，由调用方（core 消费方本就持有 project）传入。
     """
     n = int(num or 0)
-    sections = _build_sections(proj, n, stress)
+    sections = _build_sections(proj_io, proj, n, stress)
     return _trim_to_budget(sections, int(budget), n)
 
 
 def build_state_card(proj: str, num: int, *, budget: int = BYTE_BUDGET,
-                     stress: bool = False) -> str:
+                     stress: bool = False, proj_io) -> str:
     """七栏续写状态卡（≤budget 字节，超限按 P5→P1 优先级整项裁剪+审计日志）"""
-    card, _audit = build_state_card_detail(proj, num, budget=budget, stress=stress)
+    card, _audit = build_state_card_detail(proj, num, budget=budget, stress=stress,
+                                           proj_io=proj_io)
     return card

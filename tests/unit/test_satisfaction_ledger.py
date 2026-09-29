@@ -194,31 +194,34 @@ def _mk_proj_with_rows(tmp_path, rows):
 
 
 def test_v5_block_carries_ledger_findings(tmp_path, monkeypatch):
-    """on：账本欠账 → V5 块出现 [fail候选|空头支票]（挂进 L0 输出，三审校注入点共用）"""
-    monkeypatch.setattr(config, "load_config",
-                        lambda: {"writing": {"satisfaction_ledger_enabled": True}})
+    """on：账本欠账 → V5 块出现 [fail候选|空头支票]（挂进 L0 输出，三审校注入点共用）
+
+    S6a：开关改由调用方透传 cfg（l0_checks 不再上探 app-top 读 config）。
+    """
+    _cfg = {"writing": {"satisfaction_ledger_enabled": True}}
     proj = _mk_proj_with_rows(tmp_path, [_row(5, "打脸", delivered=False),
                                          _row(6, "收获", delivered=False)])
-    block = build_v5_block(proj, 7, "", read_outline=lambda: "", read_states=lambda: "")
+    block = build_v5_block(proj, 7, "", read_outline=lambda: "", read_states=lambda: "",
+                           cfg=_cfg)
     assert "[fail候选|空头支票]" in block
-    fs = ledger_findings(proj, 7, "")
+    fs = ledger_findings(proj, 7, "", cfg=_cfg)
     assert fs and fs[0]["check"] == "空头支票"
 
 
 def test_v5_block_off_switch_byte_identical(tmp_path, monkeypatch):
     """off：有账本在盘也不注入——V5 块与「无账本」逐字一致（off 态字节不变）"""
-    monkeypatch.setattr(config, "load_config",
-                        lambda: {"writing": {"satisfaction_ledger_enabled": False}})
+    _cfg = {"writing": {"satisfaction_ledger_enabled": False}}
     proj = _mk_proj_with_rows(tmp_path, [_row(1, "打脸"), _row(2, "打脸"), _row(3, "打脸")])
-    b1 = build_v5_block(proj, 4, "", read_outline=lambda: "", read_states=lambda: "")
+    b1 = build_v5_block(proj, 4, "", read_outline=lambda: "", read_states=lambda: "",
+                        cfg=_cfg)
     os.remove(sat._ledger_path(proj))
-    b2 = build_v5_block(proj, 4, "", read_outline=lambda: "", read_states=lambda: "")
+    b2 = build_v5_block(proj, 4, "", read_outline=lambda: "", read_states=lambda: "",
+                        cfg=_cfg)
     assert b1 == b2 and "节奏单一" not in b1 and "账本" not in b1
 
 
 def test_v5_block_no_evidence_byte_identical(tmp_path, monkeypatch):
     """证据在场才检查：缺省 on 但账本文件缺失 → 恒空（旧书字节不变）"""
-    monkeypatch.setattr(config, "load_config", lambda: {})
     block = build_v5_block(str(tmp_path), 4, "", read_outline=lambda: "",
                            read_states=lambda: "")
     assert block == ""

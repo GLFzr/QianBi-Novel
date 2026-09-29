@@ -303,18 +303,13 @@ def ledger_findings(proj, num: int, outline: str, cfg: dict = None) -> list:
 
     - 账本开关 off（writing.satisfaction_ledger_enabled，缺省 on）→ 恒空（off 字节不变）；
     - 证据在场才检查：账本文件缺失/无行 → 恒空（旧书字节不变，fail-open）；
-    - cfg 缺省时读应用配置（build_v5_block 无 cfg 入参；读盘失败按缺省 on）。
+    - cfg 由调用方透传（review_l0_block ← stages 持有的应用配置——S6a 参数注入，
+      本模块不再上探 app-top 读 config；缺省按 {}＝开关缺省 on）。
     任何异常返回空（fail-open，绝不阻断流水线）。
     """
     try:
         from . import satisfaction as _sat
-        if cfg is None:
-            try:
-                from .. import config as _config
-                cfg = _config.load_config()
-            except Exception:  # noqa: BLE001
-                cfg = {}
-        if not _sat.ledger_enabled(cfg):
+        if not _sat.ledger_enabled(cfg or {}):
             return []
         rows = (_sat.load_ledger(proj) or {}).get("rows") or []
         if not rows:
@@ -325,14 +320,17 @@ def ledger_findings(proj, num: int, outline: str, cfg: dict = None) -> list:
 
 
 def build_v5_block(proj, num: int, prose: str,
-                   read_outline=None, read_states=None) -> str:
-    """组装 V5 账本对照块（注入 review_l0_block 的尾部；≤1.2k chars 预算）"""
+                   read_outline=None, read_states=None, cfg: dict = None) -> str:
+    """组装 V5 账本对照块（注入 review_l0_block 的尾部；≤1.2k chars 预算）
+
+    cfg：应用配置透传（爽点账本开关门控，见 ledger_findings——S6a 参数注入）。
+    """
     try:
         outline = (read_outline or (lambda: ""))()
         states = (read_states or (lambda: ""))()
         findings = (payoff_findings(outline, prose) + clock_findings(outline, prose)
                     + taboo_findings(outline, prose) + beat_findings(outline, prose)
-                    + ledger_findings(proj, num, outline))
+                    + ledger_findings(proj, num, outline, cfg))
         checklist = state_checklist(states)
         promise = payoff_promise(outline)
         # B1：节拍承诺行同样供给审校做上下文（引擎关闭的旧细纲无此行 → 字节不变）

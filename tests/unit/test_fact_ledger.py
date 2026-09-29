@@ -137,17 +137,20 @@ def test_ledger_read_and_ingest_fail_open(tmp_path):
 
 
 def test_ledger_is_fresh_states(tmp_path):
-    """freshness 三态：有行且正文未再动→True；正文后改→False；无行→False"""
+    """freshness 三态：有行且正文未再动→True；正文后改→False；无行→False
+
+    S6a：正文路径改由调用方传入（chapter_path 参数注入）。
+    """
     proj = _proj(tmp_path)
-    assert fl.ledger_is_fresh(proj, 3) is False, "无账本行=不新鲜"
-    fl.ingest_facts(proj, 3, [dict(GOOD1)], CH3)
     chap = os.path.join(proj, "正文", "第3章_叩门.md")
+    assert fl.ledger_is_fresh(proj, 3, chapter_path=chap) is False, "无账本行=不新鲜"
+    fl.ingest_facts(proj, 3, [dict(GOOD1)], CH3)
     st = os.stat(chap)
     os.utime(chap, (st.st_atime - 5, st.st_mtime - 5))   # 落账前写成（消除同秒竞态）
-    assert fl.ledger_is_fresh(proj, 3) is True
+    assert fl.ledger_is_fresh(proj, 3, chapter_path=chap) is True
     os.utime(chap, (st.st_atime + 120, st.st_mtime + 120))
-    assert fl.ledger_is_fresh(proj, 3) is False, "正文在落账后被改动=账本陈旧"
-    assert fl.ledger_is_fresh(proj, 9) is False
+    assert fl.ledger_is_fresh(proj, 3, chapter_path=chap) is False, "正文在落账后被改动=账本陈旧"
+    assert fl.ledger_is_fresh(proj, 9, chapter_path=chap) is False
 
 
 def test_ingest_from_extraction_skip_paths(tmp_path):

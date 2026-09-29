@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
+from app import project
 from app.core import maintenance as mt
 from app.core import state as st
 
@@ -71,7 +72,7 @@ def _domain(report, name):
 def test_four_checks_deterministic_and_sidecar(tmp_path):
     """两次运行除 ts 外逐字相等（纯确定性零 LLM）；sidecar 落盘可解析"""
     proj = _mk_proj(tmp_path)
-    r1, r2 = mt.run_checks(proj, 3), mt.run_checks(proj, 3)
+    r1, r2 = mt.run_checks(proj, 3, proj_io=project), mt.run_checks(proj, 3, proj_io=project)
     assert r1 and r2
     for r in (r1, r2):
         r.pop("ts")
@@ -86,7 +87,7 @@ def test_four_checks_deterministic_and_sidecar(tmp_path):
 def test_character_domain_registration_and_stale(tmp_path):
     """本章出场带证据句；注册但近3章零出场（仅题材定位登记）→ 待交代名单"""
     proj = _mk_proj(tmp_path)
-    rep = mt.run_checks(proj, 3)
+    rep = mt.run_checks(proj, 3, proj_io=project)
     ch = _domain(rep, "角色")
     reg = {nm: ev for nm, ev in ch["本章出场"]}
     assert "陈更" in reg and "灯芯" not in reg["陈更"] and "开门" in reg["陈更"]
@@ -97,7 +98,7 @@ def test_character_domain_registration_and_stale(tmp_path):
 def test_foreshadow_overdue_and_register(tmp_path):
     """计划回收已逾期（第2章窗口，现章3）→ 提醒；本章新埋→待登记；已回收行不查"""
     proj = _mk_proj(tmp_path)
-    items = _domain(mt.run_checks(proj, 3), "伏笔")["条目"]
+    items = _domain(mt.run_checks(proj, 3, proj_io=project), "伏笔")["条目"]
     by_name = {i["伏笔"]: i for i in items}
     assert "已逾期" in by_name["旧灯笼的刻痕"]["计划"]
     assert "待登记" in by_name["铜哨的回声"]["动作"]
@@ -107,7 +108,7 @@ def test_foreshadow_overdue_and_register(tmp_path):
 def test_arc_hit_and_miss(tmp_path):
     """契约子句：逐字命中/实体共现入落点；无实体无逐字→未落点需人工复核"""
     proj = _mk_proj(tmp_path)
-    arc = _domain(mt.run_checks(proj, 3), "弧线")
+    arc = _domain(mt.run_checks(proj, 3, proj_io=project), "弧线")
     covered = {c: how for c, how in arc["落点命中"]}
     assert covered.get("陈更开门迎客") == "逐字命中"
     assert "门外人报出陈更的名字" in covered, "实体共现（陈更）算落点"
@@ -117,7 +118,7 @@ def test_arc_hit_and_miss(tmp_path):
 def test_reader_domain_hook_and_new_terms(tmp_path):
     """上章钩子要素未承接→需检查衔接；本章新名词（前文未现、复现≥2）→登记"""
     proj = _mk_proj(tmp_path)
-    rd = _domain(mt.run_checks(proj, 3), "读者认知")
+    rd = _domain(mt.run_checks(proj, 3, proj_io=project), "读者认知")
     assert "未见承接要素" in rd["上章钩子回应"], "上章钩子「当票」未在第3章开头回应"
     assert "叩门令" in rd["本章新名词(需登记读者已知)"]
     assert "确定性轨不可判" in rd["读者误知"]
@@ -129,7 +130,7 @@ def test_new_entity_pending_card_without_autowrite(tmp_path):
     """新实体「夜巡人」→ 待确认卡片；角色状态册（md+sidecar）零字节改动"""
     proj = _mk_proj(tmp_path)
     md_before = open(os.path.join(proj, "追踪", "角色状态.md"), encoding="utf-8").read()
-    rep = mt.run_checks(proj, 3)
+    rep = mt.run_checks(proj, 3, proj_io=project)
     cards = rep["cards"]
     kinds = {c["kind"] for c in cards}
     assert "新实体待登记" in kinds
@@ -146,7 +147,7 @@ def test_new_entity_pending_card_without_autowrite(tmp_path):
 def test_cards_cover_foreshadow_and_arc_kinds(tmp_path):
     """逾期→伏笔计划提醒、新埋→伏笔待登记、零出场、弧线未落点、钩子衔接各成卡"""
     proj = _mk_proj(tmp_path)
-    cards = mt.run_checks(proj, 3)["cards"]
+    cards = mt.run_checks(proj, 3, proj_io=project)["cards"]
     kinds = [c["kind"] for c in cards]
     assert "伏笔计划提醒" in kinds and "伏笔待登记" in kinds
     assert "角色零出场" in kinds and "弧线未落点" in kinds and "读者认知" in kinds
@@ -162,7 +163,7 @@ def test_no_state_pollution_report_slot_untouched(tmp_path):
     st.save_state(proj, state)
     state_path = os.path.join(proj, "pipeline_state.json")
     raw_before = open(state_path, encoding="utf-8").read()
-    mt.run_checks(proj, 3)
+    mt.run_checks(proj, 3, proj_io=project)
     assert open(state_path, encoding="utf-8").read() == raw_before
     assert st.load_state(proj)["cw"]["report"]["text"] == "sentinel"
 
@@ -173,16 +174,16 @@ def test_run_checks_fail_open(tmp_path):
     """空项目/缺目标章 → {} 且不落 sidecar（fail-open，绝不阻断定稿）"""
     empty = os.path.join(str(tmp_path), "empty")
     os.makedirs(empty)
-    assert mt.run_checks(empty, 1) == {}
+    assert mt.run_checks(empty, 1, proj_io=project) == {}
     proj_no_ch3 = _mk_proj(tmp_path, with_ch3=False)
-    assert mt.run_checks(proj_no_ch3, 3) == {}
+    assert mt.run_checks(proj_no_ch3, 3, proj_io=project) == {}
     assert not os.path.exists(mt.sidecar_path(proj_no_ch3, 3))
 
 
 def test_checklist_covers_four_domains(tmp_path):
     """注入文本四域齐全、计数与四查一致（goink 式 system-reminder）"""
     proj = _mk_proj(tmp_path)
-    rep = mt.run_checks(proj, 3)
+    rep = mt.run_checks(proj, 3, proj_io=project)
     text = rep["checklist"]
     assert text.startswith("[system-reminder] 第3章已定稿")
     for head in ("1.角色", "2.伏笔", "3.弧线", "4.读者认知"):

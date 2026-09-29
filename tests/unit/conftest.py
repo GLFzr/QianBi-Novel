@@ -47,8 +47,9 @@ def qianbi_isolated_dir():
 # 「先落名、后续批次才接线」的，必须在此登记「函数名 → 复活理由」，否则
 # test_dead_function_governance 判红。豁免不许用于绕过写错的代码。
 DEAD_FUNC_EVIDENCE = {
-    # summarize_findings 已于卡6S 复活（app/deslop_metrics.compute_metrics 为其
-    # 消费方），豁免条目随之摘除；此表保留为后续「先落名后接线」批次的登记位。
+    # summarize_findings 已于卡6S 复活（app/core/deslop_metrics.compute_metrics 为其
+    # 消费方，S6a 起真身随度量层在 core），豁免条目随之摘除；此表保留为后续
+    # 「先落名后接线」批次的登记位。
 }
 
 

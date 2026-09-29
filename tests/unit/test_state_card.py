@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
+from app import project
 from app.core import memory, state_card, tracking_store
 
 
@@ -56,7 +57,7 @@ def _seed_regular(proj):
 def test_regular_card_seven_sections_under_budget(tmp_path):
     proj = _proj(tmp_path)
     _seed_regular(proj)
-    card, audit = state_card.build_state_card_detail(proj, 6)
+    card, audit = state_card.build_state_card_detail(proj, 6, proj_io=project)
     assert len(card.encode("utf-8")) <= state_card.BYTE_BUDGET
     assert audit == []                       # 常规书远未到 12KB，零裁剪
     for header in ("当前位置", "下一章承诺", "活跃伏笔(作者真相)", "核心角色状态",
@@ -78,7 +79,7 @@ def test_regular_card_seven_sections_under_budget(tmp_path):
 def test_overdue_and_zero_mention_risks(tmp_path):
     proj = _proj(tmp_path)
     _seed_regular(proj)
-    card, _ = state_card.build_state_card_detail(proj, 6)
+    card, _ = state_card.build_state_card_detail(proj, 6, proj_io=project)
     risks = card.split("## 连贯性风险")[1]
     # 黑袍人的令牌计划第3章，cur=5 → 超期2章（确定性风险，与卡2 引擎同源）
     assert "黑袍人的令牌" in risks and "超期" in risks
@@ -87,7 +88,7 @@ def test_overdue_and_zero_mention_risks(tmp_path):
     tracking_store.apply_character_updates(
         proj, 1, [], [],
         new_chars=[{"id": "白面掌柜", "当前身份": "当铺掌柜", "record": "登场"}])
-    card2, _ = state_card.build_state_card_detail(proj, 6)
+    card2, _ = state_card.build_state_card_detail(proj, 6, proj_io=project)
     assert "白面掌柜" in card2.split("## 连贯性风险")[1]
     assert "再登场需交代行踪" in card2
 
@@ -107,7 +108,7 @@ def test_stress_trim_under_budget_with_audit(tmp_path):
         import json
         json.dump({"version": 1, "rows": rows}, f, ensure_ascii=False)
 
-    card, audit = state_card.build_state_card_detail(proj, 6, stress=True)
+    card, audit = state_card.build_state_card_detail(proj, 6, stress=True, proj_io=project)
     assert len(card.encode("utf-8")) <= state_card.BYTE_BUDGET
     assert audit, "压力样本必须触发裁剪并留审计"
     # 裁剪顺序 P5→P4→P3→P2→P1：第一条审计必是近三章速记
@@ -117,10 +118,10 @@ def test_stress_trim_under_budget_with_audit(tmp_path):
     # P0 永不丢：当前位置与下一章承诺仍在卡上
     assert "## 当前位置" in card and "揭穿假账册" in card
     # 常规模式（结构性上限在）同一数据源依旧远小于预算、零审计
-    card_norm, audit_norm = state_card.build_state_card_detail(proj, 6)
+    card_norm, audit_norm = state_card.build_state_card_detail(proj, 6, proj_io=project)
     assert audit_norm == [] and len(card_norm.encode("utf-8")) <= state_card.BYTE_BUDGET
     # 公共入口与 detail 一致
-    assert state_card.build_state_card(proj, 6, stress=True) == card
+    assert state_card.build_state_card(proj, 6, stress=True, proj_io=project) == card
 
 
 def test_placeholder_and_missing_data_fail_open(tmp_path):
@@ -128,7 +129,7 @@ def test_placeholder_and_missing_data_fail_open(tmp_path):
     proj = _proj(tmp_path)
     with open(os.path.join(proj, "追踪", "上下文.md"), "w", encoding="utf-8") as f:
         f.write("（暂无）")
-    card = state_card.build_state_card(proj, 1)
+    card = state_card.build_state_card(proj, 1, proj_io=project)
     assert "已定稿至第0章；下一章第1章" in card
     assert "进度速记" not in card            # 占位剥掉不注入
     assert "## 近三章速记(读者已知)" not in card

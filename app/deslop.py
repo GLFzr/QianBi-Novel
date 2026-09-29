@@ -110,28 +110,17 @@ ABSTRACT_SUMMARY = [
 # 解释链（密度型）
 REASONING_CONNECTOR = re.compile(r"这意味着|也就是说|换句话说|问题在于|关键在于|想到这里")
 
-# 引号强调滥用（叙述里短词加引号）
-QUOTE_EMPHASIS = re.compile(r'[“"][^“”"\n]{1,4}[”"]')
-
-# 视线词族（密度型，2026-08 真机语料分析：残留 AI 味第一名——凝视循环镜头单一）
-GAZE_MARKERS = re.compile(r"盯着|看向|望向|注视|目光")
-
-# 否定刹车句族（"没有动/没有回头/没有说话"——短促否定节奏指纹）
-BRAKE_MARKERS = re.compile(r"没有[动说气回头停开口接答理翻]")
+# 引号强调滥用（叙述里短词加引号）——S6a 起真身在 core.deslop_metrics（与度量层
+# 共用的特征登记处单一真源，app-top→core 合法方向），此处导入转发保调用面不变
+from .core.deslop_metrics import (BRAKE_MARKERS, GAZE_MARKERS, QUOTE_EMPHASIS,
+                                  in_dialogue as _in_dialogue,
+                                  summarize_findings)
 
 # 否定刹车句独立成段（结构型：可预测的段落刹车）
 BRAKE_STANDALONE = re.compile(r"^[^\n]{0,6}没有[^。，！？\n]{1,6}[。！？]?$", re.M)
 
 # 「猛地」反应词窄库（密度型：惊觉模板）
 MENGDI = re.compile(r"猛地")
-
-
-def _in_dialogue(text: str, pos: int) -> bool:
-    """判断位置是否在对话引号内（粗略：统计前面中文引号的开合）"""
-    before = text[:pos]
-    opens = before.count("“") + before.count("「")
-    closes = before.count("”") + before.count("」")
-    return opens > closes
 
 
 def scan_text(text: str) -> list:
@@ -386,20 +375,8 @@ def scan_text(text: str) -> list:
     return findings
 
 
-def summarize_findings(findings: list) -> dict:
-    """按 (rule, level) 聚合统计：{(rule, level): {rule, level, count, message, fix_hint}}
-
-    卡6S 度量层已复活：app/deslop_metrics.compute_metrics 以本函数为分规则
-    命中表的聚合底座（B1 死函数豁免登记随复活摘除）。
-    """
-    stats = {}
-    for f in findings:
-        key = (f.rule, f.level)
-        if key not in stats:
-            stats[key] = {"rule": f.rule, "level": f.level, "count": 0,
-                          "message": f.message, "fix_hint": f.fix_hint}
-        stats[key]["count"] += 1
-    return stats
+# summarize_findings：S6a 起真身在 core.deslop_metrics（与度量层同处单一真源），
+# 模块顶部已导入转发——调用面（deslop.summarize_findings）不变。
 
 
 def findings_to_prompt_text(findings: list) -> str:
