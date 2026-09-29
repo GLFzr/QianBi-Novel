@@ -203,7 +203,7 @@ def run_all():
           any("检查更新失败" in m for _l, m in toasts) and not any("已是最新" in m for _l, m in toasts),
           str(toasts[:2]))
     check("没查到东西时不给任何安装按钮",
-          not any("下载并校验" in t or "立即安装" in t for t in texts(dlg)))
+          not any("下载并校验" in t or "下载并自动安装" in t or "立即安装" in t for t in texts(dlg)))
     check("失败态也告诉用户一键更新何时出现",
           any("「一键更新」按钮会出现在这里" in t for t in texts(dlg)),
           "\n".join(texts(dlg))[:200])
@@ -220,7 +220,7 @@ def run_all():
     check("新版号显示出来", any(NEW_VERSION in t for t in ts))
     check("清单里的 SHA-256 显示出来", any(PKG_SHA in t for t in ts))
     check("标了未验签", any("未验签" in t or "未签名" in t for t in ts), "\n".join(ts)[:220])
-    check("未验签时没有下载按钮", not any("下载并校验" in t for t in ts))
+    check("未验签时没有下载按钮", not any("下载并校验" in t or "下载并自动安装" in t for t in ts))
     check("未验签时 canInstall 为假", st.get("canInstall") is False, str(st.get("whyNotInstall")))
     check("自动检查也有可见提示", any("发现新版本" in m for _l, m in toasts), str(toasts[:2]))
 
@@ -238,7 +238,7 @@ def run_all():
     # v0.18.2：一键更新不许静默消失——按钮还在，只是禁用并把原因写在按钮上
     check("不能一键时按钮禁用但可见，写明仅安装版",
           any("一键更新（仅安装版可用）" in t for t in texts(dlg))
-          and not any("下载并校验" in t for t in texts(dlg)))
+          and not any("下载并校验" in t or "下载并自动安装" in t for t in texts(dlg)))
 
     # ---- ③½ 已是最新：一键更新的入口提示要在，不能像没这个功能 ----
     reset()
@@ -251,7 +251,7 @@ def run_all():
           any("「一键更新」按钮会出现在这里" in t for t in texts(dlg)),
           "\n".join(texts(dlg))[:200])
     check("最新态不给任何安装按钮",
-          not any("下载并校验" in t or "立即安装" in t for t in texts(dlg)))
+          not any("下载并校验" in t or "下载并自动安装" in t or "立即安装" in t for t in texts(dlg)))
 
     # ---- ④ 假装是安装版：门开了按钮才出现 ----
     uc.install_mode = lambda: "installed"
@@ -261,7 +261,9 @@ def run_all():
     pump(1500)
     st = b.updateState
     check("安装版 + 验签 → 允许一键", st.get("canInstall") is True, str(st.get("whyNotInstall")))
-    check("出现下载并校验按钮", any("下载并校验" in t for t in texts(dlg)))
+    check("出现下载并自动安装按钮（单击文案含「会退出应用」）",
+          any("下载并自动安装" in t and "会退出应用" in t for t in texts(dlg)),
+          str([t for t in texts(dlg) if "安装" in t][:3]))
 
     # ---- ⑤ 本机安装包对账 ----
     exe = os.path.join(b.updateDownloadPath(), "QianBi-Novel-v99-setup.exe")
@@ -286,10 +288,34 @@ def run_all():
     out4 = b.checkLocalPackage(QUrl.fromLocalFile(exe).toString())
     check("恢复验签后同一文件重新被接受", out4.get("ok") is True, str(out4.get("reason")))
 
-    # 两步确认：第一次点只把「确认」问出来，绝不直接退出
-    armed_texts = [t for t in texts(dlg) if "立即安装" in t or "确认退出并安装" in t]
-    check("安装是两步确认", any("立即安装" in t for t in armed_texts)
-          and not any("确认退出并安装" in t for t in armed_texts), str(armed_texts[:2]))
+    # C20/U-B 一键合并：安装改单步直达（不再两步确认），倒计时取消可达——
+    # 取消后 _quit_for_update 保持 False、已验包保留、手动「立即安装」原样可达。
+    # 倒计时的武装走真实回执路径 _on_dl_done（指纹复核在槽内亲自重算），
+    # 不碰真件：不下载、不退出，安装槽在本探针里从未被倒计时触发。
+    all_t = texts(dlg)
+    check("安装改单步直达（无「确认退出并安装」二段按钮）",
+          any("立即安装" in t for t in all_t)
+          and not any("确认退出并安装" in t for t in all_t),
+          str([t for t in all_t if "安装" in t][:3]))
+    b._on_dl_done({"ok": True, "path": exe, "sha256": PKG_SHA, "reason": "", "resumed": False})
+    pump(200)
+    st = b.updateState
+    auto = st.get("autoInstall") or {}
+    check("下载校验通过后进入 5s 可取消倒计时",
+          auto.get("active") is True and 0 < int(auto.get("seconds") or 0) <= 5, str(auto))
+    check("倒计时在面板上可见且写着取消口",
+          any("自动退出并安装" in t and "取消" in t for t in texts(dlg)),
+          str([t for t in texts(dlg) if "秒" in t][:2]))
+    b.cancelUpdateAutoInstall()
+    pump(200)
+    st = b.updateState
+    check("倒计时取消后归零且 _quit_for_update 保持 False",
+          (st.get("autoInstall") or {}).get("active") is False
+          and b._quit_for_update is False, str(st.get("autoInstall")))
+    check("取消后已验包保留，手动「立即安装」原样可达",
+          (st.get("package") or {}).get("ok") is True
+          and any("立即安装" in t for t in texts(dlg)),
+          str([t for t in texts(dlg) if "安装" in t][:3]))
 
     # ---- ⑤½ C19/U-A 静默安装编排：三旗标 + journal 先于 startDetached + shutdown ----
     # 此刻 ④⑤ 已把门全开（安装版 + 验签清单 v99 + 哈希命中的包），installUpdateNow

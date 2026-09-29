@@ -7,7 +7,7 @@ import ".."
 // ============================================================
 // UpdateDialog · 更新面板
 // 四条出路同屏，因为「连不上 GitHub」不是一个错误提示能打发的事：
-//   ① 在线一键（验签清单 → 下载 → 校验 → 退出并拉起安装器）
+//   ① 在线一键（验签清单 → 下载 → 校验 → 5s 倒计时 → 退出并静默安装）
 //   ② 打开发布页 / 复制直链 / 核对 SHA-256
 //   ③ 导入离线清单（别人拷来的 1KB JSON）
 //   ④ 选择本机已有的安装包（对完哈希才给安装按钮）
@@ -48,9 +48,9 @@ Dialog {
     readonly property bool canInstall: st.canInstall === true
     readonly property bool downloading: dl.active === true
     readonly property bool busy: bridge.updateBusy === true
-    // 装完就走人的动作不是一般的按钮：点第一下只把「确认」问出来
-    property bool armedInstall: false
-    onClosed: armedInstall = false
+    // C20/U-B：下载校验通过后的 5s 可取消倒计时——「下载并自动安装」的最后一段
+    readonly property var autoInst: st.autoInstall || ({})
+    readonly property bool counting: autoInst.active === true
 
     function mb(bytes) {
         var n = Number(bytes) || 0
@@ -233,12 +233,13 @@ Dialog {
                 spacing: 8
 
                 AppButton {
-                    // 一键更新必须「看得见」：可用时亮，不可用时禁用并写明为什么——
-                    // 把按钮整个藏起来，用户看到的面板就是「没有一键更新这个功能」。
+                    // C20/U-B 一键合并：下载+校验+倒计时+自动安装，一颗按钮说完。
+                    // 「会退出应用」必须写在按钮上——退出是这颗按钮的承诺，不是副作用。
                     // 唯独清单没过验签时不出现：那不是能力不够，是不被信任（安全规则）。
-                    visible: root.hasNew && root.verified && root.pkg.ok !== true && !root.downloading
+                    visible: root.hasNew && root.verified && root.pkg.ok !== true
+                             && !root.downloading && !root.counting
                     enabled: root.canInstall
-                    text: root.canInstall ? "下载并校验 v" + String(st.version || "")
+                    text: root.canInstall ? "下载并自动安装 v" + String(st.version || "") + "（会退出应用）"
                                           : "一键更新（仅安装版可用）"
                     kind: "primary"
                     iconName: "update"
@@ -251,17 +252,25 @@ Dialog {
                     onClicked: bridge.cancelUpdateDownload()
                 }
                 AppButton {
-                    // 校验通过的包 + 验签通过的清单 + 安装版，三者齐了才让这个按钮存在
-                    visible: root.canInstall && root.pkg.ok === true
-                    text: root.armedInstall ? "确认退出并安装（未保存草稿会保留）"
-                                            : "立即安装 v" + String(st.version || "")
-                    kind: root.armedInstall ? "danger" : "primary"
-                    onClicked: {
-                        if (!root.armedInstall) { root.armedInstall = true; return }
-                        bridge.installUpdateNow()
-                    }
+                    // 倒计时进行中：按钮本身就是取消口——5 秒是给反悔留的，不是给等待的
+                    visible: root.counting
+                    text: Math.max(0, Math.round(Number(root.autoInst.seconds) || 0))
+                          + " 秒后自动退出并安装 v" + String(st.version || "") + "，点击取消"
+                    kind: "danger"
+                    onClicked: bridge.cancelUpdateAutoInstall()
+                }
+                AppButton {
+                    // 已验包在手（下载完成或本地选包）：单步直达，C20/U-B 起不再两步确认
+                    visible: root.canInstall && root.pkg.ok === true && !root.counting
+                    text: "立即安装 v" + String(st.version || "")
+                    kind: "primary"
+                    onClicked: bridge.installUpdateNow()
                 }
                 Item { Layout.fillWidth: true }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
                 AppButton {
                     visible: String(st.url || "") !== ""
                     text: "打开发布页"
@@ -274,6 +283,7 @@ Dialog {
                     kind: "ghost"
                     onClicked: bridge.copyText(String(st.url || ""))
                 }
+                Item { Layout.fillWidth: true }
             }
             Text {
                 Layout.fillWidth: true

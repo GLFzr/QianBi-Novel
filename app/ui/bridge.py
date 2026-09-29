@@ -1080,6 +1080,11 @@ class Bridge(QObject):
         self._update_dl = {"done": 0, "total": 0, "path": "", "active": False}
         self._dl_worker = None                # 同一时间只允许一个下载
         self._quit_for_update = False         # 为装新版而退出：脏稿否决要让路
+        # C20/U-B：下载校验通过后的 5s 可取消倒计时（一键合并的最后一段）
+        self._update_auto = {"active": False, "seconds": 0}
+        self._auto_install_timer = QTimer(self)
+        self._auto_install_timer.setInterval(1000)
+        self._auto_install_timer.timeout.connect(self._on_auto_install_tick)
         try:
             from .. import __version__, update_check as _uc
             self._update_result = _uc.cached_result(self.cfg, __version__)
@@ -1908,6 +1913,7 @@ class Bridge(QObject):
             "whyNotInstall": why,
             "cryptoOk": uc.CRYPTO_OK,
             "download": dict(self._update_dl),
+            "autoInstall": dict(self._update_auto),   # C20/U-B：5s 可取消倒计时
             "package": dict(self._update_pkg or {}),
             "settings": {
                 "autoCheck": bool(self._updates().get("auto_check", False)),
@@ -2109,6 +2115,7 @@ class Bridge(QObject):
                 self._update_pkg = {"ok": True, "path": _path,
                                     "actual": _actual, "expected": _expected}
                 self.toast.emit("ok", "新版已下载并校验通过，可以安装了")
+                self._arm_auto_install()   # C20/U-B：验签包在手，5s 倒计时后自动安装
             else:
                 self._update_pkg = {"ok": False, "path": _path,
                                     "actual": _actual, "expected": _expected}
@@ -2123,6 +2130,43 @@ class Bridge(QObject):
         if self._dl_worker is not None and self._dl_worker.isRunning():
             self._dl_worker.cancel()
             self.toast.emit("info", "正在取消（已下的部分留着，下次续传）")
+
+    # ---- C20/U-B：一键合并的 5s 可取消倒计时（下载校验通过即武装）----
+
+    def _arm_auto_install(self, seconds: int = 5):
+        """验签包在手后进入倒计时——「下载并自动安装」的「自动」二字由它兑现
+
+        取消只停钟不删包：_update_pkg 原样保留，手动「立即安装」原样可达；
+        _quit_for_update 在倒计时期间从未被碰过（它只归 installUpdateNow 管）。
+        """
+        self._update_auto = {"active": True, "seconds": int(seconds)}
+        self._auto_install_timer.start()
+        self.updateStateChanged.emit()
+
+    def _on_auto_install_tick(self):
+        if not self._update_auto.get("active"):
+            self._auto_install_timer.stop()
+            return
+        left = int(self._update_auto.get("seconds") or 0) - 1
+        if left > 0:
+            self._update_auto = {"active": True, "seconds": left}
+            self.updateStateChanged.emit()
+            return
+        self._auto_install_timer.stop()
+        self._update_auto = {"active": False, "seconds": 0}
+        self.updateStateChanged.emit()
+        self.installUpdateNow()   # 归零≠免检：三道门在槽内原样重过一遍
+
+    @Slot()
+    @_guarded
+    def cancelUpdateAutoInstall(self):
+        """倒计时取消口：唯一承诺是「不装」——已验包保留，去留由用户慢慢想"""
+        if not self._update_auto.get("active"):
+            return
+        self._auto_install_timer.stop()
+        self._update_auto = {"active": False, "seconds": 0}
+        self.updateStateChanged.emit()
+        self.toast.emit("info", "已取消自动安装。安装包已校验通过，随时可点「立即安装」")
 
     @Slot()
     @_guarded
