@@ -29,7 +29,14 @@
      （0.6 token/汉字，同 scripts/header_audit.py），**不用** DSH 自认低估 CJK 的
      4 字符/token 启发式；
   ⑤ 精确锚点留在台账（`ledger_snapshot`）：块只承载叙事记忆，数值/日期/名单/
-     物证位置一律指向台账文件（「以台账为准」），块内不复述。
+     物证位置一律指向台账文件（「以台账为准」），块内不复述；
+  ⑥ 因果断言（WA5/B1+B8，FlawedFictions 缺口）：装配前从被替换历史提取「因果链
+     断言清单」（因果连接词句对 / 未回收伏笔承诺 / 事件钩应答标记三源，纯启发式），
+     装配后对断言逐条核对语义在场（每个锚词槽任一别名可检索，归一化复用
+     fact_ledger.normalize 的 C42 口径）；未在场先降级「保链压缩」（失败句原文
+     保底附加成第五节），追加后仍违反保险丝①才整笔拒绝（fail-open）——
+     保险丝②保近程尾巴，这根保跨章因果债务（研究实证：摘要丢因果链是
+     连续性错误率 +50% 的主因，arXiv 2504.11900）。
 
 **flag 纪律（硬性）**：`writing.compaction` 默认关。接线契约两条，缺一即破 A/B 口径：
   - 关闭时 stages 侧**不得触达**本模块（旗标读数放在调用点，`import` 也要放在旗标
@@ -69,6 +76,11 @@ MAX_HOME_UPWARD = 5            # 用量落点上溯层数上限（项目→…�
 # B2d 拆环：han_tokens 口径下沉 app/core/text_metrics.py（volume_session 反向引用
 # 曾成环）；此处同名 re-export 保持本模块与外部消费方（stages/tests）原样。
 from .text_metrics import TOKENS_PER_HAN, _HAN_RE, han_tokens  # noqa: E402,F401
+
+# ---- 保险丝⑥（WA5）的在场判定口径 ----
+# 归一化复用 C42 fact_ledger.normalize（NFKC + 去空白 + 剥引号/破折号）：
+# 同义改写/全半角/引号差在断言判定里仍算「语义在场」，与事实账本锚定同口径。
+from .fact_ledger import normalize  # noqa: E402
 
 # 卷会话相位（这些相位的单笔 in 才是「会话输入有多长」的真值来源）
 _SESSION_PHASES = ("prose", "enrich", "trim", "deslop", "review", "review_fix",
@@ -116,6 +128,9 @@ class HandoffResult:
     to_chapter: int = 0
     artifacts: tuple = ()             # 已落盘产物路径（write=False 时为空）
     sections: dict = field(default_factory=dict)   # 机读分节（json 产物的内容）
+    causal_checked: int = 0           # 保险丝⑥：断言清单核对条数（0=无断言直通）
+    causal_failed: int = 0            # 首轮未在场断言数（degrade 后由降级兜住）
+    degraded: bool = False            # 是否走了「保链压缩」降级（失败句原文保底附加）
 
     @property
     def sha256(self) -> str:
@@ -439,6 +454,337 @@ def _verbatim_ok(block: str, endings: tuple) -> str:
     return ""
 
 
+# ==================== 保险丝⑥：因果链保链断言（WA5/B1+B8）====================
+#
+# 依据：superiter2 T3（Finding Flawed Fictions, arXiv 2504.11900）——摘要使连续性
+# 错误检出率 +50%，根因是摘要丢掉因果环节；T4 §3.3（语义债务保链：保链断言是
+# 五保险丝之外的第六根）。全部纯启发式、零 LLM、零网络、fail-open：
+#
+#   B1 提取（压缩前，从被替换历史）：collect_causal_assertions 三源——
+#     ① cause_effect：正文里含因果连接词的句子，按连接词切两侧各成一个
+#        「锚词槽」（断言只要求两侧都保持可检索，不判因果方向——方向错判
+#        比漏检更危险）；
+#     ② promise_payoff：伏笔账本未回收条目（承诺-兑现对的前半，承诺必须
+#        存活到兑现章还读得到）；
+#     ③ hook_response：钩子账本事件钩的 event_kw（埋下的钩子必须可被应答）。
+#   B8 断言（压缩后）：assert_causal_chain 逐条核对——「语义在场」= 每个锚词槽
+#     至少一个别名在归一化文本中可检索（normalize 为 C42 口径）。核对对象是
+#     「交接块 + 开幕章常驻注入」的并集：保险丝③刻意不复述常驻内容，常驻也是
+#     新栈持久前缀的一部分，单看块会假报丢失。交接块的每一级原料（常驻/近程
+#     尾巴/近章摘要/全局摘要/台账快照）过同一断言并记录逐级归属——装配式压缩
+#     的在场是全体层级的并集，任一级命中即算扛住。
+#   失败处置：先降级「保链压缩」（失败句原文保底附加成第五节，句中自带锚词
+#     → 附加后断言必然转绿，由复验证明）；追加后仍违反保险丝①（不再显著小于
+#     被替换历史）才整笔拒绝压缩——保留原稿，绝不静默丢链。
+
+# 因果连接词（长词优先，避免「因」类短词吃掉「因为」的前缀误切）
+CAUSAL_CONNECTIVES = (
+    "正因为", "之所以", "以至于", "是因为", "导致", "致使", "使得", "从而",
+    "因而", "于是", "因此", "所以", "故而", "为此", "由于", "因为", "以致",
+    "既然", "逼得", "害得",
+)
+_SENT_SPLIT_RE = re.compile(r"([^。！？!?；;\n]+[。！？!?；;]?)")
+_CHAPTER_HEAD_RE = re.compile(r"^#{0,6}\s*第\s*(\d+)\s*章")
+_CJK_RUN_RE = re.compile(r"[\u4e00-\u9fffA-Za-z0-9]+")
+_QUOTED_TERM_RE = re.compile(r"[「『]([^「」『』]{2,16})[」』]")
+# 锚词提纯：剪掉句法功能字（首尾修剪），整词命中停用词表则弃——
+# 别名组是「任一命中即槽位在场」的可检索面，不求分词精确，宁松勿假报。
+_TERM_STOP_CHARS = frozenset(
+    "的了着呢吗吧呀啊嘛么之乎其把被给和与或也都就还很才便是在有进出去来上"
+    "下中里外前后左右之间这那你我他她们它们哪谁啥")
+_TERM_STOPWORDS = frozenset((
+    "自己", "什么", "这个", "那个", "这么", "那么", "还是", "就是", "但是",
+    "可是", "然而", "不过", "如果", "虽然", "而且", "并且", "或者", "只有",
+    "已经", "正在", "将要", "时候", "之后", "以后", "然后", "起来", "出来",
+    "过来", "下去", "上去", "一声", "不住", "不得", "那些", "这些", "这里",
+    "那里", "地方", "事情", "东西", "一声",
+))
+MIN_SIDE_CHARS = 2              # 连接词两侧的最短有效长度
+MAX_CAUSAL_ASSERTIONS = 32      # 断言清单总量上限（保底追加体积因此有界）
+MAX_CE_ASSERTIONS = 16          # cause_effect 上限（每章前 MAX_CE_PER_CHAPTER 条）
+MAX_CE_PER_CHAPTER = 2
+MAX_PROMISE_ASSERTIONS = 8      # 未回收伏笔按账本紧迫序取前 8
+MAX_HOOK_ASSERTIONS = 8         # 事件钩按章号取最近 8
+CHAIN_SECTION_TITLE = "## 五、因果链保底（压缩断言清单未过——失败句原文保底附加）"
+_HOOK_LEDGER_FILENAME = "钩子账本.json"
+
+
+@dataclass(frozen=True)
+class CausalAssertion:
+    """一条「必须在压缩稿中保持语义在场」的因果链断言。
+
+    slots：锚词槽的元组，每个槽是别名元组；在场判定 = 每个槽任一别名可检索
+    （因果对两侧各一槽、承诺/钩子单槽）。sentence：原句/原名——保链降级时
+    逐字附加进块的原材料。"""
+    kind: str            # cause_effect | promise_payoff | hook_response
+    chapter: int         # 来源章（账本源无章号给 0）
+    slots: tuple         # tuple[tuple[str, ...], ...]
+    sentence: str
+    source: str = ""     # 命中的启发式描述（审计用）
+
+
+@dataclass(frozen=True)
+class CausalReport:
+    """B8 断言报告。levels：{断言序号字符串化: 首个满足它的层级名}（失败为 ""）
+    ——逐级接入的机读诊断：哪一级扛住了哪条因果链。"""
+    checked: int
+    failed: tuple
+    levels: dict = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return self.checked == 0 or not self.failed
+
+
+def causal_terms(side: str) -> tuple:
+    """连接词单侧文本 → 锚词别名组（纯启发式）：引用词「」『』优先，
+    其余取 CJK/字母数字连串剪掉首尾功能字后的片段（≤4 字整串，>4 字取
+    首二/次二/末二三个片段）。顺序确定（dict.fromkeys 去重保序），上限 4 个。"""
+    aliases = list(_QUOTED_TERM_RE.findall(side or ""))
+    for run in _CJK_RUN_RE.findall(side or ""):
+        s, e = 0, len(run)
+        while s < e and run[s] in _TERM_STOP_CHARS:
+            s += 1
+        while e > s and run[e - 1] in _TERM_STOP_CHARS:
+            e -= 1
+        run = run[s:e]
+        if len(run) < 2 or run in _TERM_STOPWORDS:
+            continue
+        if len(run) <= 4:
+            aliases.append(run)
+        else:
+            aliases.extend((run[:2], run[2:4], run[-2:]))
+    out = []
+    for a in dict.fromkeys(aliases):
+        if len(a) >= 2 and a not in _TERM_STOPWORDS:
+            out.append(a)
+        if len(out) >= 4:
+            break
+    return tuple(out)
+
+
+def _split_causal_sentence(sent: str):
+    """含因果连接词的句子 → (左半, 连接词, 右半)；首个命中连接词的两侧任一
+    过短即整句放弃（不换词再切，防碎句假断言）。"""
+    for conn in CAUSAL_CONNECTIVES:
+        i = sent.find(conn)
+        if i <= 0:
+            continue
+        left, right = sent[:i], sent[i + len(conn):]
+        if len(left.strip()) >= MIN_SIDE_CHARS and len(right.strip()) >= MIN_SIDE_CHARS:
+            return left, conn, right
+        return None
+    return None
+
+
+def extract_prose_assertions(history_text: str) -> tuple:
+    """B1 源①：被替换历史正文里的「A 导致 B」句对（每章取最先出现的
+    MAX_CE_PER_CHAPTER 条——因果句在章内越靠前越贴节拍位）。"""
+    out, cur_ch, taken, seen = [], 0, 0, set()
+    for line in (history_text or "").splitlines():
+        m = _CHAPTER_HEAD_RE.match(line.strip())
+        if m:
+            cur_ch, taken = int(m.group(1)), 0
+            continue
+        for sent in _SENT_SPLIT_RE.findall(line):
+            sent = sent.strip()
+            if not (8 <= len(sent) <= 160) or sent in seen:
+                continue
+            parts = _split_causal_sentence(sent)
+            if parts is None:
+                continue
+            left, conn, right = parts
+            l_terms, r_terms = causal_terms(left), causal_terms(right)
+            if not l_terms or not r_terms:
+                continue
+            seen.add(sent)
+            out.append(CausalAssertion(
+                kind="cause_effect", chapter=cur_ch, slots=(l_terms, r_terms),
+                sentence=sent, source="因果连接词「%s」" % conn))
+            taken += 1
+            if taken >= MAX_CE_PER_CHAPTER:
+                break
+    return tuple(out[:MAX_CE_ASSERTIONS])
+
+
+def extract_foreshadow_assertions(proj: str) -> tuple:
+    """B1 源②：未回收伏笔（memory.unfished_foreshadows 的紧迫序渲染表——
+    与交接块台账快照/章头常驻同一字节源）。承诺名词（含 ·/: 分隔的子词）
+    即锚词槽；解析不出表行就零断言（fail-open）。"""
+    try:
+        table = memory.unfished_foreshadows(proj)
+    except Exception:  # noqa: BLE001
+        return ()
+    out = []
+    for line in (table or "").splitlines():
+        t = line.strip()
+        if not (t.startswith("|") and t.endswith("|")):
+            continue
+        cells = [c.strip() for c in t.strip("|").split("|")]
+        if len(cells) < 2 or cells[0] in ("伏笔", "名称", ""):
+            continue
+        core = t.replace("|", "").replace(" ", "").strip("-:")
+        if not core:
+            continue            # 表头分隔行
+        name = re.sub(r"^【[^】]*】", "", cells[0]).strip()   # 剥【超期N章】前缀
+        if len(name) < 2:
+            continue
+        parts = [p.strip() for p in re.split(r"[·•:：/／]+", name) if len(p.strip()) >= 2]
+        aliases = tuple(dict.fromkeys([name] + parts))[:4]
+        out.append(CausalAssertion(kind="promise_payoff", chapter=0,
+                                   slots=(aliases,), sentence=name,
+                                   source="伏笔账本未回收条目"))
+        if len(out) >= MAX_PROMISE_ASSERTIONS:
+            break
+    return tuple(out)
+
+
+def _read_hook_rows(proj: str) -> list:
+    """追踪/钩子账本.json 容错读（JSON 数组 / {"rows":[...]} / jsonl 行三种形态）。
+    缺失/损坏 → []（fail-open；卡4 的落账接线不在本模块，读侧只认公共键）。"""
+    path = os.path.join(proj, "追踪", _HOOK_LEDGER_FILENAME)
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = f.read().strip()
+    except OSError:
+        return []
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = []
+        for ln in raw.splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                data.append(json.loads(ln))
+            except ValueError:
+                return []
+    if isinstance(data, dict):
+        data = data.get("rows")
+    if not isinstance(data, list):
+        return []
+    return [r for r in data if isinstance(r, dict)]
+
+
+def extract_hook_assertions(proj: str) -> tuple:
+    """B1 源③：事件钩的 event_kw（钩子应答标记——埋钩关键词必须存活到应答章）。
+    按章号取最近 MAX_HOOK_ASSERTIONS 条。"""
+    rows = [r for r in _read_hook_rows(proj) if str(r.get("event_kw") or "").strip()]
+    rows.sort(key=lambda r: (int(r.get("num") or 0), str(r.get("position") or "")))
+    out = []
+    for r in rows[-MAX_HOOK_ASSERTIONS:]:
+        kw = str(r.get("event_kw")).strip()
+        aliases = tuple(dict.fromkeys(
+            [kw] + _QUOTED_TERM_RE.findall(kw)))[:4]
+        out.append(CausalAssertion(
+            kind="hook_response", chapter=int(r.get("num") or 0),
+            slots=(aliases,), sentence=kw, source="钩子账本事件钩 event_kw"))
+    return tuple(out)
+
+
+def collect_causal_assertions(proj: str, history_text: str) -> tuple:
+    """B1 总入口：三源合并成压缩前断言清单（顺序稳定：因果句→伏笔承诺→钩子）。"""
+    assertions = (extract_prose_assertions(history_text)
+                  + extract_foreshadow_assertions(proj)
+                  + extract_hook_assertions(proj))
+    return tuple(assertions[:MAX_CAUSAL_ASSERTIONS])
+
+
+def _slot_hit(aliases: tuple, norm_text: str) -> bool:
+    return any(normalize(a) in norm_text for a in aliases if a)
+
+
+def assertion_satisfied(a: CausalAssertion, norm_text: str) -> bool:
+    """单个断言的在场判定：每个锚词槽至少一个别名可检索（norm_text 须已过
+    normalize——与 fact_ledger 锚定同口径，引号/全半角/空白差不假报）。"""
+    return bool(a.slots) and all(_slot_hit(s, norm_text) for s in a.slots)
+
+
+def assert_causal_chain(levels, assertions) -> CausalReport:
+    """B8 总入口：每一级原料过同一断言（levels = (层级名, 文本) 有序对）。
+
+    在场 = 全体层级归一化并集中可检索（装配式压缩的语义并集口径）；levels
+    记录每条断言的逐级归属（首个满足它的层级；全不满足 → 失败 + 归属空串）。"""
+    assertions = tuple(assertions or ())
+    norm_levels = [(name, normalize(text or "")) for name, text in (levels or [])]
+    arena = "".join(n for _name, n in norm_levels)
+    failed, levels_map = [], {}
+    for i, a in enumerate(assertions):
+        hit_level = ""
+        if assertion_satisfied(a, arena):
+            for name, n in norm_levels:
+                if assertion_satisfied(a, n):
+                    hit_level = name
+                    break
+        else:
+            failed.append(a)
+        levels_map[str(i)] = hit_level
+    return CausalReport(checked=len(assertions), failed=tuple(failed),
+                        levels=levels_map)
+
+
+def render_chain_appendix(failed) -> str:
+    """保链降级的保底附加节（第五节）：失败断言的原句逐字入块。句中自带它的
+    锚词别名 → 附加后断言必然转绿（由 build 内的复验证明）。零时间戳，确定性。"""
+    lines = [CHAIN_SECTION_TITLE,
+             "（以下原句因压缩稿未保住其因果语义而整句保底；精确锚点仍以台账为准）"]
+    for a in failed:
+        label = "第%d章" % a.chapter if a.chapter else "前文"
+        lines.append("- [%s·%s] %s" % (a.kind, label, a.sentence))
+    return "\n".join(lines)
+
+
+def assertion_payload(assertions: tuple) -> list:
+    """断言清单 → 机读形态（交接块 json 的 sections.causal.assertions，
+    读侧复验与审计共用同一形状）。"""
+    return [{"kind": a.kind, "chapter": a.chapter, "sentence": a.sentence,
+             "slots": [list(s) for s in a.slots]} for a in assertions]
+
+
+def assertions_from_payload(items) -> tuple:
+    """机读形态 → 断言对象（读侧复验用）；坏条目跳过（fail-open）。"""
+    out = []
+    for it in items or []:
+        if not isinstance(it, dict) or not isinstance(it.get("slots"), list):
+            continue
+        slots = tuple(tuple(str(x) for x in s if str(x))
+                      for s in it["slots"] if isinstance(s, list))
+        try:
+            ch = int(it.get("chapter") or 0)
+        except (TypeError, ValueError):
+            ch = 0
+        out.append(CausalAssertion(kind=str(it.get("kind") or ""), chapter=ch,
+                                   slots=slots, sentence=str(it.get("sentence") or "")))
+    return tuple(out)
+
+
+def _record_causal_event(proj: str, volume: int, upto: int, report: CausalReport,
+                         *, degraded: bool, rejected: bool) -> None:
+    """保险丝⑥告警（W-3 同纪律：纯观测件，任何失败静默）——断言失败必留现场：
+    compaction_causal{checked, failed, degraded, rejected, kinds}。"""
+    try:
+        from .volume_session import record_event
+        record_event(proj, "compaction_causal", volume=int(volume), upto=int(upto),
+                     checked=int(report.checked), failed=len(report.failed),
+                     degraded=1 if degraded else 0, rejected=1 if rejected else 0,
+                     kinds=",".join(sorted({a.kind for a in report.failed})))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _record_stale_event(proj: str, volume: int, num: int, failed: int) -> None:
+    """读侧复验失败的现场（handoff_causal_stale）：不复用旧块、转现场重装配。"""
+    try:
+        from .volume_session import record_event
+        record_event(proj, "handoff_causal_stale", volume=int(volume), num=int(num),
+                     failed=int(failed))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ==================== 产物落盘（§6.2）====================
 
 def handoff_md_path(proj: str, volume: int) -> str:
@@ -496,6 +842,8 @@ def build_handoff_block(proj: str, *, cfg: dict = None, upto: int = 0,
                      是 93.8% 而日志曾报 80%）；缺省 0 退回单章口径（仅兜底）。
     write=False：只装配不落盘（调用方先验货再决定写）。
     任何一条保险丝不过 → HandoffResult(ok=False, text="", reason=...)，不落盘。
+    保险丝⑥（因果断言，WA5）失败先降级「保链压缩」（失败句原文保底附加，
+    degraded=True + session_events 告警），追加后仍违反保险丝①才整笔拒绝。
     """
     if not compaction_enabled(cfg):
         return HandoffResult(ok=False, flag_on=False, trigger=trigger,
@@ -519,8 +867,10 @@ def build_handoff_block(proj: str, *, cfg: dict = None, upto: int = 0,
     text = render_handoff(vol, upto, endings, summaries, ledger)
     tokens, meter = han_tokens(text), "han-caliber"
     # V1-b（T 轮报告 §9-B）：被顶替量优先取调用方按会话栈实测的 replaced_hint；
-    # 单章正文口径只是无 hint 时的兜底（严重低估，曾把 93.8% 的真实压缩报成 80%）
-    replaced = int(replaced_hint or 0) or han_tokens(chapter_prose(proj, vol, upto))
+    # 单章正文口径只是无 hint 时的兜底（严重低估，曾把 93.8% 的真实压缩报成 80%）。
+    # 被替换历史全文同时是保险丝⑥因果断言的提取原料（B1），无条件读一次。
+    replaced_text = chapter_prose(proj, vol, upto)
+    replaced = int(replaced_hint or 0) or han_tokens(replaced_text)
     if not _shrink_ok(tokens, replaced):
         return HandoffResult(ok=False, tokens=tokens, replaced_tokens=replaced,
                              shrunk=False, meter=meter, trigger=trigger, volume=vol,
@@ -535,6 +885,42 @@ def build_handoff_block(proj: str, *, cfg: dict = None, upto: int = 0,
         return HandoffResult(ok=False, tokens=tokens, replaced_tokens=replaced,
                              shrunk=True, meter=meter, trigger=trigger, volume=vol,
                              to_chapter=upto, reason="保险丝②拒绝：%s" % lost)
+    # ---- 保险丝⑥（WA5/B1+B8）：压缩前提取因果断言清单，压缩稿逐条核对 ----
+    # 逐级接入：交接块的每一级原料 + 开幕章常驻注入过同一 assert_causal_chain
+    # （保险丝③刻意不复述常驻内容，常驻也是新栈持久前缀——在场按并集判定）。
+    levels = (
+        ("resident", "\n".join(t or "" for t in resident_texts)),
+        ("near_endings", "\n".join(e.tail for e in endings)),
+        ("recent_summaries", summaries or ""),
+        ("global_summary", ledger.get("global_summary") or ""),
+        ("ledger", "\n".join((s.get("body") or "")
+                             for s in ledger.get("sections") or [])),
+    )
+    assertions = collect_causal_assertions(proj, replaced_text)
+    report = assert_causal_chain(levels, assertions)
+    failed_initial = len(report.failed)
+    degraded = False
+    if not report.ok:
+        # 降级「保链压缩」：失败句原文保底附加（句中自带锚词 → 附加后必转绿）；
+        # 追加后仍不显著小于被替换历史 → 整笔拒绝（保留原稿，fail-open 不压缩）。
+        appendix = render_chain_appendix(report.failed)
+        degraded_text = text + "\n\n" + appendix
+        d_tokens = han_tokens(degraded_text)
+        if _shrink_ok(d_tokens, replaced) and not _verbatim_ok(degraded_text, endings):
+            text, tokens, degraded = degraded_text, d_tokens, True
+            _record_causal_event(proj, vol, upto, report, degraded=True, rejected=False)
+            report = assert_causal_chain(
+                levels + (("chain_appendix", appendix),), assertions)
+        else:
+            _record_causal_event(proj, vol, upto, report, degraded=False, rejected=True)
+            return HandoffResult(
+                ok=False, tokens=tokens, replaced_tokens=replaced, shrunk=True,
+                meter=meter, trigger=trigger, volume=vol,
+                from_chapter=endings[-1].num, to_chapter=upto,
+                causal_checked=report.checked, causal_failed=len(report.failed),
+                reason="保险丝⑥拒绝：%d 条因果断言未保，且保底追加后交接块 %d tok "
+                       "不再显著小于被替换历史 %d tok（> %.2f）——fail-open 保留原稿"
+                       % (len(report.failed), d_tokens, replaced, SHRINK_MAX_RATIO))
     payload = {"kind": ARTIFACT_KIND, "version": ARTIFACT_VERSION, "volume": vol,
                "from_chapter": endings[-1].num, "to_chapter": upto,
                "trigger": trigger, "text": text, "tokens": tokens,
@@ -544,12 +930,19 @@ def build_handoff_block(proj: str, *, cfg: dict = None, upto: int = 0,
                "sections": {"near_endings": [{"num": e.num, "title": e.title,
                                               "tail": e.tail} for e in endings],
                             "recent_summaries": summaries,
-                            "ledger": ledger}}
+                            "ledger": ledger,
+                            "causal": {"checked": report.checked,
+                                       "failed_initial": failed_initial,
+                                       "failed": len(report.failed),
+                                       "degraded": degraded,
+                                       "assertions": assertion_payload(assertions)}}}
     artifacts = save_handoff(proj, vol, payload) if write else ()
     return HandoffResult(ok=True, text=text, tokens=tokens, replaced_tokens=replaced,
                          shrunk=True, meter=meter, trigger=trigger, volume=vol,
                          from_chapter=endings[-1].num, to_chapter=upto,
-                         artifacts=artifacts, sections=payload["sections"])
+                         artifacts=artifacts, sections=payload["sections"],
+                         causal_checked=report.checked, causal_failed=failed_initial,
+                         degraded=degraded)
 
 
 # ==================== 接回（新会话开幕块）====================
@@ -570,12 +963,29 @@ def opening_block(proj: str, num: int, *, cfg: dict = None, volume: int = 0,
     if not compaction_enabled(cfg):
         return OpeningBlock(reason="writing.compaction 关闭：开幕块不介入")
     cur = int(volume or resolve_volume(proj, num) or 1)
+    from .shared_prefix import chapter_header, project_header
+    resident_norm = ""
     for v in (cur, cur - 1):
         if v < 1:
             continue
         d = load_handoff(proj, v)
         text = (d.get("text") or "")
         if text.strip() and int(d.get("to_chapter") or 0) >= num - 1:
+            # 保险丝⑥读侧复验（WA5/B8）：盘上块若带着断言清单，先按「块+本章
+            # 常驻注入」复核在场——建档后被改动的台账可能已把某条因果链的唯一
+            # 载体抽走；复验失败就不复用旧块，落到下方现场重装配（带完整保链
+            # 管线）。无 causal 节的历史产物照旧复用（兼容，skip）。
+            stored = ((d.get("sections") or {}).get("causal") or {}).get("assertions")
+            if stored:
+                if not resident_norm:
+                    resident_norm = normalize(
+                        project_header(proj) + "\n"
+                        + chapter_header(proj, num, volume_mode=True))
+                stale = [a for a in assertions_from_payload(stored)
+                         if not assertion_satisfied(a, resident_norm)]
+                if stale:
+                    _record_stale_event(proj, v, num, len(stale))
+                    break
             return OpeningBlock(text=text, tokens=int(d.get("tokens") or han_tokens(text)),
                                 contributed=True, reason="handoff_卷%d" % v,
                                 replaced_tokens=int(d.get("replaced_tokens") or 0),
