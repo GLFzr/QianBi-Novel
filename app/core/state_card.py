@@ -21,6 +21,7 @@ import os
 import re
 
 from . import memory as _memory
+from . import reader_belief as _reader_belief
 from . import setting_ledger as _setting_ledger
 from . import tracking_store
 
@@ -184,6 +185,14 @@ def _sec_must(proj_io, proj: str) -> list:
 
 
 def _sec_recent(proj_io, proj: str, num: int, stress: bool = False) -> list:
+    head: list = []
+    # B3/WA3-b 第 6 栏升级三段压缩版（已知常驻≤5/悬念≤5/误知≤3，段预算 ≤1.2KB
+    # ≈12KB 预算 10%）：读者认知 sidecar 缺失时恒空，输出与 0.22 逐字一致；
+    # 近三章速记语义保留在段尾（事件型 known=近三章摘要，超限最先被裁）。
+    try:
+        head = _reader_belief.three_part_items(proj, num - 1)
+    except Exception:  # noqa: BLE001
+        head = []
     try:
         if stress:
             # 压力模式：全部摘要入卡（200 章书的追踪涨满形态）
@@ -191,11 +200,11 @@ def _sec_recent(proj_io, proj: str, num: int, stress: bool = False) -> list:
             for line in _rd(proj_io, proj, "追踪", "章节摘要.md").splitlines():
                 if re.match(r"^\s*-\s*第\d+章", line):
                     lines.append(line.strip())
-            return lines
+            return head + lines
         text = _memory.read_recent_summaries(proj, num, n=CAP_RECENT)
     except Exception:  # noqa: BLE001
-        return []
-    return [ln for ln in text.splitlines() if ln.strip()] if text else []
+        return head
+    return head + ([ln for ln in text.splitlines() if ln.strip()] if text else [])
 
 
 def _sec_risks(ranked: list, zero_roles: list, num: int, has_outline: bool) -> list:
