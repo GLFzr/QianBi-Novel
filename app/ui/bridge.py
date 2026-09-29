@@ -1085,6 +1085,13 @@ class Bridge(QObject):
         self._auto_install_timer = QTimer(self)
         self._auto_install_timer.setInterval(1000)
         self._auto_install_timer.timeout.connect(self._on_auto_install_tick)
+        # C21/R3：更新后首启观察期——journal 相位 × 崩溃 dump 判崩溃（引导式，不自动动包）
+        self._update_rollback = {}
+        try:
+            from .. import __version__ as _rb_ver
+            self._update_rollback = self._check_update_rollback(_rb_ver)
+        except Exception:                 # noqa: BLE001
+            self._update_rollback = {}    # 回滚观察是锦上添花，坏了不许挡启动
         try:
             from .. import __version__, update_check as _uc
             self._update_result = _uc.cached_result(self.cfg, __version__)
@@ -2242,6 +2249,61 @@ class Bridge(QObject):
         # Qt 静态析构会在退出时抛 0xC0000409（app/selftest.py 同一坑），
         # 而此刻用户已经在看安装进度窗了，别把一次成功升级报成崩溃
         os._exit(0)
+
+    # ---- C21/R3：引导回滚（只引导，不自动回滚——w5_update.md §3 裁决）----
+    # 新版首启即崩时 app 自己就是崩的那个，自动回滚等于在最不允许出错的路径上
+    # 新增常驻观察者进程；这里只把「上一次更新出过事」和「回滚的路子」摆上桌面。
+
+    def _check_update_rollback(self, current_version: str) -> dict:
+        """启动对账处的回滚检查：journal first_run 相位 × 崩溃 dump → 恢复对话框数据
+
+        判定与相位落盘全在 update_rollback（纯函数可测），这里只做一行 IO 编排。
+        相位文件独立于 C19 的 journal：journal 会被 main.py 的对账清掉，观察期
+        必须活过「装完后的第一次成功启动」才罩得住首启崩溃。
+        """
+        from .. import update_install as ui, update_rollback as ur
+        verdict = ur.startup_check(ui.read_journal(), ui.read_marker_text(),
+                                   current_version)
+        if verdict.get("state") == "crash":
+            logger.warning("更新后首启崩溃：进引导回滚横幅（to=%s）", verdict.get("to"))
+        return verdict
+
+    @Property("QVariantMap", notify=updateStateChanged)
+    def updateRollback(self) -> dict:
+        """「上次更新遇到问题」的恢复数据（to/from/dump/installer），横幅直接绑它"""
+        return dict(self._update_rollback)
+
+    @Slot()
+    @_guarded
+    def runPreviousInstaller(self):
+        """一键运行上一版安装包：交互式拉起（不静默——回滚是罕见动作，全程可见）
+
+        不替用户退出应用：向导若撞上被占用的文件会自己提示「关闭应用后重试」，
+        每一步都在用户手里，这正是「引导式」与静默一键更新的分野。
+        """
+        info = self._update_rollback or {}
+        inst = str(info.get("installer") or "")
+        if not inst or not os.path.isfile(inst):
+            self.toast.emit("warn", "updates/ 里没有上一版安装包，可从发布页手动下载旧版")
+            return
+        self._flush_draft()               # 用户可能跟着向导关掉应用：草稿先落袋
+        if QProcess.startDetached(inst, []):
+            self.toast.emit("ok", "旧版安装器已启动：按向导走完即回到上一版（书稿与配置不动）")
+            self.dismissUpdateRollback()  # 用户已做出选择，横幅功成身退
+        else:
+            self.toast.emit("error", "上一版安装器没能启动（路径：%s）" % inst)
+
+    @Slot()
+    @_guarded
+    def dismissUpdateRollback(self):
+        """「继续用新版」：消费掉 first_run 相位文件，横幅不再出现"""
+        from .. import update_rollback as ur
+        try:
+            ur.clear_state()
+        except Exception:                 # noqa: BLE001
+            pass
+        self._update_rollback = {}
+        self.updateStateChanged.emit()
 
     @Slot(str)
     @_guarded

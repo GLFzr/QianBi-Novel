@@ -464,6 +464,59 @@ ApplicationWindow {
                 editor.forceActiveFocus()
             }
 
+            // ---- C21/R3：引导回滚横幅（更新后首启崩溃检测命中；只引导，不自动回滚）----
+            Rectangle {
+                id: rollbackBanner
+                objectName: "rollbackBanner"
+                readonly property var rb: bridge.updateRollback || ({})
+                Layout.fillWidth: true
+                height: visible ? 34 : 0
+                visible: rb.active === true
+                color: Theme.warnSoft
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 10
+                    spacing: 8
+                    Text {
+                        text: "⚠ 上次更新遇到问题：v" + String(rb.to || "?")
+                              + " 启动时崩溃过。可以回到 v" + String(rb.from || "上一版")
+                              + "（书稿与配置不动），也可以继续用新版"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsMicro
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    AppButton {
+                        objectName: "rollbackRunPrevButton"
+                        text: "运行上一版安装包"
+                        kind: "secondary"
+                        height: 24
+                        visible: String(rb.installer || "") !== ""
+                        onClicked: bridge.runPreviousInstaller()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "交互式走向导回到上一版（updates/ 里保留的旧安装包，装完书稿配置不动）；不静默，每一步你都看得见"
+                    }
+                    AppButton {
+                        objectName: "rollbackOpenDumpButton"
+                        text: "打开崩溃现场"
+                        kind: "ghost"
+                        height: 24
+                        visible: String(rb.dump || "") !== ""
+                        onClicked: bridge.openPath(String(rb.dump || ""))
+                    }
+                    AppButton {
+                        objectName: "rollbackDismissButton"
+                        text: "继续用新版"
+                        kind: "ghost"
+                        height: 24
+                        onClicked: bridge.dismissUpdateRollback()
+                    }
+                }
+            }
+
             // ---- CW-G6：反哺看门狗横幅（已锁定 ∧ 反哺未新鲜 → 常驻 + 一键补跑）----
             Rectangle {
                 id: backflowStaleBanner
