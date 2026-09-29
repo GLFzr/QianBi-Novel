@@ -179,31 +179,42 @@ def character_brief_table(proj: str, max_chars: int = 1800) -> str:
 
 # ---------------- 伏笔表 ----------------
 
+def parse_foreshadow_md(md: str) -> list:
+    """伏笔 markdown 表格 → rows（与 load_foreshadow 的 md 播种同一套解析，纯函数）。
+
+    memory.unfished_foreshadows 用它直接吃 `追踪/伏笔.md`（人工与反哺两条写路径
+    的共同可见面），不强迫调用方先落 sidecar。缺列按空串补齐，非表行忽略。
+    """
+    rows, order = [], []
+    for line in (md or "").splitlines():
+        t = line.strip()
+        if not (t.startswith("|") and t.endswith("|")):
+            continue
+        cells = [c.strip() for c in t.strip("|").split("|")]
+        if len(cells) < 2 or set(t.replace("|", "").strip()) <= {"-", ":", " "}:
+            continue
+        if cells[0] in ("伏笔", "名称"):
+            continue
+        row = {k: cells[i] if i < len(cells) else "" for i, k in enumerate(_FORESHADOW_COLS)}
+        if row["伏笔"] and row["伏笔"] not in order:
+            rows.append(row)
+            order.append(row["伏笔"])
+    return rows
+
+
 def load_foreshadow(proj: str) -> dict:
     path = _sidecar_path(proj, "伏笔表")
     data = _read_json(path)
     if data and isinstance(data.get("rows"), list):
         return data
     md_path = os.path.join(proj, "追踪", "伏笔.md")
-    rows, order = [], []
+    md = ""
     try:
         with open(md_path, encoding="utf-8") as f:
-            for line in f:
-                t = line.strip()
-                if not (t.startswith("|") and t.endswith("|")):
-                    continue
-                cells = [c.strip() for c in t.strip("|").split("|")]
-                if len(cells) < 2 or set(t.replace("|", "").strip()) <= {"-", ":", " "}:
-                    continue
-                if cells[0] in ("伏笔", "名称"):
-                    continue
-                row = {k: cells[i] if i < len(cells) else "" for i, k in enumerate(_FORESHADOW_COLS)}
-                if row["伏笔"] and row["伏笔"] not in order:
-                    rows.append(row)
-                    order.append(row["伏笔"])
+            md = f.read()
     except OSError:
         pass
-    data = {"version": 1, "rows": rows}
+    data = {"version": 1, "rows": parse_foreshadow_md(md)}
     _write_json(path, data)
     return data
 
@@ -234,9 +245,82 @@ def apply_foreshadow_upserts(proj: str, upserts: list) -> list:
 def render_foreshadow_md(proj: str) -> str:
     data = load_foreshadow(proj)
     out = ["# 伏笔追踪", "",
-           "> 状态：未埋 / 已埋 / 已回收", "",
+           "> 状态：未埋 / 已埋 / 已回收 / 已失效（显式废弃，理由写入备注列）", "",
            "| " + " | ".join(_FORESHADOW_COLS) + " |",
            "|------|------|----------|------|----------|------|"]
     for r in data["rows"]:
         out.append("| " + " | ".join(r.get(k, "") for k in _FORESHADOW_COLS) + " |")
     return "\n".join(out) + "\n"
+
+
+# ---------------- 伏笔到期引擎（卡2/T3：纯本地派生，不落盘） ----------------
+# 「计划回收」列约定填章号或章号区间；解析不出（「第N单元」「待定」等）视为无窗口。
+# 派生字段（urgency/超期章数）全部程序计算，不写回 sidecar——状态枚举扩「已失效」
+# 作为僵尸伏笔的显式终态，超出两态（已回收/已失效）的行都按活跃参与排序。
+
+_NUM_RE = re.compile(r"\d+")
+
+
+def parse_recovery_window(cell: str) -> tuple:
+    """「计划回收」列 → (min_ch, max_ch)；解析不出 → (None, None)。
+
+    支持：40 / 第40章 / 第40-45章 / 第40~45章 / 第40—45章（区间取 [min,max]，
+    P2 原型坑①——区间不取首数字）；「第N单元」「待定」「无」等 → (None, None)。
+    """
+    t = str(cell or "").strip()
+    if not t or "单元" in t:
+        return (None, None)
+    nums = [int(x) for x in _NUM_RE.findall(t)]
+    if not nums:
+        return (None, None)
+    if len(nums) == 1:
+        return (nums[0], nums[0])
+    return (min(nums), max(nums))
+
+
+# urgency 分组序：超期(0) > 临期(1) > 无窗口(2) > 远期(3)；组内各自排序
+_OVERDUE, _DUE_SOON, _NO_WINDOW, _LATER = 0, 1, 2, 3
+_DUE_SOON_CHAPTERS = 5          # 剩余 ≤5 章即入「临期」（webnovel-writer 同款判据）
+
+
+def _urgency_bucket(row: dict, cur_num: int) -> tuple:
+    """单行 → (组序, 组内排序键, 展示标签)。标签同时供注入前缀与 L0 消费。"""
+    if cur_num is None or cur_num < 0:
+        lo, _hi = parse_recovery_window(row.get("计划回收"))
+        return (_NO_WINDOW, 0, "无窗口") if lo is None else (_LATER, 0, "")
+    lo, hi = parse_recovery_window(row.get("计划回收"))
+    if lo is None:
+        return (_NO_WINDOW, 0, "无窗口")
+    if cur_num > hi:
+        return (_OVERDUE, -(cur_num - hi), "超期%d章" % (cur_num - hi))
+    if cur_num >= lo:
+        return (_DUE_SOON, hi - cur_num, "剩%d章" % max(hi - cur_num, 0))
+    remain = lo - cur_num
+    if remain <= _DUE_SOON_CHAPTERS:
+        return (_DUE_SOON, remain, "剩%d章" % remain)
+    return (_LATER, lo, "")
+
+
+def foreshadow_urgency(data, cur_num: int) -> list:
+    """逐行派生 urgency（程序计算不落盘）：超期N章 > 剩≤N章 > 无窗口 > 远期。
+
+    data: load_foreshadow() 的 dict（{"rows": [...]}）或 rows 列表；
+    排除 状态∈(已回收,已失效)；返回 [(row, tag)]，tag ∈ {"超期N章", "剩N章",
+    "无窗口", ""}。排序：超期优先（超期章数降序）→ 临期（剩余章数升序）→
+    无窗口 → 远期（计划章升序）。解析/数据异常逐行跳过（fail-open）。
+    """
+    rows = data.get("rows") if isinstance(data, dict) else data
+    out = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        status = str(r.get("状态") or "").strip()
+        if status in ("已回收", "回收", "已失效"):
+            continue
+        try:
+            bucket, key, tag = _urgency_bucket(r, cur_num)
+        except (TypeError, ValueError):
+            continue
+        out.append((bucket, key, r, tag))
+    out.sort(key=lambda t: (t[0], t[1]))
+    return [(r, tag) for _b, _k, r, tag in out]

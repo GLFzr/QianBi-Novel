@@ -71,10 +71,49 @@ def read_recent_summaries(proj: str, before_num: int, n: int = 3) -> str:
 
 
 def unfished_foreshadows(proj: str, limit: int = 2000) -> str:
-    """未回收伏笔节选（过滤已回收条目）
+    """未回收伏笔节选（卡2/T3：按到期紧迫度排序，超期排最前带【超期N章】前缀）
 
-    伏笔表格式：| 伏笔 | 类别 | 埋设章节 | 状态 | 计划回收 | 备注 |
+    结构化读取 `追踪/伏笔.md` 表格（tracking_store.parse_foreshadow_md——人工
+    编辑与反哺 diff 两条写路径的共同可见面），空表回退 sidecar 真源；按
+    foreshadow_urgency 排序（超期降序 → 临期升序 → 无窗口 → 远期），超期条目
+    加【超期N章】前缀、无窗口条目加【无回收窗口】前缀。签名不变，四个消费方
+    （细纲批/正文前缀/cw 参考块/卷会话）自动受益。已回收与已失效条目一律过滤。
+    结构化解析失败时回退旧的裸文本行过滤（fail-open）。
     """
+    try:
+        from . import tracking_store
+        rows = tracking_store.parse_foreshadow_md(
+            project.read_file(project.get_tracking_path(proj, "伏笔")))
+        if not rows:
+            rows = tracking_store.load_foreshadow(proj).get("rows") or []
+        try:
+            chapters = project.list_chapters(proj)
+            cur = max((c[0] for c in chapters), default=0)
+        except Exception:  # noqa: BLE001
+            cur = None
+        ranked = tracking_store.foreshadow_urgency({"rows": rows}, cur)
+    except Exception:  # noqa: BLE001
+        return _unfished_foreshadows_raw(proj, limit)
+    if not ranked:
+        return ""
+    lines = ["| 伏笔 | 类别 | 埋设章节 | 状态 | 计划回收 | 备注 |",
+             "|------|------|----------|------|----------|------|"]
+    for row, tag in ranked:
+        name = str(row.get("伏笔") or "")
+        if tag.startswith("超期"):
+            name = "【%s】%s" % (tag, name)
+        elif tag == "无窗口":
+            name = "【无回收窗口】%s" % name
+        cells = [name] + [str(row.get(k) or "") for k in
+                          ("类别", "埋设章节", "状态", "计划回收", "备注")]
+        cells = [c.replace("\n", " ").replace("|", "｜") for c in cells]
+        lines.append("| " + " | ".join(cells) + " |")
+    out = "\n".join(lines)
+    return out[:limit] if out else ""
+
+
+def _unfished_foreshadows_raw(proj: str, limit: int) -> str:
+    """旧路径兜底：伏笔表缺表头/非标准格式时按裸文本行过滤已回收（V2.1 前行为）"""
     text = project.read_file(project.get_tracking_path(proj, "伏笔"))
     if not text.strip():
         return ""

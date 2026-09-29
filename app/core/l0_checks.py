@@ -11,6 +11,8 @@
 3. taboo_findings    禁止提前释放：细纲 `本章禁止提前释放` 引号关键词 → 正文确定性 grep
 4. state_checklist   状态在场清单（证据供给，不判 fail）：角色状态里的未愈伤情/持续状态
                      → 提示审校逐条核对（"踝伤却写胳膊不方便"类漂移的对照材料）
+5. foreshadow_findings 伏笔到期批次 L0（卡2/T3）：超期伏笔在本批细纲「伏笔推进」段
+                     既无「回收」也无「改期：新窗口+理由」→ fail候选（证据在场才检查）
 
 全部纯正则/词典，CPU <0.5s/章，零网络零模型。任何解析失败返回空 finding（fail-open）。
 """
@@ -190,6 +192,105 @@ def state_checklist(states_text: str) -> list:
         for fm in _OPEN_STATE_RE.finditer(line):
             items.append("%s：%s" % (cur_name or "（未具名）", fm.group(0).lstrip("- ")))
     return items
+
+
+# ---- 卡2/T3 伏笔到期批次 L0（证据在场才检查；风格对齐 beat_findings） ----
+
+_FORESHADOW_SEG_RE = re.compile(r"^#{2,4}\s*伏笔推进")
+_HEADING_RE = re.compile(r"^(#{2,6}\s|===)")
+
+
+def _foreshadow_sections(outline_text: str) -> list:
+    """细纲文本 → 各章「伏笔推进」段列表（段起于伏笔推进标题，止于下一标题/===小节）"""
+    segs, cur, on = [], [], False
+    for ln in (outline_text or "").splitlines():
+        s = ln.strip()
+        if _FORESHADOW_SEG_RE.match(s):
+            if cur:
+                segs.append("\n".join(cur))
+            cur, on = [], True
+            continue
+        if on and _HEADING_RE.match(s):
+            segs.append("\n".join(cur))
+            cur, on = [], False
+            continue
+        if on:
+            cur.append(ln)
+    if on and cur:
+        segs.append("\n".join(cur))
+    return segs
+
+
+_NO_PAYOFF_RE = re.compile(r"^(无|未定|暂无|尚未?[回收挂])[。．.）)]?$")
+
+
+def _deferred_or_paid_line(line: str, name: str) -> bool:
+    """单行是否构成本批对该伏笔的「回收/显式改期」交代（确定性判据）
+
+    - 「本章回收：黑袍人的令牌当众焚毁」→ 收；
+    - 「回收：无 / 未定」→ 不算（模板占位与空头支票都不是交代）；
+    - 「改期：…」→ 算（显式改期，新窗口与理由由审校核）；
+    - 「继续挂起（预计第60章）」→ 算（带新窗口的显式改期）；裸「挂起：未定」不算。
+    """
+    if name not in line:
+        return False
+    m = re.search(r"回收[：:]?\s*(.{0,14})", line)
+    if m and not _NO_PAYOFF_RE.match(m.group(1).strip()):
+        return True
+    if "改期" in line:
+        return True
+    return "挂起" in line and bool(re.search(r"第?\d+\s*章|单元", line))
+
+
+def foreshadow_findings(proj, batch_outlines, cur_num: int) -> list:
+    """批次伏笔到期 L0（卡2/T3）：每条超期伏笔必须在本批某章「伏笔推进」段
+    出现「回收」或「改期：新窗口+理由」，否则产出 fail候选。
+
+    - 证据在场才检查：伏笔表缺失/无超期条目 → 恒空（旧书字节不变，fail-open）；
+    - batch_outlines: [(num, title, content)] / 纯文本 / dict 的宽容列表；
+    - 产出进 review_l0_block 由审校终裁（证据定位器，不是独立裁决者）。
+    任何异常返回空（fail-open，绝不阻断流水线）。
+    """
+    try:
+        from . import tracking_store
+        rows = (tracking_store.load_foreshadow(proj) or {}).get("rows") or []
+        overdue = [(r, tag) for r, tag in
+                   tracking_store.foreshadow_urgency({"rows": rows}, cur_num)
+                   if tag.startswith("超期")]
+        if not overdue:
+            return []
+        texts = []
+        for it in batch_outlines or []:
+            if isinstance(it, str):
+                texts.append(it)
+            elif isinstance(it, dict):
+                texts.append(str(it.get("content") or it.get("text") or ""))
+            elif isinstance(it, (tuple, list)):
+                texts.append("\n".join(str(x) for x in it))
+        segs = []
+        for t in texts:
+            segs.extend(_foreshadow_sections(t))
+        findings = []
+        for row, tag in overdue:
+            name = str(row.get("伏笔") or "").strip()
+            if not name:
+                continue
+            covered = any(_deferred_or_paid_line(ln, name)
+                          for seg in segs for ln in seg.splitlines())
+            if covered:
+                continue
+            findings.append({
+                "level": "fail候选", "check": "伏笔到期",
+                "text": "伏笔「%s」（%s埋设，计划%s）已%s，本批细纲的「伏笔推进」段"
+                        "既无「回收」也无「改期：新窗口+理由」——请在本批安排回收、"
+                        "显式改期写明新窗口，或标记「已失效」；不许无声挂起。"
+                        % (name[:32], str(row.get("埋设章节") or "?").strip() or "?",
+                           str(row.get("计划回收") or "?").strip() or "?", tag),
+                "quote": name,
+            })
+        return findings
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def build_v5_block(proj, num: int, prose: str,
