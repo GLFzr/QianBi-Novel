@@ -2189,6 +2189,206 @@ class _MicroCycle:
             elif g8_idea:
                 _store_inner_gate_idea(ctx, proj, num, "G8", g8_idea)
 
+    def _mc_finalize(self) -> dict:
+        """⑤ 定稿落库：正文+版本快照+追踪四文件+摘要链+设定清算+语料滚动+断点收尾。返回章节记录"""
+        ctx = self.ctx
+        num = self.num
+        proj = self.proj
+        session = self.session
+        _w_cfg = self._w_cfg
+        gr = self.gr
+        prose = self.prose   # 本段只读（定稿不改写正文），局部别名保持段体逐字
+        # ---- ⑤ 定稿落库：正文 + 追踪四文件 + 摘要链 ----
+        ctx.step(num, st.STEP_FINALIZE)
+        title = ""
+        m = re.search(r"^#+\s*第\s*\d+\s*章[：: ]*\s*(.+)", prose, re.M)
+        if m:
+            title = m.group(1).strip()
+        chapter_path = project.get_chapter_path(proj, num, title)
+        # 保存驱动版本体系：定稿落库归档（重写场景归档旧正文；首版则存 v1=定稿）
+        old_text = project.read_file(chapter_path)
+        if not versions.list_versions(proj, num):
+            # 首版：定稿内容本身即 v1（AI 的"保存"动作）
+            versions.snapshot(proj, num, prose, versions.SOURCE_FINALIZE)
+        elif old_text and old_text != prose:
+            versions.snapshot(proj, num, old_text, versions.SOURCE_REREWRITE)
+        project.write_file(chapter_path, prose)
+
+        # 追踪四文件
+        ctx.checkpoint()
+        try:
+            tracking = _update_tracking(ctx, num, prose, session=session)
+            applied = [k for k in tracking.keys()]
+            ctx.log("ok", f"追踪文件已更新：{', '.join(applied) if applied else '（无变化）'}")
+        except PipelineStopped:
+            # 停止请求在定稿收尾中到达：正文已落库，保留本记录，返回后由调度层停止
+            ctx.log("info", f"第 {num} 章已落库，停止请求在收尾中到达，记录保留")
+        except Exception as e:
+            ctx.log("warn", f"追踪更新失败（不阻断）：{e}")
+
+        # 章节摘要 + 全局摘要链
+        ctx.checkpoint()
+        try:
+            # 头 2000 + 尾 800：模板要求「结尾落点」，只喂开头会让超标章的结尾缺席
+            if len(prose) > 3000:
+                excerpt = prose[:2000] + "\n…（中段省略）…\n" + prose[-800:]
+            else:
+                excerpt = prose[:3000]
+            _every = max(1, int(((ctx.cfg or {}).get("writing", {}) or {})
+                                .get("summary_every", 1)))
+            _global_due = not (_every > 1 and num % _every != 0)
+            _merged = (bool(((ctx.cfg or {}).get("writing", {}) or {}).get("summary_merged", False))
+                       and _global_due)
+            new_global = ""
+            if _merged:
+                # A11（v16 总案）：章摘要+全局摘要一次调用——少一次大请求＝少一次冷击
+                # 抽奖。会话轮剥 prose 换历史引用（prose_sentinel）；【全局摘要】节缺失
+                # 或解析失败回退两段式旧路径（fail-open）。
+                old_global = memory.read_global_summary(proj)
+                merged_kw = dict(chapter_num=num, title=title or f"第{num}章",
+                                 prose_excerpt=excerpt,
+                                 old_summary=old_global or "（全书刚开始）",
+                                 project_header=project_header(proj),
+                                 chapter_header=_chap_header(ctx, proj, num))
+                merged_prompt = prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT.format(**merged_kw)
+                ctx.last_prompt = merged_prompt
+                if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
+                    _session_seed(session, prose)
+                    turn_text = prompts.session_turn_text(
+                        prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT,
+                        prose_sentinel="{prose_excerpt}").format(**merged_kw)
+                    ctx.last_prompt = turn_text
+                    _raw_m = _session_ask(ctx, session, SLOT_HELPER, turn_text,
+                                          phase=PHASE_CH_SUMMARY, stream=False)
+                else:
+                    _raw_m = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
+                        merged_prompt, phase=PHASE_CH_SUMMARY))
+                chapter_summary, new_global = _split_merged_summary(_raw_m)
+                if not chapter_summary:
+                    new_global = ""
+                    ctx.log("warn", f"第 {num} 章 合并摘要解析失败，回退两段式旧路径")
+            if not _merged or not chapter_summary:
+                summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
+                    chapter_num=num, title=title or f"第{num}章",
+                    prose_excerpt=excerpt, project_header=project_header(proj),
+                    chapter_header=_chap_header(ctx, proj, num))
+                ctx.last_prompt = summary_prompt
+                if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
+                    _session_seed(session, prose)
+                    turn_text = prompts.session_turn_text(
+                        prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
+                        chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
+                        project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
+                    ctx.last_prompt = turn_text
+                    chapter_summary = _session_ask(ctx, session, SLOT_HELPER, turn_text,
+                                                   phase=PHASE_CH_SUMMARY, stream=False
+                                                   ).splitlines()[0].strip()
+                else:
+                    chapter_summary = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
+                        summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
+            if chapter_summary:
+                memory.append_chapter_summary(proj, num, title or f"第{num}章", chapter_summary)
+                # V7（writing.summary_every，缺省 1=每章重算）：全局摘要降频——非重算章
+                # 沿用旧摘要（滞后至多 N-1 章，消费方为章头快照，可容忍）。
+                if not _global_due:
+                    ctx.log("info", f"第 {num} 章 全局摘要降频跳过（每 {_every} 章重算一次）")
+                elif _merged:
+                    # A11 合并路径：全局摘要已随上一次调用产出
+                    if new_global.strip():
+                        memory.write_global_summary(proj, new_global)
+                        ctx.log("ok", f"摘要链已更新（合并调用：章 {len(chapter_summary)} 字 + "
+                                      f"全局 {len(new_global)} 字）")
+                    else:
+                        ctx.log("warn", f"第 {num} 章 合并调用缺【全局摘要】节，本章全局摘要沿用旧值")
+                else:
+                    old_global = memory.read_global_summary(proj)
+                    ctx.checkpoint()
+                    global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
+                        old_summary=old_global or "（全书刚开始）",
+                        chapter_num=num, chapter_summary=chapter_summary,
+                        chapter_header=_chap_header(ctx, proj, num),
+                        project_header=project_header(proj))
+                    ctx.last_prompt = global_prompt
+                    if _use_session(ctx, session, SLOT_HELPER, PHASE_G_SUMMARY):
+                        # W-2 ②-c：既有全局摘要＝上一章本相位自己的回复，多半已逐字节固化在
+                        # 栈里（t3b 实测 ~2.4k han 字/章、类内重复率 95%）。**可证才替换**：
+                        # 判定命中才换引用行，否则与改造前逐字相同（崩溃续跑/无历史时必然走这条）
+                        _old_g = old_global or "（全书刚开始）"
+                        if old_global and getattr(session, "has_history", None) \
+                                and session.has_history(old_global):
+                            _old_g = ("【＝本会话历史中最近一条全局摘要（既有内容已在其中），"
+                                      "在它基础上更新，不要要求重新输出旧摘要】")
+                        turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
+                            old_summary=_old_g,
+                            chapter_num=num, chapter_summary=chapter_summary,
+                            chapter_header=_chap_header(ctx, proj, num), project_header=project_header(proj))
+                        ctx.last_prompt = turn_text
+                        new_global = _session_ask(ctx, session, SLOT_HELPER, turn_text,
+                                                  phase=PHASE_G_SUMMARY, stream=False)
+                    else:
+                        new_global = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
+                            global_prompt, phase=PHASE_G_SUMMARY))
+                    if new_global.strip():
+                        memory.write_global_summary(proj, new_global)
+                    ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
+        except PipelineStopped:
+            ctx.log("info", f"第 {num} 章摘要链更新被停止请求中断（不影响已落库正文与记录）")
+        except Exception as e:
+            ctx.log("warn", f"摘要链更新失败（不阻断）：{e}")
+
+        # ---- 设定清算（方案 D1）：本章自创设定三分类对账（不阻断，产物落追踪/）----
+        try:
+            from .canon_audit import audit_chapter
+            # v10 audit 鲸鱼修复（深化计划 §8）：审校票的缓存单元注册需要写延迟窗——
+            # 13/13 章实测清算首笔在审校末票（hit 99%）后 2-5 秒只记到头部（-65~-81pp）。
+            # 调整二：迁移为 pace_boundaries 边界配置（review_audit），未配置回退全局值。
+            _pace_after_long_call(ctx, session, boundary="review_audit")
+            audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router, session=session)
+            v = audit.get("violations") or []
+            hard = [x for x in v if x.get("severity") == "硬伤"]
+            adopt = audit.get("adoptions") or []
+            if audit.get("failed"):
+                ctx.log("warn", f"第 {num} 章 设定清算执行失败（{str(audit.get('error', ''))[:60]}）——"
+                                f"本章未对账，勿当作已通过；可用「世界观对账」重跑")
+            elif v or adopt:
+                ctx.log("warn", f"第 {num} 章 设定清算：违反 {len(v)}（硬伤 {len(hard)}）· "
+                                f"可收编自创 {len(adopt)}——详见 追踪/设定清算_第{num:03d}.json")
+            else:
+                ctx.log("ok", f"第 {num} 章 设定清算：无越界")
+        except Exception as e:
+            ctx.log("warn", f"设定清算失败（不阻断）：{e}")
+
+        # ---- v15（writing.corpus_roll）：章末滚动语料快照（追加式+前缀守卫）----
+        # 本章正文+摘要行追加进语料快照，下一章头部构建自然读到——头部从
+        # 第 2 章起每章增长（不再等卷界）。摘要行随滚（方向 B2）。
+        # v16 A2：book_stream 开启时追加进书级语料流（跨卷同一文件）。
+        if bool(_w_cfg.get("corpus_roll", False)) and prose.strip():
+            try:
+                _summ = memory.read_recent_summaries(proj, num + 1, n=1)
+                if bool(_w_cfg.get("book_stream", False)):
+                    from .volume_session import roll_book_stream_chapter
+                    rolled = roll_book_stream_chapter(proj, num, title or f"第{num}章",
+                                                      prose, _summ)
+                else:
+                    from .volume_session import roll_corpus_snapshot, \
+                        resolve_volume_number as _rvn2
+                    rolled = roll_corpus_snapshot(proj, _rvn2(proj, num), num,
+                                                  title or f"第{num}章", prose, _summ)
+                if not rolled:
+                    ctx.log("warn", f"第 {num} 章 语料滚动被前缀守卫拒绝（violated），"
+                                    f"下一章头部退化为上次快照")
+            except Exception as e:  # noqa: BLE001
+                ctx.log("warn", f"语料滚动失败（不阻断）：{e}")
+
+        # 断点收尾（方案 H）：本章全流程完成，清除章内断点（带章号，L1-02 守卫）
+        st.clear_chapter_step(proj, num)
+        # S1 卷会话：逐章 append-only 落盘（v3 §2.4）——崩溃恢复后消息逐字节一致，
+        # 服务端前缀缓存继续有效（不重放、不重新 miss）。
+        _save_session_checkpoint(ctx, session, "定稿后")
+        gr.word_actual = project.count_chars(prose)
+        record = {"num": num, "title": title, **gr.to_record()}
+        return record
+
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
@@ -2334,199 +2534,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     mc._mc_scan()
     mc._mc_deslop()
     mc._mc_review()
-    # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
-    prose = mc.prose
-
-    # ---- ⑤ 定稿落库：正文 + 追踪四文件 + 摘要链 ----
-    ctx.step(num, st.STEP_FINALIZE)
-    title = ""
-    m = re.search(r"^#+\s*第\s*\d+\s*章[：: ]*\s*(.+)", prose, re.M)
-    if m:
-        title = m.group(1).strip()
-    chapter_path = project.get_chapter_path(proj, num, title)
-    # 保存驱动版本体系：定稿落库归档（重写场景归档旧正文；首版则存 v1=定稿）
-    old_text = project.read_file(chapter_path)
-    if not versions.list_versions(proj, num):
-        # 首版：定稿内容本身即 v1（AI 的"保存"动作）
-        versions.snapshot(proj, num, prose, versions.SOURCE_FINALIZE)
-    elif old_text and old_text != prose:
-        versions.snapshot(proj, num, old_text, versions.SOURCE_REREWRITE)
-    project.write_file(chapter_path, prose)
-
-    # 追踪四文件
-    ctx.checkpoint()
-    try:
-        tracking = _update_tracking(ctx, num, prose, session=session)
-        applied = [k for k in tracking.keys()]
-        ctx.log("ok", f"追踪文件已更新：{', '.join(applied) if applied else '（无变化）'}")
-    except PipelineStopped:
-        # 停止请求在定稿收尾中到达：正文已落库，保留本记录，返回后由调度层停止
-        ctx.log("info", f"第 {num} 章已落库，停止请求在收尾中到达，记录保留")
-    except Exception as e:
-        ctx.log("warn", f"追踪更新失败（不阻断）：{e}")
-
-    # 章节摘要 + 全局摘要链
-    ctx.checkpoint()
-    try:
-        # 头 2000 + 尾 800：模板要求「结尾落点」，只喂开头会让超标章的结尾缺席
-        if len(prose) > 3000:
-            excerpt = prose[:2000] + "\n…（中段省略）…\n" + prose[-800:]
-        else:
-            excerpt = prose[:3000]
-        _every = max(1, int(((ctx.cfg or {}).get("writing", {}) or {})
-                            .get("summary_every", 1)))
-        _global_due = not (_every > 1 and num % _every != 0)
-        _merged = (bool(((ctx.cfg or {}).get("writing", {}) or {}).get("summary_merged", False))
-                   and _global_due)
-        new_global = ""
-        if _merged:
-            # A11（v16 总案）：章摘要+全局摘要一次调用——少一次大请求＝少一次冷击
-            # 抽奖。会话轮剥 prose 换历史引用（prose_sentinel）；【全局摘要】节缺失
-            # 或解析失败回退两段式旧路径（fail-open）。
-            old_global = memory.read_global_summary(proj)
-            merged_kw = dict(chapter_num=num, title=title or f"第{num}章",
-                             prose_excerpt=excerpt,
-                             old_summary=old_global or "（全书刚开始）",
-                             project_header=project_header(proj),
-                             chapter_header=_chap_header(ctx, proj, num))
-            merged_prompt = prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT.format(**merged_kw)
-            ctx.last_prompt = merged_prompt
-            if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
-                _session_seed(session, prose)
-                turn_text = prompts.session_turn_text(
-                    prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT,
-                    prose_sentinel="{prose_excerpt}").format(**merged_kw)
-                ctx.last_prompt = turn_text
-                _raw_m = _session_ask(ctx, session, SLOT_HELPER, turn_text,
-                                      phase=PHASE_CH_SUMMARY, stream=False)
-            else:
-                _raw_m = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
-                    merged_prompt, phase=PHASE_CH_SUMMARY))
-            chapter_summary, new_global = _split_merged_summary(_raw_m)
-            if not chapter_summary:
-                new_global = ""
-                ctx.log("warn", f"第 {num} 章 合并摘要解析失败，回退两段式旧路径")
-        if not _merged or not chapter_summary:
-            summary_prompt = prompts.CHAPTER_SUMMARY_PROMPT.format(
-                chapter_num=num, title=title or f"第{num}章",
-                prose_excerpt=excerpt, project_header=project_header(proj),
-                chapter_header=_chap_header(ctx, proj, num))
-            ctx.last_prompt = summary_prompt
-            if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
-                _session_seed(session, prose)
-                turn_text = prompts.session_turn_text(
-                    prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
-                    chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
-                    project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
-                ctx.last_prompt = turn_text
-                chapter_summary = _session_ask(ctx, session, SLOT_HELPER, turn_text,
-                                               phase=PHASE_CH_SUMMARY, stream=False
-                                               ).splitlines()[0].strip()
-            else:
-                chapter_summary = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
-                    summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
-        if chapter_summary:
-            memory.append_chapter_summary(proj, num, title or f"第{num}章", chapter_summary)
-            # V7（writing.summary_every，缺省 1=每章重算）：全局摘要降频——非重算章
-            # 沿用旧摘要（滞后至多 N-1 章，消费方为章头快照，可容忍）。
-            if not _global_due:
-                ctx.log("info", f"第 {num} 章 全局摘要降频跳过（每 {_every} 章重算一次）")
-            elif _merged:
-                # A11 合并路径：全局摘要已随上一次调用产出
-                if new_global.strip():
-                    memory.write_global_summary(proj, new_global)
-                    ctx.log("ok", f"摘要链已更新（合并调用：章 {len(chapter_summary)} 字 + "
-                                  f"全局 {len(new_global)} 字）")
-                else:
-                    ctx.log("warn", f"第 {num} 章 合并调用缺【全局摘要】节，本章全局摘要沿用旧值")
-            else:
-                old_global = memory.read_global_summary(proj)
-                ctx.checkpoint()
-                global_prompt = prompts.GLOBAL_SUMMARY_PROMPT.format(
-                    old_summary=old_global or "（全书刚开始）",
-                    chapter_num=num, chapter_summary=chapter_summary,
-                    chapter_header=_chap_header(ctx, proj, num),
-                    project_header=project_header(proj))
-                ctx.last_prompt = global_prompt
-                if _use_session(ctx, session, SLOT_HELPER, PHASE_G_SUMMARY):
-                    # W-2 ②-c：既有全局摘要＝上一章本相位自己的回复，多半已逐字节固化在
-                    # 栈里（t3b 实测 ~2.4k han 字/章、类内重复率 95%）。**可证才替换**：
-                    # 判定命中才换引用行，否则与改造前逐字相同（崩溃续跑/无历史时必然走这条）
-                    _old_g = old_global or "（全书刚开始）"
-                    if old_global and getattr(session, "has_history", None) \
-                            and session.has_history(old_global):
-                        _old_g = ("【＝本会话历史中最近一条全局摘要（既有内容已在其中），"
-                                  "在它基础上更新，不要要求重新输出旧摘要】")
-                    turn_text = prompts.session_turn_text(prompts.GLOBAL_SUMMARY_PROMPT).format(
-                        old_summary=_old_g,
-                        chapter_num=num, chapter_summary=chapter_summary,
-                        chapter_header=_chap_header(ctx, proj, num), project_header=project_header(proj))
-                    ctx.last_prompt = turn_text
-                    new_global = _session_ask(ctx, session, SLOT_HELPER, turn_text,
-                                              phase=PHASE_G_SUMMARY, stream=False)
-                else:
-                    new_global = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
-                        global_prompt, phase=PHASE_G_SUMMARY))
-                if new_global.strip():
-                    memory.write_global_summary(proj, new_global)
-                ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
-    except PipelineStopped:
-        ctx.log("info", f"第 {num} 章摘要链更新被停止请求中断（不影响已落库正文与记录）")
-    except Exception as e:
-        ctx.log("warn", f"摘要链更新失败（不阻断）：{e}")
-
-    # ---- 设定清算（方案 D1）：本章自创设定三分类对账（不阻断，产物落追踪/）----
-    try:
-        from .canon_audit import audit_chapter
-        # v10 audit 鲸鱼修复（深化计划 §8）：审校票的缓存单元注册需要写延迟窗——
-        # 13/13 章实测清算首笔在审校末票（hit 99%）后 2-5 秒只记到头部（-65~-81pp）。
-        # 调整二：迁移为 pace_boundaries 边界配置（review_audit），未配置回退全局值。
-        _pace_after_long_call(ctx, session, boundary="review_audit")
-        audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router, session=session)
-        v = audit.get("violations") or []
-        hard = [x for x in v if x.get("severity") == "硬伤"]
-        adopt = audit.get("adoptions") or []
-        if audit.get("failed"):
-            ctx.log("warn", f"第 {num} 章 设定清算执行失败（{str(audit.get('error', ''))[:60]}）——"
-                            f"本章未对账，勿当作已通过；可用「世界观对账」重跑")
-        elif v or adopt:
-            ctx.log("warn", f"第 {num} 章 设定清算：违反 {len(v)}（硬伤 {len(hard)}）· "
-                            f"可收编自创 {len(adopt)}——详见 追踪/设定清算_第{num:03d}.json")
-        else:
-            ctx.log("ok", f"第 {num} 章 设定清算：无越界")
-    except Exception as e:
-        ctx.log("warn", f"设定清算失败（不阻断）：{e}")
-
-    # ---- v15（writing.corpus_roll）：章末滚动语料快照（追加式+前缀守卫）----
-    # 本章正文+摘要行追加进语料快照，下一章头部构建自然读到——头部从
-    # 第 2 章起每章增长（不再等卷界）。摘要行随滚（方向 B2）。
-    # v16 A2：book_stream 开启时追加进书级语料流（跨卷同一文件）。
-    if bool(_w_cfg.get("corpus_roll", False)) and prose.strip():
-        try:
-            _summ = memory.read_recent_summaries(proj, num + 1, n=1)
-            if bool(_w_cfg.get("book_stream", False)):
-                from .volume_session import roll_book_stream_chapter
-                rolled = roll_book_stream_chapter(proj, num, title or f"第{num}章",
-                                                  prose, _summ)
-            else:
-                from .volume_session import roll_corpus_snapshot, \
-                    resolve_volume_number as _rvn2
-                rolled = roll_corpus_snapshot(proj, _rvn2(proj, num), num,
-                                              title or f"第{num}章", prose, _summ)
-            if not rolled:
-                ctx.log("warn", f"第 {num} 章 语料滚动被前缀守卫拒绝（violated），"
-                                f"下一章头部退化为上次快照")
-        except Exception as e:  # noqa: BLE001
-            ctx.log("warn", f"语料滚动失败（不阻断）：{e}")
-
-    # 断点收尾（方案 H）：本章全流程完成，清除章内断点（带章号，L1-02 守卫）
-    st.clear_chapter_step(proj, num)
-    # S1 卷会话：逐章 append-only 落盘（v3 §2.4）——崩溃恢复后消息逐字节一致，
-    # 服务端前缀缓存继续有效（不重放、不重新 miss）。
-    _save_session_checkpoint(ctx, session, "定稿后")
-    gr.word_actual = project.count_chars(prose)
-    record = {"num": num, "title": title, **gr.to_record()}
-    return record
+    return mc._mc_finalize()
 
 
 # ============ 审校（v1 一致性检查 + v2 6 维最终审核）============
