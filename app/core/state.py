@@ -321,6 +321,7 @@ class PipelineStateTD(TypedDict, total=False):
     review_findings: dict
     review_chain: dict
     chapter_need_human: dict
+    anomalies: list
     cw: CWStateTD
 
 
@@ -336,6 +337,10 @@ DEFAULT_STATE: PipelineStateTD = {
     "review_findings": {},      # {章号: [{verdict, items, ts, blocking, advisory, ...}]} v2 6 维审校结果
     "review_chain": {},         # {章号: {issues, reworks, rounds, verdict_history}} v3 反馈闭环状态
     "chapter_need_human": {},   # {章号: ts} 3 次 REJECT 不收敛时标 human，跳过本轮继续
+    # C35 G5：台账/看门狗异常告警（[{ts, rule, ch, level, msg, ...}]，尾部保留 500 条）。
+    # 写入方=app.usage.report_anomaly（G5 规则命中）与 orchestrator._watch_phase_products
+    # （G4 相位看门狗）；UI 常驻横幅与跑后汇总消费。
+    "anomalies": [],            # [{ts, rule, ch, level, msg, ...}]
 }
 
 
@@ -352,6 +357,7 @@ _STATE_KEY_TYPES = {
     "review_findings": dict,
     "review_chain": dict,
     "chapter_need_human": dict,
+    "anomalies": list,
     "backflowed": dict,
     "forced_locks": dict,
     "cw": dict,

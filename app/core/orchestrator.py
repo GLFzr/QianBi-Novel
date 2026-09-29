@@ -8,6 +8,7 @@
 """
 import logging
 import os
+import re
 import threading
 import time
 
@@ -15,6 +16,7 @@ from PySide6.QtCore import QThread, Signal
 
 from .. import project
 from .. import diagnostics
+from .. import usage
 from ..llm import ModelRouter
 from . import stages, state as st
 from .stages import StageError, PipelineStopped
@@ -24,6 +26,8 @@ logger = logging.getLogger("qianbi.core")
 OUTLINE_BATCH = 2  # 细纲每批生成章数（max 思考下 5 章批会被推理吃光输出预算，2 章批实测稳定）
 
 LOG_TAIL_MAX = 50  # 日志环形缓冲条数（失败 dump 用）
+
+G4_PAUSE_AFTER = 2  # 相位看门狗：连续 N 章记账产物缺失 → auto_pause（T3 连停 30 章的翻案线）
 
 
 class Orchestrator(QThread):
@@ -105,6 +109,9 @@ class Orchestrator(QThread):
         # stages 首次取用时从 项目/会话/卷N_messages.jsonl 装载）。flag 关闭时
         # 这张表永不被触达，章会话路径行为逐字节不变。
         self.volume_sessions = {}
+        # C35 G4 相位看门狗：连续缺失计数与去重游标（章循环收尾维护）
+        self._g4_missing_run = 0
+        self._g4_last_missing = 0
 
     # ---------- 外部控制 ----------
 
@@ -137,6 +144,60 @@ class Orchestrator(QThread):
         self._pause.set()
         self.log("warn", f"闸门暂停：{reason}（处理后可点「继续」）")
         self.sig_auto_paused.emit(reason)
+
+    # ---------- C35 G4：相位看门狗（记账对账）----------
+
+    def _chapter_bookkeeping_ok(self, num: int) -> bool:
+        """第 N 章正文已落库 ⇒ 记账产物必须存在的本地零成本校验。
+
+        章级可验证的记账证据取两路并集（追踪四文件是累积件、无章级指纹，其存在性
+        由 ensure_tracking_files 保证；对账只认章级证据）：
+          1. usage 台账该章出现过任一记账相位行（tracking/chapter_summary/
+             global_summary/canon_audit）——记账调用发生过的直接痕迹；
+          2. 追踪/章节摘要.md 存在第 N 章条目——记账产物本体（台账行缺失但产物
+             真实写成了的场景，如他进程写入后本进程内存视图未刷新）。
+        两路皆缺 =「正文已落库、收尾记账窗口被中断」（T3 记账停摆 30 章的指纹）。
+        """
+        if usage.chapter_accounted(num):
+            return True
+        try:
+            with open(os.path.join(self.proj, "追踪", "章节摘要.md"),
+                      encoding="utf-8") as f:
+                pat = re.compile(r"^-\s*第%d章[《\s]" % int(num))
+                return any(pat.match(ln.strip()) for ln in f)
+        except OSError:
+            return False
+
+    def _watch_phase_products(self, num: int):
+        """章循环收尾的相位看门狗（append_history 后、G9 门之前调用）。
+
+        缺失 → error 日志 + 异常落账（state.anomalies / session_events）；
+        连续 G4_PAUSE_AFTER 章缺失 → auto_pause（复用闸门暂停机制，等人处理）。
+        看门狗自身故障只 warn，绝不阻断主流水线。
+        """
+        try:
+            ok = self._chapter_bookkeeping_ok(num)
+        except Exception as e:  # noqa: BLE001
+            self.log("warn", f"相位看门狗自检失败（不阻断）：{e}")
+            return
+        if ok:
+            self._g4_missing_run = 0
+            self._g4_last_missing = 0
+            return
+        if self._g4_last_missing != num:   # 同章重跑（G9 回退）不计「连续」
+            self._g4_missing_run += 1
+            self._g4_last_missing = num
+        msg = (f"第 {num} 章正文已落库，但记账产物缺失（台账无 tracking/摘要相位行，"
+               f"章节摘要链亦无本章条目）——收尾记账窗口被中断的典型信号")
+        self.log("error", msg)
+        try:
+            usage.report_anomaly("bookkeeping_missing", "error", ch=num, msg=msg,
+                                 source="G4")
+        except Exception as e:  # noqa: BLE001
+            logger.debug("G4 告警落账失败（忽略）: %s", e)
+        if self._g4_missing_run >= G4_PAUSE_AFTER:
+            self.auto_pause(f"G4 相位看门狗：连续 {self._g4_missing_run} 章记账产物"
+                            f"缺失（正文已落库而追踪/摘要未更新）")
 
     # ---------- 步骤决策门（Step Gates）----------
 
@@ -339,6 +400,9 @@ class Orchestrator(QThread):
     def run(self):
         try:
             self.volume_sessions = {}   # S1：卷会话实例随本次连跑重建（每卷一个）
+            # C35 G5：登记告警落账目标——此后 record() 命中规则 → 本项目
+            # state.anomalies + session_events；阈值随 cfg.usage_alerts 下发
+            usage.set_project(self.proj, self.cfg)
             project.ensure_tracking_files(self.proj)
             state = st.load_state(self.proj)
             # 恢复上次回退时持久化的用户想法（G2 回退后重启仍携带）
@@ -490,6 +554,9 @@ class Orchestrator(QThread):
                 state["current_chapter"] = num
                 st.append_history(self.proj, state, record)
                 self.sig_queue.emit()
+                # C35 G4 相位看门狗：正文已落库 ⇒ 记账产物必须存在（T3 记账停摆
+                # 30 章零告警的翻案）——缺失 error 落账，连续 2 章 auto_pause
+                self._watch_phase_products(num)
                 # 决策门 G9：本章定稿完成 → 确认进下一章 / 带想法 / 回退重写本章
                 self.checkpoint()
                 g9_idea = self.gate("G9", f"第 {num} 章已定稿（{record.get('words', 0)} 字" +
