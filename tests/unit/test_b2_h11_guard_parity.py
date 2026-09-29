@@ -6,11 +6,29 @@
 判空/判计划/长度阈值被单方面改动即红，改一侧必须同步另一侧或显式更新本护栏。
 """
 import ast
+import copy
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BRIDGE = os.path.join(ROOT, "app", "ui", "bridge.py")
 STAGES = os.path.join(ROOT, "app", "core", "stages.py")
+
+
+def _norm_dump(node):
+    """B3 切段后 stages 侧守卫迁入 _mc_review 方法体，局部变量 prose 变为
+    self.prose——机械改名、语义同一，签名比对对 self.prose↔prose 归一化。"""
+    node = copy.deepcopy(node)
+
+    class _T(ast.NodeTransformer):
+        def visit_Attribute(self, n):
+            self.generic_visit(n)
+            if isinstance(n.value, ast.Name) and n.value.id == "self" and n.attr == "prose":
+                return ast.copy_location(ast.Name(id="prose", ctx=n.ctx), n)
+            return n
+
+    node = _T().visit(node)
+    ast.fix_missing_locations(node)
+    return ast.dump(node)
 
 
 def _guard_signatures(path):
@@ -39,7 +57,7 @@ def _guard_signatures(path):
         if not (isinstance(too_short, ast.Assign)
                 and isinstance(if_stmt, ast.If)):
             continue
-        sigs.append([ast.dump(node), ast.dump(too_short), ast.dump(if_stmt.test)])
+        sigs.append([_norm_dump(node), _norm_dump(too_short), _norm_dump(if_stmt.test)])
     return sigs
 
 
