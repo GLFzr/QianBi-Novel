@@ -8,6 +8,8 @@
 - 线程安全：LLM 工作线程调用 record()，用锁保护内存结构
 - C35 G5 准实时告警：record() 后置规则引擎（顶格稿/单章成本/缺记账行），
   命中落 state['anomalies'] + 项目/追踪/session_events.jsonl（详见 ANOMALY_RULES 注记）
+- C39 成本面板取数侧：book_scope_summary/chapter_costs/chapter_cost/
+  anomalies_snapshot（纯读台账，盲区优先于 0，详见对应注记）
 """
 import datetime
 import json
@@ -439,3 +441,141 @@ def summary(cfg: dict = None) -> dict:
             cost_of(model, m["in"], m["out"], cfg)
             for model, m in scope["by_model"].items()), 2)
     return out
+
+
+# ==================== C39 成本面板：book-scope 三层聚合（纯读台账）====================
+#
+# B 方案「常驻消费层」的取数侧（docs/落地计划附录A 卡 C39 / w4_model_orch §3 方案 B）。
+# summary() 是进程内存聚合，没有「本书」维度——台账行本身无 project 列（record()
+# 不带项目，跨书共用一份 usage.jsonl），章级调用（ch>0）是唯一诚实的本书代理。
+# 三层口径：
+#   today = ymd == 今天（全部行；费率对 in/out 线性，逐行累计与 summary 的按模型
+#           聚合同值）
+#   month = ymd 前缀 == 本月（全部行）
+#   book  = ch > 0 的行（本书口径＝章级流水线行；多书共用台账时为各书章级行合计，
+#           面板文案写明这一近似，不猜不装）；since_ts 非空时再卡 ts >= since_ts
+#           的会话窗口（w4 §3 B 的原始口径，缺省全史）。
+# 「盲区优先于 0」（验收②）：范围内没有任何行 → known=False，UI 显示「盲区」
+# 而非 ¥0.00——「没记账」与「花了 0 元」是两句话；命中率同理，hit+miss=0
+# （渠道不回缓存明细/全盲区）时不给率值，不伪装成 0%。盲区 token 单列（W-5 口径，
+# cache_caliber 直接复用），既不进命中率分子也不进分母。
+
+
+def _scope_accum() -> dict:
+    return {"in": 0, "out": 0, "calls": 0, "hit": 0, "miss": 0, "blind": 0,
+            "cost": 0.0, "known": False, "hit_rate": None}
+
+
+def _as_int(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _scope_add(acc: dict, rec: dict, cfg: dict) -> None:
+    i, o = _as_int(rec.get("in")), _as_int(rec.get("out"))
+    h, m, b = cache_caliber({"in": i, "hit": _as_int(rec.get("hit")),
+                             "miss": _as_int(rec.get("miss"))})
+    acc["in"] += i
+    acc["out"] += o
+    acc["calls"] += 1
+    acc["hit"] += h
+    acc["miss"] += m
+    acc["blind"] += b
+    acc["cost"] += cost_of(str(rec.get("model") or ""), i, o, cfg)
+    acc["known"] = True
+
+
+def _scope_finish(acc: dict) -> dict:
+    acc["cost"] = round(acc["cost"], 4)
+    if acc["hit"] + acc["miss"] > 0:
+        acc["hit_rate"] = round(acc["hit"] / (acc["hit"] + acc["miss"]), 4)
+    return acc
+
+
+def book_scope_summary(cfg: dict = None, path: str = None,
+                       since_ts: str = "") -> dict:
+    """三层聚合（纯读台账 JSONL，不碰内存缓存）→ {"today","book","month"}。
+
+    每层含 in/out/calls/cost/hit/miss/blind/hit_rate/known；坏行跳过（与 _load
+    同容忍度）。path 供测试注入；since_ts（"YYYY-MM-DD HH:MM:SS"）只约束 book 层。
+    文件缺失/范围内无行 → 该层 known=False，费用/命中率由 UI 显示「盲区」。"""
+    p = path or FILE
+    today = _today()
+    month = today[:7]
+    scopes = {"today": _scope_accum(), "month": _scope_accum(),
+              "book": _scope_accum()}
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                        ymd = str(r.get("ymd") or (r.get("ts") or "")[:10])
+                        try:
+                            ch = int(r.get("ch", 0) or 0)
+                        except (TypeError, ValueError):
+                            ch = 0              # 脏章号按「章外行」计，不炸整表扫描
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if ymd == today:
+                        _scope_add(scopes["today"], r, cfg)
+                    if ymd.startswith(month):
+                        _scope_add(scopes["month"], r, cfg)
+                    if ch > 0 and (not since_ts or str(r.get("ts") or "") >= since_ts):
+                        _scope_add(scopes["book"], r, cfg)
+        except OSError as e:
+            logger.warning("台账读取失败（成本面板按盲区显示）: %s", e)
+    return {k: _scope_finish(v) for k, v in scopes.items()}
+
+
+def chapter_costs(cfg: dict = None, path: str = None, limit: int = 10) -> list:
+    """章级成本列表（纯读）：[{ch, cost, in, out, calls, hit, miss, blind}]。
+
+    按章号降序取最近 limit 章；章号是台账里唯一的服务侧归属键（无 project 列），
+    故列表即「本书流水线行」视角——多书共台账时旧书章号一并入列，按号排序天然
+    以最近的书为主。ch<=0（章外调用）不入列。"""
+    p = path or FILE
+    per: dict = {}
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                        ch = int(r.get("ch", 0) or 0)
+                        if ch <= 0:
+                            continue
+                        acc = per.setdefault(ch, _scope_accum())
+                        _scope_add(acc, r, cfg)
+                    except Exception:  # noqa: BLE001
+                        continue
+        except OSError as e:
+            logger.warning("台账读取失败（章级成本按空显示）: %s", e)
+    out = []
+    for ch in sorted(per, reverse=True)[:max(0, int(limit or 0))]:
+        acc = _scope_finish(per[ch])
+        acc["ch"] = ch
+        out.append(acc)
+    return out
+
+
+def chapter_cost(num: int):
+    """单章累计估算成本（元）：读内存视图（record 实时 + _load 回放）。
+
+    append_history 落 history 行的取数口；该章在台账里没有任何行时返回 None——
+    「没记账」落缺字段，不伪装成 0（与盲区口径同一句话）。"""
+    with _lock:
+        _ensure_today()
+        v = _chapter_cost.get(int(num or 0))
+        return None if v is None else round(float(v), 6)
+
+
+def anomalies_snapshot(limit: int = 20) -> list:
+    """告警内存镜像只读视图（尾部 limit 条深拷贝）——成本面板消费，外部不许改账。"""
+    n = max(0, int(limit or 0))
+    with _lock:
+        _ensure_today()
+        tail = _anomalies[-n:] if n else list(_anomalies)
+        return json.loads(json.dumps(tail))

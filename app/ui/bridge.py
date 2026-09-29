@@ -1172,6 +1172,127 @@ class ModelPolicyController(QObject):
                                       f"（{spec.get('label', card_id)}）")
 
 
+# ---------- C39：成本面板 controller（w4_model_orch §3 方案 B）----------
+# 硬规约同 C26 先例：独立 controller 类，不往 Bridge 主类摊。取数全部走 app.usage
+# 纯读函数（book_scope_summary / chapter_costs / anomalies_snapshot），只读不写、
+# 不碰记账主流程；「盲区优先于 0」在本层落成文案（验收②：不知道 ≠ ¥0.00）。
+
+class CostPanelController(QObject):
+    """今日 / 本书 / 本月三层成本 + 最近十章章级成本 + 台账告警（全部只读）。
+
+    数据源＝本地用量台账（~/.qianbi_novel/usage/usage.jsonl）一次线性扫描：
+    无网络请求，断网不影响（本地账本本来就是 record() 落盘的那份）。告警优先读
+    项目 state['anomalies']（C35 落账的持久层，跨进程存活），无项目/读不到时
+    退回台账内存镜像（未登记项目的进程内告警也该看得见）。
+    展示文案在本层拼好（cost/detail/rate），QML 只负责摆——与 C26 同款分工。
+    """
+
+    dataChanged = Signal()
+
+    def __init__(self, bridge, parent=None):
+        super().__init__(parent)
+        self._bridge = bridge
+        self._summary: dict = {}
+        self._chapters: list = []
+        self._anomalies: list = []
+        self._generated = ""
+
+    # ---- 文案（staticmethod：无 Qt 依赖，单测直调）----
+
+    @staticmethod
+    def cost_text(scope) -> str:
+        """scope → 「¥0.0312」；无数据（known=False）→ 「盲区」，绝不显示 ¥0.00"""
+        if not isinstance(scope, dict) or not scope.get("known"):
+            return "盲区"
+        return f"¥{float(scope.get('cost') or 0):.4f}"
+
+    @staticmethod
+    def detail_text(scope) -> str:
+        """第二行：tokens / 命中率 / 盲区 token / 笔数——命中不可知时写「命中率盲区」，
+        不伪装成 0%（与 W-5 口径同源：盲区不进分子也不进分母）"""
+        if not isinstance(scope, dict) or not scope.get("known"):
+            return "盲区：范围内没有任何记账行"
+        n = int(scope.get("in") or 0)
+        out_n = int(scope.get("out") or 0)
+        fmt = lambda v: (f"{v / 1e6:.2f}M" if v >= 1e6 else
+                         (f"{v / 1e3:.1f}k" if v >= 1000 else str(v)))  # noqa: E731
+        parts = [f"入 {fmt(n)} · 出 {fmt(out_n)}"]
+        hr = scope.get("hit_rate")
+        parts.append(f"命中 {hr * 100:.1f}%" if isinstance(hr, (int, float))
+                     else "命中率盲区")
+        if int(scope.get("blind") or 0) > 0:
+            parts.append(f"盲区 {fmt(int(scope['blind']))}")
+        parts.append(f"{int(scope.get('calls') or 0)} 笔")
+        return " · ".join(parts)
+
+    @staticmethod
+    def chapter_text(row) -> str:
+        """章级行 → 「¥0.0312 · 入 45.2k · 出 3.1k · 12 笔」"""
+        if not isinstance(row, dict) or not row.get("calls"):
+            return "盲区"
+        return (f"{CostPanelController.cost_text(row)} · "
+                f"{CostPanelController.detail_text(row)}")
+
+    # ---- 取数 ----
+
+    @Slot()
+    @_guarded
+    def refresh(self):
+        """重扫台账（QML 打开设置面板 / 点刷新 / 换项目时调用）"""
+        from .. import usage
+        cfg = getattr(self._bridge, "cfg", None)
+        cfg = cfg if isinstance(cfg, dict) else None
+        self._summary = usage.book_scope_summary(cfg)
+        self._chapters = usage.chapter_costs(cfg, limit=10)
+        self._anomalies = self._load_anomalies(usage)
+        self._generated = datetime.datetime.now().strftime("%m-%d %H:%M")
+        self.dataChanged.emit()
+
+    def _load_anomalies(self, usage) -> list:
+        """项目 state['anomalies'] 为准（跨进程持久层）；没有项目或读不到 →
+        退回台账内存镜像。返回副本，面板不许持有可变引用。"""
+        proj = getattr(self._bridge, "proj", "")
+        if proj:
+            try:
+                lst = st.load_state(proj).get("anomalies")
+                if isinstance(lst, list) and lst:
+                    return json.loads(json.dumps(lst[-20:]))
+            except Exception:  # noqa: BLE001
+                pass
+        return usage.anomalies_snapshot(20)
+
+    # ---- QML 出口 ----
+
+    @Property("QVariantList", notify=dataChanged)
+    def layerCards(self) -> list:
+        """三层展示卡：[{key,label,cost,detail}]——文案本层拼好，QML 只摆"""
+        out = []
+        for key, label in (("today", "今日"), ("book", "本书"), ("month", "本月")):
+            scope = self._summary.get(key)
+            out.append({"key": key, "label": label,
+                        "cost": self.cost_text(scope),
+                        "detail": self.detail_text(scope)})
+        return out
+
+    @Property("QVariantList", notify=dataChanged)
+    def chapterList(self) -> list:
+        """最近十章：[{ch,cost,detail}]（章号降序；台账无行时列表为空＝诚实空白）"""
+        return [{"ch": int(r.get("ch") or 0),
+                 "cost": self.cost_text(r),
+                 "detail": self.detail_text(r)} for r in self._chapters]
+
+    @Property("QVariantList", notify=dataChanged)
+    def anomalyList(self) -> list:
+        """台账告警（尾部 20 条）：[{ts,rule,ch,level,msg}]"""
+        return [{"ts": str(a.get("ts") or ""), "rule": str(a.get("rule") or ""),
+                 "ch": int(a.get("ch") or 0), "level": str(a.get("level") or "warn"),
+                 "msg": str(a.get("msg") or "")} for a in self._anomalies]
+
+    @Property(str, notify=dataChanged)
+    def generated(self) -> str:
+        return self._generated
+
+
 class Bridge(QObject):
     # 属性变更信号
     bookTitleChanged = Signal()
@@ -1368,6 +1489,8 @@ class Bridge(QObject):
         # C26：阶段级模型路由 controller——独立类不往主类摊（w4 方案 A 硬规约），
         # 桥只持引用 + 一个常量 Property 出口（QML 经 bridge.modelPolicy 调用）
         self._model_policy = ModelPolicyController(self, parent=self)
+        # C39：成本面板 controller——同款规约（w4 方案 B），QML 经 bridge.costPanel 调用
+        self._cost_panel = CostPanelController(self, parent=self)
         # 上次项目自动打开
         last = self.cfg.get("last_project", "")
         if last and project.is_project(last):
@@ -1518,6 +1641,7 @@ class Bridge(QObject):
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
     modelPolicy = Property(QObject, lambda self: self._model_policy, constant=True)  # C26
+    costPanel = Property(QObject, lambda self: self._cost_panel, constant=True)  # C39
 
     # ============ 项目管理 ============
 

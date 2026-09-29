@@ -331,7 +331,8 @@ DEFAULT_STATE: PipelineStateTD = {
     "chapter_step": "",         # 当前章执行到微循环哪一步（断点用）
     "total_chapters": 0,        # 计划总章数（0=不限）
     "paused": False,
-    "history": [],              # [{num,title,words,deslop_blocking,deslop_advisory,status,ts}]
+    "history": [],              # [{num,title,words,deslop_blocking,deslop_advisory,status,ts,cost?}]
+                                #  cost=C39 章级成本（元，台账聚合；缺=该章无台账行）
     "pending_guidance": {},     # {章号: 重写指导语}：用户"带指导重写"时暂存，续跑时消费
     "pending_ideas": [],        # 用户创作想法队列（写作中随时提交，下一章草稿注入）
     "review_findings": {},      # {章号: [{verdict, items, ts, blocking, advisory, ...}]} v2 6 维审校结果
@@ -732,6 +733,19 @@ def append_history(proj: str, state: dict, record: dict):
     import datetime
     record = dict(record)
     record["ts"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # C39 成本面板：章级成本随定稿入 history 行（台账聚合，见 usage.chapter_cost）。
+    # 调用时刻＝章微循环收尾，本章 prose/审校/追踪/清算的台账行已全部入账；
+    # 台账无该章任何行 → 保持缺字段（「没记账」不伪装成 0，与盲区口径同一句话）。
+    # 历史行无 cost 键属正常（旧存档不回填）；类型在此处收口，validate_state 的
+    # 键型注册只覆盖顶层键（history: list），行内字段无注册机制。
+    if "cost" not in record:
+        try:
+            from .. import usage as _usage
+            c = _usage.chapter_cost(record.get("num"))
+            if c is not None:
+                record["cost"] = float(c)
+        except Exception:  # noqa: BLE001
+            pass                    # 观测字段，任何失败不碰定稿主流程
     state["history"] = [h for h in state.get("history", []) if h.get("num") != record.get("num")]
     state["history"].append(record)
     state["history"].sort(key=lambda h: h.get("num", 0))

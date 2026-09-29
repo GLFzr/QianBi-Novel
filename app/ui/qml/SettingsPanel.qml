@@ -52,6 +52,9 @@ Item {
         function onConnTestResult(cid, ok, msg) {
             bridge.showToast(ok ? "ok" : "error", msg)
         }
+        function onProjectOpened() {
+            bridge.costPanel.refresh()      // C39：换书后成本三层/告警跟着台账与项目走
+        }
     }
 
     function currentModelName() {
@@ -1180,6 +1183,174 @@ Item {
                                 spacing: 8
                                 AppButton { text: "立即备份 zip"; kind: "primary"; height: 28; onClicked: bridge.backupProject() }
                                 Item { Layout.fillWidth: true }
+                            }
+                        }
+                    }
+
+                    // ---- C39：成本面板（三层聚合 + 最近十章 + 台账告警，w4 §3 方案 B）----
+                    // 取数走 bridge.costPanel（独立 controller，同 C26 先例不摊主类）。
+                    // 「盲区」＝范围内没有任何台账行——不知道就不许伪装成 ¥0.00。
+                    Component.onCompleted: bridge.costPanel.refresh()
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
+                        implicitHeight: costCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: costCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            spacing: 8
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "成本（本地台账）"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsBody
+                                    font.weight: Font.DemiBold   // U-02：新代码走字重令牌
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: bridge.costPanel.generated ? ("更新于 " + bridge.costPanel.generated) : ""
+                                    color: Theme.textTertiary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsTiny
+                                }
+                                AppButton {
+                                    text: "刷新"
+                                    kind: "secondary"
+                                    height: 24
+                                    onClicked: bridge.costPanel.refresh()
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: "重扫本地用量台账（纯本地读，不发网络请求，断网也能看）"
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "「本书」按章级调用行（ch>0）汇总——台账未分书，多书共用一份台账时为各书章级行合计；「盲区」＝范围内没有任何记账行（没记账 ≠ 花了 0 元）。"
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 16
+                                Repeater {
+                                    model: bridge.costPanel.layerCards
+                                    delegate: ColumnLayout {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: modelData.label
+                                            color: Theme.textTertiary
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.fsTiny
+                                        }
+                                        Text {
+                                            text: modelData.cost
+                                            color: Theme.textPrimary
+                                            font.family: Theme.monoFont
+                                            font.pixelSize: Theme.fsBody
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.detail
+                                            color: Theme.textTertiary
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.fsTiny
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                text: "最近十章"
+                                color: Theme.textSecondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.weight: Font.DemiBold
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+                                Repeater {
+                                    model: bridge.costPanel.chapterList
+                                    delegate: RowLayout {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        Text {
+                                            Layout.preferredWidth: 64
+                                            text: "第 " + modelData.ch + " 章"
+                                            color: Theme.textSecondary
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.fsSmall
+                                        }
+                                        Text {
+                                            Layout.preferredWidth: 76
+                                            text: modelData.cost
+                                            color: Theme.textPrimary
+                                            font.family: Theme.monoFont
+                                            font.pixelSize: Theme.fsSmall
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: modelData.detail
+                                            color: Theme.textTertiary
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.fsTiny
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: bridge.costPanel.chapterList.length === 0
+                                    text: "（台账里还没有章级记账行——跑一章后这里会出现成本）"
+                                    color: Theme.textTertiary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsTiny
+                                }
+                            }
+                            Text {
+                                visible: bridge.costPanel.anomalyList.length > 0
+                                text: "台账告警（C35 规则引擎命中）"
+                                color: Theme.textSecondary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                font.weight: Font.DemiBold
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 4
+                                Repeater {
+                                    model: bridge.costPanel.anomalyList
+                                    delegate: RowLayout {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Rectangle {
+                                            width: 6; height: 6; radius: 3
+                                            Layout.alignment: Qt.AlignVCenter
+                                            color: modelData.level === "error" ? Theme.danger : Theme.warn
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: (modelData.ch > 0 ? ("第 " + modelData.ch + " 章 · ") : "") + modelData.msg
+                                            color: modelData.level === "error" ? Theme.danger : Theme.warn
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.fsTiny
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
