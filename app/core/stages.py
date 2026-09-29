@@ -2433,6 +2433,19 @@ class _MicroCycle:
         except Exception as e:  # noqa: BLE001
             ctx.log("warn", f"事实账本入账失败（不阻断）：{e}")
 
+        # ---- C42（卡9 P3）：写后维护四查（追踪落账区，fail-open）——确定性四查
+        # （角色/伏笔/弧线/读者认知）→ 待确认卡片落 sidecar 追踪/维护四查_第NNN章.json：
+        # 不自动写库、不占 cw["report"] 单槽（state.py 三共抢教训）。
+        try:
+            from . import maintenance
+            _mt = maintenance.run_checks(proj, num)
+            if _mt:
+                ctx.log("info", f"第 {num} 章 写后维护四查：待确认卡 "
+                                f"{len(_mt.get('cards') or [])} 张——"
+                                f"详见 追踪/维护四查_第{num:03d}.json")
+        except Exception as e:  # noqa: BLE001
+            ctx.log("warn", f"写后维护四查失败（不阻断）：{e}")
+
         # C33（writing.satisfaction_ledger_enabled，缺省 on）：本章记录落账——declared
         # 已在 _mc_assemble 立据，此处以审校 B_PAYOFF 维（六维 ===B_PAYOFF===，经
         # _chapter_review 存于 ctx.review_v2.items）回写 delivered：B_PAYOFF 无 fail=
