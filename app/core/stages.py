@@ -2004,6 +2004,191 @@ class _MicroCycle:
         elif g7_idea:
             _store_inner_gate_idea(ctx, proj, num, "G7", g7_idea)
 
+    def _mc_review(self) -> None:
+        """④.5 审校（v2 6 维，投票/修复环/断点补票）+ W-3 里程碑② + ④.9 决策门 G8（回退=还原审校前文本）"""
+        ctx = self.ctx
+        num = self.num
+        proj = self.proj
+        session = self.session
+        resume_at = self.resume_at
+        saved_votes = self.saved_votes
+        draft_rel = self.draft_rel
+        outline_fp = self.outline_fp
+        gates_cfg = self.gates_cfg
+        gr = self.gr
+        # 断点续跑（方案 H）：停在审校中途时，已投票数从 chapter_step 恢复，只补投剩余的票
+        skip_review = resume_at in ("review", "finalize")
+        verdict_review, blocking_review, review_ran = "", [], False
+        pre_review_prose = self.prose   # G8 回退还原点
+        review_enabled = gates_cfg.get("review_enabled", True)
+        post_review_turns = session.turn_count() if _session_usable(session) else 0
+        review_mode = str(gates_cfg.get("review_mode") or "auto").strip().lower()
+        manual_review = review_enabled and review_mode == "manual"
+        if manual_review:
+            review_ran = not skip_review
+            if skip_review:
+                ctx.log("info", f"第 {num} 章 断点续跑：审校已完成，跳过（进入定稿）")
+            else:
+                ctx.stream_stage(f"人工审校 第{num}章")
+                blocking_review, advisory_review, verdict_review, self.prose = _author_review_entry(
+                    ctx, num, self.prose,
+                    pre_review_prose=pre_review_prose, session=session,
+                    post_review_turns=post_review_turns, gr=gr, gates_cfg=gates_cfg)
+                post_review_turns = session.turn_count() if _session_usable(session) else 0
+        elif review_enabled and slot_connection(ctx.cfg, SLOT_REVIEW):
+            # resume="review" = 审校与 G8 都已走完 → 一并跳过，不二次问门
+            review_ran = not skip_review
+            if skip_review:
+                ctx.log("info", f"第 {num} 章 断点续跑：审校已完成，跳过（进入定稿）")
+            else:
+                ctx.stream_stage(f"审校 第{num}章")
+                blocking_review, advisory_review, verdict_review = _chapter_review(
+                    ctx, num, self.prose, done_votes=saved_votes, session=session,
+                    vote_saver=lambda pl: st.save_chapter_step(
+                        proj, num, step_done="deslop", draft_path=draft_rel, votes=pl,
+                        outline_fp=outline_fp))
+                post_review_turns = session.turn_count() if _session_usable(session) else 0
+                gr.review_blocking = blocking_review
+
+            def _demote_word_block():
+                """全 [字数] 阻塞 → 降级建议：修复 prompt 有 ±5% 纪律扩不了字数，强修只会原地打转（#37 教训）"""
+                nonlocal blocking_review, advisory_review, verdict_review
+                ctx.log("warn", f"第 {num} 章 字数不足（{blocking_review[0]}）：字数问题不走修复环，降级为建议"
+                                "（请手动扩写或调高扩写轮数）")
+                advisory_review = list(advisory_review) + [str(b) for b in blocking_review]
+                try:
+                    st.save_review_findings(proj, st.load_state(proj), num, "PASS_WITH_NOTES",
+                                            [{"dim": "D_PLOT", "level": "marginal", "text": str(b),
+                                              "quote": "", "root_layer": "ROOT_PROSE", "line": ""}
+                                             for b in blocking_review],
+                                            [], advisory_review)
+                except Exception as e:  # noqa: BLE001
+                    ctx.log("warn", f"第 {num} 章 带保留通过结论落盘失败（{e}）：待修汇总可能缺此章")
+                blocking_review, verdict_review = [], "PASS_WITH_NOTES"
+
+            if blocking_review and all(str(b).startswith("[字数]") for b in blocking_review):
+                _demote_word_block()
+            review_rounds = 0
+            # v2 反馈环触发：verdict == REJECT/REJECT-HARD 且未达轮数熔断（N-06：上限由配置真实生效，地板 1）
+            max_review_rounds = _review_round_cap(gates_cfg)
+            while blocking_review and review_rounds < max_review_rounds:
+                if all(str(b).startswith("[字数]") for b in blocking_review):
+                    _demote_word_block()
+                    break
+                review_rounds += 1
+                prev_n = len(blocking_review)
+                ctx.step(num, st.STEP_REVIEW)
+                ctx.log("warn",
+                        f"第 {num} 章 6 维审校 {verdict_review} → 修复（第 {review_rounds} 轮，上限 {max_review_rounds} 轮）· 阻塞 {prev_n} 处")
+                ctx.checkpoint()
+                # v2 反馈环：若 REJECT 且 review_rounds >= 2 → 调 ROOT_CAUSE_PROMPT 重新生成问题列表
+                if verdict_review in ("REJECT", "REJECT-HARD") and review_rounds >= 2:
+                    try:
+                        issues = (getattr(ctx, "review_v2", None)
+                                  or parse_final_review_v2(ctx.review_raw or "")).get("items", [])
+                        anchors = prompts.build_upstream_anchors(proj, num)
+                        issues_brief = prompts.build_issues_brief(issues)
+                        root_prompt = prompts.ROOT_CAUSE_PROMPT.format(
+                            issues_brief=issues_brief,
+                            upstream_anchors=anchors,
+                        )
+                        ctx.last_prompt = root_prompt
+                        root_result = clean_llm_output(
+                            ctx.router.client(SLOT_REVIEW).chat_stream(
+                                root_prompt, on_chunk=ctx.stream_chunk,
+                                temperature=gates_cfg.get("review_temperature", 0.2),
+                                phase=PHASE_ROOT_CAUSE
+                            )
+                        )
+                        # 记录根因
+                        try:
+                            st.append_review_chain(proj, st.load_state(proj), num,
+                                                   issues, [root_result[:200]],
+                                                   verdict_review, review_rounds)
+                        except Exception as e:  # noqa: BLE001
+                            ctx.log("warn", f"第 {num} 章 根因链落盘失败（{e}）：「详见 review_chain」不成立")
+                        ctx.log("info", f"第 {num} 章 根因溯源完成（{len(issues)} issue · 详见 review_chain）")
+                    except Exception as e:
+                        ctx.log("warn", f"第 {num} 章 根因溯源失败：{e}")
+                # 普通修改（v1 REVIEW_FIX_PROMPT + worst_segment_quotes）
+                fix_kwargs = dict(chapter_num=num, findings="\n".join(blocking_review), prose=self.prose,
+                                  project_header=project_header(proj),
+                                  chapter_header=_chap_header(ctx, proj, num))
+                t_fix = session.turn_count() if _session_usable(session) else 0
+                rewritten = _rewrite_phase(ctx, session, SLOT_REVIEW, PHASE_REVIEW_FIX,
+                                           prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=self.prose,
+                                           label=f"审校修改 第{review_rounds}轮")
+                # 修复稿健全性守卫（真机缺陷修复：模型可能返回 ===REVISIONS=== 修订计划
+                # 而非改后正文；采纳会把整章替换成指令清单，且空文本复检阻塞更少被误判改善）
+                looks_like_plan = rewritten.lstrip().startswith("===")
+                too_short = len(rewritten.strip()) < max(300, int(len(self.prose) * 0.5))
+                if not rewritten.strip() or looks_like_plan or too_short:
+                    if _session_usable(session):
+                        session.rollback_to(t_fix)   # 修复稿被否决 → 历史截断，正文消息不指向废稿
+                    ctx.log("warn", f"第 {num} 章 审校修复返回非正文"
+                                    f"（{'空' if not rewritten.strip() else '修订计划' if looks_like_plan else '长度骤减'}），保留原稿")
+                    break
+                # 回滚保护：修复后复扫，未改善（阻塞不减反增）则保留原稿
+                # 复扫只投 review_votes_recheck 票（默认 1）控成本——修复环内不做全量投票
+                new_blocking, new_advisory, new_verdict = _chapter_review(
+                    ctx, num, rewritten, session=session,
+                    votes=max(1, int(gates_cfg.get("review_votes_recheck", 1))))
+                if len(new_blocking) < prev_n:
+                    self.prose = rewritten
+                    blocking_review, advisory_review, verdict_review = new_blocking, new_advisory, new_verdict
+                    gr.review_blocking = new_blocking
+                else:
+                    if _session_usable(session):
+                        session.rollback_to(t_fix)   # 修复稿未改善被否决 → 同步截断修复稿与复检轮
+                    ctx.log("warn", f"第 {num} 章 审校修复未改善（{prev_n}→{len(new_blocking)} 处），保留原稿")
+                    blocking_review = new_blocking
+                    gr.review_blocking = new_blocking
+                    break
+            gr.review_rounds_used = review_rounds
+            if blocking_review:
+                # 3 次不收敛 → 标 human
+                if review_rounds >= max_review_rounds:
+                    try:
+                        st.mark_chapter_need_human(proj, st.load_state(proj), num)
+                        ctx.log("warn",
+                                f"第 {num} 章 审校 {review_rounds} 轮后仍 {len(blocking_review)} 处阻塞 → 标 chapter_need_human，跳过本轮")
+                    except Exception as e:  # noqa: BLE001
+                        ctx.log("error", f"第 {num} 章 标记转人工失败（{e}）：下一轮会再次拦截本章")
+                else:
+                    ctx.log("warn", f"第 {num} 章 审校 {review_rounds} 轮后仍有 {len(blocking_review)} 处阻塞")
+                gates.resolve_failed(ctx, f"第 {num} 章审校未通过（{len(blocking_review)} 处阻塞）", gr)
+                _save_review_findings(proj, num, blocking_review)
+            elif review_rounds:
+                ctx.log("ok", f"第 {num} 章 审校通过（复检 {review_rounds} 轮 · verdict={verdict_review}）")
+            else:
+                ctx.log("ok", f"第 {num} 章 审校通过（verdict={verdict_review or 'PASS'}）")
+        else:
+            ctx.log("info", "审校已跳过（未启用或审校槽未绑定连接）")
+
+        # W-3 里程碑②：审校与修复环的轮次先落盘（G8 若要回退，rollback_to 自己会重写持久层）
+        _save_session_checkpoint(ctx, session, "审校后")
+
+        # ---- ④.9 决策门 G8：审校完成后（T4.1 内侧门；回退=保留原稿=还原审校前文本）----
+        # 人工审校模式下 G8 门已由人工审校循环承担，不再二次弹门
+        if review_ran and not manual_review:
+            g8_idea = ctx.gate("G8", f"审校完成：verdict {verdict_review or 'PASS'} · 阻塞 {len(blocking_review)} 处"
+                                     f"（下一步定稿落库，G9 仍会把关）", chapter=num)
+            if g8_idea is None:
+                g8_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+                ctx.log("warn", "G8 回退：保留审校前原稿继续")
+                if self.prose != pre_review_prose:
+                    _archive_inner_rollback(ctx, proj, num, "G8", self.prose)   # 审校修改稿归档
+                    self.prose = pre_review_prose                                # 还原原稿
+                if _session_usable(session):
+                    # 历史截回「首轮审校票固化后」：修复稿轮次作废，正文消息与还原稿一致
+                    session.rollback_to(post_review_turns)
+                if blocking_review:
+                    ctx.log("warn", f"G8：{len(blocking_review)} 处审校阻塞按人工裁决保留（定稿照常进行，G9 把关）")
+                    gr.review_blocking = []
+                    gr.final_status = "pass"
+            elif g8_idea:
+                _store_inner_gate_idea(ctx, proj, num, "G8", g8_idea)
+
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
@@ -2148,182 +2333,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     mc._mc_word_gate()
     mc._mc_scan()
     mc._mc_deslop()
+    mc._mc_review()
     # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
     prose = mc.prose
-
-    # ---- ④.5 审校（v2 6 维最终审核，可开关；用审校槽）----
-    # 断点续跑（方案 H）：停在审校中途时，已投票数从 chapter_step 恢复，只补投剩余的票
-    skip_review = resume_at in ("review", "finalize")
-    verdict_review, blocking_review, review_ran = "", [], False
-    pre_review_prose = prose   # G8 回退还原点
-    review_enabled = gates_cfg.get("review_enabled", True)
-    post_review_turns = session.turn_count() if _session_usable(session) else 0
-    review_mode = str(gates_cfg.get("review_mode") or "auto").strip().lower()
-    manual_review = review_enabled and review_mode == "manual"
-    if manual_review:
-        review_ran = not skip_review
-        if skip_review:
-            ctx.log("info", f"第 {num} 章 断点续跑：审校已完成，跳过（进入定稿）")
-        else:
-            ctx.stream_stage(f"人工审校 第{num}章")
-            blocking_review, advisory_review, verdict_review, prose = _author_review_entry(
-                ctx, num, prose,
-                pre_review_prose=pre_review_prose, session=session,
-                post_review_turns=post_review_turns, gr=gr, gates_cfg=gates_cfg)
-            post_review_turns = session.turn_count() if _session_usable(session) else 0
-    elif review_enabled and slot_connection(ctx.cfg, SLOT_REVIEW):
-        # resume="review" = 审校与 G8 都已走完 → 一并跳过，不二次问门
-        review_ran = not skip_review
-        if skip_review:
-            ctx.log("info", f"第 {num} 章 断点续跑：审校已完成，跳过（进入定稿）")
-        else:
-            ctx.stream_stage(f"审校 第{num}章")
-            blocking_review, advisory_review, verdict_review = _chapter_review(
-                ctx, num, prose, done_votes=saved_votes, session=session,
-                vote_saver=lambda pl: st.save_chapter_step(
-                    proj, num, step_done="deslop", draft_path=draft_rel, votes=pl,
-                    outline_fp=outline_fp))
-            post_review_turns = session.turn_count() if _session_usable(session) else 0
-            gr.review_blocking = blocking_review
-
-        def _demote_word_block():
-            """全 [字数] 阻塞 → 降级建议：修复 prompt 有 ±5% 纪律扩不了字数，强修只会原地打转（#37 教训）"""
-            nonlocal blocking_review, advisory_review, verdict_review
-            ctx.log("warn", f"第 {num} 章 字数不足（{blocking_review[0]}）：字数问题不走修复环，降级为建议"
-                            "（请手动扩写或调高扩写轮数）")
-            advisory_review = list(advisory_review) + [str(b) for b in blocking_review]
-            try:
-                st.save_review_findings(proj, st.load_state(proj), num, "PASS_WITH_NOTES",
-                                        [{"dim": "D_PLOT", "level": "marginal", "text": str(b),
-                                          "quote": "", "root_layer": "ROOT_PROSE", "line": ""}
-                                         for b in blocking_review],
-                                        [], advisory_review)
-            except Exception as e:  # noqa: BLE001
-                ctx.log("warn", f"第 {num} 章 带保留通过结论落盘失败（{e}）：待修汇总可能缺此章")
-            blocking_review, verdict_review = [], "PASS_WITH_NOTES"
-
-        if blocking_review and all(str(b).startswith("[字数]") for b in blocking_review):
-            _demote_word_block()
-        review_rounds = 0
-        # v2 反馈环触发：verdict == REJECT/REJECT-HARD 且未达轮数熔断（N-06：上限由配置真实生效，地板 1）
-        max_review_rounds = _review_round_cap(gates_cfg)
-        while blocking_review and review_rounds < max_review_rounds:
-            if all(str(b).startswith("[字数]") for b in blocking_review):
-                _demote_word_block()
-                break
-            review_rounds += 1
-            prev_n = len(blocking_review)
-            ctx.step(num, st.STEP_REVIEW)
-            ctx.log("warn",
-                    f"第 {num} 章 6 维审校 {verdict_review} → 修复（第 {review_rounds} 轮，上限 {max_review_rounds} 轮）· 阻塞 {prev_n} 处")
-            ctx.checkpoint()
-            # v2 反馈环：若 REJECT 且 review_rounds >= 2 → 调 ROOT_CAUSE_PROMPT 重新生成问题列表
-            if verdict_review in ("REJECT", "REJECT-HARD") and review_rounds >= 2:
-                try:
-                    issues = (getattr(ctx, "review_v2", None)
-                              or parse_final_review_v2(ctx.review_raw or "")).get("items", [])
-                    anchors = prompts.build_upstream_anchors(proj, num)
-                    issues_brief = prompts.build_issues_brief(issues)
-                    root_prompt = prompts.ROOT_CAUSE_PROMPT.format(
-                        issues_brief=issues_brief,
-                        upstream_anchors=anchors,
-                    )
-                    ctx.last_prompt = root_prompt
-                    root_result = clean_llm_output(
-                        ctx.router.client(SLOT_REVIEW).chat_stream(
-                            root_prompt, on_chunk=ctx.stream_chunk,
-                            temperature=gates_cfg.get("review_temperature", 0.2),
-                            phase=PHASE_ROOT_CAUSE
-                        )
-                    )
-                    # 记录根因
-                    try:
-                        st.append_review_chain(proj, st.load_state(proj), num,
-                                               issues, [root_result[:200]],
-                                               verdict_review, review_rounds)
-                    except Exception as e:  # noqa: BLE001
-                        ctx.log("warn", f"第 {num} 章 根因链落盘失败（{e}）：「详见 review_chain」不成立")
-                    ctx.log("info", f"第 {num} 章 根因溯源完成（{len(issues)} issue · 详见 review_chain）")
-                except Exception as e:
-                    ctx.log("warn", f"第 {num} 章 根因溯源失败：{e}")
-            # 普通修改（v1 REVIEW_FIX_PROMPT + worst_segment_quotes）
-            fix_kwargs = dict(chapter_num=num, findings="\n".join(blocking_review), prose=prose,
-                              project_header=project_header(proj),
-                              chapter_header=_chap_header(ctx, proj, num))
-            t_fix = session.turn_count() if _session_usable(session) else 0
-            rewritten = _rewrite_phase(ctx, session, SLOT_REVIEW, PHASE_REVIEW_FIX,
-                                       prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
-                                       label=f"审校修改 第{review_rounds}轮")
-            # 修复稿健全性守卫（真机缺陷修复：模型可能返回 ===REVISIONS=== 修订计划
-            # 而非改后正文；采纳会把整章替换成指令清单，且空文本复检阻塞更少被误判改善）
-            looks_like_plan = rewritten.lstrip().startswith("===")
-            too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))
-            if not rewritten.strip() or looks_like_plan or too_short:
-                if _session_usable(session):
-                    session.rollback_to(t_fix)   # 修复稿被否决 → 历史截断，正文消息不指向废稿
-                ctx.log("warn", f"第 {num} 章 审校修复返回非正文"
-                                f"（{'空' if not rewritten.strip() else '修订计划' if looks_like_plan else '长度骤减'}），保留原稿")
-                break
-            # 回滚保护：修复后复扫，未改善（阻塞不减反增）则保留原稿
-            # 复扫只投 review_votes_recheck 票（默认 1）控成本——修复环内不做全量投票
-            new_blocking, new_advisory, new_verdict = _chapter_review(
-                ctx, num, rewritten, session=session,
-                votes=max(1, int(gates_cfg.get("review_votes_recheck", 1))))
-            if len(new_blocking) < prev_n:
-                prose = rewritten
-                blocking_review, advisory_review, verdict_review = new_blocking, new_advisory, new_verdict
-                gr.review_blocking = new_blocking
-            else:
-                if _session_usable(session):
-                    session.rollback_to(t_fix)   # 修复稿未改善被否决 → 同步截断修复稿与复检轮
-                ctx.log("warn", f"第 {num} 章 审校修复未改善（{prev_n}→{len(new_blocking)} 处），保留原稿")
-                blocking_review = new_blocking
-                gr.review_blocking = new_blocking
-                break
-        gr.review_rounds_used = review_rounds
-        if blocking_review:
-            # 3 次不收敛 → 标 human
-            if review_rounds >= max_review_rounds:
-                try:
-                    st.mark_chapter_need_human(proj, st.load_state(proj), num)
-                    ctx.log("warn",
-                            f"第 {num} 章 审校 {review_rounds} 轮后仍 {len(blocking_review)} 处阻塞 → 标 chapter_need_human，跳过本轮")
-                except Exception as e:  # noqa: BLE001
-                    ctx.log("error", f"第 {num} 章 标记转人工失败（{e}）：下一轮会再次拦截本章")
-            else:
-                ctx.log("warn", f"第 {num} 章 审校 {review_rounds} 轮后仍有 {len(blocking_review)} 处阻塞")
-            gates.resolve_failed(ctx, f"第 {num} 章审校未通过（{len(blocking_review)} 处阻塞）", gr)
-            _save_review_findings(proj, num, blocking_review)
-        elif review_rounds:
-            ctx.log("ok", f"第 {num} 章 审校通过（复检 {review_rounds} 轮 · verdict={verdict_review}）")
-        else:
-            ctx.log("ok", f"第 {num} 章 审校通过（verdict={verdict_review or 'PASS'}）")
-    else:
-        ctx.log("info", "审校已跳过（未启用或审校槽未绑定连接）")
-
-    # W-3 里程碑②：审校与修复环的轮次先落盘（G8 若要回退，rollback_to 自己会重写持久层）
-    _save_session_checkpoint(ctx, session, "审校后")
-
-    # ---- ④.9 决策门 G8：审校完成后（T4.1 内侧门；回退=保留原稿=还原审校前文本）----
-    # 人工审校模式下 G8 门已由人工审校循环承担，不再二次弹门
-    if review_ran and not manual_review:
-        g8_idea = ctx.gate("G8", f"审校完成：verdict {verdict_review or 'PASS'} · 阻塞 {len(blocking_review)} 处"
-                                 f"（下一步定稿落库，G9 仍会把关）", chapter=num)
-        if g8_idea is None:
-            g8_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
-            ctx.log("warn", "G8 回退：保留审校前原稿继续")
-            if prose != pre_review_prose:
-                _archive_inner_rollback(ctx, proj, num, "G8", prose)   # 审校修改稿归档
-                prose = pre_review_prose                                # 还原原稿
-            if _session_usable(session):
-                # 历史截回「首轮审校票固化后」：修复稿轮次作废，正文消息与还原稿一致
-                session.rollback_to(post_review_turns)
-            if blocking_review:
-                ctx.log("warn", f"G8：{len(blocking_review)} 处审校阻塞按人工裁决保留（定稿照常进行，G9 把关）")
-                gr.review_blocking = []
-                gr.final_status = "pass"
-        elif g8_idea:
-            _store_inner_gate_idea(ctx, proj, num, "G8", g8_idea)
 
     # ---- ⑤ 定稿落库：正文 + 追踪四文件 + 摘要链 ----
     ctx.step(num, st.STEP_FINALIZE)
