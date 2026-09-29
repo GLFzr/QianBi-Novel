@@ -6,6 +6,7 @@
 - strict：修复失败 → 自动暂停等人（auto_pause）
 """
 import logging
+import os
 import re
 
 from .. import deslop, project
@@ -163,3 +164,103 @@ def word_count_precheck(proj: str, num: int, prose: str, cfg: dict) -> tuple:
     items = [{"dim": "D_PLOT", "level": "fail", "text": text,
               "quote": "", "root_layer": "ROOT_PROSE", "line": ""}]
     return items, [text], "REJECT"
+
+
+# ============ 卡9-P4 本地规则质检（easy-writing 哲学移植：只拦明显写坏的硬伤） ============
+# 误拦比漏报更伤——拦=停机等人。三规则：断流(blocking 信号)/复读(blocking)/敏感词(advisory)。
+
+COLLAPSE_RATIO = 0.55   # 55% 断流闸阈值（原型坑②：与 90% 质量闸语义不同，绝不合并）
+
+_SENSITIVE_PATH = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))), "assets", "sensitive_words.txt")
+
+
+def check_collapse(text: str, target: int, ratio: float = None) -> tuple:
+    """55% 断流闸：实际字数 < 目标×ratio(缺省 55%) → (True, actual)——「这章写崩了」信号。
+
+    与 check_words / word_count_precheck 的 90% 质量闸语义分离：90% 闸触发
+    扩写微循环（质量目标），55% 闸判定生成中断（故障，停机待确认）。
+    两闸并存互不联动：60% 稿不触发断流闸但过不了质量闸，属正常扩写对象。
+    """
+    actual = project.count_chars(text)
+    r = COLLAPSE_RATIO if ratio is None else ratio
+    return actual < int(target * r), actual
+
+
+def repeat_findings(text: str) -> list:
+    """整段复读检测（P4 R2）：≥16 字段落（去空白归一）重复出现 → blocking，
+    附 ≤3 条 60 字引文。返回 deslop.Finding（可并入既有 blocking 通道消费）。
+    """
+    seen, order = {}, []
+    for p in re.split(r"\n\s*\n", text or ""):
+        norm = re.sub(r"\s+", "", p)
+        if len(norm) >= 16:
+            if norm not in seen:
+                order.append(norm)
+            seen[norm] = seen.get(norm, 0) + 1
+    dups = sorted(((p, seen[p]) for p in order if seen[p] > 1),
+                  key=lambda t: -t[1])[:3]
+    return [deslop.Finding(
+        rule="paragraph-repeat", level="blocking",
+        message="整段复读 ×%d（疑似生成循环）" % c,
+        text=p[:60], start=0, end=0,
+        fix_hint="删除重复段，保留信息量最全的一处；复读常伴字数不足，先查断流闸")
+        for p, c in dups]
+
+
+def load_sensitive_words(path: str = None) -> list:
+    """assets/sensitive_words.txt → [(word, category)]；行格式「词条｜分类」或「词条」，
+    # 开头为注释。文件缺失/损坏 → 空表（advisory 关闭，fail-open）。"""
+    out = []
+    try:
+        with open(path or _SENSITIVE_PATH, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                t = line.strip()
+                if not t or t.startswith("#"):
+                    continue
+                for sep in ("｜", "|"):
+                    if sep in t:
+                        w, cat = t.split(sep, 1)
+                        break
+                else:
+                    w, cat = t, ""
+                w = w.strip()
+                if w:
+                    out.append((w, cat.strip()))
+    except OSError:
+        return []
+    return out
+
+
+def sensitive_findings(text: str, words: list = None) -> list:
+    """敏感词扫描：只提示不停机（advisory，发布前自检向）。
+
+    悬疑修仙文「血/杀」高频是已知误报源——本族永远 advisory，绝不 blocking、
+    绝不进停机裁决；词库按平台规则维护（assets/sensitive_words.txt）。
+    """
+    body = text or ""
+    out = []
+    for w, cat in (words if words is not None else load_sensitive_words()):
+        n = body.count(w)
+        if not n:
+            continue
+        i = body.find(w)
+        ctx = re.sub(r"\s+", "", body[max(0, i - 12):i + len(w) + 12])
+        out.append(deslop.Finding(
+            rule="sensitive-word", level="advisory",
+            message="敏感词[%s]「%s」×%d，首处上下文：…%s…（发布前自检，按平台规则人工取舍）"
+                    % (cat or "未分类", w, n, ctx),
+            text=w, start=i, end=i + len(w),
+            fix_hint="平台雷区词：确认情节必需后保留，或换同义白描"))
+    return out
+
+
+def collapse_report(text: str, target: int) -> dict:
+    """P4 质检单聚合入口：断流闸 + 整段复读 + 敏感词一次出全（draft 相位后调用）。
+
+    collapsed=True 是独立于 word_ok 的 crash 信号——触发走 strict 停机待确认，
+    不进 mark_continue 的标待修通道（接线点见 TODO，本批不接 stages）。
+    """
+    collapsed, actual = check_collapse(text, target)
+    return {"collapsed": collapsed, "actual": actual, "target": target,
+            "repeat": repeat_findings(text), "sensitive": sensitive_findings(text)}
