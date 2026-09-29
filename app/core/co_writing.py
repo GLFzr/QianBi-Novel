@@ -20,6 +20,27 @@ logger = __import__("logging").getLogger("qianbi.core")
 # 追踪文件里以表格记登的两份（伏笔表/时间线）：表头+分隔行之后仍有非空行才算登记
 _TRACK_TABLE_FILES = ("伏笔.md", "时间线.md")
 
+# ---- 软开局子态常量（cw['soft']；语义见 CoWriting.soft_card_step docstring）----
+SOFT_OFF = ""            # 未武装/已消费——零行为
+SOFT_STEP1 = "s1"        # 示例立项卡（创建项目阶段）
+SOFT_STEP2 = "s2"        # 示范讨论卡（剧情总纲阶段，草案生成后一次）
+SOFT_HANDOFF = "hand"    # 交还卡片（第一章锁定后）
+SOFT_DONE = "done"       # 已消费（跳过/手改/交还完成/项目关闭）——不再触发
+
+# 示例值本地写死随版本走（方案 §5：不做云下发）。灵感与示范追问文案取自
+# w3_onboarding §2 站⑤/方案 v1 §3.3 定稿文案。
+SOFT_EXAMPLE_IDEA = ("小城旧书铺的店员发现，被写上批注的旧书三天后都会应验批注内容"
+                     "——他开始用批注帮人改命，直到一本写着自己名字的书出现")
+SOFT_EXAMPLE_REPLY = "第二章的反派动机再落地一点，别只用台词交代"
+
+# 逐字段旁注（key, 标签, 这栏在定什么/填坏了会怎样——方案 §3.2）
+SOFT_FIELD_NOTES = (
+    ("genre", "题材", "决定提示词特化，选错了随时可换"),
+    ("platform", "平台", "影响字数与节奏习惯，可随时改"),
+    ("words", "目标字数", "决定细纲批次与节奏预算，填坏了不会坏稿"),
+    ("idea", "一句话点子", "Agent 立项的第一粒种子，越具体越好"),
+)
+
 
 def _read_lines(path: str) -> list:
     try:
@@ -295,3 +316,65 @@ class CoWriting:
                 break
             batch.append(n + k)
         return batch
+
+    # ---------- 软开局（OB-M1：示例代填 → 示范讨论 → 交还卡片；方案 v1 全量）----------
+    #
+    # cw['soft'] 子态机（与六阶段机正交，只随其自然舞台露卡）：
+    #   ""    未武装/已消费——零行为（旧项目无此键同此，回归面=0）
+    #   s1    示例立项卡（创建项目阶段）
+    #   s2    示范讨论卡（剧情总纲阶段，Agent 出过草案后一次性出现）
+    #   hand  交还卡片（第一章锁定后；示例代填已全部退场，只剩收官仪式）
+    #   done  已消费（跳过/手改/交还完成/项目关闭）——永不再触发
+    #
+    # 红线（方案 §4）：不写 writing.run_mode（R17）；代填带 [示例] 留痕；不进演示
+    # 硬隔离也不借演示内容；每个代填步可跳过；无 Key 只允许走到卡片为止。
+
+    def soft_state(self, state: dict) -> str:
+        return str(st.ensure_cw(state).get("soft") or "")
+
+    def soft_arm(self, state: dict) -> bool:
+        """武装软开局（仅新建项目时由 bridge 调）：共写档才生效。返回是否武装。"""
+        cw = st.ensure_cw(state)
+        if cw.get("mode") != "cw":
+            return False
+        if cw.get("soft"):
+            return False   # 已表态过，绝不重投（方案 §5：不对存量补投）
+        cw["soft"] = SOFT_STEP1
+        return True
+
+    def soft_consume(self, state: dict, final: str = SOFT_DONE,
+                     only_active: bool = False) -> str:
+        """消费软开局（三退出/项目关闭）。only_active=True 时仅活动态才消费。
+
+        返回消费后的子态（未消费返回原态）——调用方据此决定是否刷 UI。
+        """
+        cw = st.ensure_cw(state)
+        cur = str(cw.get("soft") or "")
+        if only_active and cur not in (SOFT_STEP1, SOFT_STEP2, SOFT_HANDOFF):
+            return cur
+        cw["soft"] = final
+        return final
+
+    def soft_card_step(self, state: dict) -> str:
+        """当前该露出的软开局卡片步（""=无卡片）。
+
+        卡片只在其自然舞台出现：s1→创建项目阶段；s2→剧情总纲阶段且 Agent 已
+        出过话（草案/回复在场）；hand→已锁定章存在（交还卡片常驻到三选一表态）。
+        阶段不匹配一律 ""——卡片永不把用户堵死在路上（零死路）。
+        """
+        cw = st.ensure_cw(state)
+        soft = str(cw.get("soft") or "")
+        stage = cw.get("stage", st.STAGE_CW_PROJECT)
+        if soft == SOFT_STEP1:
+            return SOFT_STEP1 if stage == st.STAGE_CW_PROJECT else SOFT_OFF
+        if soft == SOFT_STEP2:
+            if stage != st.STAGE_CW_OUTLINE:
+                return SOFT_OFF
+            has_agent_reply = any(it.get("role") == "agent"
+                                  for it in (cw.get("transcript", {}).get(stage) or []))
+            return SOFT_STEP2 if has_agent_reply else SOFT_OFF
+        if soft == SOFT_HANDOFF:
+            locked = [n for n, _nm, _p in project.list_chapters(self.proj)
+                      if project.is_chapter_locked(self.proj, n)]
+            return SOFT_HANDOFF if locked else SOFT_OFF
+        return SOFT_OFF

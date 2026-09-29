@@ -19,6 +19,7 @@ from ..core import gates, state as st, versions
 from ..core.volume_session import _keep_aside
 from ..core.shared_prefix import project_header, chapter_header
 from ..core.orchestrator import Orchestrator
+from ..core import co_writing
 from ..core.co_writing import CoWriting
 from ..core import co_dialogue
 from ..llm import LLMClient, LLMError, ModelRouter
@@ -1218,6 +1219,7 @@ class Bridge(QObject):
     cwReportChanged = Signal()
     cwStreamingChanged = Signal()
     cwLockedChanged = Signal()
+    cwSoftChanged = Signal()        # OB-M1：软开局卡片子态变动（示例立项/示范讨论/交还）
     cwProsePolished = Signal(str)   # M6：手动去AI味完成，改写文本进编辑器工作副本（不落盘）
     regexRulesChanged = Signal()    # 本书正则契约条目变动（界面无持久缓存，重取即可）
     importBusyChanged = Signal()
@@ -1510,6 +1512,7 @@ class Bridge(QObject):
     cwBusySeconds = Property(int, lambda self: self._cw_busy_seconds, notify=cwBusyChanged)
     cwPreset = Property(str, lambda self: self._get_cw_preset(), notify=cwStageChanged)
     cwReachedStages = Property("QVariantList", lambda self: self._get_cw_reached_stages(), notify=cwStageChanged)
+    cwSoft = Property("QVariantMap", lambda self: self._get_cw_soft(), notify=cwSoftChanged)  # OB-M1
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
@@ -1568,6 +1571,17 @@ class Bridge(QObject):
                             + "，点击「开始」启动流水线")
         if wb_msg:
             self.toast.emit("info", wb_msg.strip())
+        # OB-M1：软开局武装（触发三条件①②③——新建项目∧共写档∧标记未消费）。
+        # 必须在 _open_project 之后（打开旧项目路径会按「项目关闭即退出」消费在途子态）；
+        # 演示硬隔离中不武装（软开局是真实流水线，不进演示）。
+        if not self._demo.active:
+            try:
+                _sstate = st.load_state(path)
+                if CoWriting(path).soft_arm(_sstate):
+                    st.save_state(path, _sstate)
+                    self.cwSoftChanged.emit()
+            except Exception:  # noqa: BLE001  软开局是增强功能，坏了绝不挡建书
+                pass
         return True
 
     @Slot(str)
@@ -1638,6 +1652,16 @@ class Bridge(QObject):
             self.projectOpened.emit()
         self.forcedLocksChanged.emit()   # L2-13：换书后审计痕重算
         self._refresh_backflow_stale()   # CW-G6：打开项目即对账（上次退出被杀的反哺在此补账）
+        # OB-M1：软开局只在「新建项目」的那次会话内有效——项目关闭即退出（方案 §3.1
+        # 第四退出），换书/重启后不再复活（不对存量补投）。
+        try:
+            if self._cw is not None:
+                _sstate = self._cw.load()
+                if self._cw.soft_consume(_sstate, only_active=True) == co_writing.SOFT_DONE:
+                    self._cw_save_state(_sstate)
+                    self.cwSoftChanged.emit()
+        except Exception:  # noqa: BLE001
+            pass
 
     def _reset_editor_state(self):
         """工作副本状态复位：编辑器内容 == 磁盘基准，无未保存修改"""
@@ -4230,6 +4254,70 @@ class Bridge(QObject):
                 for i, k in enumerate(st.CW_STAGE_ORDER)
                 if i <= idx and k != st.STAGE_CW_PROJECT]
 
+    def _get_cw_soft(self) -> dict:
+        """OB-M1：软开局卡片载荷（step="" = 无卡片）。
+
+        step1：示例立项四字段（取新建书时选的预设/填的选题，灵感缺省落本地示例）
+        + 逐字段旁注 + 写作槽就绪缺因（无 Key 只允许走到卡片为止，零请求）。
+        step2：可直接发送的示范追问（讨论 ≠ 重来）。
+        hand：第一章「怎么长出来的」清单（数据全部来自既有落盘：选题信息/cw 痕/
+        审校 findings/history，零新增埋点）+ 三出口。
+        """
+        empty = {"step": ""}
+        if not self.proj or not self._cw or self._get_cw_mode() != "cw":
+            return empty
+        state = self._cw.load()
+        step = self._cw.soft_card_step(state)
+        if not step:
+            return empty
+        info = project.read_idea_info(self.proj)
+        cw = st.ensure_cw(state)
+        if step == co_writing.SOFT_STEP1:
+            preset_name = ""
+            pid = cw.get("preset") or state.get("genre_preset", "")
+            if pid:
+                try:
+                    from .. import presets as genre_presets
+                    preset_name = genre_presets.load_preset(pid).get("name", "")
+                except Exception:  # noqa: BLE001
+                    preset_name = ""
+            genre = info["genre"] or preset_name or "都市悬疑"
+            words = int(info["total_words_wan"] or 100)
+            platform = info["platform"] or "番茄"
+            idea = info["idea"] or co_writing.SOFT_EXAMPLE_IDEA
+            return {"step": step,
+                    "fields": [{"key": k, "label": lb, "note": note,
+                                "value": {"genre": genre, "platform": platform,
+                                          "words": str(words), "idea": idea}.get(k, "")}
+                               for k, lb, note in co_writing.SOFT_FIELD_NOTES],
+                    "ideaIsExample": not info["idea"],
+                    "connReason": self._slot_readiness(
+                        co_dialogue.dialogue_slot(st.STAGE_CW_CORE, "compose"))}
+        if step == co_writing.SOFT_STEP2:
+            return {"step": step, "exampleReply": co_writing.SOFT_EXAMPLE_REPLY}
+        if step == co_writing.SOFT_HANDOFF:
+            locked = sorted(n for n, _nm, _p in project.list_chapters(self.proj)
+                            if project.is_chapter_locked(self.proj, n))
+            num = locked[0] if locked else 0
+            hist = next((h for h in (state.get("history") or [])
+                         if h.get("num") == num), {})
+            rf = st.load_review_findings(state, num)
+            growth = []
+            if cw.get("soft_used_example"):
+                growth.append("选题四件事（题材/平台/字数/灵感）来自示例开局——你也可以随时改成自己的")
+            else:
+                growth.append("选题四件事（题材/平台/字数/灵感）来自你自己的输入")
+            growth.append("设定、大纲、世界书、本章细纲：Agent 逐阶段起草，每一步都由你点「确定」放行")
+            if cw.get("supervised", {}).get(str(num)):
+                growth.append("锁定前过了主 Agent 衔接比对（与设定/前文的连续性核验）")
+            if rf.get("verdict"):
+                growth.append(f"六维审校结论：{rf.get('verdict')}")
+            if hist.get("words"):
+                growth.append(f"正文约 {hist.get('words')} 字，字数闸门与去味/审校链已跑完")
+            return {"step": step, "chapter": num, "growth": growth,
+                    "exportHint": "这一章已经可以带走：工具条「导出」可生成 txt/epub。"}
+        return empty
+
     def _cw_save_state(self, state: dict):
         st.save_state(self.proj, state)
 
@@ -5146,6 +5234,8 @@ class Bridge(QObject):
                               "解锁后可继续编辑（终稿仍留版本历史）")
         self._maybe_backflow(self._cur_num)
         self._refresh_backflow_stale()   # CW-G6：锁定即对账（反哺失败/被杀的章进横幅）
+        # OB-M1：首章锁定后交还卡片到舞台（软开局收官仪式）——刷子态让卡片现身
+        self.cwSoftChanged.emit()
 
     # ---- 剧情反哺：定稿正文里的新实体/新规则/伏笔变动 → 回写世界书/伏笔表 ----
 
@@ -5745,6 +5835,11 @@ class Bridge(QObject):
         cw = st.ensure_cw(state)
         if cw.get("preset"):
             state["genre_preset"] = cw["preset"]
+        # OB-M1：作者没走示例卡、自己点了「确定」= 已表态——示例立项卡退场，
+        # 示范讨论与交还卡片保留（都还没到各自的舞台）。
+        if cw.get("soft") == co_writing.SOFT_STEP1:
+            cw["soft"] = co_writing.SOFT_STEP2
+            self.cwSoftChanged.emit()
         self._cw.advance(state)
         self._cw_save_state(state)
         self._cw_view = self._get_cw_stage_key()
@@ -5768,6 +5863,202 @@ class Bridge(QObject):
         from .. import presets as genre_presets
         name = genre_presets.load_preset(preset_id).get("name", "通用") if preset_id else "通用（无预设）"
         self.toast.emit("ok", f"共写档选用预设「{name}」（仅作参考，不锁定）")
+
+    # ---- OB-M1：软开局（示例立项卡 / 示范讨论卡 / 交还卡片；方案 v1 全量）----
+    #
+    # 子态机在 co_writing（cw['soft']：""/s1/s2/hand/done），bridge 只做 IO 编排：
+    # 提交走真实流水线（与作者手输同价同链），三退出全部留痕，演示中一律不接管。
+
+    def _cw_soft_submit(self, state: dict, genre: str, platform: str,
+                        words: int, idea: str, example: bool):
+        """提交立项（示例/手改同一条真实链）：选题落盘 + 转写留痕 + 推进核心设定。
+
+        红线2：示例提交带 [示例] 前缀进对话记录，选题信息标注示例来源；
+        手改提交是作者自己的话原样留痕（改过即视为表态，软开局终止）。
+        """
+        genre = (genre or "").strip()
+        platform = (platform or "").strip() or "番茄"
+        idea = (idea or "").strip()
+        words = int(words or 0)
+        project.write_idea_info(self.proj, genre, platform, idea, words)
+        if example:
+            try:
+                with open(os.path.join(self.proj, "设定", "选题信息.md"),
+                          "a", encoding="utf-8") as f:
+                    f.write("- 来源：示例开局（软开工）\n")
+            except OSError:
+                pass   # 标注失败不挡提交（来源痕在转写里仍有 [示例] 前缀兜底）
+            co_dialogue.transcript_append(
+                state, st.STAGE_CW_PROJECT, "user",
+                f"[示例] 就用示例开写：题材「{genre}」· 平台「{platform}」"
+                f"· 目标 {words} 万字 · 灵感：{idea}", mode="discuss")
+        else:
+            co_dialogue.transcript_append(
+                state, st.STAGE_CW_PROJECT, "user",
+                f"立项确认：题材「{genre}」· 平台「{platform}」"
+                f"· 目标 {words} 万字 · 灵感：{idea}", mode="discuss")
+        cw = st.ensure_cw(state)
+        if cw.get("preset"):
+            state["genre_preset"] = cw["preset"]
+        self._cw.advance(state)
+        # advance() 内部 ensure_cw 会换掉 state['cw'] 字典——软开局子态必须
+        # 在推进之后重取再写，否则写进的是孤儿字典（落盘即丢，真机会静默断链）
+        cw = st.ensure_cw(state)
+        if example:
+            cw["soft"] = co_writing.SOFT_STEP2
+            cw["soft_used_example"] = True
+        else:
+            cw["soft"] = co_writing.SOFT_DONE   # 改过即视为表态（方案 §3.1）
+        self._cw_save_state(state)
+        self._cw_view = self._get_cw_stage_key()
+        self._cw_open_product(st.STAGE_CW_CORE)
+        self._cw_refresh()
+        self.cwSoftChanged.emit()
+        self.toast.emit("ok", "立项已提交，进入「核心设定」——"
+                        + CW_NEXT_PREVIEW.get(st.STAGE_CW_CORE, ""))
+
+    @Slot()
+    @_guarded
+    def cwSoftUseExample(self):
+        """示例卡「就用这个开写」：示例值作为作者输入真实提交（真实调用，与手输同价）。
+
+        红线5：无 Key/无模型只允许走到卡片为止——起跑前 _slot_readiness 拦下，
+        零网络请求零计费；演示硬隔离中不接管（软开局不进演示）。
+        """
+        if not self.proj or not self._cw or self._demo.active:
+            return
+        state = self._cw.load()
+        if self._cw.soft_state(state) != co_writing.SOFT_STEP1:
+            return
+        card = self._get_cw_soft()
+        reason = str(card.get("connReason", ""))
+        if reason:
+            self.toast.emit("warn", reason)
+            return
+        fields = {f["key"]: f["value"] for f in card.get("fields", [])}
+        self._cw_soft_submit(state, fields.get("genre", ""), fields.get("platform", "番茄"),
+                             int(fields.get("words", "100") or 0),
+                             fields.get("idea", ""), example=True)
+
+    @Slot(str, str, int, str)
+    @_guarded
+    def cwSoftSubmitEdited(self, genre: str, platform: str, words: int, idea: str):
+        """示例卡「我来改」提交：改过的值是作者自己的输入——软开局即刻终止"""
+        if not self.proj or not self._cw or self._demo.active:
+            return
+        state = self._cw.load()
+        if self._cw.soft_state(state) != co_writing.SOFT_STEP1:
+            return
+        self._cw_soft_submit(state, genre, platform, words, idea, example=False)
+
+    @Slot()
+    @_guarded
+    def cwSoftSkip(self):
+        """示例卡「跳过，我自己说」：软开局终止且转写零示例条目（判据可测）"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        if self._cw.soft_consume(state, only_active=True) == co_writing.SOFT_DONE:
+            self._cw_save_state(state)
+            self.cwSoftChanged.emit()
+            self.toast.emit("info", "已收起示例——点「✓ 确定」按当前选题进入核心设定")
+
+    @Slot()
+    @_guarded
+    def cwSoftStep2Send(self):
+        """示范卡「发送这条」：示例追问按真实讨论链发送（submitCwMessage 全链）"""
+        if not self.proj or not self._cw or self._demo.active:
+            return
+        state = self._cw.load()
+        if self._cw.soft_state(state) != co_writing.SOFT_STEP2:
+            return
+        # 此步之后示例代填全部退场（方案 §3.3）；交还卡片保留（§3.4 收官仪式）
+        self._cw.soft_consume(state, co_writing.SOFT_HANDOFF)
+        self._cw_save_state(state)
+        self.cwSoftChanged.emit()
+        self.submitCwMessage(co_writing.SOFT_EXAMPLE_REPLY, "discuss")
+
+    @Slot()
+    @_guarded
+    def cwSoftStep2Defer(self):
+        """示范卡「先不用/改改再发」：示例代填退场，交还卡片保留（软开局的最后一张卡）"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        if self._cw.soft_consume(state, co_writing.SOFT_HANDOFF) == co_writing.SOFT_HANDOFF:
+            self._cw_save_state(state)
+            self.cwSoftChanged.emit()
+
+    @Slot()
+    @_guarded
+    def cwSoftHandContinue(self):
+        """交还卡「继续共写」：软开局收官——此后一切如常"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        if self._cw.soft_consume(state, only_active=True) == co_writing.SOFT_DONE:
+            self._cw_save_state(state)
+            self.cwSoftChanged.emit()
+            self.toast.emit("ok", "软开局完成——接下来和平时一样：讨论、确定、锁定；"
+                                  "这一章随时可用工具条「导出」带走")
+
+    @Slot()
+    @_guarded
+    def cwSoftHandEdit(self):
+        """交还卡「我来改」：解锁本章进编辑器——读改 Agent 揣摩手改意图的既有链路承接"""
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        locked = sorted(n for n, _nm, _p in project.list_chapters(self.proj)
+                        if project.is_chapter_locked(self.proj, n))
+        if not locked:
+            return
+        num = locked[0]
+        if self._cur_num != num:
+            self.openChapter(num)
+        project.attempt_unlock(self.proj, num)
+        self.cwLockedChanged.emit()
+        self.forcedLocksChanged.emit()
+        self.refreshQueue()
+        self._refresh_backflow_stale()
+        if self._cw.soft_consume(state, only_active=True) == co_writing.SOFT_DONE:
+            self._cw_save_state(state)
+            self.cwSoftChanged.emit()
+            self.toast.emit("ok", f"第 {num} 章已解锁，编辑器可直接修改——"
+                                  "保存后 Agent 会读一遍揣摩你的手改意图")
+
+    @Slot()
+    @_guarded
+    def cwSoftHandRestart(self):
+        """交还卡「换个方向重来」：本章归档（先归档再删除纪律）+ 打回核心设定。
+
+        走既有重写安全网（versions.snapshot + clear_chapter_step，同
+        agent_tools.rewrite_chapter），下游产物由 CW-G7 打回级联归档；软开局不再代填。
+        """
+        if not self.proj or not self._cw:
+            return
+        state = self._cw.load()
+        locked = sorted(n for n, _nm, _p in project.list_chapters(self.proj)
+                        if project.is_chapter_locked(self.proj, n))
+        if not locked:
+            return
+        num = locked[0]
+        path = next((p for n, _nm, p in project.list_chapters(self.proj) if n == num), "")
+        if path and os.path.isfile(path):
+            versions.snapshot(self.proj, num, project.read_file(path), "软开局换向归档")
+            project.attempt_unlock(self.proj, num)   # 锁痕随章走：归档后不留幽灵锁
+            os.remove(path)
+            st.clear_chapter_step(self.proj, num)
+        if self._cur_num == num:
+            self._chapter_text = ""
+            self._chapter_path = ""
+            self.chapterTextChanged.emit()
+        self._rollback_to(st.STAGE_CW_CORE, confirmed=True)
+        self._cw.soft_consume(state, only_active=True)
+        self._cw_save_state(state)
+        self.cwSoftChanged.emit()
+        self.toast.emit("ok", f"第 {num} 章已归档（版本历史可回看），已打回「核心设定」——"
+                              "换个方向重新来，这次每一步仍由你确认")
 
     def _on_cw_sum_done(self, text: str):
         self.refreshUsage()

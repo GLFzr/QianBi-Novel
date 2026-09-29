@@ -391,6 +391,284 @@ Rectangle {
             }
         }
 
+        // ---- OB-M1：软开局卡片（示例立项 s1 / 示范讨论 s2 / 交还 hand）----
+        // 方案 v1：前 1-2 步由应用代填带「示例」标记的输入并逐字段解释；第一章
+        // 写完交还评判。三退出全部落 bridge（cwSoftSkip/SubmitEdited/Hand*），
+        // 无 Key 只允许走到卡片为止（bridge 侧 _slot_readiness 前置，零请求）。
+        Rectangle {
+            id: softCard
+            Layout.fillWidth: true
+            Layout.margins: 8
+            visible: bridge.cwSoft.step !== "" && cwDock.viewIsCurrent
+            height: softCardCol.implicitHeight + 20
+            radius: 8
+            color: Theme.bgCard
+            border.width: 1
+            border.color: Theme.accent
+            clip: true
+
+            property bool editMode: false
+            onVisibleChanged: if (visible) editMode = false
+
+            ColumnLayout {
+                id: softCardCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 10
+                spacing: 6
+
+                // ---- s1：示例立项（就用这个开写 / 我来改 / 跳过）----
+                ColumnLayout {
+                    visible: bridge.cwSoft.step === "s1"
+                    Layout.fillWidth: true
+                    spacing: 5
+                    Text {
+                        text: "先用这本书试试手：《种子书》同款开局"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "下面四件事已替你填好示例——可以直接开写，也可以改成你自己的。每一步之后仍由你确认。"
+                        color: Theme.textSecondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        wrapMode: Text.Wrap
+                    }
+                    Repeater {
+                        id: softFieldRepeater
+                        model: bridge.cwSoft.fields || []
+                        delegate: ColumnLayout {
+                            required property var modelData
+                            required property int index
+                            property string val: modelData.value
+                            Layout.fillWidth: true
+                            spacing: 1
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                Text {
+                                    text: modelData.label
+                                    color: Theme.info
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsSmall
+                                    font.bold: true
+                                }
+                                Text {
+                                    visible: !softCard.editMode
+                                    Layout.fillWidth: true
+                                    text: modelData.value + (modelData.key === "words" ? " 万字" : "")
+                                    color: Theme.textPrimary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsSmall
+                                    wrapMode: Text.Wrap
+                                }
+                                TextField {
+                                    visible: softCard.editMode
+                                    Layout.fillWidth: true
+                                    text: modelData.value
+                                    color: Theme.textPrimary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsSmall
+                                    selectByMouse: true
+                                    background: Rectangle {
+                                        radius: Theme.rBtn
+                                        color: Theme.bgHover
+                                        border.width: 1
+                                        border.color: Theme.accent
+                                    }
+                                    onTextChanged: {
+                                        var it = softFieldRepeater.itemAt(index)
+                                        if (it) it.val = text
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "· " + modelData.note
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsMicro
+                                wrapMode: Text.Wrap
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        AppButton {
+                            text: softCard.editMode ? "就这样开写" : "就用这个开写（会调用模型，产生少量费用）"
+                            kind: "primary"
+                            onClicked: {
+                                if (softCard.editMode) {
+                                    var g = "", p = "", w = 100, i2 = ""
+                                    for (var k = 0; k < softFieldRepeater.count; k++) {
+                                        var it = softFieldRepeater.itemAt(k)
+                                        var key = (bridge.cwSoft.fields[k] || {}).key
+                                        if (key === "genre") g = it.val
+                                        else if (key === "platform") p = it.val
+                                        else if (key === "words") w = parseInt(it.val) || 0
+                                        else if (key === "idea") i2 = it.val
+                                    }
+                                    bridge.cwSoftSubmitEdited(g, p, w, i2)
+                                } else {
+                                    bridge.cwSoftUseExample()
+                                }
+                            }
+                            ToolTip.visible: hovered && !softCard.editMode
+                            ToolTip.text: "示例值作为你的输入走真实共写链（与手输同价）；还没有可用连接时只停在卡片，不会发起任何请求"
+                        }
+                        AppButton {
+                            text: softCard.editMode ? "不改了" : "我来改"
+                            kind: "ghost"
+                            onClicked: softCard.editMode = !softCard.editMode
+                            ToolTip.visible: hovered && !softCard.editMode
+                            ToolTip.text: "示例值原地可编辑——改完提交即视为你自己的立项（软开局退出）"
+                        }
+                        AppButton {
+                            text: "跳过，我自己说"
+                            kind: "ghost"
+                            visible: !softCard.editMode
+                            onClicked: bridge.cwSoftSkip()
+                            ToolTip.visible: hovered
+                            ToolTip.text: "收起示例——之后点「✓ 确定」按你创建时填的选题进入核心设定"
+                        }
+                    }
+                }
+
+                // ---- s2：示范一次「讨论」（发送这条 / 改改再发 / 先不用）----
+                ColumnLayout {
+                    visible: bridge.cwSoft.step === "s2"
+                    Layout.fillWidth: true
+                    spacing: 5
+                    Text {
+                        text: "示范一次「讨论」"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "草稿已出。讨论 ≠ 重来——你可以只对局部提要求，比如："
+                        color: Theme.textSecondary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        wrapMode: Text.Wrap
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rBtn
+                        color: Theme.bgHover
+                        border.width: 1
+                        border.color: Theme.border
+                        Text {
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.margins: 8
+                            text: "「" + (bridge.cwSoft.exampleReply || "") + "」"
+                            color: Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                            font.italic: true
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        AppButton {
+                            text: "发送这条"
+                            kind: "primary"
+                            onClicked: bridge.cwSoftStep2Send()
+                            ToolTip.visible: hovered
+                            ToolTip.text: "按真实讨论链发送（会调用模型，与手输同价）——发送后示例全部退场"
+                        }
+                        AppButton {
+                            text: "改改再发"
+                            kind: "ghost"
+                            onClicked: {
+                                cwInput.text = bridge.cwSoft.exampleReply || ""
+                                bridge.cwSoftStep2Defer()
+                                cwInput.forceActiveFocus()
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: "把这条示例填进输入框，你改成自己的话再发送"
+                        }
+                        AppButton {
+                            text: "先不用"
+                            kind: "ghost"
+                            onClicked: bridge.cwSoftStep2Defer()
+                        }
+                    }
+                }
+
+                // ---- hand：交还卡片（继续共写 / 我来改 / 换个方向重来）----
+                ColumnLayout {
+                    visible: bridge.cwSoft.step === "hand"
+                    Layout.fillWidth: true
+                    spacing: 5
+                    Text {
+                        text: "第一章完成了——它是怎么长出来的"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsBody
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.Wrap
+                    }
+                    Repeater {
+                        model: bridge.cwSoft.growth || []
+                        delegate: Text {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            text: "· " + modelData
+                            color: Theme.textSecondary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: bridge.cwSoft.exportHint || ""
+                        color: Theme.textTertiary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsMicro
+                        wrapMode: Text.Wrap
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        AppButton {
+                            text: "继续共写"
+                            kind: "primary"
+                            onClicked: bridge.cwSoftHandContinue()
+                            ToolTip.visible: hovered
+                            ToolTip.text: "软开局到此收官——此后一切如常"
+                        }
+                        AppButton {
+                            text: "我来改"
+                            kind: "ghost"
+                            onClicked: bridge.cwSoftHandEdit()
+                            ToolTip.visible: hovered
+                            ToolTip.text: "解锁本章进编辑器——保存后 Agent 会揣摩你的手改意图"
+                        }
+                        AppButton {
+                            text: "换个方向重来"
+                            kind: "danger"
+                            onClicked: bridge.cwSoftHandRestart()
+                            ToolTip.visible: hovered
+                            ToolTip.text: "本章归档（版本历史可回看），打回「核心设定」重新来——软开局不再代填"
+                        }
+                    }
+                }
+            }
+        }
+
         // ---- 主 Agent 报告区（M5：定稿前衔接比对 / 世界书变更提示；与审校 Findings 分开展示）----
         Rectangle {
             Layout.fillWidth: true
