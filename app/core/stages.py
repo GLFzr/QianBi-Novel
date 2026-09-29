@@ -19,6 +19,7 @@ from contextlib import contextmanager as _contextmanager
 
 from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
 from .. import project, prompts, deslop, mustscan, wb
+from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
 from ..prompts import scene_cards
 from . import gates, memory, scan, state as st, versions
@@ -65,7 +66,7 @@ def _wb_rg_blocks(proj: str, cfg: dict, num: int = 0) -> tuple:
     """
     sem = cfg.get("writing", {}).get("regex_semantics", "logic")
     meta = wb.assemble(proj, num=num, budget=2000,
-                       anchors=project.worldbook_anchors(proj, num))
+                       anchors=worldbook_anchors(proj, num))
     return (meta["text"], project.regex_block(proj, sem), meta)
 
 
@@ -2421,13 +2422,13 @@ def review_l0_block(proj: str, num: int, prose: str) -> str:
     prev = project.nearest_chapter_before(proj, num)
     prev_prose = (project.read_file(prev[2]) if prev else "") or ""
     ledger_text = "\n".join([
-        project.worldbook_text(proj, 1500, num=num),
+        worldbook_text(proj, 1500, num=num),
         project.read_file(project.get_tracking_path(proj, "角色状态")) or "",
     ])
     genre = (project.read_idea_info(proj) or {}).get("genre", "") or ""
     forbidden = [] if any(k in genre for k in ("修仙", "仙侠", "玄幻")) else scan.GENERIC_FORBIDDEN
     block = scan.format_scan_block(scan.scan_chapter(
-        prose, prev_prose, roster=project.worldbook_anchors(proj, 0),
+        prose, prev_prose, roster=worldbook_anchors(proj, 0),
         ledger_text=ledger_text, forbidden_words=forbidden))
     must_fs = mustscan.scan_proj(proj, prose)
     if must_fs:
@@ -3469,7 +3470,7 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
         timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
         old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
         or "（尚无写作上下文）",
-        worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+        worldbook=worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
         project_header=project_header(proj),
         chapter_header=_chap_header(ctx, proj, num),
     )
@@ -3504,7 +3505,7 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
                 timeline=project.read_file(project.get_tracking_path(proj, "时间线"))[:1500],
                 old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1500]
                 or "（尚无写作上下文）",
-                worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+                worldbook=worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
                 project_header=project_header(proj),
                 chapter_header=_chap_header(ctx, proj, num))
         ctx.last_prompt = turn_text
@@ -3634,7 +3635,7 @@ def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
         timeline_recent=_timeline_recent(proj),
         old_context=project.read_file(project.get_tracking_path(proj, "上下文"))[:1200]
         or "（尚无写作上下文）",
-        worldbook=project.worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
+        worldbook=worldbook_text(proj, max_chars=2500, num=num) or "（世界书为空）",
         roster=_roster(proj),
         project_header=project_header(proj),
         chapter_header=_chap_header(ctx, proj, num),

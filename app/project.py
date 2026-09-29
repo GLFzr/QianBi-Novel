@@ -13,8 +13,6 @@ import re
 import tempfile
 import time
 
-from . import wb
-
 PROJECT_DIRS = ["设定", "大纲", "正文", "追踪"]
 SETTING_SUBDIRS = ["世界观", "角色", "势力"]
 
@@ -421,31 +419,16 @@ REGEX_PATH = "设定/正则.md"
 WORLDBOOK_BACKFLOW_HEADING = "## 追加登记"
 
 
-def worldbook_text(proj: str, max_chars: int = 2000, anchors: list = None,
-                   num: int = 0) -> str:
-    """世界书注入块（空串回退占位）——装配内核见 app/wb.py（双端逐字节一致）
-
-    条目化激活：常驻（规则/数值基准节、``[常驻]``）＞ 本章命中（专名/关键词/章节区间）
-    ＞ 近章登记（追加登记区、首见第N章、拓宽批次）＞ 节权重；「追加登记」区另有保底预算。
-    全文不超预算时逐字返回原文件（老书零变化）。签名向后兼容：不传 num 即无章上下文。
-    """
-    return wb.assemble(proj, num=num, budget=max_chars, anchors=anchors)["text"]
-
-
-def worldbook_anchors(proj: str, num: int = 0) -> list:
-    """世界书注入锚点：本章出场专名 ＞ 细纲已知名命中 ＞ 主要角色表（相关性截断优先保留）
-
-    旧实现只认「角色：」字段与 ``名字：`` 行首式写法，而细纲模板的真实字段是
-    「出场顺序」、世界书实体登记多为表格/标题行，锚点恒为空。
-    """
-    core = read_file(os.path.join(proj, "设定", "题材定位.md"))
-    m = re.search(r"##\s*主要角色表(.*?)(?=\n##\s|\Z)", core, re.S)
-    roster = wb.roster_names(m.group(1)) if m else []
-    if not num:
-        return roster[:20]
-    known = wb.merge_names(roster, wb.roster_names(read_file(os.path.join(proj, WORLDBOOK_PATH))))
-    outline = read_file(get_outline_path(proj, num)) or ""
-    return wb.merge_names(wb.matching_names(outline, known), wb.cast_names(outline), roster)[:20]
+# ---- C10b 拆环兼容壳（PEP 562）----
+# worldbook_text / worldbook_anchors 真身已迁 app/wb.py（wb→project 单向依赖，
+# project 不再 import wb——本壳是仅存的回边，且走 importlib 不入静态依赖图）。
+# TODO(S2)：co_dialogue.py 的 6 处 project.worldbook_* 调用改为 from ..wb import
+# 之后，删除本壳与 conftest/test 的迁移遗留。
+def __getattr__(name):
+    if name in ("worldbook_text", "worldbook_anchors"):
+        from importlib import import_module
+        return getattr(import_module("app.wb"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def regex_rules(proj: str, semantics: str = "logic") -> list:

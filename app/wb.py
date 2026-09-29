@@ -19,6 +19,10 @@ import hashlib
 import os
 import re
 
+# C10b 拆环（0.22.0）：本模块对 project 的三处延迟 import 升模块级——依赖方向
+# 定格为 wb→project 单向（project 侧的壳函数已迁入本模块，仅剩 PEP 562 兼容壳）。
+from . import project
+
 # 专名：2-6 个汉字（可含中间圆点，兼容译名）
 _NAME = r"[一-鿿][一-鿿·]{1,5}"
 
@@ -477,7 +481,6 @@ def parse(doc: str) -> list:
 
 def chapter_context(proj: str, num: int) -> str:
     """触发检索文本：本章细纲 + 近窗章节摘要（缺文件一律容忍为空）"""
-    from . import project
     if not num:
         return ""
     parts = []
@@ -688,7 +691,6 @@ def assemble(proj: str, num: int = 0, budget: int = 2000, *, preset=None,
 
     **快速路径不变式**：全文不超预算时逐字返回原文件（老书零变化的硬保证）。
     """
-    from . import project
     budget = max(0, int(budget or 0))
     budget = _budget_for(preset, phase, budget)
     if doc is None:
@@ -702,7 +704,7 @@ def assemble(proj: str, num: int = 0, budget: int = 2000, *, preset=None,
                 "dropped": [], "budget": budget, "phase": phase}
     if anchors is None:
         try:
-            anchors = project.worldbook_anchors(proj, num) if num else []
+            anchors = worldbook_anchors(proj, num) if num else []
         except Exception:  # noqa: BLE001
             anchors = []
     anchors = list(anchors or [])
@@ -725,7 +727,6 @@ def constant_entries(proj: str, budget: int = 0) -> str:
     - budget>0 时按条截断（不切半条），截断时末尾注明；
     - 无常驻条目返回空串。**不触碰 assemble 本体与其快速路径不变式。**
     """
-    from . import project
     doc = project.read_file(os.path.join(proj, project.WORLDBOOK_PATH))
     if not (doc or "").strip():
         return ""
@@ -742,3 +743,35 @@ def constant_entries(proj: str, budget: int = 0) -> str:
         out.append(body)
         used += len(body) + 2
     return "\n\n".join(out) + "\n"
+
+
+# ==================== 注入壳（C10b 自 app/project.py 迁入） ====================
+# project.worldbook_text / project.worldbook_anchors 的真身在这两个函数；project
+# 侧只剩 PEP 562 兼容壳（惰性回装，TODO(S2) 随 co_dialogue 改引后移除）。
+
+def worldbook_text(proj: str, max_chars: int = 2000, anchors: list = None,
+                   num: int = 0) -> str:
+    """世界书注入块（空串回退占位）——装配内核见本模块 assemble（双端逐字节一致）
+
+    条目化激活：常驻（规则/数值基准节、``[常驻]``）＞ 本章命中（专名/关键词/章节区间）
+    ＞ 近章登记（追加登记区、首见第N章、拓宽批次）＞ 节权重；「追加登记」区另有保底预算。
+    全文不超预算时逐字返回原文件（老书零变化）。签名向后兼容：不传 num 即无章上下文。
+    """
+    return assemble(proj, num=num, budget=max_chars, anchors=anchors)["text"]
+
+
+def worldbook_anchors(proj: str, num: int = 0) -> list:
+    """世界书注入锚点：本章出场专名 ＞ 细纲已知名命中 ＞ 主要角色表（相关性截断优先保留）
+
+    旧实现只认「角色：」字段与 ``名字：`` 行首式写法，而细纲模板的真实字段是
+    「出场顺序」、世界书实体登记多为表格/标题行，锚点恒为空。
+    """
+    core = project.read_file(os.path.join(proj, "设定", "题材定位.md"))
+    m = re.search(r"##\s*主要角色表(.*?)(?=\n##\s|\Z)", core, re.S)
+    roster = roster_names(m.group(1)) if m else []
+    if not num:
+        return roster[:20]
+    known = merge_names(roster, roster_names(
+        project.read_file(os.path.join(proj, project.WORLDBOOK_PATH))))
+    outline = project.read_file(project.get_outline_path(proj, num)) or ""
+    return merge_names(matching_names(outline, known), cast_names(outline), roster)[:20]
