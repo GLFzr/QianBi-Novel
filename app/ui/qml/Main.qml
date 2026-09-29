@@ -464,6 +464,43 @@ ApplicationWindow {
                 editor.forceActiveFocus()
             }
 
+            // ---- CW-G6：反哺看门狗横幅（已锁定 ∧ 反哺未新鲜 → 常驻 + 一键补跑）----
+            Rectangle {
+                id: backflowStaleBanner
+                objectName: "backflowStaleBanner"
+                Layout.fillWidth: true
+                height: visible ? 34 : 0
+                visible: bridge.backflowStaleChapters.length > 0
+                color: Theme.warnSoft
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 10
+                    spacing: 8
+                    Text {
+                        text: "⚠ 第 " + bridge.backflowStaleChapters.slice(0, 3).join("、")
+                              + (bridge.backflowStaleChapters.length > 3
+                                 ? " 等 " + bridge.backflowStaleChapters.length + " 章" : "")
+                              + " 已锁定，但剧情反哺没跑完（可能上次退出被打断）——新设定还没回写世界书"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsMicro
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    AppButton {
+                        objectName: "backfillStaleButton"
+                        text: "一键补跑"
+                        kind: "secondary"
+                        height: 24
+                        onClicked: bridge.runBackfillStale()
+                        ToolTip.visible: hovered
+                        ToolTip.text: "把这些章的剧情反哺重新排队（后台串行，不产生请求风暴）；完成或解锁后横幅自动消失"
+                    }
+                }
+            }
+
             // ---- 编辑器顶栏（44px · 面包屑标题）----
             Rectangle {
                 Layout.fillWidth: true

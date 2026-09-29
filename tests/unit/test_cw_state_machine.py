@@ -354,9 +354,11 @@ def _val_self(proj):
     from types import SimpleNamespace
     fs = SimpleNamespace(
         proj=proj, _cw=CoWriting(proj), toast=_Toast(), _cw_sum_worker=None,
-        cfg={}, _set_cw_busy=lambda v: None,
+        cfg={}, _cw_gen=0, _set_cw_busy=lambda v: None,
     )
     fs._cw_outline_nums = lambda state: bmod.Bridge._cw_outline_nums(fs, state)
+    fs._bump_cw_gen = lambda: bmod.Bridge._bump_cw_gen(fs)
+    fs._cw_guarded = lambda gen, fn: bmod.Bridge._cw_guarded(fs, gen, fn)
     return fs
 
 
@@ -413,3 +415,181 @@ def test_outline_validation_prompt_cap_on_sixty_chapter_book(tmp_path):
     assert "OUTLINE_001" not in w.last_prompt, "第 1 章细纲漏进校验输入（截断失效）"
     assert len(w.last_prompt) < 30000, \
         f"批±2 窗口 prompt 应 ≤3 万字符级，实得 {len(w.last_prompt)}"
+
+
+# ================= 段2（C25b）：CW-G5 取消代际化 + CW-G6 反哺看门狗 =================
+
+class _GuardSelf:
+    """_cw_guarded / cancelCwWorker / _reconcile_outline_batch / 看门狗的轻量 self"""
+
+    def __init__(self, proj):
+        self.proj = proj
+        self._cw = CoWriting(proj)
+        self._cw_gen = 0
+        self._cw_cancelled = False
+        self._cw_reply = ""
+        self._cw_mode = "discuss"
+        self._cw_busy = False
+        self._cw_worker = None
+        self._cw_sum_worker = None
+        self._backflow_worker = None
+        self._backflow_queue = []
+        self._backflow_stale = []
+        self.started_backflow = []
+        self.toast = _Toast()
+        self.cwStreamingChanged = _Sig()
+        self.backflowStaleChanged = _Sig()
+        self.refreshQueue = lambda: None
+        # 桩上绑定真实现（@_guarded 会吞 AttributeError，缺绑定会假绿/假红）
+        self._bump_cw_gen = lambda: bmod.Bridge._bump_cw_gen(self)
+        self._refresh_backflow_stale = lambda: bmod.Bridge._refresh_backflow_stale(self)
+        self._drain_backflow_queue = lambda: bmod.Bridge._drain_backflow_queue(self)
+
+    def _cw_save_state(self, state):
+        st.save_state(self.proj, state)
+
+    def _cw_sync_messages(self):
+        pass
+
+    def _get_cw_stage_key(self):
+        return st.ensure_cw(st.load_state(self.proj)).get("stage", st.STAGE_CW_PROJECT)
+
+    def _set_cw_busy(self, v):
+        self._cw_busy = v
+
+    def _start_backflow(self, num):
+        self.started_backflow.append(int(num))
+
+    def refreshUsage(self):
+        pass
+
+
+def test_cancel_token_overlapping_done(tmp_path):
+    """缺口3 / CW-G5：两代 worker 交叠完成——旧回复整条丢弃、新回复入转写、取消断代"""
+    proj = make_proj(tmp_path, "tok")
+    st.save_state(proj, {"cw": {"mode": "cw", "stage": st.STAGE_CW_CORE}})
+    fs = _GuardSelf(proj)
+    g1 = bmod.Bridge._bump_cw_gen(fs)      # 第一代在途
+    g2 = bmod.Bridge._bump_cw_gen(fs)      # 用户没等旧代回完又发了一条（第二代）
+
+    old_chunk = bmod.Bridge._cw_guarded(
+        fs, g1, lambda t: bmod.Bridge._on_cw_chunk(fs, t))
+    old_done = bmod.Bridge._cw_guarded(
+        fs, g1, lambda t: bmod.Bridge._on_cw_done(fs, t))
+    new_done = bmod.Bridge._cw_guarded(
+        fs, g2, lambda t: bmod.Bridge._on_cw_done(fs, t))
+
+    old_chunk("旧代的流式残渣")
+    old_done("旧一代的迟到回复")
+    assert fs._cw_reply == "", "旧代 chunk/done 不得污染流式缓冲"
+    new_done("新一代的正式回复")
+
+    def transcript_text():
+        state = st.load_state(proj)
+        items = st.ensure_cw(state)["transcript"].get(st.STAGE_CW_CORE, [])
+        return "\n".join(m.get("text", "") for m in items)
+
+    joined = transcript_text()
+    assert "新一代的正式回复" in joined, "新回复必须入转写"
+    assert "旧一代的迟到回复" not in joined, "旧代回复必须整条丢弃"
+
+    # 取消 = 断代：cancel 后在途结果到达也丢弃（_cw_cancelled 单旗标做不到这点）
+    fs._cw_busy = True
+    bmod.Bridge.cancelCwWorker(fs)
+    assert fs._cw_gen != g2, "cancel 必须断代（在途代际全部作废）"
+    bmod.Bridge._cw_guarded(
+        fs, g2, lambda t: bmod.Bridge._on_cw_done(fs, t))("取消后才到的回复")
+    assert "取消后才到的回复" not in transcript_text()
+
+
+def test_outline_batch_cancel_reconciles_written_files(tmp_path):
+    """CW-G5 后半：OutlineBatchWorker 半提交对账——取消后按落盘清单补转写回执+批次账"""
+    proj = make_proj(tmp_path, "recon")
+    st.save_state(proj, {"cw": {"mode": "cw", "stage": st.STAGE_CW_UNIT}})
+    for n in (3, 4):
+        project.write_file(project.get_outline_path(proj, n), f"### 第 {n} 章：事件{n}")
+
+    class _W:
+        batch = [3, 4, 5]
+        written = [3, 4]      # 第 5 章没写完就被取消
+
+    fs = _GuardSelf(proj)
+    stale_gen = bmod.Bridge._bump_cw_gen(fs)
+    bmod.Bridge._reconcile_outline_batch(fs, _W(), stale_gen + 1)   # 已成旧代
+    cw = st.ensure_cw(st.load_state(proj))
+    items = cw["transcript"].get(st.STAGE_CW_UNIT, [])
+    receipt = [m for m in items if "落盘" in m.get("text", "")]
+    assert receipt, "取消后必须有「已落盘 X 章细纲」对账回执"
+    assert "第 3" in receipt[-1]["text"] and "第 4" in receipt[-1]["text"]
+    assert cw.get("last_outline_batch") == [3, 4], "批次账必须按实际落盘对齐（不丢、不多）"
+
+    # 当代（未取消）不补回执：done 正常路径自己写回执，对账不得重复插话
+    n_before = len(cw["transcript"][st.STAGE_CW_UNIT])
+    cur_gen = bmod.Bridge._bump_cw_gen(fs)
+    bmod.Bridge._reconcile_outline_batch(fs, _W(), cur_gen)
+    cw2 = st.ensure_cw(st.load_state(proj))
+    assert len(cw2["transcript"][st.STAGE_CW_UNIT]) == n_before
+
+
+def test_outline_batch_reconcile_skips_when_nothing_written(tmp_path):
+    """取消时一个文件都没写 → 零回执零改账（不制造噪音）"""
+    proj = make_proj(tmp_path, "recon0")
+    st.save_state(proj, {"cw": {"mode": "cw", "stage": st.STAGE_CW_UNIT}})
+
+    class _W:
+        batch = [3, 4]
+        written = []
+
+    fs = _GuardSelf(proj)
+    stale_gen = bmod.Bridge._bump_cw_gen(fs)
+    bmod.Bridge._reconcile_outline_batch(fs, _W(), stale_gen + 1)
+    cw = st.ensure_cw(st.load_state(proj))
+    assert not cw["transcript"].get(st.STAGE_CW_UNIT)
+    assert not cw.get("last_outline_batch")
+
+
+# ---------- CW-G6：反哺对账看门狗 ----------
+
+def test_backflow_watchdog_points_stale_locked_chapters(tmp_path):
+    """CW-G6：已锁定∧¬fresh → 看门狗点名；fresh / 未锁定 / 在途补跑 不误报"""
+    proj = make_proj(tmp_path, "wd")
+    full_products(proj, upto=3)
+    for n in (1, 2, 3):
+        mark_chapter_locked(proj, n)
+    st.mark_backflowed(proj, st.load_state(proj), 1, "反哺 第1章")   # 第 1 章新鲜
+    # 反哺新鲜度按秒截断比对——测试里造册与写文同秒，把第 1 章正文 mtime 拨早 10s 保判定确定
+    import time as _time
+    _p1 = os.path.join(proj, "正文", "第0001章.md")
+    _past = _time.time() - 10
+    os.utime(_p1, (_past, _past))
+    fs = _GuardSelf(proj)
+    bmod.Bridge._refresh_backflow_stale(fs)
+    assert fs._backflow_stale == [2, 3], "第 1 章新鲜不报；2/3 已锁定未反哺必须点名"
+    # 在途与排队的章不算 stale（正在补，横幅别添乱）
+    fs._backflow_queue = [2]
+    from types import SimpleNamespace
+    fs._backflow_worker = SimpleNamespace(num=3)
+    bmod.Bridge._refresh_backflow_stale(fs)
+    assert fs._backflow_stale == []
+    # 解锁的章不报
+    fs._backflow_queue = []
+    fs._backflow_worker = None
+    assert project.attempt_unlock(proj, 2) and project.attempt_unlock(proj, 3)
+    bmod.Bridge._refresh_backflow_stale(fs)
+    assert fs._backflow_stale == []
+
+
+def test_backfill_stale_enqueues_watchdog_list(tmp_path):
+    """CW-G6 一键补跑：横幅点名章全部入队（复用现有串行队列）并即时收横幅"""
+    proj = make_proj(tmp_path, "bfs")
+    full_products(proj, upto=2)
+    for n in (1, 2):
+        mark_chapter_locked(proj, n)
+    fs = _GuardSelf(proj)
+    bmod.Bridge._refresh_backflow_stale(fs)
+    assert fs._backflow_stale == [1, 2]
+    bmod.Bridge.runBackfillStale(fs)
+    assert fs.started_backflow == [1], "队首章应立刻起跑（复用 _drain_backflow_queue）"
+    assert fs._backflow_queue == [2], "其余章排队"
+    assert fs._backflow_stale == [], "已排队/在途的章出横幅（在途集合排除）"
+    assert any("排队" in m for _l, m in fs.toast.items)

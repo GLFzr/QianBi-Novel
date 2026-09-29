@@ -1009,6 +1009,7 @@ class Bridge(QObject):
     gateDetail = Signal(str, int, "QVariantMap")    # Q6（只加不改）：九门停靠详情，伴随 gateAsked
     lockBlockedDetail = Signal(int, "QVariantMap")  # Q6（只加不改）：锁门全量违规+当前值/阈值+两侧后果
     rollbackConfirm = Signal(str, "QVariantMap")    # C25 CW-G7：打回确认卡（stage, 级联清单/锁定章/追踪态）
+    backflowStaleChanged = Signal()                 # C25 CW-G6：反哺看门狗账目变动（常驻横幅数据源）
     # kind: "word"=字数未达标（有 actual/target）| "contract"=正则 must 契约违规（无字数概念）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
@@ -1109,6 +1110,7 @@ class Bridge(QObject):
         self._cw_sum_worker = None
         self._backflow_worker = None           # 剧情反哺 worker（helper 槽，后台串行）
         self._backflow_queue = []              # 补跑队列（章号，先进先出）
+        self._backflow_stale = []              # CW-G6：已锁定∧¬backflow_is_fresh 的章（看门狗）
         self._cw_busy_timer = QTimer(self)
         self._cw_busy_timer.setInterval(1000)
         self._cw_busy_timer.timeout.connect(self._on_cw_busy_tick)
@@ -1384,6 +1386,7 @@ class Bridge(QObject):
         if not silent:
             self.projectOpened.emit()
         self.forcedLocksChanged.emit()   # L2-13：换书后审计痕重算
+        self._refresh_backflow_stale()   # CW-G6：打开项目即对账（上次退出被杀的反哺在此补账）
 
     def _reset_editor_state(self):
         """工作副本状态复位：编辑器内容 == 磁盘基准，无未保存修改"""
@@ -4314,9 +4317,10 @@ class Bridge(QObject):
         self._set_cw_busy(True)
         worker = co_dialogue.DialogueWorker(self.cfg, self.proj, stage, text, parent=self,
                                             focus_chapter=focus_chapter, mode=self._cw_mode)
-        worker.chunk.connect(self._on_cw_chunk)
-        worker.done.connect(self._on_cw_done)
-        worker.error.connect(self._on_cw_error)
+        gen = self._bump_cw_gen()
+        worker.chunk.connect(self._cw_guarded(gen, self._on_cw_chunk))
+        worker.done.connect(self._cw_guarded(gen, self._on_cw_done))
+        worker.error.connect(self._cw_guarded(gen, self._on_cw_error))
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_worker = worker
         worker.start()
@@ -4350,15 +4354,32 @@ class Bridge(QObject):
     @Slot()
     @_guarded
     def cancelCwWorker(self):
-        """取消在途共写请求（#8：中断尽力而为，结果丢弃）"""
+        """取消在途共写请求（#8：中断尽力而为，结果丢弃）
+
+        CW-G5：取消 = 断代。旧实现是单旗标 _cw_cancelled——旧代迟到的 done 会把
+        旗标消费掉，新一代的正当结果反被误杀（跨代误伤）；改代际 token 后，
+        断代即作废全部在途结果，新一代 spawn 又会自增，互不干扰。
+        """
         if not self._cw_busy:
             return
-        self._cw_cancelled = True
+        self._bump_cw_gen()
         for w in (self._cw_worker, self._cw_sum_worker):
             if w and w.isRunning():
                 w.requestInterruption()
         self._set_cw_busy(False)
         self.toast.emit("warn", "已请求取消（当前请求可能无法立即中断，结果将被丢弃）")
+
+    def _bump_cw_gen(self) -> int:
+        """CW-G5：开新一代。spawn 与 cancel 各调一次；返回新代际号"""
+        self._cw_gen += 1
+        return self._cw_gen
+
+    def _cw_guarded(self, gen: int, fn):
+        """CW-G5：把 done/chunk/error 槽包进代际比对——过期代际的结果整条丢弃"""
+        def call(*a):
+            if gen == self._cw_gen:
+                fn(*a)
+        return call
 
     def _on_cw_chunk(self, text: str):
         self._cw_reply += text
@@ -4366,11 +4387,7 @@ class Bridge(QObject):
 
     def _on_cw_done(self, text: str):
         self.refreshUsage()
-        if self._cw_cancelled:
-            self._cw_cancelled = False
-            self._cw_reply = ""
-            self.cwStreamingChanged.emit()
-            return
+        # CW-G5：取消/过期代际的结果在 _cw_guarded 已整条丢弃，这里只见当代结果
         # 讨论模式保险丝（方案 A）：模型不守短回复约束时机器截断——
         # 截断的是进转写/展示的文本，完整原文已随流式看过
         if self._cw_mode == "discuss":
@@ -4448,8 +4465,9 @@ class Bridge(QObject):
                 return
             self._set_cw_busy(True)
             worker = co_dialogue.SummarizeWorker(self.cfg, self.proj, stage, parent=self)
-            worker.done.connect(self._on_cw_sum_done)
-            worker.error.connect(self._on_cw_error)
+            gen = self._bump_cw_gen()
+            worker.done.connect(self._cw_guarded(gen, self._on_cw_sum_done))
+            worker.error.connect(self._cw_guarded(gen, self._on_cw_error))
             worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
             self._cw_sum_worker = worker
             worker.start()
@@ -4527,8 +4545,9 @@ class Bridge(QObject):
         unit = self._cw.unit(state)
         self._set_cw_busy(True)
         worker = co_dialogue.ReviewOutlinesWorker(self.cfg, self.proj, nums, unit, parent=self)
-        worker.done.connect(self._on_cw_validate_done)
-        worker.error.connect(self._on_cw_error)
+        gen = self._bump_cw_gen()
+        worker.done.connect(self._cw_guarded(gen, self._on_cw_validate_done))
+        worker.error.connect(self._cw_guarded(gen, self._on_cw_error))
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_sum_worker = worker
         worker.start()
@@ -4576,17 +4595,18 @@ class Bridge(QObject):
         unit = self._cw.unit(state)
         self._set_cw_busy(True)
         worker = co_dialogue.OutlineBatchWorker(self.cfg, self.proj, batch, unit, parent=self)
-        worker.done.connect(self._on_cw_batch_done)
-        worker.error.connect(self._on_cw_error)
+        gen = self._bump_cw_gen()
+        worker.done.connect(self._cw_guarded(gen, self._on_cw_batch_done))
+        worker.error.connect(self._cw_guarded(gen, self._on_cw_error))
+        # CW-G5：半提交对账——取消/被顶替后，已落盘的细纲按清单补回执（finished 必达）
+        worker.finished.connect(lambda w=worker, g=gen: self._reconcile_outline_batch(w, g))
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_worker = worker
         worker.start()
 
     def _on_cw_batch_done(self, outlines: list):
         self.refreshUsage()
-        if self._cw_cancelled:
-            self._cw_cancelled = False
-            return
+        # CW-G5：取消/过期代际在 _cw_guarded 已丢弃；半提交对账走 _reconcile_outline_batch
         state = self._cw.load()
         nums = [o[0] for o in outlines]
         st.ensure_cw(state)["last_outline_batch"] = list(nums)
@@ -4600,6 +4620,32 @@ class Bridge(QObject):
         self.refreshQueue()
         self.toast.emit("ok", f"细纲已生成：第 {nums[0]}-{nums[-1]} 章")
         self._cw_open_product(self._get_cw_stage_key())
+
+    def _reconcile_outline_batch(self, w, gen: int):
+        """CW-G5 半提交对账：OutlineBatchWorker 先落盘后回执——取消/被顶替时，
+        已写进磁盘的细纲必须按 worker 记的落盘清单对账（补转写回执 + 批次账），
+        不许「文件在盘上、对话区却只字未提」的半提交悬账。finished 必达，
+        done 正常当代完成时本函数直接让路（回执由 _on_cw_batch_done 写）。"""
+        if gen == self._cw_gen or not self.proj or not self._cw:
+            return
+        # 按 worker 自记清单对账：只认真的已落盘的章（清单与磁盘交集）
+        written = sorted({int(n) for n in (getattr(w, "written", None) or [])
+                          if os.path.isfile(project.get_outline_path(self.proj, n))})
+        if not written:
+            return
+        state = self._cw.load()
+        cw = st.ensure_cw(state)
+        cw["last_outline_batch"] = list(written)
+        names = "、".join(f"第 {n} 章" for n in written[:5]) + ("…" if len(written) > 5 else "")
+        co_dialogue.transcript_append(
+            state, st.STAGE_CW_UNIT, "agent",
+            f"⚠ 本批细纲生成已取消，但取消前已有 {len(written)} 章落盘：{names}"
+            "——文件保留，可在编辑器回看或直接修改；再点「生成下一批」会自动跳过已落盘的章。",
+            nums=written)
+        self._cw_save_state(state)
+        self._cw_sync_messages()
+        self.refreshQueue()
+        self.toast.emit("warn", f"生成已取消：取消前仍有 {len(written)} 章细纲落盘（对话区有清单）")
 
     # ---- M4：章节确定锁定（两级提交：保存=临时草稿 / 章节确定=终稿锁定）----
 
@@ -4718,6 +4764,7 @@ class Bridge(QObject):
         self.toast.emit("ok", f"第 {self._cur_num} 章已确定（终稿锁定）{tag}：内容不再改动；"
                               "解锁后可继续编辑（终稿仍留版本历史）")
         self._maybe_backflow(self._cur_num)
+        self._refresh_backflow_stale()   # CW-G6：锁定即对账（反哺失败/被杀的章进横幅）
 
     # ---- 剧情反哺：定稿正文里的新实体/新规则/伏笔变动 → 回写世界书/伏笔表 ----
 
@@ -4780,10 +4827,12 @@ class Bridge(QObject):
         else:
             self.toast.emit("ok", first_line)
         self._drain_backflow_queue()
+        self._refresh_backflow_stale()   # CW-G6：跑完即对账
 
     def _on_backflow_error(self, num: int, msg: str):
         self.toast.emit("error", f"第 {num} 章反哺失败：{msg}（可稍后补跑）")
         self._drain_backflow_queue()
+        self._refresh_backflow_stale()   # CW-G6：失败的章回看门狗账上（横幅点名）
 
     def _drain_backflow_queue(self):
         while self._backflow_queue:
@@ -4792,6 +4841,57 @@ class Bridge(QObject):
                 continue
             self._start_backflow(nxt)
             return
+
+    # ---- CW-G6：反哺对账看门狗（锁定 ⇒ 反哺必须存在的对账）----
+
+    def _refresh_backflow_stale(self):
+        """扫「已锁定 ∧ ¬backflow_is_fresh」——反哺没跑成/被杀/失败的章。
+
+        看门狗是「关机杀 worker 之后没人记得补」的唯一解：worker 被杀时一个字节
+        不写（正确），但登记也不会有——重启后由本扫描点名，横幅常驻 + 一键补跑。
+        在途（worker 正跑/已排队）的章不算 stale，横幅不添乱。
+        """
+        stale = []
+        if self.proj:
+            try:
+                state = st.load_state(self.proj)
+                in_flight = {int(n) for n in self._backflow_queue}
+                w = self._backflow_worker
+                if w is not None and getattr(w, "num", 0):
+                    in_flight.add(int(w.num))
+                for n, _name, _p in project.list_chapters(self.proj):
+                    if (n not in in_flight
+                            and project.is_chapter_locked(self.proj, n)
+                            and not st.backflow_is_fresh(self.proj, state, n)):
+                        stale.append(n)
+            except Exception as e:  # noqa: BLE001
+                # 看门狗自身故障不许拖垮界面：清空账目并留一句提示
+                logger.warning("反哺看门狗扫描失败: %s", e)
+                stale = []
+        if stale != self._backflow_stale:
+            self._backflow_stale = stale
+            self.backflowStaleChanged.emit()
+
+    @Property("QVariantList", notify=backflowStaleChanged)
+    def backflowStaleChapters(self):
+        """已锁定但反哺未新鲜的章号（QML 常驻横幅数据源）"""
+        return list(self._backflow_stale)
+
+    @Slot()
+    @_guarded
+    def runBackfillStale(self):
+        """CW-G6 横幅一键补跑：看门狗点名的章全部入队（复用现有串行反哺队列）"""
+        if not self.proj:
+            return
+        stale = list(self._backflow_stale)
+        if not stale:
+            self.toast.emit("info", "没有需要补跑的章——已锁定章节的剧情反哺都新鲜")
+            return
+        self._backflow_queue.extend(n for n in stale if n not in self._backflow_queue)
+        self._refresh_backflow_stale()   # 已排队的章出横幅（在途集合排除）
+        if self._backflow_worker is None:
+            self._drain_backflow_queue()
+        self.toast.emit("info", f"反哺补跑已排队：{len(stale)} 章（后台串行，完成即消横幅）")
 
     @Slot(str)
     @_guarded
@@ -4835,6 +4935,7 @@ class Bridge(QObject):
             self.cwLockedChanged.emit()
             self.forcedLocksChanged.emit()   # L2-13：审计痕即时可见
             self.refreshQueue()
+            self._refresh_backflow_stale()   # CW-G6：解锁的章出看门狗账
             self.toast.emit("ok", f"第 {self._cur_num} 章已解锁（原终稿仍在版本历史）")
         else:
             self.toast.emit("info", "该章未锁定")
@@ -4865,8 +4966,9 @@ class Bridge(QObject):
     def _start_readback(self, old: str, new: str):
         self._set_cw_busy(True)
         worker = co_dialogue.ReadbackWorker(self.cfg, self.proj, self._cur_num, old, new, parent=self)
-        worker.done.connect(self._on_cw_readback_done)
-        worker.error.connect(self._on_cw_error)
+        gen = self._bump_cw_gen()
+        worker.done.connect(self._cw_guarded(gen, self._on_cw_readback_done))
+        worker.error.connect(self._cw_guarded(gen, self._on_cw_error))
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_worker = worker
         worker.start()
@@ -4915,8 +5017,9 @@ class Bridge(QObject):
         editor_text = self._working_text or self._chapter_text if self._cur_num > 0 else ""
         worker = co_dialogue.SupervisorWorker(self.cfg, self.proj, self._cur_num, parent=self,
                                               chapter_text=editor_text)
-        worker.done.connect(self._on_cw_supervisor_done)
-        worker.error.connect(self._on_cw_supervisor_error)
+        gen = self._bump_cw_gen()
+        worker.done.connect(self._cw_guarded(gen, self._on_cw_supervisor_done))
+        worker.error.connect(self._cw_guarded(gen, self._on_cw_supervisor_error))
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_worker = worker
         worker.start()
@@ -5015,12 +5118,8 @@ class Bridge(QObject):
         cw = st.ensure_cw(state)
         ts = _dt.datetime.now().strftime("%m-%d %H:%M")
         cw["report"] = {"ts": ts, "num": num, "text": text}
-        if self._cw_cancelled:
-            # 已取消：报告照常落盘，但不触发自动派活，也不置「已比对」痕（F3）
-            self._cw_cancelled = False
-            self._cw_save_state(state)
-            self.cwReportChanged.emit()
-            return
+        # CW-G5：取消（断代）的比对结果在 _cw_guarded 已整条丢弃——
+        # 报告不落盘、不派活、不置痕，与「结果将被丢弃」的取消承诺一致
         needs_fix, directive = co_dialogue.parse_supervisor_report(text)
         parse_ok = co_dialogue.supervisor_report_has_conclusion(text)
         if parse_ok and not needs_fix:
@@ -5188,12 +5287,15 @@ class Bridge(QObject):
         self._set_cw_busy(True)
         worker = co_dialogue.CwProseCheckWorker(self.cfg, self.proj, num, text,
                                                 mode=mode, parent=self)
-        worker.chunk.connect(self._on_cw_chunk)
+        gen = self._bump_cw_gen()
+        worker.chunk.connect(self._cw_guarded(gen, self._on_cw_chunk))
         if mode == "deslop":
-            worker.done.connect(lambda _t, n=num: self._on_cw_deslop_done(n))
+            worker.done.connect(self._cw_guarded(
+                gen, lambda _t, n=num: self._on_cw_deslop_done(n)))
         else:
-            worker.done.connect(lambda t, n=num: self._on_cw_review_done(t, n))
-        worker.error.connect(self._on_cw_error)
+            worker.done.connect(self._cw_guarded(
+                gen, lambda t, n=num: self._on_cw_review_done(t, n)))
+        worker.error.connect(self._cw_guarded(gen, self._on_cw_error))
         worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
         self._cw_worker = worker
         worker.start()
@@ -5202,11 +5304,6 @@ class Bridge(QObject):
 
     def _on_cw_deslop_done(self, num: int):
         self.refreshUsage()
-        if self._cw_cancelled:
-            self._cw_cancelled = False
-            self._cw_reply = ""
-            self.cwStreamingChanged.emit()
-            return
         w = self._cw_worker
         self._cw_reply = ""
         self.cwStreamingChanged.emit()
@@ -5228,11 +5325,6 @@ class Bridge(QObject):
 
     def _on_cw_review_done(self, text: str, num: int):
         self.refreshUsage()
-        if self._cw_cancelled:
-            self._cw_cancelled = False
-            self._cw_reply = ""
-            self.cwStreamingChanged.emit()
-            return
         from ..core import stages as stages_mod
         self._cw_reply = ""
         self.cwStreamingChanged.emit()
@@ -5298,9 +5390,7 @@ class Bridge(QObject):
 
     def _on_cw_sum_done(self, text: str):
         self.refreshUsage()
-        if self._cw_cancelled:
-            self._cw_cancelled = False
-            return
+        # CW-G5：取消/过期代际的总结在 _cw_guarded 已整条丢弃
         stage = self._get_cw_stage_key()
         state = self._cw.load()
         product, handoff = co_dialogue.build_handoff(stage, text)

@@ -515,6 +515,7 @@ class OutlineBatchWorker(QThread):
         self.router = router or ModelRouter(cfg)
         self.last_prompt = ""
         self.result = []
+        self.written = []   # CW-G5：本 worker 实际落盘的章号（半提交对账清单）
 
     def run(self):
         from . import stages as stages_mod
@@ -550,6 +551,7 @@ class OutlineBatchWorker(QThread):
             valid = [o for o in outlines if o[0] in self.batch]
             for num, _title, content in valid:
                 project.write_file(project.get_outline_path(self.proj, num), content)
+                self.written.append(int(num))   # CW-G5：半提交对账清单（先落盘后回执）
             self.result = valid
             if not valid:
                 self.error.emit(f"细纲解析失败：未能按格式解析出目标章 {self.batch}")
