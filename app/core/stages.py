@@ -1610,6 +1610,36 @@ def _directive_contract_block(directive) -> str:
     return "\n\n" + _to_prompt_block(directive)
 
 
+def _missing_cover_nodes(directive, prose: str) -> list:
+    """A2 大纲覆盖对照（确定性，零 LLM）：must_cover_nodes 逐节点对照正文。
+
+    节点「主体 | 动作/变化 | 对象/结果」按 |｜/／ 切要件，长度≥2 的要件全部
+    在正文出现才算覆盖；切不出要件（无分隔符）退整节点子串匹配。宽容口径：
+    模型复述要件即可，不要求逐字复现整行。返回缺失节点原文清单（保序）。
+    """
+    if directive is None:
+        return []
+    text = prose or ""
+    missing = []
+    for node in (getattr(directive, "must_cover_nodes", None) or []):
+        s = str(node or "").strip()
+        if not s:
+            continue
+        parts = [p.strip() for p in re.split(r"[|｜/／]", s) if len(p.strip()) >= 2]
+        need = parts or [s]
+        if not all(p in text for p in need):
+            missing.append(s)
+    return missing
+
+
+def _coverage_finding(missing: list) -> str:
+    """A2：缺失节点清单 → 合成阻塞票（进既有 REJECT 修复环，findings 可消费）。"""
+    listed = "；".join("「%s」" % m[:60] for m in missing[:4])
+    return ("[大纲覆盖] 必须覆盖节点缺失 %d 项：%s——正文未命中节点要件，"
+            "须在本章正文补演该节点（缺失清单见上，逐项兑现）"
+            % (len(missing), listed))
+
+
 @dataclass
 class _MicroCycle:
     """C11：chapter_microcycle 七阶段（_mc_assemble→…→_mc_finalize）共享上下文。
@@ -2306,6 +2336,18 @@ class _MicroCycle:
 
             if blocking_review and all(str(b).startswith("[字数]") for b in blocking_review):
                 _demote_word_block()
+            # A2（0.23.0）大纲覆盖拒收：directive.must_cover_nodes 对照正文（确定性
+            # 零 LLM）。缺失≥1 → 合成一条阻塞票（带缺失清单）走既有 REJECT 修复环：
+            # findings 进 REVIEW_FIX、verdict 记 REJECT、连续拒收受 review_max_rounds
+            # 既有上限约束（不另起环）；修复后仍缺 → 走既有「轮尽标 human +
+            # resolve_failed」收口。人工审校/断点跳审路径不在此列（人工裁决优先）。
+            _cov_missing = _missing_cover_nodes(getattr(self, "directive", None), self.prose)
+            if _cov_missing:
+                blocking_review = list(blocking_review) + [_coverage_finding(_cov_missing)]
+                verdict_review = "REJECT"
+                gr.review_blocking = blocking_review
+                ctx.log("warn", f"第 {num} 章 大纲覆盖拒收：{len(_cov_missing)} 个必须覆盖节点未命中"
+                                f"（首缺：{_cov_missing[0][:40]}），合成阻塞票进修复环")
             review_rounds = 0
             # v2 反馈环触发：verdict == REJECT/REJECT-HARD 且未达轮数熔断（N-06：上限由配置真实生效，地板 1）
             max_review_rounds = _review_round_cap(gates_cfg)
@@ -2371,6 +2413,10 @@ class _MicroCycle:
                 new_blocking, new_advisory, new_verdict = _chapter_review(
                     ctx, num, rewritten, session=session,
                     votes=max(1, int(gates_cfg.get("review_votes_recheck", 1))))
+                # A2：修复稿同口径过覆盖对照（覆盖票与审校票同池计数，「改善」判定一致）
+                _cov_missing2 = _missing_cover_nodes(getattr(self, "directive", None), rewritten)
+                if _cov_missing2:
+                    new_blocking = list(new_blocking) + [_coverage_finding(_cov_missing2)]
                 if len(new_blocking) < prev_n:
                     self.prose = rewritten
                     blocking_review, advisory_review, verdict_review = new_blocking, new_advisory, new_verdict
