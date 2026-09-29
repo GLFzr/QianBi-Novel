@@ -20,7 +20,7 @@ Dialog {
     objectName: "wizardDialog"
     modal: true
     closePolicy: Popup.NoAutoClose
-    width: 480
+    width: 560
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
     padding: 18
@@ -37,6 +37,62 @@ Dialog {
     property int step: 1
     // A9：三槽连接齐备与否（与桥面 _slot_readiness 同一判定）——决定「开始写作」主/次级与提示行
     property bool connAllReady: bridge.connReadySummary.every(function (r) { return r.ready })
+
+    // ---- OB-M2：内嵌迷你连接表单（选服务商 → 贴 Key → 选模型 → 测试，不离开向导）----
+    // 改的是当前第一条（出厂推荐）连接：就地补齐 Key/模型后保存，checklist 即时
+    // 亮绿（connReadySummary 同源刷新）——「打开连接设置」降为深度配置的次级出口。
+    property string wizConnId: ""
+    property string wizName: ""
+    property var wizRest: ({ temperature: 0.7, max_tokens: 8192, timeout: 300,
+                             thinking: "", reasoning_effort: "" })
+    property bool wizTestOk: false
+    property string wizTestMsg: ""          // 空串 = 未测过
+
+    ListModel { id: miniModels }
+
+    function wizFillModels(idx) {
+        var opts = bridge.providerOptions
+        if (idx < 0 || idx >= opts.length) return
+        var models = opts[idx].models || []
+        var typed = miniModel.editText
+        miniModels.clear()
+        for (var i = 0; i < models.length; i++) miniModels.append({ "m": models[i] })
+        miniModel.currentIndex = -1
+        miniModel.editText = typed          // 换建议列表不打断已手填的模型名
+    }
+
+    function wizLoad() {
+        var opts = bridge.connectionOptions()
+        if (!opts.length) return
+        var c = bridge.getConnection(opts[0].id)
+        wizConnId = opts[0].id
+        wizName = c.name || ""
+        var prov = c.provider || "custom"
+        for (var p = 0; p < bridge.providerOptions.length; p++)
+            if (bridge.providerOptions[p].key === prov) miniProvider.currentIndex = p
+        miniUrl.text = c.base_url || (bridge.providerOptions.length
+                                      ? bridge.providerOptions[miniProvider.currentIndex].baseUrl : "")
+        miniKey.text = c.api_key || ""
+        miniModel.currentIndex = -1
+        miniModel.editText = c.model || ""
+        wizFillModels(miniProvider.currentIndex)
+        wizRest = {
+            "temperature": c.temperature !== undefined ? c.temperature : 0.7,
+            "max_tokens": c.max_tokens || 8192,
+            "timeout": c.timeout || 300,
+            "thinking": c.thinking || "",
+            "reasoning_effort": c.reasoning_effort || ""
+        }
+        wizTestMsg = ""
+    }
+
+    onOpened: wizLoad()
+    Connections {
+        target: bridge
+        function onConnTestResult(cid, ok, msg) {
+            if (cid === "__wizard__") { wizard.wizTestOk = ok; wizard.wizTestMsg = msg }
+        }
+    }
 
     contentItem: ColumnLayout {
         spacing: 12
@@ -108,6 +164,164 @@ Dialog {
                         color: modelData.ready ? Theme.textSecondary : Theme.textTertiary
                         font.pixelSize: Theme.fsSmall
                         wrapMode: Text.Wrap
+                    }
+                }
+            }
+            // OB-M2：迷你连接表单——四件事不离开向导完成（保存后 checklist 即时亮绿）
+            Rectangle {
+                Layout.fillWidth: true
+                radius: 8
+                color: Theme.bgCard
+                border.width: 1
+                border.color: Theme.border
+                height: miniCol.implicitHeight + 16
+                ColumnLayout {
+                    id: miniCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 8
+                    spacing: 6
+                    Text {
+                        Layout.fillWidth: true
+                        text: "就地配好连接（改的是当前推荐那条，不用离开向导）："
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fsSmall
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.Wrap
+                    }
+                    Row {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Column {
+                            spacing: 4
+                            width: 128
+                            Text { text: "服务商"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny }
+                            AppSelect {
+                                id: miniProvider
+                                width: parent.width
+                                model: bridge.providerOptions.map(function (o) { return o.label })
+                                onActivated: function (idx) {
+                                    miniUrl.text = bridge.providerOptions[idx].baseUrl
+                                    wizard.wizFillModels(idx)
+                                }
+                            }
+                        }
+                        Column {
+                            spacing: 4
+                            width: parent.width - 134
+                            Text { text: "接口地址"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny }
+                            TextField {
+                                id: miniUrl
+                                width: parent.width
+                                color: Theme.textPrimary
+                                font.pixelSize: Theme.fsSmall
+                                selectByMouse: true
+                                background: Rectangle {
+                                    radius: Theme.rBtn
+                                    color: Theme.bgHover
+                                    border.width: 1
+                                    border.color: miniUrl.activeFocus ? Theme.accent : Theme.border
+                                }
+                            }
+                        }
+                    }
+                    Row {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Column {
+                            spacing: 4
+                            width: parent.width - 176
+                            Text { text: "API Key"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny }
+                            TextField {
+                                id: miniKey
+                                width: parent.width
+                                echoMode: TextInput.Password
+                                color: Theme.textPrimary
+                                font.pixelSize: Theme.fsSmall
+                                placeholderText: "sk-…"
+                                placeholderTextColor: Theme.textTertiary
+                                selectByMouse: true
+                                background: Rectangle {
+                                    radius: Theme.rBtn
+                                    color: Theme.bgHover
+                                    border.width: 1
+                                    border.color: miniKey.activeFocus ? Theme.accent : Theme.border
+                                }
+                            }
+                        }
+                        Column {
+                            spacing: 4
+                            width: 170
+                            Text { text: "模型（下拉候选或直接填）"; color: Theme.textTertiary; font.pixelSize: Theme.fsTiny }
+                            ComboBox {
+                                id: miniModel
+                                width: parent.width
+                                editable: true
+                                model: miniModels
+                                textRole: "m"
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        AppButton {
+                            text: "测试连接"
+                            onClicked: {
+                                wizard.wizTestMsg = ""
+                                bridge.testConnectionDraft({
+                                    "id": "__wizard__",
+                                    "name": wizard.wizName || "向导连接",
+                                    "provider": bridge.providerOptions[miniProvider.currentIndex].key,
+                                    "base_url": miniUrl.text,
+                                    "api_key": miniKey.text,
+                                    "model": miniModel.editText !== "" ? miniModel.editText
+                                                                       : miniModel.currentText,
+                                    "temperature": wizard.wizRest.temperature,
+                                    "max_tokens": wizard.wizRest.max_tokens,
+                                    "timeout": wizard.wizRest.timeout,
+                                    "thinking": wizard.wizRest.thinking,
+                                    "reasoning_effort": wizard.wizRest.reasoning_effort
+                                })
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: "连接通但模型空会出黄牌提示（黄牌不是红牌：连接没坏，选上模型即可）"
+                        }
+                        AppButton {
+                            objectName: "wizardSaveConnButton"
+                            text: "保存这条连接"
+                            kind: "primary"
+                            onClicked: {
+                                bridge.saveConnection({
+                                    "id": wizard.wizConnId,
+                                    "name": wizard.wizName || "我的连接",
+                                    "provider": bridge.providerOptions[miniProvider.currentIndex].key,
+                                    "base_url": miniUrl.text,
+                                    "api_key": miniKey.text,
+                                    "model": miniModel.editText !== "" ? miniModel.editText
+                                                                       : miniModel.currentText,
+                                    "temperature": wizard.wizRest.temperature,
+                                    "max_tokens": wizard.wizRest.max_tokens,
+                                    "timeout": wizard.wizRest.timeout,
+                                    "thinking": wizard.wizRest.thinking,
+                                    "reasoning_effort": wizard.wizRest.reasoning_effort
+                                })
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: "保存后上方清单即时重判——三槽全绿「开始写作」自动变主按钮"
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: wizard.wizTestMsg !== ""
+                            text: (wizard.wizTestOk ? "✓ " : "✗ ") + wizard.wizTestMsg
+                            color: wizard.wizTestOk
+                                   ? (wizard.wizTestMsg.indexOf("⚠") === 0 ? Theme.warn : "#3a9d5f")
+                                   : Theme.danger
+                            font.pixelSize: Theme.fsMicro
+                            wrapMode: Text.Wrap
+                        }
                     }
                 }
             }

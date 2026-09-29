@@ -77,3 +77,33 @@ def test_m4_guard_covers_generation_entries():
         m = re.search(rf"    def {fn}\(.*?(?=\n    def |\n    [A-Z_]+ = )", bsrc, re.S)
         assert m, f"未定位到 {fn}"
         assert "_demo_book_reason()" in m.group(0), f"{fn} 缺示例书只读守卫"
+
+
+# ---------- OB-M2：向导内嵌迷你连接表单 ----------
+
+def test_m2_wizard_mini_form_wiring():
+    """四件事不离开向导：表单消费既有桥面出口（providerOptions/getConnection/
+    testConnectionDraft/saveConnection），测试回执就地呈现（不走全局 toast）"""
+    src = _read(os.path.join("components", "WizardDialog.qml"))
+    assert "bridge.testConnectionDraft" in src, "测试连接按钮缺席"
+    assert "bridge.saveConnection" in src, "保存按钮缺席——表单不能落盘就是死路"
+    assert "bridge.getConnection(" in src, "打开时不预填推荐连接——用户要从零猜字段"
+    assert "bridge.providerOptions" in src, "服务商预设缺席（接口地址/模型候选没有来源）"
+    assert '"id": "__wizard__"' in src, "测试回执须带向导专用 cid（就地呈现不串线）"
+    assert "onConnTestResult" in src, "测试结果没有就地呈现面"
+    assert "⚠" in src, "黄牌（连接通但模型空）没有琥珀级呈现分支"
+    assert 'objectName: "wizardSaveConnButton"' in src
+    # 消费的桥面出口真实存在（防改名断链）
+    bsrc = _bridge_src()
+    assert re.search(r"providerOptions\s*=\s*Property", bsrc)
+    for fn in ("def connectionOptions", "def getConnection",
+               "def saveConnection", "def testConnectionDraft"):
+        assert re.search(rf"{fn}\(", bsrc), f"桥面出口缺席：{fn}"
+
+
+def test_m2_wizard_checklist_drives_primary():
+    """保存后闭环：connAllReady（connReadySummary 同源）驱动「开始写作」主/次级"""
+    src = _read(os.path.join("components", "WizardDialog.qml"))
+    assert re.search(r"connAllReady:\s*bridge\.connReadySummary\.every", src)
+    assert re.search(r'kind:\s*wizard\.connAllReady \? "primary" : "secondary"', src), \
+        "「开始写作」未随就绪态切主按钮——保存后的闭环断在最后一环"
