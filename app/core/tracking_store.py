@@ -245,7 +245,8 @@ def apply_foreshadow_upserts(proj: str, upserts: list) -> list:
 def render_foreshadow_md(proj: str) -> str:
     data = load_foreshadow(proj)
     out = ["# 伏笔追踪", "",
-           "> 状态：未埋 / 已埋 / 已回收 / 已失效（显式废弃，理由写入备注列）", "",
+           "> 状态：未埋 / 已埋 / 推进中 / 已回收 / 已失效（显式废弃，理由写入备注列；"
+           "推进中=有推进事件未回收，B4/WA4 中间态）", "",
            "| " + " | ".join(_FORESHADOW_COLS) + " |",
            "|------|------|----------|------|----------|------|"]
     for r in data["rows"]:
@@ -324,3 +325,164 @@ def foreshadow_urgency(data, cur_num: int) -> list:
         out.append((bucket, key, r, tag))
     out.sort(key=lambda t: (t[0], t[1]))
     return [(r, tag) for _b, _k, r, tag in out]
+
+
+# ---------------- 伏笔补链（B4/WA4：advance 中间态+plant 前置校验+重写回补） ----------------
+# 状态机：未埋/新设 → 已埋 → 推进中（本章有推进事件但未回收）→ 已回收；
+# 已失效（显式废弃）可从任意非终态进入。卡2 引擎（parse_recovery_window/
+# foreshadow_urgency）零推翻——「推进中」不在排除集内，照常按活跃参与排序。
+# 推进事件落 sidecar `追踪/伏笔表.json` 的 advances 追加日志（{name, ch, from,
+# to}），供章重写后回滚（rollback_foreshadow_advances）——回滚只恢复「本章造成
+# 的状态迁移」，后续章节已推进的状态不动。
+
+_ADVANCED = "推进中"
+_TERMINAL = ("已回收", "回收", "已失效")
+
+
+def _norm_name(s: str) -> str:
+    return re.sub(r"\s+", "", (s or "")).strip("《》「」『』“”\"'")
+
+
+def _row_index(rows: list) -> dict:
+    return {r.get("伏笔"): r for r in rows
+            if isinstance(r, dict) and str(r.get("伏笔") or "").strip()}
+
+
+def _match_row(index: dict, name: str):
+    """精确 → 归一化 → 唯一包含（与 memory.apply_foreshadow_diff 同口径）；
+    歧义多命中视为查无此行（不臆造）。"""
+    name = str(name or "").strip()
+    if not name:
+        return None
+    if name in index:
+        return index[name]
+    key = _norm_name(name)
+    for n, r in index.items():
+        if _norm_name(n) == key:
+            return r
+    hits = [r for n, r in index.items()
+            if key and n and (key in _norm_name(n) or _norm_name(n) in key)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def validate_plant_window(cell: str, planted_ch: int | None = None) -> tuple:
+    """plant 前置校验（纯函数）：回收窗口字段合法性 → (ok, reason)。
+
+    - 空/待定/「第N单元」→ (True, "无窗口")——合法缺省，引擎按无窗口参与排序；
+    - 数字窗口 max < 埋设章 → (False, "计划回收第N章早于埋设第M章")——唯一非法态；
+    - 其余（含解析不出的自由文本）→ (True, "")。校验只警示不阻断（fail-open）。
+    """
+    t = str(cell or "").strip()
+    if not t or "待定" in t or "单元" in t:
+        return (True, "无窗口")
+    lo, hi = parse_recovery_window(t)
+    if lo is None:
+        return (True, "")
+    if planted_ch is not None and hi < planted_ch:
+        return (False, "计划回收第%d章早于埋设第%d章" % (hi, planted_ch))
+    return (True, "")
+
+
+def plant_foreshadow(proj: str, num: int, upserts: list) -> dict:
+    """新伏笔登记（带前置校验的 plant 通道）：只对新增行校验回收窗口合法性，
+    警示不阻断（fail-open）——非法窗口原样落表（作者可见原话），warnings 供
+    待确认卡/日志消费；更新既有行不校验（改期/回收任意合法）。
+    Returns: {"changed": [...], "warnings": [{"伏笔", "reason"}]}
+    """
+    data = load_foreshadow(proj)
+    index = _row_index(data.get("rows") or [])
+    norm_known = {_norm_name(n) for n in index}
+    warnings = []
+    for u in upserts or []:
+        if not isinstance(u, dict):
+            continue
+        name = str(u.get("伏笔") or "").strip()
+        if not name or name in index or _norm_name(name) in norm_known:
+            continue                      # 既有行更新不校验
+        planted = u.get("埋设章节")
+        nums = _NUM_RE.findall(str(planted or ""))
+        planted_ch = int(nums[0]) if nums else int(num)
+        ok, reason = validate_plant_window(u.get("计划回收"), planted_ch)
+        if not ok:
+            warnings.append({"伏笔": name, "reason": reason})
+    changed = apply_foreshadow_upserts(proj, upserts)
+    return {"changed": changed, "warnings": warnings}
+
+
+def advance_foreshadow(proj: str, num: int, names: list) -> dict:
+    """伏笔推进（中间态登记）：本章有推进事件但未回收 → 状态=推进中。
+
+    - 终态（已回收/已失效）不推进；同章同名去重（重写重登记幂等）；
+    - 每次迁移落 advances 日志 {name, ch, from, to}（重写回补的依据）；
+    - 名称匹配失败跳过不臆造。Returns: {"advanced": [...], "skipped": [(名, 原因)]}
+    """
+    data = load_foreshadow(proj)
+    rows = data.setdefault("rows", [])
+    log = data.setdefault("advances", [])
+    done = {(e.get("name"), e.get("ch")) for e in log if isinstance(e, dict)}
+    index = _row_index(rows)
+    advanced, skipped = [], []
+    for name in names or []:
+        name = str(name or "").strip()
+        if not name:
+            continue
+        row = _match_row(index, name)
+        if row is None:
+            skipped.append((name, "未登记"))
+            continue
+        row_name = str(row.get("伏笔"))
+        status = str(row.get("状态") or "").strip() or "未埋"
+        if status in _TERMINAL:
+            skipped.append((name, status))
+            continue
+        if (row_name, int(num)) in done:
+            skipped.append((name, "本章已登记推进"))
+            continue
+        log.append({"name": row_name, "ch": int(num), "from": status, "to": _ADVANCED})
+        row["状态"] = _ADVANCED
+        advanced.append(row_name)
+    if advanced:
+        _write_json(_sidecar_path(proj, "伏笔表"), data)
+    return {"advanced": advanced, "skipped": skipped}
+
+
+def rollback_foreshadow_advances(proj: str, num: int) -> list:
+    """重写回补：第 num 章重写后，撤销该章按旧版登记的伏笔推进（回到重写前状态）。
+
+    逐条倒序处理该章 advances 日志：当前状态仍是该章迁入态且**无后续章接续推进**
+    → 恢复迁出态；已被后续章推进/回收的不动状态（后续章事件在场即视为接续）。
+    该章日志条目一律移除——重写后本章事件清零，重定稿时重新登记。
+    返回回补了状态的伏笔名列表。
+    """
+    data = load_foreshadow(proj)
+    rows = data.setdefault("rows", [])
+    log = data.get("advances")
+    if not isinstance(log, list):
+        return []
+    index = _row_index(rows)
+    num = int(num)
+    later = {e.get("name") for e in log
+             if isinstance(e, dict) and isinstance(e.get("ch"), int) and e["ch"] > num}
+    keep, rolled = [], []
+    for e in reversed(log):
+        if not isinstance(e, dict):
+            keep.append(e)
+            continue
+        try:
+            ch = int(e.get("ch"))
+        except (TypeError, ValueError):
+            keep.append(e)
+            continue
+        if ch != num:
+            keep.append(e)
+            continue
+        row = index.get(e.get("name"))
+        if (row is not None and e.get("name") not in later
+                and str(row.get("状态") or "").strip() == str(e.get("to") or "")):
+            row["状态"] = str(e.get("from") or "未埋")
+            rolled.append(str(row.get("伏笔")))
+    rolled_log = list(reversed(keep))
+    if rolled or len(rolled_log) != len(log):
+        data["advances"] = rolled_log
+        _write_json(_sidecar_path(proj, "伏笔表"), data)
+    return rolled

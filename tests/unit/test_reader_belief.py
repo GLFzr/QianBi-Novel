@@ -96,6 +96,21 @@ def test_due_query_overdue_only(tmp_path):
     assert [d["kind"] for d in rb.due_query(proj, 25)] == ["suspense"]
 
 
+def test_resolve_suspense_closes_window(tmp_path):
+    """悬念回收：resolved 置章后出清 due_query；重复回收与未登记返回 False"""
+    proj = _proj(tmp_path)
+    rb.register_suspense(proj, 3, "谁杀了村长", truth="王大锤", due_ch=12)
+    assert rb.resolve_suspense(proj, "谁杀了村长", 20) is True
+    assert rb.resolve_suspense(proj, "谁杀了村长", 21) is False
+    assert rb.resolve_suspense(proj, "不存在", 21) is False
+    assert rb.due_query(proj, 30) == []
+    e = rb.load(proj)["suspense"][0]
+    assert e["resolved_ch"] == 20 and e["truth"] == "王大锤"   # 记录保留（goink 语义）
+    # 同文已回收后可再种新悬念
+    rb.register_suspense(proj, 25, "谁杀了村长", truth="另有其人", due_ch=40)
+    assert len(rb.load(proj)["suspense"]) == 2
+
+
 def test_three_part_items_caps_order_and_budget(tmp_path):
     """三段版：显示序 已知→悬念→误知；段上限 5/5/3；合计 ≤1.2KB（≈12KB 预算 10%）"""
     proj = _proj(tmp_path)
