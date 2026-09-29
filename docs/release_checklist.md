@@ -76,6 +76,9 @@
 - [ ] 复验发布生效只看 **raw 与 Pages**（实测：raw 近乎即时、Pages 一两分钟重建完）。
       **别用 jsDelivr 判断发没发出去**——它缓存分支 ref 长达约 12 小时（`s-maxage=43200`，
       2026-09-04 实测响应头），只会「少报」不会「乱报」（清单带签名），但拿来验收会误判成没发
+- [ ] 三通道一致性自动比对（M-CI）：`python scripts/check_manifest_consistency.py`
+      （或 GitHub Actions 手动跑 `release-consistency` job 留档）——raw/Pages/本地逐字节一致
+      = PASS；jsDelivr 旧版 = PASS(WARN，≤12h 追平)；安装包哈希与清单声明对账
 - [x] **反向验证**：手改清单里 `version` 的任意一个字节再跑 `--verify` → 必须拒签。
       没做过这一条，就等于验签路径从没被真实数据跑通过
 - [ ] 开机自动检查默认开 + 24h 限流 + 一次性告知 + `auto_check_chosen` 迁移，

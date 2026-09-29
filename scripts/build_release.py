@@ -15,9 +15,11 @@
 """
 import argparse
 import datetime
+import glob
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -57,6 +59,32 @@ def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 sys.path.insert(0, ROOT)
+
+# M-SCH：双写契约判据与 M-CI 一致性脚本同源（顶层 sha256 == assets.setup.sha256）
+from scripts.check_manifest_consistency import dual_write_ok  # noqa: E402
+
+# M-SCH：notes 里内嵌的测试规模数字（「单元测试 1122 项 + 探针舰队 49 支」这类）
+# 一律判漂移——数字的唯一来源是构建回填的 latest.json stats 键
+_EMBEDDED_COUNT_RE = re.compile(r"\d+\s*(?:项|支|个测试|tests?\b|probes?\b)", re.IGNORECASE)
+
+
+def notes_has_embedded_counts(notes: str) -> bool:
+    return bool(_EMBEDDED_COUNT_RE.search(notes or ""))
+
+
+def count_unit_tests() -> int:
+    """pytest --collect-only 收集数（构建机实测，不靠人记）"""
+    r = subprocess.run([sys.executable, "-m", "pytest", "tests/unit",
+                        "--collect-only", "-q"],
+                       cwd=ROOT, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    m = re.search(r"(\d+)\s+tests?\s+collected", r.stdout or "")
+    return int(m.group(1)) if m else 0
+
+
+def count_probes() -> int:
+    """探针舰队支数 = tests/probe_*.py 文件数"""
+    return len(glob.glob(os.path.join(ROOT, "tests", "probe_*.py")))
 
 VERSION_INFO_TPL = """# UTF-8
 # 版本资源（Windows 资源管理器属性页显示），由 build_release.py 生成
@@ -420,12 +448,30 @@ def main():
                              "sha256": sha256(portable), "size": os.path.getsize(portable)},
             },
         })
+        # ---- M-SCH：测试规模数字构建时回填——stats 是数字唯一来源，notes 不再手写 ----
+        stats = {"unit_tests": count_unit_tests(),
+                 "probes": count_probes(),
+                 "installed_size_mb": round(size_mb)}
+        data["stats"] = stats
         with open(manifest, "w", encoding="utf-8", newline="\n") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
             f.write("\n")
+        step("测试规模回填（latest.json stats）",
+             stats["unit_tests"] > 0 and stats["probes"] > 0,
+             "单测 %s · 探针 %s 支 · 安装体积 %sMB（collect-only/文件名单实测）"
+             % (stats["unit_tests"] or "?", stats["probes"] or "?", stats["installed_size_mb"]))
         if __version__ not in str(data.get("notes") or ""):
             print("[WARN] latest.json 的 notes 里没出现 v%s —— 用户看更新说明时会对不上号"
                   % __version__)
+        if notes_has_embedded_counts(str(data.get("notes") or "")):
+            print("[WARN] latest.json 的 notes 内嵌了测试规模数字——数字已改由 stats 键"
+                  "构建时回填（本版：%s），手写数字必然漂移，请把 notes 里的数字删掉"
+                  % json.dumps(stats, ensure_ascii=False))
+        # CI 断言双写相等（M-SCH）：顶层兼容字段与 assets.setup.* 必须逐字一致，
+        # 不然 v0.15~0.17 老客户端拿到「发布页 URL + exe 哈希」对不上的组合
+        step("清单双写一致（顶层 sha256 == assets.setup.sha256）", dual_write_ok(data),
+             "老客户端核对的是顶层字段，双写断裂 = 升级页指错包"
+             if not dual_write_ok(data) else "")
         r = subprocess.run([sys.executable, "scripts/sign_manifest.py", manifest], cwd=ROOT)
         v = subprocess.run([sys.executable, "scripts/sign_manifest.py", "--verify", manifest],
                            cwd=ROOT)

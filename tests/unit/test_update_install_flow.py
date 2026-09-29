@@ -403,3 +403,142 @@ def test_state_machine_failed_has_no_manifest(isolate_updates_dir, monkeypatch):
     res = uc.check(_cfg(), "0.20.0")
     assert res.state == uc.STATE_FAILED and res.manifest is None
     assert not res.is_new and not res.can_install
+
+
+# ---------- M-CI：三通道清单一致性裁决（纯函数面，零网络） ----------
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _mci():
+    import importlib.util
+    path = os.path.join(ROOT, "scripts", "check_manifest_consistency.py")
+    spec = importlib.util.spec_from_file_location("qbn_check_manifest_consistency", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _pub_manifest(version="99.0.0", sha=None):
+    sha = sha or "a" * 64
+    return {"version": version,
+            "url": "https://github.com/GLFzr/QianBi-Novel/releases/tag/v%s" % version,
+            "sha256": sha, "notes": "n",
+            "assets": {"setup": {"name": "QianBi-Novel-v%s-setup.exe" % version,
+                                 "url": "https://github.com/GLFzr/QianBi-Novel/releases/"
+                                        "download/v%s/QianBi-Novel-v%s-setup.exe"
+                                        % (version, version),
+                                 "sha256": sha, "size": 4096}}}
+
+
+def test_mci_all_channels_identical_is_ok():
+    mci = _mci()
+    m = _pub_manifest()
+    level, findings, _rows = mci.judge(m, {"raw": (m, ""), "pages": (m, ""),
+                                           "jsdelivr": (m, "")})
+    assert level == mci.OK and findings == [], findings
+
+
+def test_mci_jsdelivr_lag_is_warn_not_fail():
+    """jsDelivr 旧版 = PASS(WARN)：已知缓存延迟，只会少报不会乱报"""
+    mci = _mci()
+    old = _pub_manifest("98.0.0")
+    new = _pub_manifest("99.0.0")
+    level, findings, _rows = mci.judge(new, {"raw": (new, ""), "pages": (new, ""),
+                                             "jsdelivr": (old, "")})
+    assert level == mci.WARN
+    assert any("滞后" in msg for _lv, msg in findings), findings
+
+
+def test_mci_jsdelivr_newer_or_rewritten_is_fail():
+    mci = _mci()
+    new = _pub_manifest("99.0.0")
+    newer = _pub_manifest("100.0.0")
+    rewritten = dict(_pub_manifest("99.0.0"), sha256="b" * 64)
+    rewritten["assets"]["setup"]["sha256"] = "b" * 64
+    lv1, f1, _ = mci.judge(new, {"raw": (new, ""), "pages": (new, ""),
+                                 "jsdelivr": (newer, "")})
+    assert lv1 == mci.FAIL and any("还新" in msg for _lv, msg in f1)
+    lv2, f2, _ = mci.judge(new, {"raw": (new, ""), "pages": (new, ""),
+                                 "jsdelivr": (rewritten, "")})
+    assert lv2 == mci.FAIL and any("内容不一致" in msg for _lv, msg in f2)
+
+
+def test_mci_pages_mismatch_is_fail():
+    """Pages 一两分钟内就该追平 raw：不一致不算缓存延迟，直接红"""
+    mci = _mci()
+    new = _pub_manifest("99.0.0")
+    old_pages = _pub_manifest("98.0.0")
+    level, findings, _rows = mci.judge(new, {"raw": (new, ""), "pages": (old_pages, ""),
+                                             "jsdelivr": (new, "")})
+    assert level == mci.FAIL
+    assert any("pages" in msg and "落后" in msg for _lv, msg in findings), findings
+
+
+def test_mci_down_channels_raw_is_fail_others_warn():
+    """raw 缺席=FAIL（判定基准）；Pages 404（发布窗口未开）/jsDelivr 缺席=WARN——
+    缺席≠分歧，但 Pages **拉到了却不一致**仍是 FAIL（见 test_mci_pages_mismatch_is_fail）"""
+    mci = _mci()
+    m = _pub_manifest()
+    lv_raw, _f, _r = mci.judge(m, {"raw": (None, "ConnectError"), "pages": (m, ""),
+                                   "jsdelivr": (m, "")})
+    assert lv_raw == mci.FAIL
+    lv_pages, f_pages, _r = mci.judge(m, {"raw": (m, ""), "pages": (None, "HTTPError 404"),
+                                          "jsdelivr": (m, "")})
+    assert lv_pages == mci.WARN and any("pages" in msg for _lv, msg in f_pages)
+    lv_js, f_js, _r = mci.judge(m, {"raw": (m, ""), "pages": (m, ""),
+                                    "jsdelivr": (None, "ConnectError")})
+    assert lv_js == mci.WARN and any("jsdelivr" in msg for _lv, msg in f_js)
+
+
+def test_mci_dual_write_broken_is_fail_everywhere():
+    mci = _mci()
+    m = _pub_manifest()
+    broken = dict(m, sha256="e" * 64)          # 顶层与 assets.setup 双写断裂
+    level, findings, _rows = mci.judge(broken, {"raw": (m, ""), "pages": (m, ""),
+                                                "jsdelivr": (m, "")})
+    assert level == mci.FAIL
+    assert any("双写断裂" in msg and "本地" in msg for _lv, msg in findings), findings
+
+
+def test_mci_dual_write_contract():
+    """老客户端核对的是顶层字段：sha 双写相等 + 版本在 url 里 + setup 有直链"""
+    mci = _mci()
+    assert mci.dual_write_ok(_pub_manifest()) is True
+    split = _pub_manifest()
+    split["sha256"] = "f" * 64                                   # 顶层另指一个哈希
+    assert mci.dual_write_ok(split) is False
+    no_ver_url = _pub_manifest()
+    no_ver_url["url"] = "https://github.com/GLFzr/QianBi-Novel/releases"
+    assert mci.dual_write_ok(no_ver_url) is False
+    assert mci.dual_write_ok({}) is False
+
+
+def test_mci_parse_manifest_rejects_garbage():
+    mci = _mci()
+    assert mci.parse_manifest(b"<html>")[0] is None
+    assert mci.parse_manifest(json.dumps({"notes": "x"}).encode())[0] is None
+    data, err = mci.parse_manifest(json.dumps(_pub_manifest()).encode())
+    assert data and err == ""
+
+
+# ---------- M-SCH：latest.json stats 回填的构件 ----------
+
+def test_msch_notes_embedded_counts_detector():
+    from scripts.build_release import notes_has_embedded_counts
+    assert notes_has_embedded_counts("单元测试 1122 项 + 探针舰队 49 支，CI 全绿")
+    assert notes_has_embedded_counts("新增 12 tests")
+    assert not notes_has_embedded_counts("共写默认档与两档制收口，修复若干问题")
+
+
+def test_msch_count_probes_matches_disk():
+    from scripts.build_release import count_probes
+    import glob as _glob
+    expected = len(_glob.glob(os.path.join(ROOT, "tests", "probe_*.py")))
+    assert count_probes() == expected > 0
+
+
+def test_msch_count_unit_tests_matches_collect_only():
+    """stats.unit_tests 的唯一来源：pytest --collect-only（构建机实测，慢一点值得）"""
+    from scripts.build_release import count_unit_tests
+    assert count_unit_tests() > 1000

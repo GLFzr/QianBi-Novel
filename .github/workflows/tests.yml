@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -59,3 +60,18 @@ jobs:
           name: fleet-logs
           path: .tmp_fleet_logs/
           retention-days: 7
+
+  # M-CI：三通道清单一致性（raw/Pages/jsDelivr + 安装包哈希对账）。
+  # 只在 Actions 页手动触发（workflow_dispatch）——每次 push 都拉 71MB 安装包太浪费；
+  # 发版日按 docs/release_checklist.md §5 手动跑一次留档。
+  release-consistency:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 三通道清单与安装包一致性（直连，公网真实状态）
+        run: python scripts/check_manifest_consistency.py
