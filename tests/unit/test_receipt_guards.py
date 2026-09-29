@@ -122,6 +122,8 @@ EXEMPT = {
     ("bridge.py", "_on_finished"): "停止/完本回执发出前，orchestrator.run 的每条终态路径都已 save_state 真实落盘（WP-25：else 停止与 PipelineStopped 两路径新增 load→save 往返；跨层钉死=test_stop_receipts_backed_by_persisted_stop，删任一终态落盘即红）；本函数是 UI 态收尾+转述",
     ("bridge.py", "confirmChapterLocked"): "「该章已终稿锁定」是早退分支的状态转述（锁由 _do_lock_chapter→set_chapter_locked 落盘）",
     ("bridge.py", "emitCrash"): "「现场已保存」是跨函数转述：CrashReporter 钩子先 dump_global 落盘再排队本回执（钉死=test_release_readiness::test_crash_dump_global_redacted 的 hook 链路断言）；A-6 已弃 QMessageBox 防二次崩溃",
+    # C21/R3 引导回滚（U2）新增：
+    ("bridge.py", "runPreviousInstaller"): "「已启动」宣称即证据：回执在 `if QProcess.startDetached(inst, [])` 的 True 分支内发出，进程真被拉起才开口（startDetached 的返回值就是生效证明，外部效果类）；且成功路径随即 dismissUpdateRollback 消费 first_run 相位文件（ur.clear_state 落盘生效，钉死=test_update_rollback.py::test_bridge_run_previous_installer_interactive_params 的相位消费断言）",
 }
 
 
