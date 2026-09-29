@@ -1925,6 +1925,85 @@ class _MicroCycle:
         elif g6_idea:
             self.deslop_extra_text = f"\n【人工补充要求（G6 想法）】{g6_idea}"
 
+    def _mc_deslop(self) -> None:
+        """④ 去味改写（仅阻断级触发，≤max_deslop_rounds 轮）+ ④.4 决策门 G7（回退=还原去味前文本）"""
+        ctx = self.ctx
+        num = self.num
+        proj = self.proj
+        session = self.session
+        _w_cfg = self._w_cfg
+        max_deslop_rounds = self.max_deslop_rounds
+        skip_scan_deslop = self.skip_scan_deslop
+        deslop_extra_text = self.deslop_extra_text
+        gr = self.gr
+        pre_deslop_prose = self.prose   # G7 回退还原点
+        pre_deslop_turns = session.turn_count() if _session_usable(session) else 0
+        rounds = 0
+        # 调整五（writing.deslop_pinned，缺省关）：命中段 ≤2 处走定点修复——只输出
+        # 替换段全文（无 JSON 编辑列表），本地拼回；不适定自动回退整章重写。
+        _deslop_pinned_on = bool(_w_cfg.get("deslop_pinned", False))
+        # 调整一（writing.instruction_in_head）：去味改写原则段已在卷级冻结头时，
+        # 整章重写轮剥掉同段（定点修复模板自身不带该段，无需瘦身）。
+        _deslop_strip = prompts.deslop_static_rules() \
+            if (bool(_w_cfg.get("instruction_in_head", False)) and not _deslop_pinned_on) else ""
+        while self.blocking and rounds < max_deslop_rounds:
+            rounds += 1
+            ctx.step(num, st.STEP_DESLOP)
+            ctx.log("warn", f"第 {num} 章 阻断 {len(self.blocking)} 处 → 去味改写（第 {rounds} 轮）…")
+            ctx.checkpoint()
+            rewritten = ""
+            if _deslop_pinned_on:
+                rewritten = _deslop_pinned_rewrite(ctx, session, self.prose, self.blocking, self.advisory, num)
+            if not rewritten:
+                findings_text = deslop.findings_to_prompt_text(self.blocking + self.advisory) + deslop_extra_text
+                t_round = session.turn_count() if _session_usable(session) else 0
+                deslop_kw = dict(findings=findings_text, prose=self.prose,
+                                 tic_blacklist=_tic_blacklist(proj),
+                                 must_block=_must_block(proj, ctx.cfg),
+                                 chapter_header=_chap_header(ctx, proj, num),
+                                 project_header=project_header(proj))
+                rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_DESLOP,
+                                           prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=self.prose,
+                                           label=f"去味改写 第{rounds}轮",
+                                           strip_static=_deslop_strip,
+                                           strip_replacement="（改写原则见系统「去味改写规则」"
+                                                             "（卷级冻结），本步照常执行。）")
+            if rewritten.strip():
+                self.prose = rewritten
+            elif _session_usable(session):
+                session.rollback_to(t_round)   # 空改写稿不采纳 → 历史不留坏正文轮
+            self.blocking, self.advisory = gates.scan_deslop(self.prose)
+            gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+        gr.deslop_rounds_used = rounds
+        if self.blocking:
+            gates.resolve_failed(ctx, f"第 {num} 章去味未通过（{len(self.blocking)} 处阻断）", gr)
+        else:
+            gr.final_status = "pass"
+            if rounds:
+                ctx.log("ok", f"第 {num} 章 去味完成，复扫通过")
+
+        # ---- ④.4 决策门 G7：去味完成后（T4.1 内侧门；回退=保留原稿=还原去味前文本）----
+        g7_idea = "" if skip_scan_deslop else ctx.gate("G7", f"去味改写完成：{rounds} 轮 · 复扫{'通过' if not self.blocking else f'仍 {len(self.blocking)} 处阻断'}"
+                                 f"（当前 {project.count_chars(self.prose)} 字，下一步审校）", chapter=num)
+        if g7_idea is None:
+            g7_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+            ctx.log("warn", "G7 回退：保留去味前原稿继续")
+            if rounds and self.prose != pre_deslop_prose:
+                _archive_inner_rollback(ctx, proj, num, "G7", self.prose)   # 去味稿归档
+                self.prose = pre_deslop_prose                                # 还原原稿
+                if _session_usable(session):
+                    session.rollback_to(pre_deslop_turns)   # 历史截断回去味前，正文消息与实际一致
+                self.blocking, self.advisory = gates.scan_deslop(self.prose)
+                gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+                gr.deslop_rounds_used = 0
+            if self.blocking:
+                ctx.log("warn", f"G7：原稿 {len(self.blocking)} 处阻断按人工裁决保留（降级为建议）")
+                gr.advisory_findings = gr.advisory_findings + self.blocking
+                gr.blocking_findings = self.blocking = []
+                gr.final_status = "pass"   # 人工裁决保留原稿 = 本步通过
+        elif g7_idea:
+            _store_inner_gate_idea(ctx, proj, num, "G7", g7_idea)
+
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
@@ -2068,80 +2147,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     mc._mc_draft()
     mc._mc_word_gate()
     mc._mc_scan()
+    mc._mc_deslop()
     # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
     prose = mc.prose
-    blocking, advisory = mc.blocking, mc.advisory
-    deslop_extra_text = mc.deslop_extra_text
-    skip_scan_deslop = mc.skip_scan_deslop
-
-    # ---- ④ 去味改写（仅阻断级触发，最多 max_deslop_rounds 轮）----
-    pre_deslop_prose = prose   # G7 回退还原点
-    pre_deslop_turns = session.turn_count() if _session_usable(session) else 0
-    rounds = 0
-    # 调整五（writing.deslop_pinned，缺省关）：命中段 ≤2 处走定点修复——只输出
-    # 替换段全文（无 JSON 编辑列表），本地拼回；不适定自动回退整章重写。
-    _deslop_pinned_on = bool(_w_cfg.get("deslop_pinned", False))
-    # 调整一（writing.instruction_in_head）：去味改写原则段已在卷级冻结头时，
-    # 整章重写轮剥掉同段（定点修复模板自身不带该段，无需瘦身）。
-    _deslop_strip = prompts.deslop_static_rules() \
-        if (bool(_w_cfg.get("instruction_in_head", False)) and not _deslop_pinned_on) else ""
-    while blocking and rounds < max_deslop_rounds:
-        rounds += 1
-        ctx.step(num, st.STEP_DESLOP)
-        ctx.log("warn", f"第 {num} 章 阻断 {len(blocking)} 处 → 去味改写（第 {rounds} 轮）…")
-        ctx.checkpoint()
-        rewritten = ""
-        if _deslop_pinned_on:
-            rewritten = _deslop_pinned_rewrite(ctx, session, prose, blocking, advisory, num)
-        if not rewritten:
-            findings_text = deslop.findings_to_prompt_text(blocking + advisory) + deslop_extra_text
-            t_round = session.turn_count() if _session_usable(session) else 0
-            deslop_kw = dict(findings=findings_text, prose=prose,
-                             tic_blacklist=_tic_blacklist(proj),
-                             must_block=_must_block(proj, ctx.cfg),
-                             chapter_header=_chap_header(ctx, proj, num),
-                             project_header=project_header(proj))
-            rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_DESLOP,
-                                       prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=prose,
-                                       label=f"去味改写 第{rounds}轮",
-                                       strip_static=_deslop_strip,
-                                       strip_replacement="（改写原则见系统「去味改写规则」"
-                                                         "（卷级冻结），本步照常执行。）")
-        if rewritten.strip():
-            prose = rewritten
-        elif _session_usable(session):
-            session.rollback_to(t_round)   # 空改写稿不采纳 → 历史不留坏正文轮
-        blocking, advisory = gates.scan_deslop(prose)
-        gr.blocking_findings, gr.advisory_findings = blocking, advisory
-    gr.deslop_rounds_used = rounds
-    if blocking:
-        gates.resolve_failed(ctx, f"第 {num} 章去味未通过（{len(blocking)} 处阻断）", gr)
-    else:
-        gr.final_status = "pass"
-        if rounds:
-            ctx.log("ok", f"第 {num} 章 去味完成，复扫通过")
-
-    # ---- ④.4 决策门 G7：去味完成后（T4.1 内侧门；回退=保留原稿=还原去味前文本）----
-    g7_idea = "" if skip_scan_deslop else ctx.gate("G7", f"去味改写完成：{rounds} 轮 · 复扫{'通过' if not blocking else f'仍 {len(blocking)} 处阻断'}"
-                             f"（当前 {project.count_chars(prose)} 字，下一步审校）", chapter=num)
-    if g7_idea is None:
-        g7_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
-        ctx.log("warn", "G7 回退：保留去味前原稿继续")
-        if rounds and prose != pre_deslop_prose:
-            _archive_inner_rollback(ctx, proj, num, "G7", prose)   # 去味稿归档
-            prose = pre_deslop_prose                                # 还原原稿
-            if _session_usable(session):
-                session.rollback_to(pre_deslop_turns)   # 历史截断回去味前，正文消息与实际一致
-            blocking, advisory = gates.scan_deslop(prose)
-            gr.blocking_findings, gr.advisory_findings = blocking, advisory
-            gr.deslop_rounds_used = 0
-        if blocking:
-            ctx.log("warn", f"G7：原稿 {len(blocking)} 处阻断按人工裁决保留（降级为建议）")
-            gr.advisory_findings = gr.advisory_findings + blocking
-            gr.blocking_findings = blocking = []
-            gr.final_status = "pass"   # 人工裁决保留原稿 = 本步通过
-    elif g7_idea:
-        _store_inner_gate_idea(ctx, proj, num, "G7", g7_idea)
 
     # ---- ④.5 审校（v2 6 维最终审核，可开关；用审校槽）----
     # 断点续跑（方案 H）：停在审校中途时，已投票数从 chapter_step 恢复，只补投剩余的票
