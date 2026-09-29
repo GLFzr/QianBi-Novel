@@ -3,7 +3,16 @@
 TUI 原本只有英文关键词路由（battle/fight/duel...），对中文细纲命中率≈0。
 本版加中文关键词字典，并提供中文标签（label_zh）+ 中文化 method 翻译，
 使 chapter_to_cards() 能正确路由中文细纲，render_cards_zh() 输出中文注入。
+
+C43 桥段码优先路由（bridge_codes_enabled，默认关）：开时细纲「- 桥段：」
+码行经 bridge_codes.route_to_cards 直路由场景卡（绕过关键词匹配），主码命中
+bridge_cards 打法卡时 craft_block 追加打法块；关时两函数走原关键词路径，
+输出与现状逐字一致（字节隔离）。开关由 stages._mc_draft 在 craft_block 调用
+前按配置置位（见 set_bridge_codes_enabled）。
 """
+
+from .bridge_cards import play_block
+from .bridge_codes import parse_bridge_codes, route_to_cards
 
 # ---- 6 张场景卡（保留英文 method/example 不变，作为 LLM 技法提示）----
 
@@ -186,12 +195,33 @@ _KEYWORDS = {
 }
 
 
+# ---- C43 桥段码优先路由开关（数据面；默认关 = 行为与现状逐字一致）----
+
+_bridge_enabled = False
+
+
+def set_bridge_codes_enabled(on: bool) -> None:
+    """桥段码优先路由开关（C43；缺省关=字节隔离）。
+
+    stages._mc_draft 在 craft_block 调用前按 writing.bridge_codes_enabled 置位；
+    关闭时 chapter_to_cards / craft_block 走原关键词路由，装配字节不变。
+    """
+    global _bridge_enabled
+    _bridge_enabled = bool(on)
+
+
 def chapter_to_cards(genre_block_main="", extra_keywords=""):
     """根据细纲文本路由场景卡。
 
     Returns:
         (main_key, sub_keys_list)  例如 ("battle", ["lowkey", "mystery"])
     """
+    # C43（开关开时）：细纲带「- 桥段：」码行且主码可路由 → 按码直路由，
+    # 绕过关键词匹配；无码行/位置码/反例码返回 None → 回退现有关键词路由。
+    if _bridge_enabled:
+        routed = route_to_cards(genre_block_main, extra_keywords)
+        if routed is not None:
+            return routed
     text = (genre_block_main + " " + extra_keywords).lower()
     main = "lowkey"
 
@@ -289,4 +319,10 @@ def craft_block(num: int, total: int, outline: str, extra: str = "") -> str:
         sub = SCENE_CARDS[sk]
         out.append(f"叠加·{sub['label_zh']}")
         out += [f"- {m}" for m in sub["method_zh"][:2]]
+    # C43（开关开时）：主码命中打法卡 → 追加桥段打法块（触发/步骤/失败态）；
+    # 无打法卡的码零追加，与关态字节一致。
+    if _bridge_enabled:
+        blk = play_block(parse_bridge_codes(f"{outline}\n{extra}")[0])
+        if blk:
+            out.append(blk)
     return "\n".join(out)

@@ -114,7 +114,11 @@ DEFAULT_CONFIG = {
                 # B1 爽点引擎（0.20.0 L5-B1，缺省关）：开时细纲携带「本章爽点节拍」
                 # 三拍字段、正文轮注入兑现指令、L0 账本对照加节拍检查；关时所有
                 # 装配字节与 0.19.x 逐字节一致（变量隔离纪律）。
-                "satisfaction_engine": False},
+                "satisfaction_engine": False,
+                # C43 桥段码账本（0.22.0 卡5，缺省关）：开时正文轮 craft_block 按
+                # 细纲「- 桥段：」码行直路由场景卡并追加打法卡；关时装配字节与
+                # 现状逐字一致（变量隔离纪律）。
+                "bridge_codes_enabled": False},
     # 成本实验开关区（A/B 用，缺省全关；开=请求体字节变化，做对照实验的公共前提
     # 是「关态与旧版逐字节一致」）
     "cost": {"a8_opening_compress": False},    # A8 开幕轮密度压缩（L5-A1）：与 system

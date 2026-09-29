@@ -22,7 +22,7 @@ from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
 from .. import project, prompts, deslop, mustscan, wb
 from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
-from ..prompts import scene_cards
+from ..prompts import bridge_codes, scene_cards
 from . import gates, memory, scan, state as st, versions
 from .satisfaction import outline_directive as _satisfaction_outline_directive
 from .satisfaction import prose_beat_block as _satisfaction_prose_block
@@ -1675,6 +1675,10 @@ class _MicroCycle:
                 os.remove(sg_path)
             except OSError:
                 pass
+        # C43（writing.bridge_codes_enabled，缺省关）：桥段码优先路由——开时
+        # craft_block 按细纲「- 桥段：」码行直路由场景卡并追加打法卡；关时
+        # 装配字节与现状逐字一致（变量隔离纪律）。
+        scene_cards.set_bridge_codes_enabled(bridge_codes.enabled_from_cfg(ctx.cfg))
         prose_kw = {
             "chapter_num": num,
             "next_chapter_brief": next_brief,
