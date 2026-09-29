@@ -13,12 +13,31 @@ from typing import TypedDict
 
 STATE_FILENAME = "pipeline_state.json"
 
-# H-4：save_state 会被 GUI 线程（add_idea/set_guidance 等 Slot）与流水线
-# worker 线程（checkpoint/append_history 等）并发调用——进程内锁串行化
-# 「校验→写临时→replace」整段，保证任一时刻盘上都是一份完整 JSON，
-# 不因写盘段交错产生截断/混写现场。跨线程 load→改→save 的丢失更新
-# 是另一层问题，不在此处展开（审查报告 H-4 归属说明）。
-_SAVE_LOCK = threading.Lock()
+# H-4/C32：save_state 会被 GUI 线程（add_idea/set_guidance 等 Slot）与流水线
+# worker 线程（checkpoint/append_history 等）并发调用。两层防护：
+# ① 进程内按项目（state 实例）粒度的写锁（_project_save_lock）串行化
+#    「读盘→三方合并→写临时→replace」整段——任一时刻盘上都是一份完整 JSON；
+# ② save 前重读盘上现状，与调用方内存态按装载基线（PipelineState._base）做
+#    三方合并（_three_way_dict）：长生成窗口（orchestrator run 主循环
+#    load→…数分钟 LLM 调用…→save）里，GUI 提想法/发指导/标修复等写入
+#    不再被旧快照全量回写覆盖（09-17 审查 H-4 残留主体）。
+# 同键·同子键·同条目并发写 = 最后写者胜（键级契约，见 _three_way_dict 注记）；
+# 跨进程并发不在此修复射程（与审查 H-4 口径一致）。
+_SAVE_LOCK_TIMEOUT = 10.0  # 秒；持锁超限视为病态重入/死锁 → 降级无锁原子写 + error 告警
+
+_LOCKS_GUARD = threading.Lock()
+_PROJECT_LOCKS = {}   # {normcase(绝对路径): Lock}——按项目（state 实例）懒建
+
+
+def _project_save_lock(proj: str) -> threading.Lock:
+    """按项目取写锁（懒建）。粒度 = 单个 pipeline_state.json（state 实例），
+    不同项目互不阻塞。"""
+    key = os.path.normcase(os.path.abspath(state_path(proj)))
+    with _LOCKS_GUARD:
+        lk = _PROJECT_LOCKS.get(key)
+        if lk is None:
+            lk = _PROJECT_LOCKS[key] = threading.Lock()
+        return lk
 
 # 总流水线阶段
 STAGE_INIT = "init"            # 立项（仅有选题信息）
@@ -509,9 +528,109 @@ def state_path(proj: str) -> str:
     return os.path.join(proj, STATE_FILENAME)
 
 
-def load_state(proj: str) -> dict:
+# ---------- H-4/C32：跨线程 load→改→save 丢失更新防护 ----------
+
+_MISSING = object()   # 哨兵：区分「键缺失」与「值为 None」
+
+
+class PipelineState(dict):
+    """load_state 的返回容器（dict 子类）。
+
+    携带 _base = 装载时刻的深拷贝基线；save_state 据此做三方合并
+    （基线/内存/盘上），长生成窗口内其他线程写入的键不被本线程全量回写覆盖。
+    对外仍是普通 dict：isinstance(state, dict) 成立，取值/赋值/序列化行为不变；
+    调用方自建的裸 dict 无基线 → save 走旧整写语义（「我拥有全部状态」）。
+    """
+    __slots__ = ("_base",)
+
+
+def _read_disk_state(path: str):
+    """读盘上当前状态（不加锁：os.replace 原子性保证读到完整 JSON）。
+    文件缺失/解析失败返回 None → 调用方按旧语义整写（损坏留证已在 load 侧 A-8）。"""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _list_item_key(item):
+    """列表条目的身份键：history 用 num、pending_ideas 用 id；不可识别返回 None"""
+    if isinstance(item, dict):
+        if "num" in item:
+            return ("num", item["num"])
+        if "id" in item:
+            return ("id", item["id"])
+    return None
+
+
+def _merge_list_by_id(base, mem, disk):
+    """列表条目粒度三方合并（history / pending_ideas 等带身份键的 dict 条目表）：
+    - 本线程未动的条目（== 基线）：以盘上为准（他线程改的字段生效，如 needs_fix→pass）
+    - 本线程改过/新增的条目：内存为准（worker 定稿新记录、想法标 applied）
+    - 盘上新增条目（他线程写入，如 GUI 窗口内提交的想法）：追加尾部
+    条目顺序以内存为骨架（history 顺序由 append_history 负责排序）。"""
+    def keyed(seq):
+        return {_list_item_key(x): x for x in seq if _list_item_key(x) is not None}
+    b_by, d_by = keyed(base), keyed(disk)
+    out = []
+    for x in mem:
+        k = _list_item_key(x)
+        if k is None:
+            out.append(x)                      # 无身份条目：内存为准
+            continue
+        bx = b_by.get(k, _MISSING)
+        dx = d_by.get(k, _MISSING)
+        if bx is not _MISSING and x == bx:
+            if dx is not _MISSING:
+                out.append(dx)                 # 未动 → 盘上为准（含他线程的字段修改）
+            # 盘上也没有 → 他线程删除了该条目 → 尊重删除
+        else:
+            out.append(x)                      # 改过/新增 → 内存为准
+    known = set(b_by) | {_list_item_key(x) for x in mem if _list_item_key(x) is not None}
+    out.extend(y for k2, y in d_by.items() if k2 not in known)
+    return out
+
+
+def _three_way_dict(base, mem, disk):
+    """键粒度三方合并（对 dict 键可递归下沉到子键）：返回新 dict，不改任何入参。
+    - 键被本线程删除：保持删除（carry_idea 消费场景）
+    - 键本线程未动（== 基线）：盘上为准（含他线程改值/删除——长窗口不回滚别人）
+    - 键本线程新增或独改：内存为准
+    - 双方都改：dict 键下沉子键再三方；带身份键的条目表按条目三方；
+      其余（标量/结构不符）内存为准——最后写者胜。"""
+    out = {}
+    for k in set(base) | set(mem) | set(disk):
+        b = base.get(k, _MISSING)
+        m = mem.get(k, _MISSING)
+        d = disk.get(k, _MISSING)
+        if m is _MISSING:
+            if b is _MISSING and d is not _MISSING:
+                out[k] = d        # 本线程不认识的盘上新键（他线程刚写入）→ 收下
+            continue              # 其余：本线程删除 / 双方皆无 → 保持删除
+        if b is not _MISSING and m == b:
+            if d is not _MISSING:
+                out[k] = d        # 本线程未动 → 盘上为准
+            continue              # 盘上也没有 → 他线程删除 → 尊重删除
+        if d is _MISSING or b is _MISSING or d == b:
+            out[k] = m            # 盘上未动 / 本线程新增键 → 内存为准
+            continue
+        # 双方都改 → 分型合并
+        if isinstance(b, dict) and isinstance(m, dict) and isinstance(d, dict):
+            out[k] = _three_way_dict(b, m, d)
+        elif (isinstance(b, list) and isinstance(m, list) and isinstance(d, list)
+              and all(_list_item_key(x) is not None for x in b + m + d)):
+            out[k] = _merge_list_by_id(b, m, d)
+        else:
+            out[k] = m            # 兜底：内存为准（同键并发写最后写者胜）
+    return out
+
+
+def load_state(proj: str) -> "PipelineState":
     path = state_path(proj)
-    state = json.loads(json.dumps(DEFAULT_STATE))
+    state = PipelineState(json.loads(json.dumps(DEFAULT_STATE)))
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -537,39 +656,70 @@ def load_state(proj: str) -> dict:
                 logging.getLogger("qianbi.state").error("state.json 损坏且留证失败：%s", e)
     validate_state(state)   # T3.2：损坏早报错，不静默降级
     ensure_cw(state)
+    # H-4/C32：装载基线快照（深拷贝）——save_state 据此识别「本线程改过没有」，
+    # 未动的键以盘上为准，长生成窗口内其他线程的写入不被全量回写覆盖。
+    state._base = json.loads(json.dumps(state))
     return state
 
 
-def save_state(proj: str, state: dict):
-    """原子写入：先临时文件再替换，防中途崩溃损坏状态；写前最小键校验（T3.2）。
+def _atomic_write_json(path: str, data: dict):
+    """写临时文件 + os.replace 原子替换，防中途崩溃损坏状态。
     os.replace 在 Windows 上会被杀软/索引器的瞬时文件锁拒绝（真机 WinError 5），
-    重试 3 次退避后再放弃。H-4：整段在 _SAVE_LOCK 内串行，GUI↔worker 并发
-    save_state 不再可能交错写盘（见 _SAVE_LOCK 处注记）。"""
+    重试 3 次退避后再放弃。调用方负责持项目写锁。"""
+    fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=os.path.dirname(path) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        last_err = None
+        for attempt in range(3):
+            try:
+                os.replace(tmp, path)
+                last_err = None
+                break
+            except PermissionError as e:   # 瞬时文件锁：退避重试
+                last_err = e
+                time.sleep(0.2 * (attempt + 1))
+        if last_err is not None:
+            raise last_err
+    except Exception:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        raise
+
+
+def save_state(proj: str, state: dict):
+    """原子写入 + 跨线程三方合并（H-4/C32）。
+
+    写前最小键校验（T3.2）；「读盘→合并→写临时→replace」整段在按项目粒度的
+    进程内写锁（_project_save_lock）内串行。调用方持 load_state 旧快照时：
+    本线程改过的键以内存为准，未动的键以盘上为准——长生成窗口（orchestrator
+    run 主循环）里 GUI 提想法/发指导/标修复的落盘不被旧快照覆盖。
+    无基线（裸 dict）或盘上缺失/损坏 → 旧整写语义。锁等待超过
+    _SAVE_LOCK_TIMEOUT 视为病态重入/死锁：降级无锁原子写（os.replace 原子性
+    仍在，无截断现场）并 error 告警，绝不永久挂死。
+    """
     validate_state(state)
     path = state_path(proj)
-    with _SAVE_LOCK:
-        fd, tmp = tempfile.mkstemp(suffix=".tmp", dir=proj)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(state, f, ensure_ascii=False, indent=2)
-            last_err = None
-            for attempt in range(3):
-                try:
-                    os.replace(tmp, path)
-                    last_err = None
-                    break
-                except PermissionError as e:   # 瞬时文件锁：退避重试
-                    last_err = e
-                    time.sleep(0.2 * (attempt + 1))
-            if last_err is not None:
-                raise last_err
-        except Exception:
-            if os.path.exists(tmp):
-                try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-            raise
+    base = getattr(state, "_base", None)
+    lk = _project_save_lock(proj)
+    have_lock = lk.acquire(timeout=_SAVE_LOCK_TIMEOUT)
+    if not have_lock:
+        logging.getLogger("qianbi.state").error(
+            "save_state 项目写锁等待超时（%.1fs，%s）——疑似重入/死锁，"
+            "降级为无锁原子写", _SAVE_LOCK_TIMEOUT, path)
+    try:
+        disk = _read_disk_state(path)
+        if base is None or disk is None:
+            merged = dict(state)      # 裸 dict / 盘上缺失或损坏：旧语义整写
+        else:
+            merged = _three_way_dict(base, state, disk)
+        _atomic_write_json(path, merged)
+    finally:
+        if have_lock:
+            lk.release()
 
 
 def append_history(proj: str, state: dict, record: dict):
