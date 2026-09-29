@@ -480,8 +480,8 @@ ApplicationWindow {
                     anchors.rightMargin: 10
                     spacing: 8
                     Text {
-                        text: "⚠ 上次更新遇到问题：v" + String(rb.to || "?")
-                              + " 启动时崩溃过。可以回到 v" + String(rb.from || "上一版")
+                        text: "⚠ 上次更新遇到问题：v" + String(rollbackBanner.rb.to || "?")
+                              + " 启动时崩溃过。可以回到 v" + String(rollbackBanner.rb.from || "上一版")
                               + "（书稿与配置不动），也可以继续用新版"
                         color: Theme.textPrimary
                         font.family: Theme.uiFont
@@ -494,7 +494,7 @@ ApplicationWindow {
                         text: "运行上一版安装包"
                         kind: "secondary"
                         height: 24
-                        visible: String(rb.installer || "") !== ""
+                        visible: String(rollbackBanner.rb.installer || "") !== ""
                         onClicked: bridge.runPreviousInstaller()
                         ToolTip.visible: hovered
                         ToolTip.text: "交互式走向导回到上一版（updates/ 里保留的旧安装包，装完书稿配置不动）；不静默，每一步你都看得见"
@@ -504,8 +504,8 @@ ApplicationWindow {
                         text: "打开崩溃现场"
                         kind: "ghost"
                         height: 24
-                        visible: String(rb.dump || "") !== ""
-                        onClicked: bridge.openPath(String(rb.dump || ""))
+                        visible: String(rollbackBanner.rb.dump || "") !== ""
+                        onClicked: bridge.openPath(String(rollbackBanner.rb.dump || ""))
                     }
                     AppButton {
                         objectName: "rollbackDismissButton"

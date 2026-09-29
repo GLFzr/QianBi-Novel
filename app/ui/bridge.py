@@ -2682,10 +2682,13 @@ class Bridge(QObject):
         if not QProcess.startDetached(path, ["/SILENT", "/NORESTART",
                                              "/LOG=%s" % log_path]):
             # 没拉起来就没有安装器，也就永远不会有 marker：journal 必须撤掉，
-            # 否则下次启动会被误报成「上次更新未完成」
+            # 否则下次启动会被误报成「上次更新未完成」。
+            # V2 审计（低危）：走到这里时 shutdown() 已执行（线程收尾不可逆），
+            # 继续运行是「编辑可用、生成不可用」的僵尸态——必须明示用户重启。
             update_install.clear_journal()
             self._quit_for_update = False
-            self.toast.emit("error", "安装程序没能启动（路径：%s）" % path)
+            self.toast.emit("error", "安装程序没能启动（路径：%s）。后台任务已收尾，"
+                                     "请保存稿件并手动重启应用后再重试更新" % path)
             return
         self.toast.emit("ok", "正在退出并静默安装 v%s，装完会自动重开" % to_ver)
         for h in logging.getLogger().handlers:

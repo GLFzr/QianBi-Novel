@@ -2632,6 +2632,10 @@ class _MicroCycle:
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
+    # V2 审计（中危）：ctx 是 Orchestrator 跨章单例，review_v2 只在审校段赋值、
+    # 无重置——断路/人工/字数拦截章的 finalize 会吃到上一章 B_PAYOFF 裁决，
+    # 误记「兑现/空头支票」。章入口强制清零。
+    ctx.review_v2 = None
     proj = ctx.proj
     # 用量行归属章号：T 轮的逐章曲线一直靠"prose 每章恰一次"反推，就是缺这一格
     from .. import usage as _usage

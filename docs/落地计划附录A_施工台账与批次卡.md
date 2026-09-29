@@ -375,7 +375,7 @@ BACKUP(独立)  M-CI/M-SCH(独立)  SKILL(独立)  OD10(独立)  U-C(先行可)
 
 **C12 信任残渣+i18n+版权夹具**（QW-B2/B7/I18N/D9｜1.5-2d｜前置：C01）
 - 文件：`app/ui/bridge.py`(设置域,符号锚)+`app/llm/client.py:313`(H-7)；新增契约钉测试（stages.py:3128 写侧/bridge.py:279 读侧，任一侧格式单方面改动即红）；`README.md`(i18n 声明行，落点见缺口 G9)；`tests/` 夹具改名（斗破专名/守夜人作者）
-- 验收：`./.venv/Scripts/python.exe -m pytest tests/unit -k "contract or degrade or copyright" -q`；主仓 `grep -rn "萧炎\|乌坦城\|守夜人" tests/` 零命中
+- 验收：`./.venv/Scripts/python.exe -m pytest tests/unit -k "contract or degrade or copyright" -q`；主仓 `grep -rn "萧炎\|乌坦城\|爱潜水的乌贼" tests/` 零命中（《守夜人》系自创虚构书名按裁决保留，仅作者名改虚构）
 - 回滚：三件独立。
 
 **C12b w1_ux 小修四件**（QW-A11｜0.5-1d｜前置：C01）

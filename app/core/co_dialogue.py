@@ -495,7 +495,11 @@ def parse_supervisor_report(text: str) -> tuple:
         s = line.strip()
         m = re.match(r"^[-*]?\s*结论[：:]\s*(.+)$", s)
         if m:
-            needs_fix = "需调整" in m.group(1)
+            # V2 审计（低危）：「部分通过/基本通过」是未收口（仍有待修项），
+            # 只有干净「通过」才算过——否则 F3 结论门会置 supervised 直锁
+            verdict = m.group(1)
+            needs_fix = not ("通过" in verdict and "需调整" not in verdict
+                             and "部分" not in verdict and "基本" not in verdict)
             continue
         m = re.match(r"^[-*]?\s*【改写指令】[：:]?\s*(.*)$", s)
         if m:
