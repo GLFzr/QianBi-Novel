@@ -13,6 +13,9 @@
                      → 提示审校逐条核对（"踝伤却写胳膊不方便"类漂移的对照材料）
 5. foreshadow_findings 伏笔到期批次 L0（卡2/T3）：超期伏笔在本批细纲「伏笔推进」段
                      既无「回收」也无「改期：新窗口+理由」→ fail候选（证据在场才检查）
+6. ledger_findings    爽点节奏账本跨章 L0（C33/T1）：sidecar 追踪/爽点账本.json +
+                     satisfaction.rhythm_findings 三规则（连排/空头支票/类型轮换）
+                     → fail候选×2 + advisory（账本开关 off / 账本缺失 → 恒空）
 
 全部纯正则/词典，CPU <0.5s/章，零网络零模型。任何解析失败返回空 finding（fail-open）。
 """
@@ -293,6 +296,34 @@ def foreshadow_findings(proj, batch_outlines, cur_num: int) -> list:
         return []
 
 
+def ledger_findings(proj, num: int, outline: str, cfg: dict = None) -> list:
+    """爽点节奏账本跨章 L0（C33/T1）：sidecar 追踪/爽点账本.json 历史行 +
+    satisfaction.rhythm_findings 三规则（①同型连排≥3章=节奏单一 fail候选；
+    ②声明未兑现累计≥2=空头支票 fail候选；③类型分布熵过低=类型轮换 advisory）。
+
+    - 账本开关 off（writing.satisfaction_ledger_enabled，缺省 on）→ 恒空（off 字节不变）；
+    - 证据在场才检查：账本文件缺失/无行 → 恒空（旧书字节不变，fail-open）；
+    - cfg 缺省时读应用配置（build_v5_block 无 cfg 入参；读盘失败按缺省 on）。
+    任何异常返回空（fail-open，绝不阻断流水线）。
+    """
+    try:
+        from . import satisfaction as _sat
+        if cfg is None:
+            try:
+                from .. import config as _config
+                cfg = _config.load_config()
+            except Exception:  # noqa: BLE001
+                cfg = {}
+        if not _sat.ledger_enabled(cfg):
+            return []
+        rows = (_sat.load_ledger(proj) or {}).get("rows") or []
+        if not rows:
+            return []
+        return _sat.rhythm_findings(rows, num, outline)
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def build_v5_block(proj, num: int, prose: str,
                    read_outline=None, read_states=None) -> str:
     """组装 V5 账本对照块（注入 review_l0_block 的尾部；≤1.2k chars 预算）"""
@@ -300,7 +331,8 @@ def build_v5_block(proj, num: int, prose: str,
         outline = (read_outline or (lambda: ""))()
         states = (read_states or (lambda: ""))()
         findings = (payoff_findings(outline, prose) + clock_findings(outline, prose)
-                    + taboo_findings(outline, prose) + beat_findings(outline, prose))
+                    + taboo_findings(outline, prose) + beat_findings(outline, prose)
+                    + ledger_findings(proj, num, outline))
         checklist = state_checklist(states)
         promise = payoff_promise(outline)
         # B1：节拍承诺行同样供给审校做上下文（引擎关闭的旧细纲无此行 → 字节不变）
