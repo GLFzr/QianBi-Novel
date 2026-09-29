@@ -47,7 +47,7 @@ PROMPT = """你是网文世界观设定管理员。下面是一段《{fandom}》
      会常驻注入每章；普通实体一律 false
    - keys：别名/别称/相关触发词数组（没有就空数组）
 2. rules：写作时**必须遵守的硬约束**，每条一句话可判定。
-   - rule：约束内容（如「斗气等级从低到高依次为：斗者、斗师、大斗师、斗灵、斗王、斗皇、斗宗、斗尊、半圣、斗圣、斗帝，每级九星」）
+   - rule：约束内容（如「焰力等级从低到高依次为：焰者、焰师、大焰师、焰灵、焰王、焰皇、焰宗、焰尊、半圣、焰圣、焰帝，每级九星」）
    - level：must（违反=硬伤）或 should（风格倾向）
    - pattern：可选，条目内一段反引号包裹的字面正则（只在你确信时给，否则空串）
    只登记材料里真实写明的；禁止脑补材料没有的设定。宁缺毋滥，但材料里的硬设定一条都不许漏。
@@ -72,7 +72,7 @@ THEMES = {
         "instructions": (
             "【专题指令：民生与市场】本次是专题拆解，只抽取材料里与下列五个层面相关的条目与规则，"
             "其余内容（修炼升级、人物恩怨、地理风物、法宝丹药等）一律无视：\n"
-            "- 平民生计：普通人（非斗气修行者）的营生与职业、工钱行市、生计方式\n"
+            "- 平民生计：普通人（非焰力修行者）的营生与职业、工钱行市、生计方式\n"
             "- 物价与货币：货币制度与币值、小额货币/辅币口径（如铜币银币的进制与最小找零单位）、"
             "典型物价（粮、布、房、劳务报酬）\n"
             "- 市场管理与坊市规矩：集市/坊市/拍卖行的开闭时间、交易规矩、管理规定\n"
@@ -162,7 +162,7 @@ def extract_chunk(client, prompt: str, label: str = "chunk ?",
     return data
 
 
-def run_theme(client, chunks: list, theme: str, fandom: str = "斗破苍穹",
+def run_theme(client, chunks: list, theme: str, fandom: str = "青焰纪",
               phase: str = PHASE) -> tuple:
     """单主题拆解：ThreadPoolExecutor(3) 并发抽取各块 → 汇合后按块序去重（输出确定）。
 
@@ -293,7 +293,7 @@ def coverage_report(entries_groups: list, proj: str) -> dict:
 
 
 def run_decompose(proj: str, client, text: str, chunk_chars: int = 8000,
-                  themes=("general",), fandom: str = "斗破苍穹") -> dict:
+                  themes=("general",), fandom: str = "青焰纪") -> dict:
     """拆解主流程（不含 Qt/配置装配，client 由调用方注入，便于单测）。
 
     general 写 设定/世界书.md + 设定/正则.md + 追踪/拆解清单.json（现状逻辑）；

@@ -50,7 +50,7 @@ def test_cap_discuss_reply_passes_short_output_through():
 def test_extract_prose_reply_prefers_markers():
     reply = ("好的，按作者要求交正文。\n\n<<<正文>>>\n## 第1章 开端\n"
              "正文第一段。\n\n正文第二段。\n<<<正文完>>>\n\n"
-             "待确认：下一章是否引入云岚宗？")
+             "待确认：下一章是否引入青焰宗？")
     body = cod.extract_prose_reply(reply)
     assert body.startswith("## 第1章 开端")
     assert "正文第二段" in body

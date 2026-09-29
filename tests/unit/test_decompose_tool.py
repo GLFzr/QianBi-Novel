@@ -77,9 +77,9 @@ class FakeClient:
 
 # 三段各 16-20 字，chunk_chars=25 → 恰好切 3 块（整段不拆）
 SRC_TEXT = "\n\n".join([
-    "乌坦城是加玛帝国边陲小城，城中当铺林立。",
-    "斗气大陆以斗气为尊，等级森严不可逾越。",
-    "萧炎年轻时在乌坦城受到家族冷遇。",
+    "青石镇是北陵帝国边陲小城，城中当铺林立。",
+    "青焰大陆以焰力为尊，等级森严不可逾越。",
+    "林澈年轻时在青石镇受到家族冷遇。",
 ])
 
 
@@ -90,17 +90,17 @@ def test_general_mode_compat(tool, proj):
     client = FakeClient({
         1: _payload(
             entries=[
-                {"name": "斗气等级", "cat": "体系规则", "desc": "斗者到斗帝十级，每级九星。",
+                {"name": "焰力等级", "cat": "体系规则", "desc": "焰者到焰帝十级，每级九星。",
                  "constant": True, "keys": []},
-                {"name": "乌坦城", "cat": "地理", "desc": "加玛帝国边陲小城。",
-                 "constant": False, "keys": ["乌坦"]},
+                {"name": "青石镇", "cat": "地理", "desc": "北陵帝国边陲小城。",
+                 "constant": False, "keys": ["青石"]},
             ],
-            rules=[{"rule": "斗气等级不可逾越", "level": "must", "pattern": ""}],
+            rules=[{"rule": "焰力等级不可逾越", "level": "must", "pattern": ""}],
         ),
-        # 第 2 块重出「乌坦城」（书名号归一化后同名）→ 该版本必须被去重丢掉
+        # 第 2 块重出「青石镇」（书名号归一化后同名）→ 该版本必须被去重丢掉
         2: _payload(entries=[
-            {"name": "《乌坦城》", "cat": "地理", "desc": "重复块里的版本，不该出现。"}]),
-        3: _payload(entries=[{"name": "萧炎", "cat": "人物", "desc": "主角。"}]),
+            {"name": "《青石镇》", "cat": "地理", "desc": "重复块里的版本，不该出现。"}]),
+        3: _payload(entries=[{"name": "林澈", "cat": "人物", "desc": "主角。"}]),
     })
     out = tool.run_decompose(proj, client, SRC_TEXT, chunk_chars=25, themes=("general",))
     assert set(out) == {"general"} and out["general"]["chunks"] == 3
@@ -108,19 +108,19 @@ def test_general_mode_compat(tool, proj):
     doc = open(os.path.join(proj, "设定", "世界书.md"), encoding="utf-8").read()
     assert "## 世界书" in doc
     assert "### 体系规则" in doc and "### 地理" in doc and "### 人物" in doc
-    assert "- **乌坦城**（地理）：加玛帝国边陲小城。" in doc
+    assert "- **青石镇**（地理）：北陵帝国边陲小城。" in doc
     assert "[常驻]" in doc, "constant 条目要带 [常驻] 标记"
     assert "重复块里的版本" not in doc, "归一化同名条目应先到先得"
-    # 块序确定：乌坦城（第1块）排在萧炎（第3块）前
-    assert doc.index("乌坦城") < doc.index("萧炎")
+    # 块序确定：青石镇（第1块）排在林澈（第3块）前
+    assert doc.index("青石镇") < doc.index("林澈")
 
     rx = open(os.path.join(proj, "设定", "正则.md"), encoding="utf-8").read()
-    assert "- 规则：斗气等级不可逾越｜level：must｜scope：全文" in rx
+    assert "- 规则：焰力等级不可逾越｜level：must｜scope：全文" in rx
 
     ledger = json.load(open(os.path.join(proj, "追踪", "拆解清单.json"), encoding="utf-8"))
     assert set(ledger) == {"fandom", "entries", "rules", "chunks"}
     assert ledger["chunks"] == 3
-    assert [e["name"] for e in ledger["entries"]] == ["斗气等级", "乌坦城", "萧炎"]
+    assert [e["name"] for e in ledger["entries"]] == ["焰力等级", "青石镇", "林澈"]
     assert len(ledger["rules"]) == 1
     assert os.path.exists(os.path.join(proj, "追踪", "拆解覆盖度.json"))
 
@@ -226,11 +226,11 @@ def test_extract_chunk_retries_then_succeeds(tool):
             calls["n"] += 1
             if calls["n"] < 3:
                 raise ValueError("坏 JSON")
-            return _payload(entries=[{"name": "萧炎", "cat": "人物", "desc": "主角。"}])
+            return _payload(entries=[{"name": "林澈", "cat": "人物", "desc": "主角。"}])
 
     data = tool.extract_chunk(Flaky(), "prompt", delay=0)
     assert calls["n"] == 3
-    assert data["entries"][0]["name"] == "萧炎"
+    assert data["entries"][0]["name"] == "林澈"
 
 
 def test_extract_chunk_gives_up_after_three_failures(tool, capsys):
@@ -258,9 +258,9 @@ def test_cli_and_theme_resolution(tool):
 def test_build_prompt_general_unchanged(tool):
     """general 主题的 prompt 与现状 PROMPT 逐字一致；专题只是在后面追加指令"""
     chunk = "材料正文"
-    base = tool.PROMPT.format(fandom="斗破苍穹", i=1, n=2, chunk=chunk)
-    assert tool.build_prompt("general", "斗破苍穹", 1, 2, chunk) == base
-    themed = tool.build_prompt("民生与市场", "斗破苍穹", 1, 2, chunk)
+    base = tool.PROMPT.format(fandom="青焰纪", i=1, n=2, chunk=chunk)
+    assert tool.build_prompt("general", "青焰纪", 1, 2, chunk) == base
+    themed = tool.build_prompt("民生与市场", "青焰纪", 1, 2, chunk)
     assert themed.startswith(base + "\n\n")
     assert "【专题指令：民生与市场】" in themed
     assert "辅币" in themed and "税收" in themed and "行会" in themed
