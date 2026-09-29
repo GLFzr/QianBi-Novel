@@ -4,13 +4,18 @@
 策略（config.gates.strategy）：
 - mark_continue（默认）：修复失败 → 标待修继续写
 - strict：修复失败 → 自动暂停等人（auto_pause）
+
+C4/C5（0.23.0 新增检测区）：生成退化检测（degeneration_findings，advisory 先观测）
+与字数双带判定（word_double_band/check_word_double_band，±12% 常规带/±15% 硬带）。
 """
 import logging
 import os
 import re
+from collections import Counter
 
 from .. import deslop, project
 from ..slots import GATE_MARK_CONTINUE, GATE_STRICT
+from . import deslop_metrics
 
 
 class GateResult:
@@ -294,3 +299,159 @@ def collapse_report(text: str, target: int) -> dict:
     collapsed, actual = check_collapse(text, target)
     return {"collapsed": collapsed, "actual": actual, "target": target,
             "repeat": repeat_findings(text), "sensitive": sensitive_findings(text)}
+
+
+# ============ C4 生成退化检测（0.23.0；oh-story check-degeneration.js 思想移植，t2 §5-Top4）============
+# 检测对象是「生成过程退化」（复读膨胀/词汇坍缩/句式固化/截断/占位/元泄漏），与
+# deslop 的「AI 文风痕迹」正交：退化是模型循环/断流的故障信号，deslop 是读感问题。
+# 全部 advisory——先观测真机稿分布，绝不 blocking、绝不进停机裁决（误拦=停机等人，
+# 与 P4 质检同纪律）。TODO(接线)：collapse_report/stages 消费点归后续批次，本批只
+# 出独立检测函数。
+#
+# 阈值依据（qianbi 校准样本实测，smoke_tmp 校准脚本）：正常中文 charbigram_ttr
+# 0.32-0.56、zlib_ratio 0.33-0.39；模型循环稿 bigram_ttr <0.10、zlib <0.10。
+
+DEGEN_MIN_CHARS = 400          # 词汇坍缩/句式固化的最小样本（短文 n-gram 噪声大）
+DEGEN_BIGRAM_TTR_FLOOR = 0.15  # 正常 0.32-0.56 / 循环 <0.10——取 0.15 留双侧余量
+DEGEN_ADJ_MIN_LEN = 8          # 紧邻近同整行的最短归一长度（oh-story ADJACENT_MIN_LEN）
+DEGEN_LINE_MIN_LEN = 12        # 全文复现通道的最短行长（oh-story 长句 ≥12 字）
+DEGEN_LINE_REPEAT = 3          # ≥12 字整行全文出现 ≥3 次（oh-story 复读通道）
+DEGEN_OPEN_MAX = 4             # 同段首 4 字开头的段落 ≥4 个（句式固化）
+DEGEN_TRUNC_MIN_CHARS = 200    # 截断判定的最小正文长度
+_TRUNC_TAIL_OK = set("。！？!?…”』」】)）…—")
+_DEGEN_PLACEHOLDER_RE = re.compile(
+    r"【待补】|【待填】|【待写】|【占位】|（待补）|（待填）|此处省略|TODO|FIXME")
+_DEGEN_META_RE = re.compile(
+    r"作为(?:一个)?AI|身为AI|人工智能助手|AI助手|语言模型|无法生成"
+    r"|无法完成[^。！？!?\n]{0,12}(?:请求|任务|创作)|内容政策|该到下一章了"
+    r"|以下是本章|以上是本章正文|本次生成|希望这段[^。！？!?\n]{0,12}符合")
+
+
+def degeneration_findings(text: str) -> list:
+    """生成退化检测（C4）：advisory 级 Finding 列表，规则 id 前缀 degeneration-*。
+
+    六通道（oh-story check-degeneration.js 的 findRepetition/findTruncation/
+    findPlaceholders/findMetaLeak 四通道 + 词汇坍缩/句式固化两个量化信号）：
+    1. degeneration-repeat       复读膨胀：紧邻近同整行（≥8 字）连现 ≥2 处 /
+                                 ≥12 字整行全文复现 ≥3 次
+    2. degeneration-lexcollapse  词汇坍缩：字符 bigram TTR <0.15（正常 0.32-0.56）
+    3. degeneration-pattern-fix  句式固化：同段首 4 字开头段落 ≥4 个
+    4. degeneration-truncation   截断：正文 ≥200 字却无句末终止符收尾
+    5. degeneration-placeholder  占位残留：【待补】/此处省略/TODO 类（raw 扫——
+                                 台词内的占位同样是未完成信号）
+    6. degeneration-metaleak     元泄漏：「作为AI/该到下一章了/以下是本章」类
+                                 工程语（掩码后扫——台词内「作为AI」可能是角色设定）
+    """
+    body = text or ""
+    out = []
+    chars = deslop_metrics.visible_chars(body)
+    # 1) 复读膨胀（oh-story findRepetition 双通道直译：紧邻整行 + 全文复现）
+    lines = [re.sub(r"\s+", "", ln) for ln in body.splitlines()]
+    lines = [ln for ln in lines if ln]
+    adjacent = sum(1 for a, b in zip(lines, lines[1:])
+                   if len(a) >= DEGEN_ADJ_MIN_LEN and a == b)
+    line_counts = Counter(ln for ln in lines if len(ln) >= DEGEN_LINE_MIN_LEN)
+    multi = sum(c - 1 for c in line_counts.values() if c >= DEGEN_LINE_REPEAT)
+    if adjacent >= 2 or multi >= 1:
+        out.append(deslop.Finding(
+            rule="degeneration-repeat", level="advisory",
+            message=f"复读膨胀：紧邻整行重复 ×{adjacent}、长行全文复现 ×{multi}"
+                    f"（生成循环信号）",
+            text="", start=0, end=0,
+            fix_hint="先查断流/重试链路；稿面删除重复段，保留信息量最全的一处"))
+    # 2) 词汇坍缩 + 3) 句式固化（量化信号，大样本才判）
+    if chars >= DEGEN_MIN_CHARS:
+        ttr = deslop_metrics.charbigram_ttr(body)
+        if 0 < ttr < DEGEN_BIGRAM_TTR_FLOOR:
+            out.append(deslop.Finding(
+                rule="degeneration-lexcollapse", level="advisory",
+                message=f"词汇坍缩：字符 bigram TTR {ttr}（正常中文 0.32-0.56），"
+                        f"用词面收窄到循环",
+                text="", start=0, end=0,
+                fix_hint="整章重写比逐句修补有效；先查是否同一场景/动作在原地打转"))
+        open_max = deslop_metrics.opening_ngram_max(body)
+        if open_max >= DEGEN_OPEN_MAX:
+            out.append(deslop.Finding(
+                rule="degeneration-pattern-fix", level="advisory",
+                message=f"句式固化：{open_max} 个段落以同 4 字开头（模板复用）",
+                text="", start=0, end=0,
+                fix_hint="变化段落进入方式：动作/对话/物件/环境轮换开场"))
+    # 4) 截断（oh-story findTruncation：正文收在非终止符上）
+    stripped = body.rstrip()
+    if chars >= DEGEN_TRUNC_MIN_CHARS and stripped \
+            and stripped[-1] not in _TRUNC_TAIL_OK:
+        out.append(deslop.Finding(
+            rule="degeneration-truncation", level="advisory",
+            message=f"疑似截断：正文 {chars} 字以「{stripped[-1]}」收尾，无句末终止符",
+            text="", start=0, end=0,
+            fix_hint="补完最后一句或截到最后完整句；截断常伴 token 上限/断流"))
+    # 5) 占位残留（raw 扫）+ 6) 元泄漏（掩码后扫，台词豁免）
+    ph = _DEGEN_PLACEHOLDER_RE.findall(body)
+    if ph:
+        out.append(deslop.Finding(
+            rule="degeneration-placeholder", level="advisory",
+            message=f"占位残留：「{'」「'.join(sorted(set(ph))[:4])}」"
+                    f"（生成未完成/模板占位）",
+            text=ph[0], start=body.find(ph[0]),
+            end=body.find(ph[0]) + len(ph[0]),
+            fix_hint="占位处补写实内容；成稿不得带【待补】类标记"))
+    masked = deslop_metrics.mask_quoted(body)
+    leaks = _DEGEN_META_RE.findall(masked)
+    if leaks:
+        out.append(deslop.Finding(
+            rule="degeneration-metaleak", level="advisory",
+            message=f"元泄漏：「{'」「'.join(sorted(set(leaks))[:4])}」"
+                    f"（模型工程语进入正文）",
+            text=leaks[0],
+            start=masked.find(leaks[0]), end=masked.find(leaks[0]) + len(leaks[0]),
+            fix_hint="删除元话语；叙述只写故事内世界，不写生成过程"))
+    return out
+
+
+# ============ C5 字数双带（oh-story wordcount_core.compute_wordcount_bands 实证参数，t2 §12.2）============
+# 常规带（internal）±12% / 硬带（user）±15%：常规带内=绿；常规带外硬带内=advisory
+# （作者带容忍）；出硬带=blocking。gates 侧纯判定函数——TODO(D-stages)：
+# stages._mc_word_gate 的消费接线归 D-stages 领地；word_count_precheck 维持 90%
+# 质量闸现状语义不动（消费面在 stages，双带是新增观测层不是替换）。
+# 口径 TODO：qianbi project.count_chars 含标点，oh-story visibleLength 只数汉字/
+# 字母数字（差约 2-5%，t2 §5 js→py 注意事项）——未来直移 storyctl 常数前需先统一。
+WORD_BAND_INNER = 0.12
+WORD_BAND_OUTER = 0.15
+
+
+def word_double_band(actual: int, target: int, inner: float = None,
+                     outer: float = None) -> dict:
+    """字数双带判定（C5）：返回 {status, direction, actual, target, inner_low/high,
+    outer_low/high, message}。
+
+    status：ok（常规带内）/ advisory（常规带外、硬带内）/ blocking（出硬带）。
+    边界含端点：actual==inner_low/inner_high → ok；==outer_low/outer_high →
+    advisory；带界随 target 用 int 截断（与 check_word_bounds 同款取整口径）。
+    """
+    i = WORD_BAND_INNER if inner is None else float(inner)
+    o = WORD_BAND_OUTER if outer is None else float(outer)
+    t = max(int(target), 1)
+    a = int(actual)
+    il, ih = int(t * (1 - i)), int(t * (1 + i))
+    ol, oh = int(t * (1 - o)), int(t * (1 + o))
+    if il <= a <= ih:
+        status = "ok"
+    elif ol <= a <= oh:
+        status = "advisory"
+    else:
+        status = "blocking"
+    direction = "" if status == "ok" else ("low" if a < t else "high")
+    band_txt = {"ok": "常规带内",
+                "advisory": "越出常规带（作者带容忍）",
+                "blocking": "越出硬带"}[status]
+    message = (f"{a} 字 / 目标 {t}：{band_txt}"
+               f"（常规带 [{il}, {ih}]，硬带 [{ol}, {oh}]）")
+    return {"status": status, "direction": direction, "actual": a, "target": t,
+            "inner_low": il, "inner_high": ih, "outer_low": ol, "outer_high": oh,
+            "message": message}
+
+
+def check_word_double_band(text: str, target: int, inner: float = None,
+                           outer: float = None) -> dict:
+    """C5 判定入口（正文文本版）：count_chars 口径与 word 闸门族一致"""
+    return word_double_band(project.count_chars(text or ""), target, inner, outer)
