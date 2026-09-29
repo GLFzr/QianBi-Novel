@@ -403,11 +403,18 @@ def summarize_findings(findings: list) -> dict:
 
 
 def findings_to_prompt_text(findings: list) -> str:
-    """把扫描结果转成给 LLM 的文本"""
+    """把扫描结果转成给 LLM 的文本（卡7：带规则 ID——改写稿复扫验收按规则 ID
+    归零/降档计算；尾部附正例修法口径与负例守则，防「换措辞复发同族句式」）
+
+    修法（fix_hint）即正例口径；负例统一收尾一句，不逐条膨胀 token。
+    """
     lines = []
     for f in findings:
         if f.text:
-            lines.append(f"- [{f.level}] {f.message}：「{f.text}」→ 修法：{f.fix_hint}")
+            lines.append(f"- [{f.level}|{f.rule}] {f.message}：「{f.text}」→ 修法：{f.fix_hint}")
         else:
-            lines.append(f"- [{f.level}] {f.message} → 修法：{f.fix_hint}")
+            lines.append(f"- [{f.level}|{f.rule}] {f.message} → 修法：{f.fix_hint}")
+    if lines:
+        lines.append("- 验收口径：每条命中按规则 ID 复扫，必须归零或至少降一档；"
+                     "不许把 B 写成新的否定铺垫，也不许换个措辞复发同族句式。")
     return "\n".join(lines)

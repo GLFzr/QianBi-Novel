@@ -19,7 +19,7 @@ from contextlib import contextmanager as _contextmanager
 from dataclasses import dataclass, field
 
 from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
-from .. import project, prompts, deslop, mustscan, wb
+from .. import project, prompts, deslop, deslop_metrics, mustscan, wb
 from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
 from ..prompts import bridge_codes, scene_cards
@@ -245,6 +245,28 @@ def _tic_blacklist(proj: str, last_n: int = 10) -> str:
     if not genre:
         return measured
     return measured + "\n题材专属限量（本书腔调配额，超出即算 AI 味）：" + genre
+
+
+def _high_freq_new_trigrams(original: str, rewritten: str,
+                            min_count: int = 3, max_out: int = 8) -> list:
+    """改写稿相对原稿「新增」的高频 3-gram（净出现 ≥min_count 次）→ 防复用黑名单。
+
+    C23/卡7 替换防复用：改写模型常把同一口癖片段一轮内复读多遍（原稿里没有的
+    3-gram 在改写稿里出现 ≥3 次）。命中片段追加进下一轮去味 prompt 的 tic_blacklist
+    （会话级不落盘）。空白不计入（中文 3-gram 语义），按净增次数降序取前 max_out 个。
+    """
+    def _counts(text: str) -> dict:
+        t = re.sub(r"\s+", "", text or "")
+        c = {}
+        for i in range(len(t) - 2):
+            g = t[i:i + 3]
+            c[g] = c.get(g, 0) + 1
+        return c
+    base = _counts(original)
+    hits = [(n - base.get(g, 0), g) for g, n in _counts(rewritten).items()]
+    hits = [(n, g) for n, g in hits if n >= min_count]
+    hits.sort(reverse=True)
+    return [g for _n, g in hits[:max_out]]
 
 
 # 契约段前言：四张重写模板共用，单点措辞（分散抄四份必然互相漂）
@@ -1984,6 +2006,12 @@ class _MicroCycle:
         ctx.step(num, st.STEP_SCAN)
         self.blocking, self.advisory = ([], []) if self.skip_scan_deslop else gates.scan_deslop(self.prose)
         gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+        # 卡6S：改前基线度量读数（纯本地零 token，随章记录落盘；去味收尾会覆盖为定稿读数）
+        try:
+            gr.metrics = deslop_metrics.compute_metrics(
+                self.prose, list(self.blocking) + list(self.advisory))
+        except Exception:  # noqa: BLE001
+            gr.metrics = {}
         ctx.log("info", "第 %d 章 本地扫描：阻断 %d 处 / 建议 %d 处%s"
                 % (num, len(self.blocking), len(self.advisory), "（断点续跑：跳过扫描与去味）" if self.skip_scan_deslop else ""))
 
@@ -2016,6 +2044,18 @@ class _MicroCycle:
         pre_deslop_prose = self.prose   # G7 回退还原点
         pre_deslop_turns = session.turn_count() if _session_usable(session) else 0
         rounds = 0
+        # C23/卡7 must 机器复扫闭环：带 pattern 的 must 规则集进循环前取一次（章内不变；
+        # scan_proj 同款过滤，只省每轮重复读盘）。空集=双复扫整体跳过——零 must 规则的
+        # 书零开销、prompt 字节不变；规则读盘异常视同空集（fail-open，不致回退风暴）。
+        try:
+            _must_rules = [r for r in project.regex_rules(proj, "logic")
+                           if (r.get("level") or "") == "must"
+                           and (r.get("pattern") or "").strip()]
+        except Exception as _e:  # noqa: BLE001
+            _must_rules = []
+            ctx.log("info", f"must 复扫规则读取失败（按无 must 规则跳过双复扫）：{_e}")
+        _must_new_total = 0   # 复扫累计「本轮改写新引入」的违规数（卡6S guard 出口）
+        _round_tics = []      # 3-gram 防复用黑名单（会话级不落盘，只进去味 prompt）
         # 调整五（writing.deslop_pinned，缺省关）：命中段 ≤2 处走定点修复——只输出
         # 替换段全文（无 JSON 编辑列表），本地拼回；不适定自动回退整章重写。
         _deslop_pinned_on = bool(_w_cfg.get("deslop_pinned", False))
@@ -2028,14 +2068,19 @@ class _MicroCycle:
             ctx.step(num, st.STEP_DESLOP)
             ctx.log("warn", f"第 {num} 章 阻断 {len(self.blocking)} 处 → 去味改写（第 {rounds} 轮）…")
             ctx.checkpoint()
+            pre_round_prose = self.prose
+            t_round = session.turn_count() if _session_usable(session) else 0
             rewritten = ""
             if _deslop_pinned_on:
                 rewritten = _deslop_pinned_rewrite(ctx, session, self.prose, self.blocking, self.advisory, num)
             if not rewritten:
                 findings_text = deslop.findings_to_prompt_text(self.blocking + self.advisory) + deslop_extra_text
-                t_round = session.turn_count() if _session_usable(session) else 0
+                _tic_txt = _tic_blacklist(proj)
+                if _round_tics:
+                    _tic_txt += ("\n改写防复用（上一轮产出中高频复现的片段，本轮不得再次复用，"
+                                 "换句法或干脆弃用）：" + "、".join(_round_tics))
                 deslop_kw = dict(findings=findings_text, prose=self.prose,
-                                 tic_blacklist=_tic_blacklist(proj),
+                                 tic_blacklist=_tic_txt,
                                  must_block=_must_block(proj, ctx.cfg),
                                  chapter_header=_chap_header(ctx, proj, num),
                                  project_header=project_header(proj))
@@ -2045,8 +2090,38 @@ class _MicroCycle:
                                            strip_static=_deslop_strip,
                                            strip_replacement="（改写原则见系统「去味改写规则」"
                                                              "（卷级冻结），本步照常执行。）")
+            if rewritten.strip() and _must_rules:
+                # C23 采纳前双复扫（卡7）：deslop 规则复扫在下方 scan_deslop，这里补
+                # must 契约指纹复扫——改写稿「新引入」must 违规 = 本轮改写更糟（trim
+                # 最低压缩量守卫同哲学），拒绝采纳：回退本轮、烧掉一个轮次并入
+                # max_deslop_rounds 熔断（不另起自动重试环，与 ±20% 字数纪律不拉扯）。
+                _must_before = mustscan.violation_keys(
+                    mustscan.check_patterns(pre_round_prose, _must_rules))
+                _must_after = mustscan.violation_keys(
+                    mustscan.check_patterns(rewritten, _must_rules))
+                _new_breaches = _must_after - _must_before
+                if _new_breaches:
+                    _must_new_total += len(_new_breaches)
+                    if _session_usable(session):
+                        session.rollback_to(t_round)   # 改写稿被否决 → 历史不留坏正文轮
+                    try:
+                        from .volume_session import record_event as _rec
+                        _rec(proj, "rewrite_retry", ch=int(num), round=rounds,
+                             new_must=len(_new_breaches))
+                    except Exception:  # noqa: BLE001
+                        pass
+                    ctx.log("warn", f"第 {num} 章 must 新增违规 {len(_new_breaches)} 条"
+                                    f"（去味第 {rounds} 轮改写稿拒绝采纳，回退本轮，"
+                                    f"剩余轮次 {max_deslop_rounds - rounds}）")
+                    _round_tics = list(dict.fromkeys(
+                        _round_tics + _high_freq_new_trigrams(pre_round_prose, rewritten)))
+                    self.blocking, self.advisory = gates.scan_deslop(self.prose)
+                    gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+                    continue
             if rewritten.strip():
                 self.prose = rewritten
+                _round_tics = list(dict.fromkeys(
+                    _round_tics + _high_freq_new_trigrams(pre_round_prose, rewritten)))
             elif _session_usable(session):
                 session.rollback_to(t_round)   # 空改写稿不采纳 → 历史不留坏正文轮
             self.blocking, self.advisory = gates.scan_deslop(self.prose)
@@ -2070,6 +2145,19 @@ class _MicroCycle:
                 self.prose = pre_deslop_prose                                # 还原原稿
                 if _session_usable(session):
                     session.rollback_to(pre_deslop_turns)   # 历史截断回去味前，正文消息与实际一致
+                # C23 对账断言：还原原稿语义下 must_after ⊆ must_before 恒成立——
+                # 违背即复扫/回退链有 bug，出声告警交人工（不阻断，fail-open）。
+                if _must_rules:
+                    try:
+                        _mk_pre = mustscan.violation_keys(
+                            mustscan.check_patterns(pre_deslop_prose, _must_rules))
+                        _mk_now = mustscan.violation_keys(
+                            mustscan.check_patterns(self.prose, _must_rules))
+                        if not _mk_now <= _mk_pre:
+                            ctx.log("warn", f"G7 对账异常：还原后 must 违规集合不是原稿子集"
+                                            f"（新增 {len(_mk_now - _mk_pre)} 条）——请人工复核正则规则")
+                    except Exception:  # noqa: BLE001
+                        pass
                 self.blocking, self.advisory = gates.scan_deslop(self.prose)
                 gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
                 gr.deslop_rounds_used = 0
@@ -2080,6 +2168,20 @@ class _MicroCycle:
                 gr.final_status = "pass"   # 人工裁决保留原稿 = 本步通过
         elif g7_idea:
             _store_inner_gate_idea(ctx, proj, num, "G7", g7_idea)
+
+        # 卡6S/卡7：去味收尾度量读数（覆盖 _mc_scan 的改前基线，随章记录落盘可横向
+        # 对比改写前后）+ guard 护栏读数（字数保持率/段落变化/must 新增违规累计）。
+        try:
+            gr.metrics = deslop_metrics.compute_metrics(
+                self.prose, list(self.blocking) + list(self.advisory))
+            _guard = deslop_metrics.compute_guard(pre_deslop_prose, self.prose,
+                                                  new_must_violations=_must_new_total)
+            if isinstance(gr.metrics.get("guard"), dict):
+                gr.metrics["guard"].update(_guard)
+            else:
+                gr.metrics["guard"] = _guard
+        except Exception:  # noqa: BLE001
+            pass
 
     def _mc_review(self) -> None:
         """④.5 审校（v2 6 维，投票/修复环/断点补票）+ W-3 里程碑② + ④.9 决策门 G8（回退=还原审校前文本）"""
