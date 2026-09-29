@@ -18,9 +18,13 @@ from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING
 from ..wb import worldbook_text
 from . import memory, state as st
 from .shared_prefix import project_header, chapter_header
+from .state_card import build_state_card
 
 TRANSCRIPT_MAX = 4000   # 对话转写截断上限（最近 ≤4k 字）
 HANDOFF_MAX = 800       # 交接块上限
+STATE_CARD_ENABLED = True   # 卡9-P2：状态卡注入开关（默认开；False=逐字回退旧装配，留作字节对照）
+STATE_CARD_BUDGET = 4096    # 状态卡字节预算（≈1365 汉字，与参考块既有 1200/1500 字符切片同档；
+                            # 超限裁剪逻辑在 state_card 内置：P5→P1 整项丢弃，P0 永不丢）
 
 
 # ---------- 对话转写管理 ----------
@@ -150,12 +154,29 @@ def _grow(preset_id: str, field: str) -> str:
         return "（该预设未提供此参考）"
 
 
+def _state_card_block(proj: str, num: int) -> str:
+    """七栏续写状态卡块（卡9-P2 消费）：build_state_card 生成，按预算注入参考块。
+
+    开关 STATE_CARD_ENABLED=False 时返回空串=逐字回退旧装配（字节对照位）；
+    生成失败 fail-open 为空串，绝不因状态卡挡住对话主链路。
+    """
+    if not STATE_CARD_ENABLED:
+        return ""
+    try:
+        card = (build_state_card(proj, num, budget=STATE_CARD_BUDGET) or "").strip()
+    except Exception:  # noqa: BLE001
+        return ""
+    return "【续写状态卡】\n%s" % card if card else ""
+
+
 def compose_reference_block(proj: str, stage: str, preset_id: str = "",
                             focus_chapter: int = 0) -> str:
     """各阶段参考块：上一环节产物 + grow_* 参考 + 世界书/正则（M2 注入）
 
     focus_chapter（仅 prose 阶段）：用户当前打开/选中的章号；0 = 沿用旧行为
     （next_chapter_num，即追加下一章）。
+    卡9-P2：prose 分支尾部追加七栏状态卡（STATE_CARD_ENABLED，超预算由
+    state_card 内置优先级裁剪），追踪台账真相与手工切片并存，关位逐字回退。
     """
     def rd(*rel):
         return project.read_file(os.path.join(proj, *rel))
@@ -215,7 +236,7 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
         char_state = project.read_file(project.get_tracking_path(proj, "角色状态"))[:1500] or "（无）"
         foreshadows = memory.unfished_foreshadows(proj, limit=1200) or "（暂无待回收伏笔）"
         recent = memory.read_recent_summaries(proj, num, n=3) or "（无更前章节摘要）"
-        return (f"【焦点章节】锚定第 {num} 章（用户在编辑器打开的章；若与作者本轮所指不同，以作者为准并提醒）\n\n"
+        base = (f"【焦点章节】锚定第 {num} 章（用户在编辑器打开的章；若与作者本轮所指不同，以作者为准并提醒）\n\n"
                 f"【本章细纲】\n{outline}\n\n【世界书摘要】\n{wb}\n\n【正则约束】\n{rg}\n\n"
                 f"【must 级自检】落笔前逐条核对上面 level=must 的规则：每条写出「本章落点」，"
                 f"给不出落点又与本章事件冲突的，先向作者提出确认，不得自行绕开或改写规则；"
@@ -224,6 +245,8 @@ def compose_reference_block(proj: str, stage: str, preset_id: str = "",
                 f"【前文摘要】\n{recent}\n\n"
                 f"【上一章结尾】\n{prev_ending}\n\n【下一章开头】\n{next_opening}\n\n"
                 f"【本章现状】{status}")
+        card = _state_card_block(proj, num)
+        return base + ("\n\n" + card if card else "")
     return "（本阶段无参考块）"
 
 
@@ -617,6 +640,9 @@ class CwProseCheckWorker(QThread):
     读 bridge 传入的编辑器工作副本；与流水线微循环同款 prompt 装配
     （DESLOP_REWRITE_PROMPT / FINAL_REVIEW_PROMPT），结果不落盘：
     - deslop：done 携带改写后文本（零改动时携带原文），前后扫描计数存属性；
+      卡6S：before/after 各调 deslop_metrics.compute_metrics，完整指标
+      （aid/by_rule/rhythm/connectivity/special）存 before_metrics/after_metrics，
+      after 侧 guard 组由 compute_guard 回填（字数保持率/段落差），供对比消费。
     - review：done 携带原始报告文本（bridge 侧解析并登记，复用待修汇总/一键修复）。
     """
     chunk = Signal(str)
@@ -637,6 +663,8 @@ class CwProseCheckWorker(QThread):
         self.changed = False
         self.before_counts = (0, 0)   # (blocking, advisory)
         self.after_counts = (0, 0)
+        self.before_metrics = None    # 卡6S：改写前完整指标（deslop_metrics.compute_metrics）
+        self.after_metrics = None     # 卡6S：改写后完整指标（guard 组由 compute_guard 回填）
 
     def run(self):
         # WP-27：章号上下文——本 worker 的 LLM 调用记录带此章号
@@ -652,13 +680,18 @@ class CwProseCheckWorker(QThread):
 
     def _run_deslop(self):
         from .. import deslop
+        from .. import deslop_metrics
         from . import gates
         from . import stages as stages_mod
         blocking, advisory = gates.scan_deslop(self.text)
         self.before_counts = (len(blocking), len(advisory))
+        # 卡6S：改写前完整指标（纯本地零 token）
+        self.before_metrics = deslop_metrics.compute_metrics(self.text, blocking + advisory)
         if not blocking and not advisory:
             self.changed = False
             self.result_text = self.text
+            self.after_metrics = dict(self.before_metrics)
+            self.after_metrics["guard"] = deslop_metrics.compute_guard(self.text, self.text)
             self.done.emit(self.text)
             return
         outline = project.read_file(project.get_outline_path(self.proj, self.num))[:600] \
@@ -682,6 +715,9 @@ class CwProseCheckWorker(QThread):
         b2, a2 = gates.scan_deslop(rewritten)
         self.changed = True
         self.after_counts = (len(b2), len(a2))
+        # 卡6S：改写后完整指标；guard 组回填改前↔改后对照（字数保持率/段落差）
+        self.after_metrics = deslop_metrics.compute_metrics(rewritten, b2 + a2)
+        self.after_metrics["guard"] = deslop_metrics.compute_guard(self.text, rewritten)
         self.result_text = rewritten
         self.done.emit(rewritten)
 
