@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 
 import httpx
@@ -73,6 +74,12 @@ STAGE_PARAM_KEYS = ("slot", "temperature", "top_p", "presence_penalty",
                     "frequency_penalty", "max_tokens", "thinking", "reasoning_effort")
 # 值存在才进请求体的采样参数：无预设时请求体逐字不变（不凭空多出 "top_p": null）
 OPTIONAL_PARAM_KEYS = ("top_p", "presence_penalty", "frequency_penalty")
+# QW-B2 值校验白名单：这些参数的 4xx 拒收若在错误文本里**回显了我方发的值**，
+# 说明网关拒的是「取值」而不是「参数本身」——按名即剥会让用户的配置错误被藏起来，
+# 还把该参数整进程停发（max_tokens 给大了被剥掉 = 这个模型本进程收不到输出上限）。
+# 名单外的参数（thinking 等枚举/开关）网关通常不回显值，维持按名即剥。
+_VALUE_ECHO_KEYS = frozenset({"max_tokens", "temperature", "top_p",
+                              "presence_penalty", "frequency_penalty"})
 # 章级配置快照（P2）留存的采样字段：只记实际进了请求体的，「没下发」本身也是信息
 SAMPLING_TRACE_KEYS = STAGE_PARAM_KEYS[1:] + ("thinking", "reasoning_effort")
 # temperature 锁死相位：审校多票判定口径（gates.review_temperature=0.2）是跨书可比的
@@ -95,6 +102,143 @@ _EFFORT_DROPPED_WARNED = set()
 # 下列常量把「怎么关这个渠道的思考」按 provider 分开，见 _escalate_after_empty。
 _THINKING_PARAM_HOSTS = ("deepseek",)  # 顶层 thinking={"type":"disabled"} 是确定有效的降档
 _ESCALATE_CEILING = 32768              # 抬高 max_tokens 的硬顶：给它把思考跑完再吐正文的空间
+
+# C05（QW-B1/E 识别层）四件配套常量：
+# - 非流式输出地板：思考计入输出上限，max_tokens 给太小（如 1024）时思考就能把它
+#   吃光、正文零输出。easy-writing NON_STREAM_MIN_TOKENS=2048 同源结论（实测不够）。
+_NON_STREAM_MIN_TOKENS = 2048
+# - Retry-After 尊重上限（秒）：服务端限流头照办，但防一个恶意/坏值把挂机跑吊死几小时
+_RETRY_AFTER_CAP = 120.0
+# - finish_reason 人话对照（E 识别层：last_finish_reason 落在 client 实例上，后续
+#   G2 截断拦截消费；这三条文案先把「为什么空/为什么短」翻译给人）
+_FINISH_REASON_HINTS = {
+    "length": "输出达到 max_tokens 上限被截断（思考或长文吃光了输出预算）",
+    "stop": "模型正常收尾",
+    "content_filter": "内容被网关安全过滤器拦截",
+}
+
+
+class _ThinkStreamFilter:
+    """`<think>…</think>` 流式过滤状态机（C05，对拍 easy-writing ai-think-filter.ts）
+
+    部分 OpenAI 兼容渠道把推理模型的思考过程内联在 content 里（MiniMax M2 官方接口、
+    OpenRouter/硅基流动路由的部分模型）——正文场景一旦漏进思考文字会被直接写进用户
+    小说，必须在请求层统一剥掉。四态：正常输出 / `<think>` 开（思考段内整体丢弃）/
+    闭标签后回到正常 / 尾部半截标签 holdback（`<thi` 可能是标签开头也可能是正文，
+    扣住等下一片补齐再判断）。流在思考段内结束（未闭合）→ 未吐出的部分整体丢弃。
+
+    与 easy-writing 语义逐字对拍：大小写不敏感（`<Think>` 同样剥）；holdback 上限
+    = 标签长度-1；finish() 时半截标签按普通文本如实吐出（正常收尾），思考段没闭合
+    则丢弃（被打断的思考不该漏半句进正文）。
+    """
+
+    OPEN = "<think>"
+    CLOSE = "</think>"
+
+    def __init__(self):
+        self._carry = ""
+        self._in_think = False
+
+    def _holdback_len(self, lower: str) -> int:
+        """尾部若可能是半截标签（如 "<thi"），长度扣住不吐，等下一片补齐再判断"""
+        ceiling = min(len(self.CLOSE) - 1, len(lower))
+        for n in range(ceiling, 0, -1):
+            tail = lower[-n:]
+            if self.OPEN.startswith(tail) or self.CLOSE.startswith(tail):
+                return n
+        return 0
+
+    def push(self, chunk: str) -> str:
+        """喂一个增量，返回本次可见文本（思考段内的内容直接丢弃）"""
+        self._carry += chunk or ""
+        out = ""
+        while True:
+            lower = self._carry.lower()
+            if self._in_think:
+                close = lower.find(self.CLOSE)
+                if close < 0:
+                    # 思考内容直接丢，只留可能是半截闭标签的尾巴
+                    keep = self._holdback_len(lower)
+                    self._carry = self._carry[len(self._carry) - keep:]
+                    return out
+                self._carry = self._carry[close + len(self.CLOSE):]
+                self._in_think = False
+                continue
+            open_at = lower.find(self.OPEN)
+            if open_at >= 0:
+                out += self._carry[:open_at]
+                self._carry = self._carry[open_at + len(self.OPEN):]
+                self._in_think = True
+                continue
+            keep = self._holdback_len(lower)
+            cut = len(self._carry) - keep
+            out += self._carry[:cut]
+            self._carry = self._carry[cut:]
+            return out
+
+    def finish(self) -> str:
+        """流结束收尾：正常态把扣住的尾巴如实吐回；思考段未闭合则整体丢弃"""
+        rest = "" if self._in_think else self._carry
+        self._carry = ""
+        self._in_think = False
+        return rest
+
+
+def strip_think_blocks(text: str) -> str:
+    """非流式整段清洗：闭合段整段删；只剩开标签没闭合（被截断）时其后全为思考内容一并丢弃"""
+    t = text or ""
+    t = re.sub(r"<think>[\s\S]*?</think>", "", t, flags=re.IGNORECASE)
+    open_at = t.lower().find(_ThinkStreamFilter.OPEN)
+    return t[:open_at] if open_at >= 0 else t
+
+
+def _parse_retry_after(value, now: float = None):
+    """Retry-After 头 → 秒数。认不了（空/非数字/坏日期）返回 None 走指数退避。
+
+    HTTP-date 形式（`Wed, 21 Oct 2026 07:28:00 GMT`）按当前时刻折算成剩余秒数；
+    负数（已经过期）钳成 0 = 立刻重试。
+    """
+    v = str(value or "").strip()
+    if not v:
+        return None
+    try:
+        return max(float(v), 0.0)
+    except ValueError:
+        pass
+    try:
+        from datetime import datetime, timezone
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(v)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if now is None:
+            now = datetime.now(timezone.utc).timestamp()
+        return max(dt.timestamp() - now, 0.0)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _finish_reason_hint(finish: str) -> str:
+    """finish_reason → 人话；认不出就返回空串（不编话）"""
+    return _FINISH_REASON_HINTS.get((finish or "").strip().lower(), "")
+
+
+def _value_echoed_in(low_text: str, value) -> bool:
+    """错误文本是否回显了我方实际下发的参数值（QW-B2 值校验的判据）
+
+    数值参数网关可能写成 `32768` 或 `32,768`、`0.7` 或整数化的 `3`，都算回显；
+    容器/布尔/None 不判（枚举与开关参数不进值校验白名单）。"""
+    if value is None or isinstance(value, (bool, dict, list)):
+        return False
+    if isinstance(value, int):
+        cands = {str(value), format(value, ",")}
+    elif isinstance(value, float):
+        cands = {str(value), repr(value), format(value, "g")}
+        if value.is_integer():
+            cands.add(str(int(value)))
+    else:
+        cands = {str(value).lower()}
+    return any(c and c.lower() in low_text for c in cands)
 
 
 def _host_of(url: str) -> str:
@@ -189,6 +333,9 @@ class LLMClient:
         self.last_degraded = False  # 最近一次调用是否发生过「不支持参数」降级
         self.last_aborted = False   # 最近一次流式调用是否被调用方 abort 中断
         self.last_sampling = {}     # 最近一次请求体实际下发的采样参数（章级配置快照）
+        # E 方案识别层：最近一次响应的 finish_reason（流式过去根本不读这个字段）。
+        # G2 截断拦截（「length 结束的稿子不得进闸门链」）后续从这里取值。
+        self.last_finish_reason = ""
 
     @classmethod
     def from_connection(cls, conn: dict, max_retries: int = 2,
@@ -239,14 +386,24 @@ class LLMClient:
         except Exception as e:  # noqa: BLE001
             logger.debug("用量埋点失败（忽略）: %s", e)
 
-    def _retry_wait(self, attempt: int, abort=None, reason=None) -> bool:
+    def _retry_wait(self, attempt: int, abort=None, reason=None,
+                    retry_after=None) -> bool:
         """重试前的统一指数退避（W-4）。返回 False＝等待期间被中止，调用方应 break。
 
         过去只有「抛异常」那条路径会睡，429/5xx 与空内容两条 `continue` 直接绕过退避
-        立刻重发同一份几百 k 的深栈——TR 的 503 SERVICE_BUSY 三连就是这么把整跑打死的。"""
-        delay = self.backoff_base * (2 ** attempt)
-        logger.warning("LLM retry %s/%s after %.1fs: %s",
-                       attempt + 1, self.max_retries, delay, reason)
+        立刻重发同一份几百 k 的深栈——TR 的 503 SERVICE_BUSY 三连就是这么把整跑打死的。
+        C05：网关 429 带了 Retry-After 头就照它等（尊重服务端的节流节奏比瞎猜指数
+        更省配额）；没有头/认不出该值则退回指数退避，行为与改动前逐字一致。
+        """
+        ra = _parse_retry_after(retry_after)
+        if ra is not None:
+            delay = min(ra, _RETRY_AFTER_CAP)
+            logger.warning("LLM retry %s/%s after %.1fs (Retry-After): %s",
+                           attempt + 1, self.max_retries, delay, reason)
+        else:
+            delay = self.backoff_base * (2 ** attempt)
+            logger.warning("LLM retry %s/%s after %.1fs: %s",
+                           attempt + 1, self.max_retries, delay, reason)
         if abort is None:
             time.sleep(delay)
             return True
@@ -307,11 +464,22 @@ class LLMClient:
     def _downgrade(self, payload: dict, err_text: str):
         """网关 4xx 明确点名了请求体里的某参数 → 剥掉重发并记入备忘录
 
-        认不出可剥参数时返回 None，调用方按原样抛错——参数降级不能变成吞错误的面子工程。
+        按名即剥 + 值校验白名单（QW-B2）：只有 `_UNSUPPORTED_HINT_KEYS` 白名单内的
+        参数名才可能被剥（白名单外点了名也不剥）；白名单内但错误文本回显了我方发的
+        值（`_VALUE_ECHO_KEYS`）说明拒的是取值——不剥、不进备忘录，返回 None 让
+        调用方把真错误原样抛给用户去改配置。认不出可剥参数时同样返回 None——
+        参数降级不能变成吞错误的面子工程。
         """
         low = (err_text or "").lower()
         rejected = [p for p in _UNSUPPORTED_HINT_KEYS if p in payload and p in low]
         if not rejected:
+            return None
+        echoed = [p for p in rejected
+                  if p in _VALUE_ECHO_KEYS and _value_echoed_in(low, payload.get(p))]
+        if echoed:
+            # 值级拒收：剥参数只会掩盖「你给的数不合法」。如实抛错，备忘录不留错结论。
+            logger.warning("网关拒收的是 %s 的取值（错误文本回显了该值），不剥参数：%s",
+                           "/".join(echoed), (err_text or "")[:200])
             return None
         if len(_UNSUPPORTED) > 64:
             _UNSUPPORTED.clear()   # 备忘录只做加速，不长期吃内存（换连接配置后旧键无意义）
@@ -379,11 +547,17 @@ class LLMClient:
                     _f.write(_line + chr(10))
             except Exception:
                 pass
+        mt = self._resolve("max_tokens", max_tokens, over)
+        if not stream and isinstance(mt, (int, float)) and mt < _NON_STREAM_MIN_TOKENS:
+            # C05 非流式输出地板：思考计入输出上限，太小的 max_tokens 会被思考吃光
+            # 只回一个空内容（再烧一次自愈重试）。流式不受此限（增量天然可截断）。
+            logger.info("非流式 max_tokens=%s 低于地板，抬到 %s", mt, _NON_STREAM_MIN_TOKENS)
+            mt = _NON_STREAM_MIN_TOKENS
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": self._resolve("temperature", temperature, over),
-            "max_tokens": self._resolve("max_tokens", max_tokens, over),
+            "max_tokens": mt,
             "stream": stream,
         }
         for key in OPTIONAL_PARAM_KEYS:   # 无配置时不下发：请求体与改造前逐字一致
@@ -463,6 +637,7 @@ class LLMClient:
         self.last_error = ""
         self.last_phase = phase or ""
         self.last_degraded = False
+        self.last_finish_reason = ""
         headers = self._headers()
         messages = self._build_messages(prompt, system)
         payload = self._build_payload(messages, stream=False, phase=phase,
@@ -482,6 +657,7 @@ class LLMClient:
                 latency=time.monotonic() - t0, stream=False)
 
         for attempt in range(self.max_retries + 1):
+            last_retry_after = None   # Retry-After 只对引发本次等待的那一发生效
             try:
                 with httpx.Client(timeout=self.timeout) as client:
                     resp = client.post(self._chat_url(), json=payload, headers=headers)
@@ -489,6 +665,10 @@ class LLMClient:
                     err = LLMError(
                         f"API 返回 {resp.status_code}: {resp.text[:500]}",
                         retryable=_status_retryable(resp.status_code))
+                    if resp.status_code == 429:
+                        # C05：429 时记下 Retry-After 头，重试等待按服务端要求来
+                        _h = getattr(resp, "headers", None)
+                        last_retry_after = _h.get("Retry-After") if _h is not None else None
                     if err.retryable:
                         last_err = err
                         _dl(f"http_{resp.status_code}", err=str(err), note="retryable")
@@ -511,15 +691,19 @@ class LLMClient:
                         content = data["choices"][0]["message"]["content"] or ""
                     except (KeyError, IndexError):
                         pass
+                    try:
+                        # E 识别层：finish_reason 无论内容空否都记录（空分支过去才读，
+                        # 流式过去根本不读——G2 截断拦截要靠它分辨「写完」与「被截断」）
+                        self.last_finish_reason = data["choices"][0].get("finish_reason") or ""
+                    except (KeyError, IndexError):
+                        pass
                     if not content:
                         # HTTP 200 但内容为空：服务端生成中断/超限，可重试
-                        finish = ""
-                        try:
-                            finish = data["choices"][0].get("finish_reason") or ""
-                        except (KeyError, IndexError):
-                            pass
+                        finish = self.last_finish_reason
+                        hint = _finish_reason_hint(finish)
                         last_err = LLMError(
-                            f"模型返回空内容 (finish_reason={finish})", retryable=True)
+                            "模型返回空内容 (finish_reason=%s%s)" % (finish, f"：{hint}" if hint else ""),
+                            retryable=True)
                         # W-4：这一发的 token 是真花了的（usage 已在响应里），先记账
                         self._charge_failed_attempt(data.get("usage"), t0, phase, "empty")
                         _dl('ok_empty', usage=data.get('usage') or {}, note=f'finish_reason={finish}')
@@ -562,10 +746,8 @@ class LLMClient:
                     raise
                 last_err = e
             if attempt < self.max_retries:
-                delay = self.backoff_base * (2 ** attempt)
-                logger.warning("LLM retry %s/%s after %.1fs: %s",
-                               attempt + 1, self.max_retries, delay, last_err)
-                time.sleep(delay)
+                # W-4 统一退避入口；429 带了 Retry-After 就按服务端要求等
+                self._retry_wait(attempt, None, last_err, retry_after=last_retry_after)
         self.last_error = str(last_err)
         self.last_latency = time.monotonic() - t0
         _dl("error", err=str(last_err), note="retries-exhausted")
@@ -621,6 +803,7 @@ class LLMClient:
         self.last_error = ""
         self.last_phase = phase or ""
         self.last_degraded = False
+        self.last_finish_reason = ""
         headers = self._headers()
         payload = self._build_payload(messages, stream=True, phase=phase,
                                       temperature=temperature)
@@ -641,6 +824,7 @@ class LLMClient:
 
         for attempt in range(self.max_retries + 1):
             parts = []   # 每次尝试重置：断流重试不得拼接两次的部分内容
+            think = _ThinkStreamFilter()   # C05：内联 <think> 过滤状态机（逐尝试重置）
             stream_usage = None   # 末 chunk 的 usage（include_usage）
             try:
                 with httpx.Client(timeout=self.timeout) as client:
@@ -669,8 +853,11 @@ class LLMClient:
                                 continue   # 换参数重发（网关点名不支持），不是限流 → 立刻发
                             # W-4：429/5xx 也要退避。过去这条 continue 绕过退避睡眠，
                             # 同一份几百 k 的深栈当场再打一遍——TR 的 503 三连就是这么打死整跑的
+                            _ra = getattr(resp, "headers", None).get("Retry-After") \
+                                if (resp.status_code == 429
+                                    and getattr(resp, "headers", None) is not None) else None
                             if attempt < self.max_retries and not self._retry_wait(
-                                    attempt, abort, err):
+                                    attempt, abort, err, retry_after=_ra):
                                 break
                             continue
                         for line in resp.iter_lines():
@@ -692,15 +879,28 @@ class LLMClient:
                             choices = chunk.get("choices") or []
                             if not choices:
                                 continue
+                            fr = choices[0].get("finish_reason") or ""
+                            if fr:
+                                # E 识别层：流式过去从不读 finish_reason；G2 截断拦截要靠它
+                                self.last_finish_reason = fr
                             delta = choices[0].get("delta") or {}
                             c = delta.get("content") or ""
                             r = delta.get("reasoning_content") or ""
                             if c:
-                                parts.append(c)
-                                if on_chunk:
-                                    _emit_to_subscriber(on_chunk, c)
+                                visible = think.push(c)   # C05：内联 <think> 段丢弃+半截标签 holdback
+                                if visible:
+                                    parts.append(visible)
+                                    if on_chunk:
+                                        _emit_to_subscriber(on_chunk, visible)
                             if r and on_reasoning:
                                 _emit_to_subscriber(on_reasoning, r)
+                        # 流正常收尾：holdback 扣住的尾巴按普通文本吐回；
+                        # 流停在思考段内（未闭合）时 finish() 返回空串=整体丢弃
+                        _tail = think.finish()
+                        if _tail:
+                            parts.append(_tail)
+                            if on_chunk:
+                                _emit_to_subscriber(on_chunk, _tail)
                 if self.last_aborted:
                     # 中断优先于空内容判定：否则「点停止时还没吐字」会掉进下面的
                     # 空内容分支 continue 重开连接，把重试预算烧光。
@@ -711,7 +911,10 @@ class LLMClient:
                     break
                 if not "".join(parts).strip():
                     # 全程无内容（或只有空白）：thinking 模式先退化重发，否则记入可重试错误
-                    last_err = LLMError("模型返回空内容 (stream)", retryable=True)
+                    _fr = self.last_finish_reason
+                    _hint = _finish_reason_hint(_fr)
+                    last_err = LLMError("模型返回空内容 (stream%s)" % (
+                        ", finish_reason=%s：%s" % (_fr, _hint) if _fr else ""), retryable=True)
                     self._charge_failed_attempt(stream_usage, t0, phase, "empty")
                     stream_usage = None
                     _dl('ok_empty', usage=stream_usage)
@@ -789,7 +992,16 @@ class LLMClient:
 
         H-8：空地址/非法协议/超时/DNS 失败四类连接错误在这里就地翻译成
         可读中文——裸 httpx 异常穿到 _NetWorker（只认 LLMError）会让新用户
-        点「测试连接」直接崩掉。"""
+        点「测试连接」直接崩掉。
+
+        QW-A4 空模型黄牌：连接还没选模型时直接返回警告级结果（⚠ 前缀），
+        不发起任何真实请求——「测试通过 ≠ 能写作」，与其让用户拿一张绿灯牌
+        到第一章才撞「还没选模型」，不如点测试的当场就说清。黄牌不是红牌：
+        连接配置本身没判死刑，不拦保存；桥侧按 ⚠ 前缀给琥珀级呈现（C06）。
+        """
+        if not (self.model or "").strip():
+            return ("⚠ 这条连接还未选择模型——写作前必须选一个：到 设置 · 连接与模型 "
+                    "点模型下拉选一个，或点「拉取」拿实时列表。")
         url = (self.base_url or "").strip()
         if not url:
             raise LLMError("连接失败：接口地址为空——请先填写 Base URL（如 https://api.deepseek.com）")
@@ -842,8 +1054,10 @@ class LLMClient:
 
 
 def clean_llm_output(text: str) -> str:
-    """清理 LLM 输出的 markdown 代码围栏"""
-    t = (text or "").strip()
+    """清理 LLM 输出：内联 `<think>` 思考段（非流式路径，C05）+ markdown 代码围栏
+
+    先剥思考段再剥围栏：`<think>` 打头会把 fence 检测顶掉，顺序反了就两头都漏。"""
+    t = strip_think_blocks((text or "").strip()).strip()
     if t.startswith("```"):
         lines = t.split("\n")
         if lines[0].startswith("```"):
