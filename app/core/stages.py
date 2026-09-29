@@ -24,6 +24,10 @@ from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
 from ..prompts import bridge_codes, scene_cards
 from . import deslop_metrics, gates, memory, scan, state as st, versions  # S6a：度量层下沉 core
+from .chapter_directive import (FIELD_ORDER as _CD_FIELD_ORDER,       # A1（0.23.0）章纲合同
+                                parse_directive as _parse_directive,
+                                to_prompt_block as _to_prompt_block,
+                                validate_directive as _validate_directive)
 from .satisfaction import outline_directive as _satisfaction_outline_directive
 from .satisfaction import prose_beat_block as _satisfaction_prose_block
 from .satisfaction import ledger_row as _sat_ledger_row
@@ -1591,6 +1595,21 @@ def _compaction_step(ctx, proj: str, num: int, session):
     return session, preface
 
 
+# ---- A1（0.23.0）章纲合同的模块级助手 ----
+
+def _directive_contract_block(directive) -> str:
+    """A1：ChapterDirective → 正文轮合同块；None / 零识别字段 → 空串。
+
+    空串纪律：legacy 自由版式细纲（无任何合同字段命中）装配字节逐字不变，
+    只有大纲已合同化的书才多出这一块（probe 漂移只发生在合同化细纲上）。
+    """
+    if directive is None:
+        return ""
+    if not any(getattr(directive, f, None) for f in _CD_FIELD_ORDER):
+        return ""
+    return "\n\n" + _to_prompt_block(directive)
+
+
 @dataclass
 class _MicroCycle:
     """C11：chapter_microcycle 七阶段（_mc_assemble→…→_mc_finalize）共享上下文。
@@ -1629,6 +1648,8 @@ class _MicroCycle:
     skip_scan_deslop: bool = False
     word_overflow: bool = False   # C17 G1 字数断路器：True=跳过 scan/deslop/review 直转人工
     sat_row: dict = None          # C33 爽点节奏账本：本章行（assemble 立据→finalize 落账）
+    directive: object = None      # A1（0.23.0）章纲合同实例（assemble 解析→draft 注入/review 消费）
+    directive_missing: list = field(default_factory=list)   # A1 必填缺失 fail 候选清单
 
     def _mc_assemble(self) -> None:
         """① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）+ 断点恢复"""
@@ -1691,6 +1712,25 @@ class _MicroCycle:
                 and getattr(session, "current_chapter", 0) != num:
             session.seed_prose(self.prose, chapter_num=num)
             ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
+
+        # A1（0.23.0）章纲合同挂点：细纲 → ChapterDirective（宽容解析，畸形不炸）
+        # + 必填校验。缺字段清单 = fail 候选（G4 warn 风格：只出声不阻断不落库），
+        # 实例存 mc 供正文合同块注入（_mc_draft）与 A2 覆盖对照（_mc_review）消费；
+        # while 循环之后解析 = G4 回退重读细纲后拿到的是最终版（断点续跑路径
+        # self.outline 来自 chapter_microcycle 的指纹读取，同样覆盖）。
+        self.directive = None
+        self.directive_missing = []
+        try:
+            self.directive = _parse_directive(self.outline or "", num)
+            self.directive_missing = _validate_directive(self.directive)
+        except Exception as e:  # noqa: BLE001
+            self.directive = None
+            self.directive_missing = []
+            ctx.log("warn", f"第 {num} 章 细纲合同解析失败（不阻断）：{e}")
+        if self.directive_missing:
+            ctx.log("warn", f"第 {num} 章 细纲合同校验：缺必填字段 "
+                            f"{', '.join(self.directive_missing)}"
+                            f"（fail 候选，不阻断——大纲即法律的机器抓手）")
 
         # C33（writing.satisfaction_ledger_enabled，缺省 on）：细纲批解析处读 declared——
         # 本章账本行在此立据（类型/强度/声明拍段），finalize 落账。账本是记录+核对，
@@ -1756,6 +1796,12 @@ class _MicroCycle:
         # 注入「三拍必须兑现」指令块；无节拍章/引擎关闭 = 空串（装配字节不变）。
         _beat_block = (_satisfaction_prose_block(outline)
                        if bool(_w_cfg.get("satisfaction_engine", False)) else "")
+        # A1（0.23.0）：细纲合同块注入——directive 有已识别字段时经 to_prompt_block
+        # 渲染，与 _beat_block 同一挂点纪律（S4/会话/单轮三分支逐字同注入位）；
+        # 零识别字段 = 空串（legacy 书装配字节不变）。注入位现状读点：状态卡/
+        # compose_reference_block 只在共写链（co_dialogue）消费，流水线内正文轮
+        # 的共享上下文挂点即此处。
+        _directive_block = _directive_contract_block(getattr(self, "directive", None))
         # A8（cost.a8_opening_compress，缺省关）：开幕轮密度压缩——只作用于会话路径
         # （开幕轮与 system 前缀重复的指令性槽位收敛为短引用）；关时逐字节不变。
         _a8_on = _a8_compress_enabled(ctx.cfg)
@@ -1779,7 +1825,7 @@ class _MicroCycle:
                     used_setpieces=prose_kw["used_setpieces"],
                     craft_block=prose_kw["craft_block"],
                     author_note=prose_kw["author_note"],
-                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _prose_directives
+                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _directive_block + _prose_directives
                 turn_text = session.open_chapter(
                     chapter_header(proj, num,
                                    volume_mode=not _w_cfg.get("head_rebuild", False),
@@ -1792,7 +1838,7 @@ class _MicroCycle:
                     # 收敛为短引用；卷会话（跨章历史已含前情正文）章头再跳三节。
                     prose_kw = _a8_opening_prose_kw(prose_kw)
                 turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
-                    + _beat_block + _prose_directives
+                    + _beat_block + _directive_block + _prose_directives
                 if hasattr(session, "open_chapter"):
                     turn_text = session.open_chapter(
                         _chap_header(ctx, proj, num, volume_mode=_a8_on), turn_text,
@@ -1802,7 +1848,7 @@ class _MicroCycle:
             self.prose = _session_ask(ctx, session, SLOT_WRITING, turn_text,
                                       label=f"草稿 第{num}章", phase=PHASE_PROSE)
         else:
-            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _prose_directives
+            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _directive_block + _prose_directives
             ctx.last_prompt = prompt
             self.prose = _stream(ctx, SLOT_WRITING, prompt, label=f"草稿 第{num}章",
                                  phase=PHASE_PROSE)
