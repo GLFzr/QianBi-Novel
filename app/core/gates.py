@@ -26,6 +26,7 @@ class GateResult:
         self.review_verdict = ""         # 最终审核 Agent 总评：PASS/PASS_WITH_NOTES/REJECT/REJECT_HARD
         self.review_rounds_used = 0
         self.final_status = "pass"   # pass / needs_fix
+        self.metrics = {}            # 卡6S：deslop_metrics.compute_metrics 读数（改前/轮次随章落盘）
 
     @property
     def blocking_count(self) -> int:
@@ -36,13 +37,17 @@ class GateResult:
         return len(self.advisory_findings)
 
     def to_record(self) -> dict:
-        return {
+        rec = {
             "words": self.word_actual,
             "deslop_blocking": self.blocking_count,
             "deslop_advisory": self.advisory_count,
             "review_blocking": len(self.review_blocking),
             "status": self.final_status,
+            # 卡6S：完整指标 dict（AID/分规则/节奏/连接度），未计算时为空 dict——
+            # 随章记录落盘，章与章可横向对比、卷/书可看趋势
+            "metrics": self.metrics,
         }
+        return rec
 
 
 def check_words(text: str, target: int, tolerance: float = 0.1) -> tuple:

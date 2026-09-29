@@ -47,9 +47,8 @@ def qianbi_isolated_dir():
 # 「先落名、后续批次才接线」的，必须在此登记「函数名 → 复活理由」，否则
 # test_dead_function_governance 判红。豁免不许用于绕过写错的代码。
 DEAD_FUNC_EVIDENCE = {
-    # 卡6S（C16 deslop 度量层）将复活 summarize_findings——函数头已挂「勿删」注释，
-    # 复活前在此登记豁免（w5_quickwins F3 裁决）。
-    "summarize_findings": "卡6S 度量层将复活（app/deslop.py），豁免期内保留",
+    # summarize_findings 已于卡6S 复活（app/deslop_metrics.compute_metrics 为其
+    # 消费方），豁免条目随之摘除；此表保留为后续「先落名后接线」批次的登记位。
 }
 
 

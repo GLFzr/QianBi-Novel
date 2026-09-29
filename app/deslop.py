@@ -45,6 +45,17 @@ TRAILER_SUMMARY = re.compile(
     r"正朝着[^。！？!?\n]{0,20}压了过去|"
     r"即将拉开序幕"
 )
+# 章末预告族（trailer）检测窗口：trailer 是「章末」病——正文中段同款句子属
+# 合法悬念铺陈不报，只收文末 600 可见字窗口（卡6S 存量修复）。
+TRAILER_WINDOW = 600
+
+
+def _tail_window_hits(pattern, body: str) -> list:
+    """pattern 在文末 TRAILER_WINDOW 字窗口内的命中（越出窗口的中段命中丢弃）"""
+    tail_start = max(0, len(body) - TRAILER_WINDOW)
+    return [m for m in pattern.finditer(body) if m.start() >= tail_start]
+
+
 # 抽象命运总结
 FATE_SUMMARY = re.compile(
     r"(?:命运|宿命)[^。！？!?\n]{0,28}(?:齿轮|棋局|獠牙|改写|安排)|"
@@ -164,9 +175,9 @@ def scan_text(text: str) -> list:
         add("voice-contrast", "blocking", "「声音不大，却……」音量反差腔", m, "直接写台词内容或动作")
     for m in FLAT_VOICE.finditer(body):
         add("flat-voice", "blocking", "无情绪声线（毫无波澜/平静无波）", m, "写具体声音特征或动作")
-    for m in TRAILER_ENDING.finditer(body):
+    for m in _tail_window_hits(TRAILER_ENDING, body):
         add("trailer-ending", "blocking", "「他不知道的是……」章末预告", m, "用具体钩子物件/事件收束")
-    for m in TRAILER_SUMMARY.finditer(body):
+    for m in _tail_window_hits(TRAILER_SUMMARY, body):
         add("trailer-summary", "blocking", "预告式总结收尾（才刚刚开始/没人知道…）", m, "用未解决问题或具体动作收束")
     for m in FATE_SUMMARY.finditer(body):
         add("fate-summary", "blocking", "抽象命运总结（齿轮/棋局/这一刻终于明白）", m, "回到角色当下可见的动作/对话/物件")
@@ -376,8 +387,11 @@ def scan_text(text: str) -> list:
 
 
 def summarize_findings(findings: list) -> dict:
-    # 卡6S 度量层将复活，勿删（B1 豁免；零调用豁免登记见 tests/unit/conftest.py 的 DEAD_FUNC_EVIDENCE）
-    """按规则聚合统计"""
+    """按 (rule, level) 聚合统计：{(rule, level): {rule, level, count, message, fix_hint}}
+
+    卡6S 度量层已复活：app/deslop_metrics.compute_metrics 以本函数为分规则
+    命中表的聚合底座（B1 死函数豁免登记随复活摘除）。
+    """
     stats = {}
     for f in findings:
         key = (f.rule, f.level)
