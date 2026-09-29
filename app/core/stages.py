@@ -26,6 +26,9 @@ from ..prompts import bridge_codes, scene_cards
 from . import gates, memory, scan, state as st, versions
 from .satisfaction import outline_directive as _satisfaction_outline_directive
 from .satisfaction import prose_beat_block as _satisfaction_prose_block
+from .satisfaction import ledger_row as _sat_ledger_row
+from .satisfaction import apply_payoff_verdict as _sat_apply_payoff
+from .satisfaction import record_chapter as _sat_record_chapter
 from .shared_prefix import chapter_header, project_header
 from .. import presets as genre_presets
 
@@ -1625,6 +1628,7 @@ class _MicroCycle:
     deslop_extra_text: str = ""
     skip_scan_deslop: bool = False
     word_overflow: bool = False   # C17 G1 字数断路器：True=跳过 scan/deslop/review 直转人工
+    sat_row: dict = None          # C33 爽点节奏账本：本章行（assemble 立据→finalize 落账）
 
     def _mc_assemble(self) -> None:
         """① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）+ 断点恢复"""
@@ -1687,6 +1691,15 @@ class _MicroCycle:
                 and getattr(session, "current_chapter", 0) != num:
             session.seed_prose(self.prose, chapter_num=num)
             ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
+
+        # C33（writing.satisfaction_ledger_enabled，缺省 on）：细纲批解析处读 declared——
+        # 本章账本行在此立据（类型/强度/声明拍段），finalize 落账。账本是记录+核对，
+        # 不改装配路径；off → None 全链路惰性（读写与 L0 注入均不发生）。
+        try:
+            self.sat_row = _sat_ledger_row(num, self.outline, ctx.cfg)
+        except Exception as e:  # noqa: BLE001
+            self.sat_row = None
+            ctx.log("warn", f"第 {num} 章 爽点账本立据失败（不阻断）：{e}")
 
     def _mc_draft(self) -> None:
         """② 草稿生成（世界书块+阶段指导消费+会话/单轮正文轮；断点续跑时整段跳过）"""
@@ -2404,6 +2417,23 @@ class _MicroCycle:
             ctx.log("info", f"第 {num} 章已落库，停止请求在收尾中到达，记录保留")
         except Exception as e:
             ctx.log("warn", f"追踪更新失败（不阻断）：{e}")
+
+        # C33（writing.satisfaction_ledger_enabled，缺省 on）：本章记录落账——declared
+        # 已在 _mc_assemble 立据，此处以审校 B_PAYOFF 维（六维 ===B_PAYOFF===，经
+        # _chapter_review 存于 ctx.review_v2.items）回写 delivered：B_PAYOFF 无 fail=
+        # 兑现（拷贝 declared）、有 fail=未兑现（计空头支票欠账）；未审/无 B_PAYOFF
+        # 证据（人工审校/字数预检拦截）→ 保持 None，不评不计欠账。纯本地零 LLM。
+        if self.sat_row is not None:
+            try:
+                _sat_apply_payoff(self.sat_row,
+                                  (getattr(ctx, "review_v2", None) or {}).get("items"))
+                _sat_record_chapter(proj, self.sat_row)
+                _dlv = self.sat_row.get("beats_delivered")
+                _dlv_txt = "未审" if _dlv is None else ("兑现" if _dlv else "未兑现")
+                ctx.log("info", f"第 {num} 章 爽点账本已落账（类型 {self.sat_row.get('类型') or '无'}"
+                                f" · {_dlv_txt}）")
+            except Exception as e:  # noqa: BLE001
+                ctx.log("warn", f"第 {num} 章 爽点账本落账失败（不阻断）：{e}")
 
         # 章节摘要 + 全局摘要链
         ctx.checkpoint()

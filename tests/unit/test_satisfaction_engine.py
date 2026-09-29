@@ -197,3 +197,11 @@ def test_wiring_guards_in_stages_source():
         "正文轮 _beat_block 注入点应为 3 处（S4 分支/会话分支/单轮分支）"
     assert len(re.findall(r"_satisfaction_outline_directive\(ctx\.cfg\)", src)) == 2, \
         "细纲装配 _satisfaction_outline_directive 注入点应为 2 处（批生成/会话内）"
+    # C33 显式改钉：爽点节奏账本接线钉（原 B1 两钉计数不变，新增账本三挂点钉）——
+    # _mc_assemble 立据 1 处 + _mc_finalize 落账 1 处 + B_PAYOFF 裁决回写 1 处
+    assert len(re.findall(r"_sat_ledger_row\(", src)) == 1, \
+        "账本 declared 立据挂点应为 1 处（_mc_assemble）"
+    assert len(re.findall(r"_sat_apply_payoff\(", src)) == 1, \
+        "账本 B_PAYOFF 裁决回写挂点应为 1 处（_mc_finalize）"
+    assert len(re.findall(r"_sat_record_chapter\(", src)) == 1, \
+        "账本章记录落账挂点应为 1 处（_mc_finalize）"
