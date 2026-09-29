@@ -8,6 +8,18 @@
 - 细纲是"要发生什么"的契约，不是正文的形状
 """
 
+from .hook_vocab import FIRST_HOOK_GUIDE, HOOK_TYPE_MENU, HOOK_VOCAB_BLOCK
+
+# T2 钩型受控词表注入（C34 段1）：三个钩子相关字段行由 hook_vocab 常量拼装——
+# 词表单一出处，改词表即改细纲模板。注入块内禁止 ASCII 花括号（模板整体走
+# .format()，test_hook_ledger 有钉测）；词表块的账本侧 schema 同见 hook_vocab。
+_POSITION_FIELD = ("- 章节定位：（高压/推进/修炼试错/关系回收/低压生活/信息整理——"
+                   "本档决定本章可用钩型与无钩白名单，规则见上方「钩型受控词表」分档路由）")
+_OPEN_HOOK_FIELD = f"- 章首钩子：（{FIRST_HOOK_GUIDE}）"
+_END_HOOK_FIELD = ("- 章尾钩子：（具体内容一句概括；钩型：" + HOOK_TYPE_MENU +
+                   "——七选一，须与词表判据相符；期待度：强/中/弱；"
+                   "低压生活/信息整理章可写「无」+读者往下看的理由；与下一章如何承接）")
+
 # ========== Phase 1-2：核心设定 ==========
 
 CORE_SETTING_PROMPT = """{project_header}
@@ -146,7 +158,7 @@ VOLUME_OUTLINE_PROMPT = """{project_header}
 
 # ========== Phase 3：章节细纲 ==========
 
-CHAPTER_OUTLINE_PROMPT = """{project_header}
+CHAPTER_OUTLINE_PROMPT = ("""{project_header}
 
 你是网络小说细纲设计师。为本批章节设计细纲（本批范围等逐批变化的信息见文末「本批动态上下文」）。
 
@@ -189,6 +201,8 @@ CHAPTER_OUTLINE_PROMPT = """{project_header}
 ## 关键动作不可章外化（防奇观跳拍）：
 凡属"首次"的事件——金手指首次使用、规则首次显形、核心关系首次建立——必须在某章的情节点序列里有
 【正拍】情节点（密，≥250字），禁止以"某某之后"开章承接、禁止压缩为起因背景。本批细纲如覆盖任何首次事件，须标注【正拍】。
+"""
+    + HOOK_VOCAB_BLOCK + """
 
 ## 输出格式：每章一个细纲，用 `===第N章===` 作为章节分隔符
 
@@ -199,11 +213,13 @@ CHAPTER_OUTLINE_PROMPT = """{project_header}
 - 核心事件：（一句话）
 - 字数目标：{chapter_words} 字
 - 阶段位置：（开篇期/发展期/高潮期/收尾期）
-- 章节定位：（高压/推进/修炼试错/关系回收/低压生活/信息整理）
+"""
+    + _POSITION_FIELD + """
 - 目标情绪：（具体情绪前状态→后状态，不得只写"热血/悲伤"等标签）
 - 主角目标/关键选择：
 - 本章结构公式：（节点1（目的） + 节点2（目的） + 节点3（目的） + 节点4（目的））
-- 章首钩子：
+"""
+    + _OPEN_HOOK_FIELD + """
 - 爽点：（低压章可写"无显性爽点，功能是…"，但仍须给读者往下看的理由）
 - 本章禁止提前释放：（没有就写"无"）
 
@@ -236,7 +252,8 @@ CHAPTER_OUTLINE_PROMPT = """{project_header}
 
 #### 结尾设定和钩子
 - 结尾设定：（收束落到什么具体动作或画面；未解决问题；下一章推动力）
-- 章尾钩子：（具体内容，期待度：强/中/弱；与下一章如何承接）
+"""
+    + _END_HOOK_FIELD + """
 
 （格式同上：为本批剩余每一章各输出一个 ===第N章=== 小节，直到本批末章）
 
@@ -282,7 +299,7 @@ CHAPTER_OUTLINE_PROMPT = """{project_header}
 
 ### 本批范围
 第 {start_chapter} 章 至 第 {end_chapter} 章（共 {count} 章）。
-只输出细纲内容，不要解释。"""
+只输出细纲内容，不要解释。""")
 
 
 # ========== 选题灵感辅助 ==========
