@@ -1155,6 +1155,26 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
     if not saved:
         raise StageError("细纲生成失败：批次全部失败（详见日志）")
     ctx.log("ok", f"细纲已生成 {len(saved)} 章：{[s[0] for s in saved]}")
+    # C14/卡2-T3 伏笔到期引擎：细纲批后独立校验（fail-open）——每条超期伏笔必须在本
+    # 批某章「伏笔推进」段出现「回收」或「改期：新窗口+理由」，否则 warn + 事件告警。
+    # 定位是证据供给（fail候选交审校终裁），不是独立裁决者：只出声、绝不阻断批次返回；
+    # 伏笔表缺失/无超期 → 恒空（旧书字节不变）。
+    if saved:
+        try:
+            from .l0_checks import foreshadow_findings as _foreshadow_findings
+            _fs = _foreshadow_findings(ctx.proj, saved, saved[0][0])
+            if _fs:
+                for _f in _fs:
+                    ctx.log("warn", "伏笔到期 L0（细纲批）：%s" % _f["text"])
+                try:
+                    from .volume_session import record_event as _rec
+                    _rec(ctx.proj, "foreshadow_overdue", ch=int(saved[0][0]),
+                         count=len(_fs),
+                         names="、".join(str(_f.get("quote") or "")[:20] for _f in _fs[:5]))
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception as _e:  # noqa: BLE001
+            ctx.log("warn", f"伏笔到期 L0 校验失败（fail-open，不阻断）：{_e}")
     return saved
 
 
@@ -2574,6 +2594,19 @@ def review_l0_block(proj: str, num: int, prose: str) -> str:
         read_states=lambda: project.read_file(project.get_tracking_path(proj, "角色状态")))
     if _v5:
         block += "\n\n" + _v5
+    # C14/卡2-T3：伏笔到期并列注入（与 build_v5_block 并列）——本章细纲「伏笔推进」段
+    # 既无「回收」也无「改期：新窗口+理由」的超期伏笔 → fail候选交审校终裁。
+    # 证据在场才检查（伏笔表缺失/无超期 → 恒空，旧书字节不变），fail-open 绝不阻断。
+    try:
+        from .l0_checks import foreshadow_findings as _foreshadow_findings
+        _ffs = _foreshadow_findings(
+            proj, [project.read_file(project.get_outline_path(proj, num))], num)
+        if _ffs:
+            block += ("\n\n【伏笔到期对照·第%d章（程序确定性预检，逐条裁决，不得无视）】\n" % num
+                      + "\n".join("- [%s|%s] %s" % (f["level"], f["check"], f["text"])
+                                  for f in _ffs[:6]))
+    except Exception:  # noqa: BLE001
+        pass
     return block
 
 
