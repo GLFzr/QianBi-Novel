@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -196,3 +197,92 @@ def prune_old_installers(directory: str, current_version: str = None,
         except OSError as e:
             report["skipped"].append("%s（%s）" % (n, e))
     return report
+
+
+# ---------- C19/U-A：静默安装的 journal × 完成标记 ----------
+#
+# 编排三方分工（w5_update.md §2.2，不引入常驻第三方进程）：
+#   app 写意向日志（journal，installUpdateNow 在拉起安装器**之前**落盘）；
+#   Inno 写完成标记（marker，installer.iss [Code] CurStepChanged ssPostInstall）；
+#   启动逻辑对账（app/main.py，journal × marker 两态）。
+# journal/marker 是更新域的落盘物，路径常量寄居本模块——既有数据目录 helper
+# （uc.updates_dir/uc.install_dir）全复用，config.py 本轮归 S4b 在途不加新键；
+# TODO(收口批/B8b)：随 Updates 域搬迁时整体平移进 UpdatesMixin 的领地。
+JOURNAL_NAME = "update_journal.json"   # 待更新意向：~/.qianbi_novel/updates/ 下
+MARKER_NAME = ".update_done"           # 装完标记：跟着程序目录走
+
+
+def journal_path() -> str:
+    return os.path.join(uc.updates_dir(), JOURNAL_NAME)
+
+
+def marker_path(base_dir: str = "") -> str:
+    return os.path.join(base_dir or uc.install_dir(), MARKER_NAME)
+
+
+def write_journal(to_version: str, pkg_path: str, from_version: str = "") -> dict:
+    """拉起安装器前落盘的「待更新」意向；先写临时文件再 replace，断电不留半份
+
+    记录 from/to 版本、安装包路径（排障与「引导手动安装」都靠它指路）与时间戳
+    （R3 回滚卡用它判「更新后首启崩溃」）。写失败由调用方决定去留——bridge 侧
+    的取舍是继续装（最坏是这次安装没人对账，不比放弃升级差）。
+    """
+    if not from_version:
+        from . import __version__ as from_version
+    entry = {"from": str(from_version), "to": str(to_version or ""),
+             "pkg": str(pkg_path or ""), "ts": time.time(), "phase": "launching"}
+    path = journal_path()
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(entry, f, ensure_ascii=False)
+    os.replace(tmp, path)
+    return entry
+
+
+def read_journal() -> dict:
+    """读不到/读坏都返回 {}：journal 只是意向，坏了不能挡正常启动"""
+    try:
+        with open(journal_path(), encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def clear_journal() -> None:
+    try:
+        os.remove(journal_path())
+    except OSError:
+        pass
+
+
+def read_marker_text(path: str = "") -> str:
+    """marker 内容（`v<版本> <时间戳>`）；空串 = 没有 marker = 安装器没跑完"""
+    try:
+        with open(path or marker_path(), encoding="utf-8", errors="replace") as f:
+            return f.read(256).strip()
+    except OSError:
+        return ""
+
+
+def reconcile_update(journal: dict, marker_text: str) -> dict:
+    """journal × marker 两态对账（纯判定；IO 由调用方做，好测）
+
+    - journal 缺 → {"state": "none"}：上次没在装更新，什么都不用做；
+    - journal + marker → {"state": "clear"}：安装器跑完了，清 journal 正常启动
+      （marker 里带的版本随行返回，给「已更新到 vX」的 toast 用）；
+    - journal 而 marker 缺 → {"state": "notify"}：安装器被杀软截杀/中途失败/断电
+      （U-3/U-4）——journal **保留**（下次启动继续提醒、供排障），指向安装包
+      引导手动安装；包不在了就退回 updates/ 目录（旧安装包的保留策略归 U-C）。
+    marker 在而版本与 journal.to 不符的细分（比如用户手动重装了旧版）归 R3
+    回滚卡，本态按「装完了」处理。
+    """
+    if not journal:
+        return {"state": "none"}
+    if marker_text:
+        return {"state": "clear", "to": str(journal.get("to") or marker_text),
+                "marker": marker_text}
+    pkg = str(journal.get("pkg") or "")
+    if pkg and not os.path.isfile(pkg):
+        pkg = ""
+    return {"state": "notify", "pkg": pkg, "updates_dir": uc.updates_dir()}

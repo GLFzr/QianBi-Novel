@@ -63,10 +63,18 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "立即运行 {#AppName}"; Flags: nowait postinstall skipifsilent
+; C19/U-A 静默安装编排：去掉 skipifsilent——/SILENT 装时无完成页，postinstall 条目
+; 按「勾选」执行，装完自动重开 app（≤2 点击判据的最后一环）；装完自动重开还撞上
+; 单实例锁的问题由 RestartApplications=no + app 先退兜着（见 [Setup] 注释）。
+; 交互路径行为不变：完成页照旧有「立即运行」勾选框。
+Filename: "{app}\{#AppExe}"; Description: "立即运行 {#AppName}"; Flags: nowait postinstall
 
 [UninstallRun]
 ; 用户数据 ~/.qianbi_novel 默认保留（书稿与配置）；如需彻底清理请手动删除该目录
+
+[UninstallDelete]
+; C19/U-A：.update_done 完成标记由 [Code] 段写入，不在卸载日志里，卸载时一并清掉
+Type: files; Name: "{app}\.update_done"
 
 [Messages]
 WelcomeLabel2=这将安装 [name/ver] 到你的电脑。%n%n一款运行在本机的 AI 网文自动写作台：自带模型 Key、数据不出本机、开源（MIT）。%n%n建议关闭其他正在运行的千笔一文窗口后继续。
@@ -135,4 +143,18 @@ begin
              '建议点「上一步」换一个独立目录。书稿与配置本身不在安装器写入的文件名里，' +
              '但程序与书混在一个目录会让卸载和备份都变复杂。', mbInformation, MB_OK);
   end;
+end;
+
+// C19/U-A 静默安装编排：装完写完成标记（marker），app 侧启动时与 journal 对账
+// （app/update_install.py JOURNAL_NAME/MARKER_NAME；对账逻辑在 app/main.py）。
+// marker 跟着程序目录走（{app}），app 读 install_dir()/.update_done 即可，
+// 无需安装器去展开用户 profile 的环境变量。内容 = 版本 + 时间戳，供日志与排障。
+// ssPostInstall 在全部文件落盘后、[Run] 执行前触发：静默装失败（盘满/文件被锁
+// 弹错误框）走不到这里，marker 缺席正是 app 侧「上次更新未完成」的判定依据。
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SaveStringToFile(ExpandConstant('{app}\.update_done'),
+      'v{#AppVersion} ' + GetDateTimeString('yyyy/mm/dd hh:nn:ss', '-', ':') + #13#10,
+      False);
 end;

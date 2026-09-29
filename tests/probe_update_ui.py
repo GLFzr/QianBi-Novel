@@ -291,6 +291,49 @@ def run_all():
     check("安装是两步确认", any("立即安装" in t for t in armed_texts)
           and not any("确认退出并安装" in t for t in armed_texts), str(armed_texts[:2]))
 
+    # ---- ⑤½ C19/U-A 静默安装编排：三旗标 + journal 先于 startDetached + shutdown ----
+    # 此刻 ④⑤ 已把门全开（安装版 + 验签清单 v99 + 哈希命中的包），installUpdateNow
+    # 会一路走到 os._exit——两个「真件」（QProcess.startDetached / os._exit）全换假件，
+    # 探针进程必须活下来继续跑；journal 落在 updates 沙箱（probe_guard），零真机残留。
+    import app.update_install as upd
+    detached, journal_at_launch, exits, shutdowns = [], [], [], []
+
+    class _QP:
+        @staticmethod
+        def startDetached(path, args):
+            journal_at_launch.append(dict(upd.read_journal()))   # 捕获拉起瞬间的 journal
+            detached.append((path, list(args)))
+            return True
+
+    _orig_QP = bridge_mod.QProcess
+    _orig_oexit = os._exit
+    _orig_shutdown = b.shutdown
+    bridge_mod.QProcess = _QP
+    os._exit = lambda code=0: exits.append(code)
+    b.shutdown = lambda *a, **k: shutdowns.append(True)
+    try:
+        b.installUpdateNow()
+    finally:
+        bridge_mod.QProcess = _orig_QP
+        os._exit = _orig_oexit
+        b.shutdown = _orig_shutdown
+    check("静默编排拉起安装器（真件零调用）", len(detached) == 1, str(detached))
+    if detached:
+        pth, ars = detached[0]
+        check("拉起的是已验包本体", pth == exe, pth)
+        check("/SILENT /NORESTART /LOG= 三旗标齐全",
+              ars[:2] == ["/SILENT", "/NORESTART"] and len(ars) == 3
+              and ars[2].startswith("/LOG=") and "install_v99" in ars[2], str(ars))
+    check("journal 先于 startDetached 落盘且记录包路径与版本",
+          bool(journal_at_launch) and journal_at_launch[0].get("pkg") == exe
+          and journal_at_launch[0].get("to") == NEW_VERSION,
+          str(journal_at_launch[:1]))
+    check("shutdown 已被调（U-6：os._exit 不走 aboutToQuit，收尾必须提前）",
+          len(shutdowns) == 1, str(shutdowns))
+    check("安装器拉起后 os._exit(0)（躲 Qt 静态析构）", exits == [0], str(exits))
+    check("journal 留盘供下次启动与 marker 对账", os.path.isfile(upd.journal_path()))
+    upd.clear_journal()
+
     # ---- ⑥ 限流、开关与白名单 ----
     reset(auto_check=True)
     requests.clear()

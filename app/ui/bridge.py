@@ -2132,8 +2132,15 @@ class Bridge(QObject):
         ① 清单验签通过且确实有更新；② 跑的是安装版（不覆盖正在运行的自己）；
         ③ 落盘文件此刻重算一遍 SHA-256 仍然命中——校验过就被换掉是极小的窗口，
         但重算只花几百毫秒，比赌它没被换便宜。
+
+        C19/U-A 静默编排（w5_update.md §2.2）：过门后 flush 草稿（不赌 5s 防抖）
+        → journal 落盘（**先于** startDetached：记录待更新状态与包路径，下次启动
+        与 .update_done marker 对账全靠它）→ shutdown() 优雅收尾（修 U-6：
+        os._exit 不走事件循环，aboutToQuit 不会再触发，流水线/共写线程必须在这里停）
+        → /SILENT /NORESTART /LOG 拉起安装器 → os._exit(0)。装完安装器写 marker
+        并自动重开（installer.iss [Run] 已去 skipifsilent）。
         """
-        from .. import update_check as uc
+        from .. import update_check as uc, update_install
         r = self._update_result
         pkg = self._update_pkg or {}
         if r is None or not r.can_install:
@@ -2159,19 +2166,37 @@ class Bridge(QObject):
             self.toast.emit("error", self._update_pkg["reason"])
             return
         # 脏稿不再拦关闭：未保存草稿本来就会被暂存，下次启动有恢复对话框兜底
+        self._flush_draft()
+        to_ver = r.version()
+        try:
+            update_install.write_journal(to_version=to_ver, pkg_path=path)
+        except OSError as e:
+            # journal 写不成也继续装：最坏是这次安装没人对账，不比放弃升级差
+            logger.warning("更新 journal 落盘失败（继续安装）：%s", e)
         self._quit_for_update = True
-        if not QProcess.startDetached(path, []):
+        self.shutdown()
+        log_name = "install_v%s.log" % (uc.sanitize_version(to_ver) or "latest")
+        # /SILENT（进度窗可见——217MB 拷贝的空窗期用户看得到「在装」，不至于手动
+        # 双击重开撞安装器）+ /NORESTART（RestartApplications=no 之外的双保险）
+        # + /LOG（Inno 逐文件安装记录，固定路径覆盖写，正好当排障凭据）。
+        # 不带 /SUPPRESSMSGBOXES：文件被锁/盘满的错误框是静默失败的用户可见出口。
+        log_path = os.path.join(uc.updates_dir(), log_name)
+        if not QProcess.startDetached(path, ["/SILENT", "/NORESTART",
+                                             "/LOG=%s" % log_path]):
+            # 没拉起来就没有安装器，也就永远不会有 marker：journal 必须撤掉，
+            # 否则下次启动会被误报成「上次更新未完成」
+            update_install.clear_journal()
             self._quit_for_update = False
             self.toast.emit("error", "安装程序没能启动（路径：%s）" % path)
             return
-        self.toast.emit("ok", "正在退出并安装 v%s" % r.version())
+        self.toast.emit("ok", "正在退出并静默安装 v%s，装完会自动重开" % to_ver)
         for h in logging.getLogger().handlers:
             try:
                 h.flush()
             except Exception:  # noqa: BLE001
                 pass
         # Qt 静态析构会在退出时抛 0xC0000409（app/selftest.py 同一坑），
-        # 而此刻用户已经在看安装向导了，别把一次成功升级报成崩溃
+        # 而此刻用户已经在看安装进度窗了，别把一次成功升级报成崩溃
         os._exit(0)
 
     @Slot(str)

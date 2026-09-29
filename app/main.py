@@ -136,6 +136,30 @@ def main():
     # A-10/H-9：退出收尾——运行中关窗必须停线程后正常退（旧实测 RC=127）
     app.aboutToQuit.connect(bridge.shutdown)
 
+    # ---- C19/U-A：静默更新启动对账（journal × .update_done marker 两态）----
+    # 上次退出写了 journal（退出去装更新了）：
+    #   marker 在 → 安装器跑完了：清 journal，正常启动，toast 报告新版；
+    #   marker 缺 → 安装器被杀软截杀/中途失败/断电（U-3/U-4）——静默失败必须
+    #   有用户可见出口：提示 + 保留 journal（下次启动继续提醒、供排障）+ 指向
+    #   updates/ 里保留的安装包引导手动安装（双击走向导，零门槛退路）。
+    try:
+        from . import update_install as _upd
+        _st = _upd.reconcile_update(_upd.read_journal(), _upd.read_marker_text())
+        if _st["state"] == "clear":
+            _upd.clear_journal()
+            logger.info("静默更新对账：已装到 v%s（marker=%s），journal 已清",
+                        _st.get("to"), _st.get("marker"))
+            bridge.toast.emit("ok", "已更新到 v%s" % _st.get("to"))
+        elif _st["state"] == "notify":
+            _hint = _st.get("pkg") or _st.get("updates_dir") or ""
+            logger.warning("上次静默更新未完成（journal 保留供排障）：%s", _hint)
+            bridge.toast.emit(
+                "warn",
+                "上次更新没有完成。安装包还在 %s ，可以双击它手动安装（会显示向导，"
+                "书稿与配置不受影响）。" % _hint)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("更新启动对账失败（不阻断启动）：%s", e)
+
     telemetry.record(cfg, "version", version=__version__)
     sys.exit(app.exec())
 
