@@ -486,3 +486,185 @@ def rollback_foreshadow_advances(proj: str, num: int) -> list:
         data["advances"] = rolled_log
         _write_json(_sidecar_path(proj, "伏笔表"), data)
     return rolled
+
+
+# ---------------- 章节计划（B7：goink chapter_plans 三槽位 next/near/far，0.23.0） ----------------
+# 「当前规划状态」而非「历史记录」（goink 固定 3 行 UPSERT 同思想）：sidecar
+# `追踪/章节计划.json` —— {version:1, next:{content,source_ch},
+# near:[{content,target_ch}], far:[{content}], consumed:[已流转章号]}。
+# - next  下一章必写（细纲装配的硬约束槽）；source_ch=登记/升格发生章；
+# - near  近 3-5 章计划（参考）；target_ch 只排不滤——goink 纪律：LLM 估算的
+#         章号永远进排序不进过滤，逾期与否由 review 语义复核校准；
+# - far   远期弧线（方向性，无章号）。
+# 流转（plan_consume，章定稿时调用）：next 清空出册、near[0] 升格为 next、
+# 其余前移——批量写作「写完一章立即维护再写下一章」的规划面；consumed 日志保
+# 同章重写重定稿幂等（不二次升格）。
+# 纯本地零 LLM；IO 全 fail-open（缺失/损坏按空计划处理，读路径零副作用——
+# setting_ledger 同款纪律）；三槽位全空 → render_for_outline 返回空串（证据在
+# 场才注入，不读配置）。
+# TODO(接线批)：render_for_outline 挂进 planning/stages 细纲装配、plan_consume
+# 挂章定稿归档分支——本卡只交付账本+查询/渲染函数，不碰 stages/prompts。
+
+PLAN_SIDECAR = "章节计划"
+_NEAR_RENDER_CAP = 5          # 细纲注入时 near 最多展示条数（存储不截，注入有界）
+_FAR_RENDER_CAP = 5
+
+
+def _empty_plan() -> dict:
+    return {"version": 1, "next": None, "near": [], "far": [], "consumed": []}
+
+
+def _plan_path(proj: str) -> str:
+    return _sidecar_path(proj, PLAN_SIDECAR)
+
+
+def load_chapter_plan(proj: str) -> dict:
+    """章节计划 sidecar（缺失/损坏 → 空计划；读路径零副作用，不回写）。
+
+    顺带做形态归一（fail-open）：next 非字典/空内容 → None；near/far 条目非
+    字典或空内容 → 丢弃；target_ch/consumed 章号非 int → 丢弃；同文条目去重。
+    """
+    data = _read_json(_plan_path(proj))
+    if not isinstance(data, dict):
+        return _empty_plan()
+    out = _empty_plan()
+    nxt = data.get("next")
+    if isinstance(nxt, dict) and str(nxt.get("content") or "").strip():
+        out["next"] = {"content": str(nxt["content"]).strip(),
+                       "source_ch": nxt.get("source_ch")
+                       if isinstance(nxt.get("source_ch"), int) else None}
+    for key in ("near", "far"):
+        items = out[key]
+        for e in data.get(key) or []:
+            if not isinstance(e, dict):
+                continue
+            content = str(e.get("content") or "").strip()
+            if not content or any(x["content"] == content for x in items):
+                continue
+            row = {"content": content}
+            if key == "near":
+                row["target_ch"] = e.get("target_ch") \
+                    if isinstance(e.get("target_ch"), int) else None
+            items.append(row)
+    cons = data.get("consumed")
+    if isinstance(cons, list):
+        out["consumed"] = sorted({c for c in cons if isinstance(c, int)})
+    return out
+
+
+def _save_plan(proj: str, data: dict) -> None:
+    data["version"] = 1
+    _write_json(_plan_path(proj), data)
+
+
+def plan_set_next(proj: str, content: str, source_ch: int | None = None) -> dict | None:
+    """UPSERT next 槽（下一章必写）。content 空白 → 清空（返回 None）"""
+    data = load_chapter_plan(proj)
+    content = str(content or "").strip()
+    if not content:
+        data["next"] = None
+    else:
+        data["next"] = {"content": content,
+                        "source_ch": int(source_ch) if isinstance(source_ch, int) else None}
+    _save_plan(proj, data)
+    return data["next"]
+
+
+def plan_add_near(proj: str, content: str, target_ch: int | None = None) -> dict | None:
+    """近章计划追加（同文幂等：既有同文条目仅更新 target_ch，不重复追加）"""
+    content = str(content or "").strip()
+    if not content:
+        return None
+    data = load_chapter_plan(proj)
+    hit = next((e for e in data["near"] if e["content"] == content), None)
+    if hit is None:
+        hit = {"content": content, "target_ch": None}
+        data["near"].append(hit)
+    hit["target_ch"] = int(target_ch) if isinstance(target_ch, int) else None
+    _save_plan(proj, data)
+    return hit
+
+
+def plan_add_far(proj: str, content: str) -> dict | None:
+    """远期弧线追加（同文幂等）。返回该条目；空白内容忽略"""
+    content = str(content or "").strip()
+    if not content:
+        return None
+    data = load_chapter_plan(proj)
+    hit = next((e for e in data["far"] if e["content"] == content), None)
+    if hit is None:
+        hit = {"content": content}
+        data["far"].append(hit)
+        _save_plan(proj, data)
+    return hit
+
+
+def plan_consume(proj: str, num: int) -> dict:
+    """章定稿流转：next 清空出册、near[0] 升格为 next（source_ch=本章）、其余
+    前移；far 不动。consumed 日志保幂等——同章重写重定稿不二次升格。
+
+    Returns: {"cleared": 被清空的原 next 内容或 None,
+              "promoted": 升格为 next 的原 near[0] 内容或 None,
+              "skipped": 本章已流转过/章号非法 → True（no-op）}
+    """
+    try:
+        num = int(num)
+    except (TypeError, ValueError):
+        return {"cleared": None, "promoted": None, "skipped": True}
+    data = load_chapter_plan(proj)
+    if num in data["consumed"]:
+        return {"cleared": None, "promoted": None, "skipped": True}
+    old = data.get("next") or {}
+    cleared = str(old.get("content") or "").strip() or None
+    promoted = None
+    if data["near"]:
+        head = data["near"].pop(0)
+        promoted = head["content"]
+        data["next"] = {"content": head["content"], "source_ch": num}
+    else:
+        data["next"] = None
+    data["consumed"].append(num)
+    _save_plan(proj, data)
+    return {"cleared": cleared, "promoted": promoted, "skipped": False}
+
+
+def plan_query(proj: str) -> dict:
+    """细纲装配查询：next 必写 / near 参考 / far 远景（fail-open 恒有全键）"""
+    data = load_chapter_plan(proj)
+    nxt = data.get("next") or {}
+    return {"next": str(nxt.get("content") or "").strip() or None,
+            "next_source_ch": nxt.get("source_ch"),
+            "near": [dict(e) for e in data.get("near") or []],
+            "far": [dict(e) for e in data.get("far") or []]}
+
+
+def render_for_outline(proj: str, max_chars: int = 1200) -> str:
+    """细纲 prompt 的章节计划块（账本注入风格；三槽位全空 → ""，调用方零注入）。
+
+    头行标注三槽位语义（next=必写 / near=参考 / far=远景）+ 每槽一行；near 取
+    前 _NEAR_RENDER_CAP 条（target_ch 仅作「约第N章」展示注，只排不滤）、far 取
+    前 _FAR_RENDER_CAP 条；累计超 max_chars 停止追加（character_brief_table
+    同款预算法）。next 注明登记章（溯源）。
+    """
+    q = plan_query(proj)
+    lines = []
+    if q["next"]:
+        src = "（第%d章登记）" % q["next_source_ch"] if q["next_source_ch"] else ""
+        lines.append("- 必写（next）：%s%s" % (q["next"], src))
+    if q["near"]:
+        parts = ["约第%d章 %s" % (e["target_ch"], e["content"]) if e["target_ch"]
+                 else e["content"] for e in q["near"][:_NEAR_RENDER_CAP]]
+        lines.append("- 近期（near）：" + "；".join(parts))
+    if q["far"]:
+        parts = [e["content"] for e in q["far"][:_FAR_RENDER_CAP]]
+        lines.append("- 远景（far）：" + "；".join(parts))
+    if not lines:
+        return ""
+    out = ["【章节计划】（next=下一章必写；near=近期参考；far=远景方向）"]
+    used = len(out[0])          # 头行计入预算
+    for ln in lines:
+        if used + len(ln) > max_chars:
+            break
+        out.append(ln)
+        used += len(ln)
+    return "\n".join(out)
