@@ -21,6 +21,7 @@ import os
 import re
 
 from . import memory as _memory
+from . import setting_ledger as _setting_ledger
 from . import tracking_store
 
 # S6a：原 from .. import project 上探边拆除（卡9-P2 引入的 core->app-top 违规）——
@@ -232,12 +233,20 @@ def _build_sections(proj_io, proj: str, num: int, stress: bool = False) -> list:
         ranked = tracking_store.foreshadow_urgency({"rows": rows}, num - 1)
     except Exception:  # noqa: BLE001
         ranked = []
+    fs_items = _sec_foreshadow(ranked, stress)
+    # B2/WA3-a 设定名词账本适配（只加适配不改结构）：揭示窗口临期/超期的设定
+    # 名词追加进「活跃伏笔(作者真相)」栏（固定 cap=4，不参与 stress 解限）——
+    # 账本 sidecar 缺失时恒空，卡片输出与 0.22 逐字一致（证据在场才注入，不读配置）。
+    try:
+        fs_items = fs_items + _setting_ledger.state_card_lines(proj, num - 1)
+    except Exception:  # noqa: BLE001
+        pass
     roles, zero_roles = _sec_roles(proj_io, proj, num, stress)
     outline = _outline_doc(proj_io, proj, num)
     return [
         ("当前位置", 0, _sec_position(proj_io, proj, num)),
         ("下一章承诺", 0, _sec_promise(proj_io, proj, num)),
-        ("活跃伏笔(作者真相)", 1, _sec_foreshadow(ranked, stress)),
+        ("活跃伏笔(作者真相)", 1, fs_items),
         ("连贯性风险", 3, _sec_risks(ranked, zero_roles, num, bool(outline.strip()))),
         ("核心角色状态", 2, roles),
         ("长期约束(正则must)", 4, _sec_must(proj_io, proj)),
