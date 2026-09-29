@@ -4842,19 +4842,9 @@ class Bridge(QObject):
         self.saveChapterText(body, quiet=True)
         self.toast.emit("ok", f"已提取正文到第 {self._cur_num} 章（{project.count_chars(body)} 字），请核对后点「确定」锁定")
 
-    def _start_cw_supervisor(self):
-        self._set_cw_busy(True)
-        # 工作副本优先：定稿时编辑器未保存内容（_working_text）才是「待定稿」，
-        # _chapter_text 是磁盘基准，只传它会在未保存时拿旧稿
-        editor_text = self._working_text or self._chapter_text if self._cur_num > 0 else ""
-        worker = co_dialogue.SupervisorWorker(self.cfg, self.proj, self._cur_num, parent=self,
-                                              chapter_text=editor_text)
-        worker.done.connect(self._on_cw_supervisor_done)
-        worker.error.connect(self._on_cw_error)
-        worker.finished.connect(lambda w=worker: self._release_cw_worker(w))
-        self._cw_worker = worker
-        worker.start()
-        self.toast.emit("info", f"主 Agent 正在做第 {self._cur_num} 章定稿前衔接比对（review 槽）…")
+    # F1：此处曾有第二份 `_start_cw_supervisor` 定义（双模式批误带的无 C2 接线旧拷贝），
+    # Python 类内后者静默覆盖前者——比对失败的逃生门（_on_cw_supervisor_error）成死代码。
+    # 已删除，唯一活版是 4756 的 C2 完整版；护栏钉测 test_cw_bridge_slots.py::test_f1_*。
 
     def _on_cw_supervisor_done(self, text: str):
         import datetime as _dt
