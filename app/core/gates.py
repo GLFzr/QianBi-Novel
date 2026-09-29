@@ -70,12 +70,42 @@ def check_word_bounds(text: str, target: int, tolerance: float = 0.2) -> tuple:
     return low_ok, high_ok, actual
 
 
-def scan_deslop(text: str) -> tuple:
-    """返回 (blocking_findings, advisory_findings)"""
-    findings = deslop.scan_text(text)
+def scan_deslop(text: str, proj: str = None) -> tuple:
+    """返回 (blocking_findings, advisory_findings)。
+
+    proj 给定时加载书级白名单（C16b/C3）：proj/.deslop-whitelist 每行一个字面量，
+    命中白名单的字面 span 不参与扫描（世界观术语/招式名误报的解法）；不传 proj
+    行为与 0.22 一致（stages/co_dialogue 既有调用面不变）。
+    """
+    whitelist = load_deslop_whitelist(proj) if proj else None
+    findings = deslop.scan_text(text, whitelist=whitelist)
     blocking = [f for f in findings if f.level == "blocking"]
     advisory = [f for f in findings if f.level == "advisory"]
     return blocking, advisory
+
+
+# 书级白名单（C16b/C3，oh-story style-whitelist.js 直译）：只认本书目录，
+# 不继承工作区或他书的选择；长词优先掩码。
+_WHITELIST_NAME = ".deslop-whitelist"
+
+
+def load_deslop_whitelist(proj: str) -> list:
+    """读 proj/.deslop-whitelist → 字面量列表（长词优先）。
+
+    行格式：每行一个字面量，# 开头为注释；文件缺失/损坏 → 空表（fail-open，
+    与 load_sensitive_words 同款纪律）。
+    """
+    if not proj:
+        return []
+    path = os.path.join(proj, _WHITELIST_NAME)
+    try:
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
+            lines = [ln.strip() for ln in f]
+    except OSError:
+        return []
+    out = [ln for ln in lines if ln and not ln.startswith("#")]
+    out.sort(key=len, reverse=True)
+    return out
 
 
 def resolve_failed(ctx, reason: str, gr: GateResult):

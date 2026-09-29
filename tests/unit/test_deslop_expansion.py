@@ -346,3 +346,124 @@ def test_not_is_dialogue_exempt_and_affirmation_safe():
     assert "abstract-summary-tic" in _rules(deslop.scan_text("旧的都翻篇了。新的开始。"
                                                              "新的开始。又是新的开始。"))
     # either-or 连词「不是A就是B」的排除与引号内豁免随 C1b/B1 状态机落地（见 test_deslop_c1b）
+
+
+# =====================================================================
+# C16b/C1b：6 处校准改进（B1 not-is 状态机 / B2 reverse 排除集 / B3 voice-contrast
+# 正则 / B4 negation-parade 排除集（随 A11 落地）/ B5 quote-emphasis 五类排除 /
+# B6 reasoning 四桶四重门）+ 书级白名单 + maskQuoted 行域重写
+# =====================================================================
+
+def test_b1_not_is_state_machine_exclusions():
+    # 五类排除（issue #166 误报学）：是不是问句 / 反问尾 / 确认语 / either-or / 分隔后连词
+    for safe in (
+        "他问了一句：「你是不是怕了？」她点头。",       # 是不是问句
+        "不是已经说好了吗？他偏要再来一次。",           # 反问尾（是吗/吧/嘛同族）
+        "不是第一次来。是的，他还记得那天。",           # 「是的」确认语
+        "不是东风压倒西风，就是西风压倒东风。",         # either-or
+        "不是我不想帮；只是我实在腾不出手。",           # 分号后连词「只是」（#166）
+    ):
+        assert "not-is-comparison" not in _rules(deslop.scan_text(safe)), safe
+    # 正例多型（oh-story test-ai-patterns 同款：而是/，是/紧凑/逗号后「只是」承接）
+    assert "not-is-comparison" in _rules(deslop.scan_text("不是害怕，是累了。"))
+    assert "not-is-comparison" in _rules(deslop.scan_text("不是笨是太急。"))
+    assert "not-is-comparison" in _rules(deslop.scan_text("他不是冷漠，只是累了。"))
+    assert "not-is-comparison" in _rules(deslop.scan_text("这不是结束，而是新的开始。"))
+    # 引号内台词「不是A，是B」是口语辩解——maskQuoted 豁免
+    assert "not-is-comparison" not in _rules(
+        deslop.scan_text("「不是我干的，是他逼我的。」他把杯子墩在桌上。"))
+    # 跨空行分段揭示（「不是A。是B」）仍报（skipGap）
+    assert "not-is-comparison" in _rules(
+        deslop.scan_text("这不是放弃。\n\n是换一条路走。"))
+
+
+def test_b2_reverse_not_is_exclusions():
+    assert "reverse-not-is" in _rules(deslop.scan_text("胜利是必然的，不是偶然的。"))
+    assert "reverse-not-is" in _rules(deslop.scan_text("他是真嗓子，不是修音修出来的。"))
+    for safe in (
+        "他手里拿的还是旧账本，不是新账。",             # 前字「还」合成词
+        "那只是传闻，不是实情。",                       # 前字「只」合成词
+        "可是他说的不是这个意思。",                     # 前字「可/但」合成词
+        "是不是他，不是别人。",                         # 是不是起头
+    ):
+        assert "reverse-not-is" not in _rules(deslop.scan_text(safe)), safe
+
+
+def test_b3_voice_contrast_regex_widened():
+    # oh-story 校准正则：音量词扩到 响亮、转折扩到 但/偏、允许 ≤16 字间隔
+    for hit in (
+        "他的声音并不响亮，却压住了整间屋子。",
+        "她的声音不高，第一句却稳稳落了地。",
+        "他的声音不大，偏要在这种时候开口。",
+    ):
+        assert "voice-contrast" in _rules(deslop.scan_text(hit)), hit
+    assert "voice-contrast" not in _rules(deslop.scan_text("他的声音不大，听得清每个字。"))
+
+
+def test_b5_quote_emphasis_exclusions():
+    base = '"自由"和"救赎"之外，还有"代价"与"选择"。'
+    assert "quote-emphasis" in _rules(deslop.scan_text(base))
+    # ①引语动词邻接=极短台词；②含句读=台词；③无叙述整行=弹幕流
+    assert "quote-emphasis" not in _rules(
+        deslop.scan_text('他说这是"自由"。她说这是"救赎"。她喊出"代价"。'))
+    assert "quote-emphasis" not in _rules(
+        deslop.scan_text('"自由，平等"写在了旗上。'))
+    assert "quote-emphasis" not in _rules(
+        deslop.scan_text('"叮咚""叮咚""叮咚"'))                # 引号外无叙述=拟声连发行
+    # ④【】系统面板载体；⑤引号套引号（台词内强调属角色语言）
+    assert "quote-emphasis" not in _rules(
+        deslop.scan_text('【提示："自由"已解锁】\n【提示："救赎"已解锁】\n【提示："代价"已解锁】'))
+    assert "quote-emphasis" not in _rules(
+        deslop.scan_text('他念道：“碑上刻着‘自由’二字。”他念道：“旁注是‘代价’。”'
+                         '他念道：“落款是‘救赎’。”'))
+
+
+def test_b6_reasoning_four_gates():
+    dense = "知道任务。这意味着风险。必须维持局面。任务与规则与责任。" * 6
+    assert "reasoning-chain" in _rules(deslop.scan_text(dense))
+    # 单桶/低密度不报（四重门）
+    assert "reasoning-chain" not in _rules(
+        deslop.scan_text("这意味着危险。也就是说他输了。问题在于没人信。"))
+    assert "reasoning-chain" not in _rules(
+        deslop.scan_text("任务、条件、风险、规则摆了一桌，他一条条核对过去。"))
+
+
+def test_in_dialogue_line_scoped_no_cross_line_leak():
+    from app.core import deslop_metrics as dm
+    # 漏收引号只吞到行尾，不会把后面成百上千字算成台词（maskQuoted 重写核心动机：
+    # 旧实现统计全文开合计数，行 1 漏收引号会把行 2 叙述判成台词内）
+    text = "「他说完就走了，\n门外静悄悄的，谁也没来。"
+    assert dm.in_dialogue(text, text.index("门外")) is False
+    # 行内正常闭合的台词照判
+    text2 = "「两句话说完了。」门外静悄悄的。"
+    assert dm.in_dialogue(text2, 3) is True
+    assert dm.in_dialogue(text2, text2.index("门外")) is False
+
+
+# ---- C16b/C3：书级白名单 ----
+
+def test_mask_style_text_and_scan_whitelist():
+    from app import deslop as d
+    poisoned = "他袖中滑出一抹青云，映亮了半间石室。"
+    assert "cliche-word" in _rules(d.scan_text(poisoned))          # 一抹=一级禁用词
+    kept = d.scan_text(poisoned, whitelist=["一抹青云"])           # 书里「一抹青云」是功法名
+    assert "cliche-word" not in _rules(kept)
+    # 白名单只掩字面 span，其余毒词照扫
+    still = d.scan_text("他眼中闪过一丝疲惫，袖中滑出一抹青云。", whitelist=["一抹青云"])
+    assert "cliche-word" in _rules(still)
+
+
+def test_gates_load_whitelist_and_scan_deslop_proj(tmp_path):
+    from app.core import gates
+    proj = tmp_path / "书名"
+    proj.mkdir()
+    (proj / ".deslop-whitelist").write_text(
+        "# 注释行\n一抹青云\n玄铁令\n", encoding="utf-8")
+    wl = gates.load_deslop_whitelist(str(proj))
+    assert "一抹青云" in wl and "玄铁令" in wl and "# 注释行" not in wl
+    assert gates.load_deslop_whitelist(str(tmp_path)) == []        # 缺文件 fail-open
+    poisoned = "他袖中滑出一抹青云，映亮了半间石室。"
+    blk, adv = gates.scan_deslop(poisoned, proj=str(proj))
+    assert not [f for f in blk + adv if f.rule == "cliche-word"]
+    blk2, adv2 = gates.scan_deslop(poisoned)                       # 不传 proj 行为同 0.22
+    assert [f for f in blk2 + adv2 if f.rule == "cliche-word"]

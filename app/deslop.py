@@ -28,12 +28,127 @@ class Finding:
 
 # ========== Blocking：确定性毒句式 ==========
 
-# "不是A，（而）是B" 及其变体
-NOT_IS_PATTERN = re.compile(
-    r"不是[^。！？!?\n]{1,30}?[，,](?:而)?(?:只)?是[^。！？!?\n]{1,30}"
-)
-# 反序变体 "是B，不是A"
-REVERSE_NOT_IS = re.compile(r"是[^。！？!?\n]{1,30}?[，,]不是[^。！？!?\n]{1,30}")
+# "不是A，（而）是B"：80 字滑窗状态机（C16b/B1，oh-story findNotIsComparisons 直译，
+# 替换 0.22 单正则）。五类排除（issue #166 误报学结晶）：
+#   ①「是不是」问句起头；②「是吗/吧/嘛」反问尾；③「是的/是啊/呀/呢」确认语
+#   （须后跟边界符）；④ either-or 连词（不是A就/也是B——就/也 前字的「是」是连词）；
+#   ⑤分隔后连词「是」（只是/可是/但是/还是/于是/倒是…——跨分隔符后只收
+#   分隔符紧邻的翻转位，「，他是」型主语翻转故意不收：硬归零门禁下误报逼改好文
+#   代价更高）。qianbi 超集：逗号（不含分号/冒号——#166 即分号连词类）后的
+#   只是/便是/却是 承接翻转保留 0.22 正则既有覆盖。引号内台词豁免（口语辩解自然）。
+_NI_STOP_CHARS = set("。！？!?\n")
+_NI_SOFT_SEPS = set("，,、；;：:")
+_NI_HARD_SEPS = set("。．！!？?")
+_NI_MAX_SPAN = 80
+_NI_EITHER_OR_PREV = set("不就也")
+_NI_TAG_PARTICLES = set("吗吧嘛")
+_NI_AFFIRM_PARTICLES = set("的啊呀呢")
+_NI_AFFIRM_BOUNDARY = set(["", "，", ",", "。", ".", "！", "!", "？", "?", "、",
+                           "；", ";", "：", ":", "\n", "\r", "\t", " "])
+_NI_TRAILING_NOISE = re.compile(r"[\s|）)】\]]+$")
+
+
+def _affirmation_tag_at(text: str, index: int) -> bool:
+    """「是的/是啊/呀/呢」确认语判定（须后跟边界符）——oh-story isAffirmationTagAt"""
+    if index >= len(text) or text[index] != "是":
+        return False
+    particle = text[index + 1] if index + 1 < len(text) else ""
+    if particle not in _NI_AFFIRM_PARTICLES:
+        return False
+    boundary = text[index + 2] if index + 2 < len(text) else ""
+    return boundary in _NI_AFFIRM_BOUNDARY
+
+
+def _skip_gap(text: str, index: int) -> int:
+    """跳过行内空白与换行（跨空行的「不是A。是B」分段揭示句）"""
+    while index < len(text) and (text[index] in " \t\r" or text[index] == "\n"):
+        index += 1
+    return index
+
+
+def _positive_flip_end(candidate: str) -> int:
+    """从「不是」后扫描 80 字找肯定翻转位——oh-story findPositiveFlipEnd 直译。
+
+    返回翻转位（「是」后一格或「而是」后两格）；找不到返回 -1。
+    """
+    index = 2
+    scanned = 0
+    crossed_separator = False
+    while index < len(candidate) and scanned <= _NI_MAX_SPAN:
+        ch = candidate[index]
+        if candidate.startswith("而是", index):
+            return index + 2
+        if ch in _NI_SOFT_SEPS:
+            nxt = _skip_gap(candidate, index + 1)
+            if candidate.startswith("而是", nxt):
+                return nxt + 2
+            soft_flip = (ch in "，,"
+                         and candidate.startswith(("只是", "便是", "却是"), nxt)
+                         and not _affirmation_tag_at(candidate, nxt + 1))
+            if soft_flip:
+                return nxt + 2
+            if candidate[nxt:nxt + 1] == "是" \
+                    and candidate[nxt + 1:nxt + 2] not in _NI_TAG_PARTICLES \
+                    and not _affirmation_tag_at(candidate, nxt):
+                return nxt + 1
+            crossed_separator = True
+        if ch in _NI_HARD_SEPS:
+            nxt = _skip_gap(candidate, index + 1)
+            if candidate[nxt:nxt + 1] == "是" \
+                    and candidate[nxt + 1:nxt + 2] not in _NI_TAG_PARTICLES \
+                    and not _affirmation_tag_at(candidate, nxt):
+                return nxt + 1
+            if ch != ".":
+                break
+            crossed_separator = True
+        if ch in _NI_STOP_CHARS:
+            break
+        # 紧凑式「不是A是B」只收首个分句内（未跨分隔符）；跨分隔符后「只是/但是…
+        # 的是」是连词词素不是系动词（issue #166），「，他是」型主语翻转不收。
+        if ch == "是" and candidate[index - 1] not in _NI_EITHER_OR_PREV \
+                and not crossed_separator:
+            return index + 1
+        index += 1
+        scanned += 1
+    return -1
+
+
+def _find_not_is_comparisons(text: str, quoted: list) -> list:
+    """「不是」锚点扫描 + 五类排除 + 引号豁免，返回 [(start, end)]"""
+    out = []
+    offset = 0
+    n = len(text)
+    while offset < n:
+        start = text.find("不是", offset)
+        if start == -1:
+            break
+        if any(s <= start < e for s, e in quoted):
+            offset = start + 2
+            continue
+        if start > 0 and text[start - 1] == "是":  # 「是不是」问句
+            offset = start + 2
+            continue
+        candidate = text[start:]
+        marker_end = _positive_flip_end(candidate)
+        if marker_end == -1:
+            offset = start + 2
+            continue
+        end = marker_end
+        limit = min(len(candidate), marker_end + _NI_MAX_SPAN)
+        while end < limit and candidate[end] not in _NI_STOP_CHARS:
+            end += 1
+        raw = _NI_TRAILING_NOISE.sub("", candidate[:end])
+        if len(raw) >= 4:
+            out.append((start, start + len(raw)))
+        offset = start + max(len(raw), 2)
+    return out
+
+# 反序变体 "是B，不是A"（C16b/B2 换 oh-story 校准正则 + 38 词前字排除集：
+# 「还是/只是/可是/但是/于是/倒是/像是/若是…」合成词里的「是」不是肯定项系动词；
+# 「是不是」问句起头、「是的」确认语、「不是吗/么/吧」反问尾单独排除。
+# 校准：《万疆》20 章 0 命中，demo 前 20 章 0 命中，blocking）
+REVERSE_NOT_IS = re.compile(r"是([^。！？!?\n，,]{1,12})[，,]\s*(?:而)?不是([^。！？!?\n]{1,20})")
+REVERSE_NOT_IS_PREV_EXCLUDE = set("不就也还只可但于倒像若要正便总老更最算怕凡或即自竟原本仍许净光单尽")
 # 否定排比（C1a/A11+B4 双模式重写，见 NEGATION_PARADE_PATTERNS）
 NEGATION_PARADE_PATTERNS = [
     # 模式①连排（qianbi 0.22 口径：第二段可不带尾逗号）+ 光杆「没」双护栏——
@@ -167,16 +282,41 @@ ABSTRACT_SUMMARY = [
     re.compile(r"(?:新的开始|全新的开始)"),
 ]
 
-# 解释链（密度型；C1b/B6 扩四桶四重门，见 REASONING_CHAIN_PATTERNS）
-REASONING_CONNECTOR = re.compile(r"这意味着|也就是说|换句话说|问题在于|关键在于|想到这里")
+# 解释链（C16b/B6 扩四桶四重门，见 REASONING_CHAIN_PATTERNS；原单桶正则退役）
+# 解释链四桶（oh-story REASONING_CHAIN_PATTERNS 直译）：mental/connector/modal 为 core，
+# abstract 非 core。四重门槛：总命中 ≥8 且 core ≥4 且 桶数 ≥2 且 ≥18/千字（引号外叙述）。
+# mental 桶与 telling-cognition 共用词面（前者不要求人称前缀、只计密度不逐处报）。
+REASONING_CHAIN_PATTERNS = [
+    ("mental", True,
+     re.compile(r"(?<![不没未无])(?:他|她|我)?(?:知道|明白|意识到|清楚|判断|确认|分析)")),
+    ("connector", True,
+     re.compile(r"这意味着|也就是说|换句话说|真正的问题(?:在于)?|问题在于|关键在于"
+                r"|在这种情况下|按照这个逻辑|只有这样|想到这里")),
+    ("modal", True,
+     re.compile(r"(?:(?<!不)(?:必须|需要|应该|只要|就会|可能|可以|能够|无法)|不能)"
+                r"[^。！？!?\n]{0,16}(?:判断|确认|承担|维持|稳住|控制|扩大|失控|带来|造成"
+                r"|理解|默认|核对|筛选|减少|建立|风险|结果|秩序|责任)")),
+    ("abstract", False,
+     re.compile(r"(?:任务|条件|风险|来源|逻辑|局面|结果|责任|秩序|规则|信息不足|决策能力)")),
+]
+REASONING_MIN_HITS = 8
+REASONING_CORE_MIN_HITS = 4
+REASONING_MIN_BUCKETS = 2
+REASONING_PER_KILO = 18
 
 # 引号强调滥用（叙述里短词加引号）——S6a 起真身在 core.deslop_metrics（与度量层
 # 共用的特征登记处单一真源，app-top→core 合法方向），此处导入转发保调用面不变
 from .core.deslop_metrics import (BRAKE_MARKERS, GAZE_MARKERS, QUOTE_EMPHASIS,
                                   in_dialogue as _in_dialogue,
                                   mask_quoted as _mask_quoted,
+                                  quoted_ranges as _quoted_ranges,
                                   strip_quoted as _strip_quoted,
                                   summarize_findings)
+
+# 引号强调排除集（C16b/B5）
+_QE_SENT_PUNCT = re.compile(r"[。！？!?…，,；;：:]")
+_QE_SPEECH_VERB = re.compile(r"[说道问喊答念叫回吼骂写读唱嘀咕]")
+QUOTE_EMPHASIS_MIN_HITS = 3
 
 # 否定刹车句独立成段（结构型：可预测的段落刹车）
 BRAKE_STANDALONE = re.compile(r"^[^\n]{0,6}没有[^。，！？\n]{1,6}[。！？]?$", re.M)
@@ -416,9 +556,31 @@ RECAP_OPENING = re.compile(
 RECAP_WINDOW = 400
 
 
-def scan_text(text: str) -> list:
-    """扫描正文，返回 Finding 列表"""
+def mask_style_text(text: str, whitelist: list) -> str:
+    """书级白名单字面 span 等长「？」掩码（C16b/C3，oh-story style-whitelist.js
+    maskStyleText 直译）：只认字面量、无正则；长词优先逐个掩码，命中区域不被任何
+    规则扫到。世界观术语/招式名误报的解法。"""
+    if not whitelist:
+        return text
+    chars = list(text)
+    for literal in whitelist:
+        at = text.find(literal)
+        while at != -1:
+            for i in range(at, at + len(literal)):
+                chars[i] = "？"
+            at = text.find(literal, at + 1)
+    return "".join(chars)
+
+
+def scan_text(text: str, whitelist: list = None) -> list:
+    """扫描正文，返回 Finding 列表。
+
+    whitelist：书级白名单字面量列表（gates.load_deslop_whitelist 产出）——
+    命中白名单的字面 span 先行等长掩码，不参与任何规则扫描。
+    """
     findings = []
+    if whitelist:
+        text = mask_style_text(text, whitelist)
     body = text
     # 去掉第一行标题
     if body.startswith("#"):
@@ -435,6 +597,8 @@ def scan_text(text: str) -> list:
     kilo = total_chars / 1000.0
     masked = _mask_quoted(body)      # 等长「？」占位——偏移不变，引号内豁免
     narration = _strip_quoted(body)  # 引号外叙述——密度分母/计数用（会移位，不定位）
+    # 引号外叙述可见字数（上游口径分母，供千字密度门）
+    narr_chars = _visible_len(narration)
 
     def add(rule, level, msg, m, hint=""):
         findings.append(Finding(
@@ -451,15 +615,23 @@ def scan_text(text: str) -> list:
         ))
 
     # ---- Blocking 单句命中 ----
-    for m in NOT_IS_PATTERN.finditer(body):
-        add("not-is-comparison", "blocking", "「不是A，（而）是B」翻转句式（最毒）", m,
-            "直接写 B，或拆成动作")
-    for m in REVERSE_NOT_IS.finditer(body):
-        # 排除 either-or 连词「不是A就是B」
-        seg = m.group(0)
-        if "就是" in seg or "也是" in seg:
+    ni_quoted = _quoted_ranges(body)
+    for s, e in _find_not_is_comparisons(body, ni_quoted):
+        add_span("not-is-comparison", "blocking", "「不是A，（而）是B」翻转句式（最毒）",
+                 s, e, body[s:e], "直接写 B，或拆成动作")
+    for m in REVERSE_NOT_IS.finditer(masked):
+        s = m.start()
+        # 前字排除：还是/只是/可是/但是/于是/倒是…合成词的「是」+ either-or 的 不/就/也
+        if s > 0 and masked[s - 1] in REVERSE_NOT_IS_PREV_EXCLUDE:
             continue
-        add("reverse-not-is", "blocking", "「是B，不是A」反序对比（not-is 变体）", m, "直接写 B")
+        if masked[s + 1:s + 2] == "不":          # 「是不是…」问句起头
+            continue
+        if _affirmation_tag_at(masked, s):        # 「是的，…」承接确认语
+            continue
+        if m.group(2)[:1] in ("吗", "么", "吧"):  # 「不是吗/么/吧」反问尾巴
+            continue
+        add_span("reverse-not-is", "blocking", "「是B，不是A」反序对比（not-is 变体）",
+                 s, m.end(), masked[s:m.end()], "直接写 B")
     np_spans = []
     for pat in NEGATION_PARADE_PATTERNS:
         for m in pat.finditer(body):
@@ -584,12 +756,30 @@ def scan_text(text: str) -> list:
             add("abstract-summary-tic", "advisory", "抽象总结复读（作者拔高腔）", m,
                 "落回角色当下证据")
 
-    # 解释链密度
-    reason_hits = list(REASONING_CONNECTOR.finditer(body))
-    if len(reason_hits) >= 3:
-        for m in reason_hits:
-            add("reasoning-chain", "advisory", "解释链连接词（替读者推理）", m,
-                "回到角色当下证据")
+    # 解释链密度（B6 四桶四重门：总命中/core/桶数/千字密度全过才报一条聚合）
+    reason_hits = reason_core = 0
+    reason_buckets = set()
+    reason_samples = []
+    for key, core, pat in REASONING_CHAIN_PATTERNS:
+        for m in pat.finditer(narration):
+            reason_hits += 1
+            reason_buckets.add(key)
+            if core:
+                reason_core += 1
+            if len(reason_samples) < 6 and m.group(0) not in reason_samples:
+                reason_samples.append(m.group(0))
+    if (narr_chars and reason_hits >= REASONING_MIN_HITS
+            and reason_core >= REASONING_CORE_MIN_HITS
+            and len(reason_buckets) >= REASONING_MIN_BUCKETS
+            and reason_hits / narr_chars * 1000 >= REASONING_PER_KILO):
+        findings.append(Finding(
+            rule="reasoning-chain", level="advisory",
+            message=f"解释链密度过高：知道/明白/这意味着/必须等判断链 {reason_hits} 处"
+                    f"（{reason_hits / narr_chars * 1000:.1f}/千字，"
+                    f"{'、'.join(reason_samples[:5])}），像逻辑报告",
+            text="", start=body_offset, end=body_offset,
+            fix_hint="把判断落到角色当下可见的动作、物件、对话和现场反馈",
+        ))
 
     # 碎句号：连续 6 个以上 ≤5 字的叙述短句
     sentences = re.split(r"(?<=[。！？!?])", body)
@@ -616,13 +806,43 @@ def scan_text(text: str) -> list:
         add("long-paragraph", "advisory",
             f"长段落（{len(m.group(0))} 字），建议按镜头断段", m, "")
 
-    # 引号强调滥用
-    quote_hits = [m for m in QUOTE_EMPHASIS.finditer(body)
-                  if not _in_dialogue(body, m.start())]
-    if len(quote_hits) >= 4:
-        for m in quote_hits:
-            add("quote-emphasis", "advisory", "叙述里短词加引号强调（密度型）", m,
-                "去掉引号直接陈述")
+    # 引号强调滥用（B5 五类排除，oh-story findQuoteEmphasisTic 直译）：
+    # 【】系统面板载体 / 引语动词邻接（前 6 字/后 3 字=极短台词）/ 引号内含句读 /
+    # 引号外无叙述的整行（独立台词/弹幕/拟声连发）/ 引号套引号。≥3 处报——
+    # 单处强调是正常修辞；真人语料也有转述载体用法（校准：《万疆》2 章），只 advisory。
+    qe_hits = []
+    for ln, off in _body_lines(body):
+        t = ln.strip()
+        if not t or _is_structural_line(t):
+            continue
+        if _visible_len(_strip_quoted(t)) == 0:
+            continue
+        ranges = _quoted_ranges(t)
+        for s, e in ranges:
+            # 语域限定：强调统计只看 “”/""（0.22 口径）。「」『』是对话主载体
+            # （台版/轻小说向整书通用），纳入会把角色代号/短台词全算成强调——
+            # 700 章真人语料实测：诡秘之主一章可命中 20+ 处，故排除（qianbi 对
+            # upstream 的语域收窄，排除逻辑仍为 upstream 五类）。
+            if t[s] not in "“\"":
+                continue
+            if t[s] == "【":
+                continue
+            if any(s2 <= s and e <= e2 and (s2, e2) != (s, e) for s2, e2 in ranges):
+                continue
+            inner = t[s + 1:e - 1]
+            vis = _visible_len(inner)
+            if vis < 1 or vis > 4:
+                continue
+            if _QE_SENT_PUNCT.search(inner):
+                continue
+            if _QE_SPEECH_VERB.search(t[max(0, s - 6):s]) or \
+                    _QE_SPEECH_VERB.search(t[e:e + 3]):
+                continue
+            qe_hits.append((off + s, off + e, t[s:e]))
+    if len(qe_hits) >= QUOTE_EMPHASIS_MIN_HITS:
+        for s, e, hit in qe_hits:
+            add_span("quote-emphasis", "advisory", "叙述里短词加引号强调（密度型）",
+                     s, e, hit, "去掉引号直接陈述，或换成具体动作让读者自己品")
 
     # ---- 结构层 AI 味（2026-08 真机语料分析新增：词表层已清洁，残留全在结构层）----
 
@@ -689,8 +909,6 @@ def scan_text(text: str) -> list:
                 "换具体身体反应或直接写动作")
 
     # ========== C1a 增量规则扫描（17 条，全部 advisory）==========
-    # 引号外叙述可见字数（上游口径分母，供千字密度门）
-    narr_chars = _visible_len(narration)
 
     # 1) negation-pair-tic「没A，也没B」否定对偶（补语尾排除）
     npair_hits = [m for m in NEGATION_PAIR.finditer(narration)

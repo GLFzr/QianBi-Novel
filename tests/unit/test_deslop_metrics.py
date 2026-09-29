@@ -35,7 +35,10 @@ _POISON_BLOCKS = [
     ("这好像是一种默契。那好像是巧合。灯好像是暗的。话好像是真是假。"
      "路好像还长。夜好像很深。人好像很多。"),                        # 好像 ×7 → metaphor-density
     "雨丝仿佛帘幕。雾仿佛海。灯仿佛星。记忆仿佛潮水。",              # 仿佛 ×4 → simile-marker-density
-    "这意味着危险。也就是说他输了。问题在于没人信。",                # reasoning-chain ×3
+    "这意味着危险。也就是说他输了。问题在于没人信。",                # reasoning connector
+    # reasoning 四桶密度（C16b/B6 四重门：无主语 mental + connector + modal + abstract，
+    # 密度过 ≥18/千字——不带人称前缀避免改 telling-cognition 计数）
+    "知道任务。这意味着风险。必须维持局面。任务与规则与责任。" * 6,  # reasoning ×42
     '"自由"和"救赎"之外，还有"代价"与"选择"。',                      # quote-emphasis ×4（ASCII 引号）
     "他没有回头。她没有接话。",                                     # brake-sentence（合计 4 处）
     "他没有动。",                                                   # brake-standalone-para 1/2
@@ -90,7 +93,7 @@ def test_metrics_match_hand_computation():
     assert c["flat-voice"] == 1
     assert c["cliche-word"] == 3            # 深吸一口气 / 眼中闪过 / 一丝
     assert c["telling-cognition"] == 3
-    assert c["reasoning-chain"] == 3
+    assert c["reasoning-chain"] == 1         # 聚合型（C16b/B6 四桶四重门起报一条）
     assert c["mengdi-density"] == 4
     assert c["em-dash"] == 2
     assert c["daizhe-adverb"] == 1

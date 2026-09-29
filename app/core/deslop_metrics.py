@@ -150,11 +150,20 @@ BRAKE_MARKERS = re.compile(r"没有[动说气回头停开口接答理翻]")
 
 
 def in_dialogue(text: str, pos: int) -> bool:
-    """判断位置是否在对话引号内（粗略：统计前面中文引号的开合）"""
-    before = text[:pos]
-    opens = before.count("“") + before.count("「")
-    closes = before.count("”") + before.count("」")
-    return opens > closes
+    """判断位置是否在对话引号内（C16b/C3 maskQuoted 重写：引号片段一律不跨行）。
+
+    旧实现统计位置之前全文引号开合计数——正文漏一个收引号很常见（多段台词只在
+    末段收尾、全半角引号混用都会漏），一个未闭合的开引号会把后面成百上千字全算成
+    「引号内」，让消费方把整段叙述静默豁免掉（oh-story QUOTE_SOURCES 注释点名的
+    失败模式）。现改为逐行计算引号区间：行内漏收引号只吞到行尾，不会跨行泄漏。
+    """
+    if not (0 <= pos < len(text)):
+        return False
+    line_start = text.rfind("\n", 0, pos) + 1
+    line_end = text.find("\n", pos)
+    if line_end == -1:
+        line_end = len(text)
+    return any(s <= pos < e for s, e in quoted_ranges(text[line_start:line_end]))
 
 
 def summarize_findings(findings: list) -> dict:
