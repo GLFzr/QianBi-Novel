@@ -9,6 +9,9 @@
 
 > 内容以中文 README 为准，可能滞后 —— The Chinese README is the source of truth;
 > this English file may lag behind it.
+>
+> 界面语言：简体中文（单语产品，暂无英文界面计划）— Interface language: Simplified
+> Chinese only (monolingual product; no English UI is planned).
 
 **A long-form fiction workbench where a human and an AI co-write** — the AI writes in full
 view, and the human stays the author.

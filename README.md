@@ -7,6 +7,8 @@
 [![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#下载)
 [![Tests](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml)
 
+> 界面语言：简体中文（单语产品，暂无英文界面计划）
+
 **人 AI 共写的长篇网文创作台** —— AI 全程透明写作，人永远是作者。
 
 写一部长篇网文真正的难点不是「让 AI 写出一章」，而是写到第 300 章时
