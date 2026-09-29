@@ -11,6 +11,7 @@
 """
 import json
 import os
+import shutil
 import sys
 
 
@@ -98,6 +99,21 @@ class DemoPack:
         turns = self.cw or []
         return turns[i] if 0 <= i < len(turns) else {}
 
+    # ---- 静态示例书（OB-M4：零 Key 只读入口的复制半边）----
+
+    @property
+    def book_source(self) -> str:
+        """book/ 目录（真实 API 生成的完整书——静态示例书的复制源）"""
+        return os.path.join(self.base, "book")
+
+    def chapter_count(self) -> int:
+        """正文章数（示例书信任底座：30 章长跑产物，缺正文 = 包坏）"""
+        d = os.path.join(self.book_source, "正文")
+        if not os.path.isdir(d):
+            return 0
+        import re as _re
+        return sum(1 for x in os.listdir(d) if _re.match(r"^第\d+章_.+\.md$", x))
+
     # ---- 校验 ----
 
     def missing(self) -> list:
@@ -125,3 +141,21 @@ class DemoPack:
         if not self.cw:
             probs.append("replay/cw_dialogue.json 为空")
         return probs
+
+
+def unpack_book(pack: "DemoPack", dest: str) -> int:
+    """把随包《种子书》整树复制成本地项目（OB-M4 零 Key 入口的复制半边）。
+
+    纯文件复制（零网络零 LLM）；返回复制文件数。dest 已存在时必须先由调用方
+    清理（只清打 demo 旗的副本，真书绝不覆盖）——本函数不判不删，边界留给桥。
+    """
+    src = pack.book_source
+    count = 0
+    for dirpath, _dirs, files in os.walk(src):
+        rel = os.path.relpath(dirpath, src)
+        target = dest if rel == "." else os.path.join(dest, rel)
+        os.makedirs(target, exist_ok=True)
+        for fn in files:
+            shutil.copy2(os.path.join(dirpath, fn), os.path.join(target, fn))
+            count += 1
+    return count

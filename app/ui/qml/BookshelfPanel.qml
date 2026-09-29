@@ -262,6 +262,16 @@ Item {
                     visible: bridge.demoAvailable
                     onClicked: bridge.demoStart()
                 }
+                // OB-M4：零 Key 静态示例书——《种子书》真实产物只读打开（零网络零费用）
+                AppButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    objectName: "openDemoBookButton"
+                    text: "打开示例书《种子书》（零 Key · 只读）"
+                    visible: bridge.demoAvailable
+                    onClicked: bridge.openDemoBook()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "30 章真实生成的完整书目：正文/审校报告/导出随便看；生成类按钮会拦下并指路"
+                }
             }
         }
 

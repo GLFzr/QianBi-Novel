@@ -3,6 +3,7 @@
 import datetime
 import difflib
 import json
+import shutil
 import threading
 import logging
 import os
@@ -1686,6 +1687,9 @@ class Bridge(QObject):
         if self._demo.active:
             self.toast.emit("warn", "演示模式不调用真实 API——点「跳过演示」后再开始写作")
             return
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
+            return
         if not self.proj:
             self.toast.emit("warn", "请先打开或新建项目")
             return
@@ -2024,6 +2028,64 @@ class Bridge(QObject):
             self._demo._win = wrapInstance(getCppPointer(win)[0], QQuickWindow)
         except Exception:  # noqa: BLE001  # 截图是诊断设施，挂载失败不挡演示
             self._demo._win = win
+
+    # ---- OB-M4：零 Key 静态示例书（《种子书》只读入口）----
+    # 与演示导演硬隔离互补：_demo.active 罩「引导演示进行中」（startPipeline 直接拒），
+    # _demo_book_reason 罩「打开的是随包示例书」——两条都是零 LLM 承诺的边界。
+    # 示例书 = assets/demo/book 的真实 30 章产物复制成本地书目 + demo 旗；可看
+    # 正文/审校报告/导出，一切生成/确定/破坏类动作拦下并指路（零网络零 Key）。
+
+    _DEMO_BOOK_BLOCK = ("《种子书》是随包示例书（只读体验，零 Key 零费用）——这个动作会改动它。"
+                        "想写自己的书：回书架点「新建项目」")
+
+    def _demo_book_reason(self) -> str:
+        """当前项目打了 demo 旗 → 返回非空（视为只读），空串 = 正常可写"""
+        if not self.proj:
+            return ""
+        try:
+            return "演示" if st.load_state(self.proj).get("demo") else ""
+        except Exception:  # noqa: BLE001  守卫自身故障绝不挡正常书写
+            return ""
+
+    @Slot()
+    @_guarded
+    def openDemoBook(self):
+        """书架空态「打开示例书《种子书》（零 Key · 只读）」：随包真实产物复制成本地
+        书目并打开。已有一本同名真书绝不覆盖（只重置打 demo 旗的副本）。"""
+        if self._running:
+            self.toast.emit("warn", "流水线运行中，先停止再打开示例书")
+            return
+        from .demo_pack import DemoPack, unpack_book
+        pack = DemoPack.load()
+        if pack is None:
+            self.toast.emit("warn", "示例书内容包缺失或损坏（assets/demo）")
+            return
+        name = pack.book_meta.get("name") or "种子书"
+        root = self.defaultBooksRoot()
+        path = os.path.join(root, name)
+        if os.path.isdir(path):
+            try:
+                marked = bool(st.load_state(path).get("demo"))
+            except Exception:  # noqa: BLE001
+                marked = False
+            if not marked:
+                self.toast.emit("warn", f"已有一本自己的《{name}》——示例书绝不覆盖真书；"
+                                        "换一个书目目录后可再打开示例书")
+                return
+            shutil.rmtree(path, ignore_errors=True)   # 重开即重置（与演示导演同纪律）
+        unpack_book(pack, path)
+        # 立项元数据 + demo 旗 + 显式落 auto 档（示例书是成品书，不进共写阶段机）
+        project.write_idea_info(path, pack.book_meta.get("genre", ""),
+                                pack.book_meta.get("platform", "番茄"),
+                                pack.book_meta.get("idea", ""),
+                                int(pack.book_meta.get("total_wan", 0) or 0))
+        state = st.load_state(path)
+        st.ensure_cw(state)["mode"] = "auto"
+        state["demo"] = True
+        st.save_state(path, state)
+        self._open_project(path)
+        self.toast.emit("ok", f"示例书《{name}》已打开（只读体验，零 Key 零费用）——"
+                              "正文/审校报告/导出随便看；生成类按钮会拦下并指路")
 
     # ---- 遥测开关（T4.3，默认关）----
     @Property(bool, notify=generalChanged)
@@ -2877,6 +2939,9 @@ class Bridge(QObject):
         self._rewrite_chapter_common(num, guidance)
 
     def _rewrite_chapter_common(self, num: int, guidance: str):
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
+            return
         if self._running or not self.proj:
             self.toast.emit("warn", "请先停止流水线再重写章节")
             return
@@ -2909,6 +2974,9 @@ class Bridge(QObject):
     def rewriteSelection(self, before: str, selected: str, after: str, idea: str, mode: str = "neighbor"):
         """AI 只改写选中段落：流式预览 → QML 应用/放弃
         mode: only=仅选中段 neighbor=带前后各一段 full=带全章 setting=全章+核心设定"""
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
+            return
         if not selected.strip():
             self.toast.emit("warn", "请先在编辑器中选中要改写的段落")
             return
@@ -4561,6 +4629,9 @@ class Bridge(QObject):
         if self._get_cw_mode() != "cw":
             self.toast.emit("warn", "当前不在共写档，先切换到共写")
             return
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
+            return
         if self._cw_busy:
             self.toast.emit("warn", "AI 正在回复中…")
             return
@@ -4637,6 +4708,9 @@ class Bridge(QObject):
     @_guarded
     def generateCwDraft(self):
         """「生成草案」：跳过讨论直接按本阶段结构产出草案（撰写模式的零输入入口）"""
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
+            return
         stage = self._get_cw_stage_key()
         if stage == st.STAGE_CW_PROJECT:
             # 尺5：同样先留痕再拒（点了按钮却"没反应"也要在对话里翻得到）
@@ -4883,6 +4957,9 @@ class Bridge(QObject):
         if not self.proj or not self._cw:
             return
         if self._get_cw_mode() != "cw":
+            return
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
             return
         if self._cw_busy or self._cw_confirming:
             self.toast.emit("warn", "上一个操作还没完成，稍后再点「确定」")
@@ -5739,6 +5816,9 @@ class Bridge(QObject):
 
     def _start_cw_prose_check(self, mode: str):
         if not self.proj or not self._cw:
+            return
+        if self._demo_book_reason():
+            self.toast.emit("warn", self._DEMO_BOOK_BLOCK)
             return
         if self._get_cw_mode() != "cw" or self._get_cw_stage_key() != st.STAGE_CW_PROSE:
             self.toast.emit("warn", "手动查验只在共写正文阶段可用")

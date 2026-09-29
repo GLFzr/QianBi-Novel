@@ -50,3 +50,30 @@ def test_m3_banner_silent_when_ready():
     assert re.search(r"visible:\s*shelf\.items\.length === 0\s*\|\|\s*"
                      r"bridge\.connReadySummary\.some", src), \
         "横幅 visible 条件不含「空书 ∨ 存在缺项」——全绿时横幅不该出现"
+
+
+# ---------- OB-M4：零 Key 静态示例书入口 ----------
+
+def test_m4_demo_book_entry_wiring():
+    """空态第二入口接 openDemoBook；复制半边与只读守卫真实存在"""
+    src = _read("BookshelfPanel.qml")
+    assert "bridge.openDemoBook()" in src, "空态缺「打开示例书」入口"
+    assert 'objectName: "openDemoBookButton"' in src
+    assert "零 Key" in src and "只读" in src, "入口文案必须写明零 Key 与只读（诚实边界）"
+    bsrc = _bridge_src()
+    assert re.search(r"def openDemoBook\(self\)", bsrc)
+    assert re.search(r"def _demo_book_reason\(self\)", bsrc), "只读守卫缺席"
+    assert re.search(r"def unpack_book\(", open(os.path.join(
+        ROOT, "app", "ui", "demo_pack.py"), encoding="utf-8").read()), "复制半边缺席"
+
+
+def test_m4_guard_covers_generation_entries():
+    """七入口守卫在场（少一处就是一处「示例书能被改」的谎）：流水线/对话/草案/
+    确定/去味审校/局部改写/整章重写"""
+    bsrc = _bridge_src()
+    for fn in ("startPipeline", "submitCwMessage", "generateCwDraft", "confirmCwStage",
+               "_start_cw_prose_check", "rewriteSelection", "_rewrite_chapter_common"):
+        # 逐函数取源（下一个同级 def 之前）断言守卫在场
+        m = re.search(rf"    def {fn}\(.*?(?=\n    def |\n    [A-Z_]+ = )", bsrc, re.S)
+        assert m, f"未定位到 {fn}"
+        assert "_demo_book_reason()" in m.group(0), f"{fn} 缺示例书只读守卫"
