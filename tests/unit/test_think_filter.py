@@ -397,3 +397,73 @@ def test_connection_with_model_still_tests(http):
     http([_ModelsResp()])
     c = lc.LLMClient("http://fake.invalid/v1", "sk", "m1")
     assert c.test_connection() == "连接成功"
+
+
+# ---------- 7. QW-B2：按名即剥 + 值校验白名单（client 侧） ----------
+
+@pytest.fixture(autouse=True)
+def _clean_memo(monkeypatch):
+    """能力备忘录是进程内全局：逐例清空，否则「不支持」结论跨用例串味"""
+    monkeypatch.setattr(lc, "_UNSUPPORTED", {})
+
+
+def _err(status, text):
+    return _JsonResp({}, status=status, text=text)
+
+
+def test_value_echo_rejection_is_not_stripped(http):
+    """max_tokens 给大了被 4xx 点名且回显取值：这是值级拒收——原样抛错，
+    不剥参数、不进备忘录（按名即剥会把配置错误藏起来还整进程停发 max_tokens）"""
+    rec = http([_err(400, "max_tokens is too large: 32768, this model supports at most 8192")])
+    c = lc.LLMClient("http://fake.invalid/v1", "sk", "m", max_tokens=32768,
+                     max_retries=0, backoff_base=0)
+    with pytest.raises(lc.LLMError) as e:
+        c.chat("p")
+    assert "32768" in str(e.value), "真错误要原样到用户手里"
+    assert c.last_degraded is False
+    assert "max_tokens" not in c._unsupported()
+    assert rec.calls[0]["max_tokens"] == 32768      # 请求体没被动过
+
+
+def test_name_level_rejection_still_strips(http):
+    """白名单内、无值回显的点名 → 照旧按名即剥并记备忘录"""
+    rec = http([_err(400, "Invalid parameter: 'max_tokens' is not supported by this model"),
+                _content("好")])
+    c = lc.LLMClient("http://fake.invalid/v1", "sk", "m", max_tokens=4096,
+                     max_retries=2, backoff_base=0)
+    assert c.chat("p") == "好"
+    assert c.last_degraded is True
+    assert "max_tokens" in c._unsupported()
+    assert "max_tokens" not in rec.calls[1]
+
+
+def test_temperature_value_echo_raises_instead_of_strip(http):
+    """temperature=3.7 越界回显在错误里：值级拒收，抛错不改请求体"""
+    http([_err(400, "temperature must be between 0 and 2, got 3.7")])
+    c = lc.LLMClient("http://fake.invalid/v1", "sk", "m", temperature=3.7,
+                     max_retries=0, backoff_base=0)
+    with pytest.raises(lc.LLMError):
+        c.chat("p")
+    assert c.last_degraded is False and not c._unsupported()
+
+
+def test_whitelist_out_param_is_never_stripped(http):
+    """白名单外参数（user/model）被点名：不剥、直接抛——剥了会悄悄改变请求语义"""
+    for text in ("field 'user' is not allowed here", "unknown field: 'model'"):
+        rec = http([_err(400, text)])
+        c = lc.LLMClient("http://fake.invalid/v1", "sk", "m", user_id="u1",
+                         max_retries=0, backoff_base=0)
+        with pytest.raises(lc.LLMError):
+            c.chat("p")
+        assert c.last_degraded is False
+        assert "user" in rec.calls[0] and "model" in rec.calls[0]
+
+
+def test_value_echo_helper_forms():
+    """回显判据：整数/逗号千分位/浮点/整数化浮点都算；容器与 None 不算"""
+    assert lc._value_echoed_in("got 32768 tokens", 32768)
+    assert lc._value_echoed_in("got 32,768 tokens", 32768)
+    assert lc._value_echoed_in("temperature 3.7 invalid", 3.7)
+    assert lc._value_echoed_in("value 3 is out of range", 3.0)      # 整数化浮点
+    assert lc._value_echoed_in("thinking must be an object", {"type": "enabled"}) is False
+    assert lc._value_echoed_in("anything", None) is False
