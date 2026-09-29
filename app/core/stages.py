@@ -16,6 +16,7 @@ import logging
 import os
 import re
 from contextlib import contextmanager as _contextmanager
+from dataclasses import dataclass, field
 
 from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
 from .. import project, prompts, deslop, mustscan, wb
@@ -1545,6 +1546,106 @@ def _compaction_step(ctx, proj: str, num: int, session):
     return session, preface
 
 
+@dataclass
+class _MicroCycle:
+    """C11：chapter_microcycle 七阶段（_mc_assemble→…→_mc_finalize）共享上下文。
+
+    字段名 = 原函数局部名（w4 §1.2 切缝清单的跨段超集，AST 实测 23 个跨段
+    共享局部变量 + guidance/ideas 漏斗进 draft 段 + ctx/num 基础设施）；
+    chapter_microcycle 退化为顺序编排器，函数签名与返回值不变（调用点零改动）。
+    """
+    ctx: object                    # 流水线上下文（log/step/gate/checkpoint/router/cfg…）
+    num: int
+    guidance: str
+    ideas: list
+    proj: str
+    session: object                # 章会话/卷会话/None（缺省单轮路径）
+    _comp_preface: str             # 长程压缩交接块（只给开幕轮一次）
+    _w_cfg: dict                   # ctx.cfg 的 writing 节
+    _s4_freeze: bool               # writing.s4_static_freeze
+    chapter_words: int
+    gates_cfg: dict
+    tolerance: float
+    max_deslop_rounds: int
+    gr: object                     # gates.GateResult
+    outline: str
+    outline_fp: str
+    resume_at: str                 # 章内断点（_ORDER 之一；""=从头）
+    saved_votes: list
+    resume_prose: str
+    draft_rel: str
+    # —— 以下字段由各阶段顺序写入 ——
+    draft_extra_ideas: list = field(default_factory=list)
+    next_brief: str = ""
+    prose: str = ""
+    blocking: list = field(default_factory=list)
+    advisory: list = field(default_factory=list)
+    deslop_extra_text: str = ""
+    skip_scan_deslop: bool = False
+
+    def _mc_assemble(self) -> None:
+        """① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）+ 断点恢复"""
+        ctx = self.ctx
+        num = self.num
+        proj = self.proj
+        session = self.session
+        _w_cfg = self._w_cfg
+        resume_at = self.resume_at
+        resume_prose = self.resume_prose
+        saved_votes = self.saved_votes
+        draft_rel = self.draft_rel
+        outline_fp = self.outline_fp
+        chapter_words = self.chapter_words
+        self.draft_extra_ideas = []
+        while resume_at == "" and True:
+            ctx.step(num, st.STEP_ASSEMBLE)
+            outline_path = project.get_outline_path(proj, num)
+            self.outline = _sanitize_chapter_refs(project.read_file(outline_path))
+            if not self.outline:
+                raise StageError(f"第 {num} 章细纲不存在")
+
+            next_outline = project.read_file(project.get_outline_path(proj, num + 1))
+            self.next_brief = _sanitize_chapter_refs(next_outline[:600]) if next_outline else "（本章为当前最后一章细纲）"
+            core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
+                            or "（未提供）")
+            # 章级上下文（全局摘要/近章摘要/角色状态/时间线/伏笔/上一章结尾与文风样本）
+            # 已统一收敛到 chapter_header（八节，两层前缀的第二层），不再散装注入——
+            # 截断取各消费方上限最大值，信息只增不减。
+            ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））")
+            # 决策门 G4：素材组装后（软门：默认轻提示）；outline_pregen 冻结期改话术
+            _g4_freeze = bool(_w_cfg.get("outline_pregen", False))
+            g4_idea = ctx.gate("G4", f"材料就绪：细纲 + 章级共享段（摘要/状态/伏笔/上一章锚点）（草稿目标 {chapter_words} 字）"
+                               + ("【细纲已预生成冻结：运行中不改细纲，修改留到卷界检查点】" if _g4_freeze else ""),
+                               chapter=num)
+            if g4_idea is None:
+                g4_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+                ctx.log("warn", "G4 回退：重新组装（" + ("细纲已冻结，仅重读" if _g4_freeze else "可趁隙修改设定/细纲/追踪文件") + "）")
+                continue
+            if g4_idea:
+                self.draft_extra_ideas.append(g4_idea)   # 带想法继续 → 注入草稿 user_ideas
+            break
+
+        if resume_at:
+            # 断点续跑：草稿已在盘上（正文/.drafts），跳过组装与草稿生成。
+            # 审校修复 prompt 仍需要 core_setting——本地重读
+            core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
+                            or "（未提供）")
+            self.prose = resume_prose
+            st.save_chapter_step(proj, num, step_done="enrich",
+                                 draft_path=draft_rel, votes=saved_votes,
+                                 outline_fp=outline_fp)
+            ctx.log("ok", f"第 {num} 章 已从断点恢复草稿（{project.count_chars(self.prose)} 字）")
+
+        # S1 卷会话断点续跑：卷栈逐章落盘，崩在中途=盘上栈只到上一章末尾——本章
+        # 开幕轮与正文都缺。先把盘上草稿播种进下一次会话调用（语义同章会话恢复的
+        # restart_with_prose，只是不清 1..N-1 章历史），防「最近一条章正文消息」
+        # 仍指向上章正文导致后续相位审错对象。
+        if resume_at and _session_usable(session) and hasattr(session, "seed_prose") \
+                and getattr(session, "current_chapter", 0) != num:
+            session.seed_prose(self.prose, chapter_num=num)
+            ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
+
+
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
     proj = ctx.proj
@@ -1674,55 +1775,21 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         chapter_words = (int(m_budget.group(1)) + int(m_budget.group(2))) // 2
         gr.word_target = chapter_words
 
-    # ---- ① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）----
-    draft_extra_ideas: list = []
-    while resume_at == "" and True:
-        ctx.step(num, st.STEP_ASSEMBLE)
-        outline_path = project.get_outline_path(proj, num)
-        outline = _sanitize_chapter_refs(project.read_file(outline_path))
-        if not outline:
-            raise StageError(f"第 {num} 章细纲不存在")
-
-        next_outline = project.read_file(project.get_outline_path(proj, num + 1))
-        next_brief = _sanitize_chapter_refs(next_outline[:600]) if next_outline else "（本章为当前最后一章细纲）"
-        core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
-                        or "（未提供）")
-        # 章级上下文（全局摘要/近章摘要/角色状态/时间线/伏笔/上一章结尾与文风样本）
-        # 已统一收敛到 chapter_header（八节，两层前缀的第二层），不再散装注入——
-        # 截断取各消费方上限最大值，信息只增不减。
-        ctx.log("info", f"第 {num} 章 上下文组装完成（核心设定 + 八节章级共享段（含细纲/摘要/状态/伏笔/上一章锚点））")
-        # 决策门 G4：素材组装后（软门：默认轻提示）；outline_pregen 冻结期改话术
-        _g4_freeze = bool(_w_cfg.get("outline_pregen", False))
-        g4_idea = ctx.gate("G4", f"材料就绪：细纲 + 章级共享段（摘要/状态/伏笔/上一章锚点）（草稿目标 {chapter_words} 字）"
-                           + ("【细纲已预生成冻结：运行中不改细纲，修改留到卷界检查点】" if _g4_freeze else ""),
-                           chapter=num)
-        if g4_idea is None:
-            g4_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
-            ctx.log("warn", "G4 回退：重新组装（" + ("细纲已冻结，仅重读" if _g4_freeze else "可趁隙修改设定/细纲/追踪文件") + "）")
-            continue
-        if g4_idea:
-            draft_extra_ideas.append(g4_idea)   # 带想法继续 → 注入草稿 user_ideas
-        break
-
-    if resume_at:
-        # 断点续跑：草稿已在盘上（正文/.drafts），跳过组装与草稿生成。
-        # 审校修复 prompt 仍需要 core_setting——本地重读
-        core_setting = (project.read_file(os.path.join(proj, "设定", "题材定位.md"))[:1500]
-                        or "（未提供）")
-        prose = resume_prose
-        st.save_chapter_step(proj, num, step_done="enrich",
-                             draft_path=draft_rel, votes=saved_votes,
-                             outline_fp=outline_fp)
-        ctx.log("ok", f"第 {num} 章 已从断点恢复草稿（{project.count_chars(prose)} 字）")
-
-    # S1 卷会话断点续跑：卷栈逐章落盘，崩在中途=盘上栈只到上一章末尾——本章
-    # 开幕轮与正文都缺。先把盘上草稿播种进下一次会话调用（语义同章会话恢复的
-    # restart_with_prose，只是不清 1..N-1 章历史），防「最近一条章正文消息」
-    # 仍指向上章正文导致后续相位审错对象。
-    if resume_at and _session_usable(session) and hasattr(session, "seed_prose") \
-            and getattr(session, "current_chapter", 0) != num:
-        session.seed_prose(prose, chapter_num=num)
-        ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
+    # C11：前奏（配置/会话/断点判定）就绪 → 装七阶段共享上下文，顺序编排
+    mc = _MicroCycle(ctx=ctx, num=num, guidance=guidance, ideas=ideas,
+                     proj=proj, session=session, _comp_preface=_comp_preface,
+                     _w_cfg=_w_cfg, _s4_freeze=_s4_freeze,
+                     chapter_words=chapter_words, gates_cfg=gates_cfg,
+                     tolerance=tolerance, max_deslop_rounds=max_deslop_rounds,
+                     gr=gr, outline=outline, outline_fp=outline_fp,
+                     resume_at=resume_at, saved_votes=saved_votes,
+                     resume_prose=resume_prose, draft_rel=draft_rel)
+    mc._mc_assemble()
+    # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
+    outline = mc.outline
+    next_brief = mc.next_brief
+    draft_extra_ideas = mc.draft_extra_ideas
+    prose = mc.prose
 
     # ---- ② 草稿生成 ----
     if resume_at == "":
