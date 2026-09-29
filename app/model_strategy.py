@@ -26,6 +26,33 @@ PRESETS = {
         "label": "严格审校（写作/辅助 flash，审校 pro）",
         "slots": {"writing": OFFICIAL_FLASH, "helper": OFFICIAL_FLASH, "review": OFFICIAL_PRO},
     },
+    # ---- C26 阶段级策略卡（w4_model_orch §3 方案 A）----
+    # 除三槽层外还带 stage_params 阶段档，由 bridge.ModelPolicyController.applyStrategy
+    # 写进项目题材预设（读取/消费管道早已接线：stage_slot/stage_params + stages 各调用点）。
+    # 审校系相位（review 三票/根因/修复/清算/终审）读码里全部默认走 review 槽，
+    # 所以「强审校」在槽位层把 review 槽钉 Pro 即全组生效；阶段层再把草稿组与
+    # 大纲组相位钉死 Flash——日后用户把写作槽升 Pro，快草稿组合语义也不漂移。
+    # A14：两卡钉的都是官方 Flash/Pro 行（apply_preset 已确保存在），零静默换型。
+    "quality_mix": {
+        "label": "强审校快草稿（审校槽 Pro，草稿/大纲钉 Flash）",
+        "slots": {"writing": OFFICIAL_FLASH, "helper": OFFICIAL_FLASH, "review": OFFICIAL_PRO},
+        "desc": "审校/根因/清算走官方 Pro，判分更稳；正文/扩写/压缩/去味与四个大纲相位在阶段层钉 Flash，日后升写作槽也不改快草稿。",
+        "stage_params": {
+            "prose": {"slot": OFFICIAL_FLASH}, "enrich": {"slot": OFFICIAL_FLASH},
+            "trim": {"slot": OFFICIAL_FLASH}, "deslop": {"slot": OFFICIAL_FLASH},
+            "core_setting": {"slot": OFFICIAL_FLASH}, "volume_outline": {"slot": OFFICIAL_FLASH},
+            "worldbook": {"slot": OFFICIAL_FLASH}, "outline": {"slot": OFFICIAL_FLASH},
+        },
+    },
+    "budget_run": {
+        "label": "全快档挂机（全 Flash + 创作相位关思考）",
+        "slots": {"writing": OFFICIAL_FLASH, "helper": OFFICIAL_FLASH, "review": OFFICIAL_FLASH},
+        "desc": "三槽全 Flash；正文/核心设定/全书大纲/世界书关思考（追踪/摘要/去味等机械相位内置表本就关）——批量挂机最省最快。",
+        "stage_params": {
+            "prose": {"thinking": "disabled"}, "core_setting": {"thinking": "disabled"},
+            "volume_outline": {"thinking": "disabled"}, "worldbook": {"thinking": "disabled"},
+        },
+    },
 }
 
 # 已知存过官方 Key 的连接 id（按序探测）
@@ -83,4 +110,17 @@ def apply_preset(cfg: dict, preset_id: str) -> dict:
 
 
 def preset_options() -> list:
-    return [{"id": pid, "label": spec["label"]} for pid, spec in PRESETS.items()]
+    """槽位层策略卡（设置页既有「一键切换三槽」节）。
+
+    阶段级卡（quality_mix/budget_run，带 stage_params）不在此列——它们需要
+    项目题材预设落阶段档，由 ModelPolicyController.strategyOptions 单独出口；
+    混进三槽列表会出现「点了没全生效」的半套语义。
+    """
+    return [{"id": pid, "label": spec["label"]}
+            for pid, spec in PRESETS.items() if not spec.get("stage_params")]
+
+
+def strategy_card_options() -> list:
+    """阶段级策略卡视图（bridge.ModelPolicyController 消费）"""
+    return [{"id": pid, "label": spec.get("label", pid), "desc": spec.get("desc", "")}
+            for pid, spec in PRESETS.items() if spec.get("stage_params")]

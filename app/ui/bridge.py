@@ -938,6 +938,237 @@ CW_NEXT_PREVIEW = {
 }
 
 
+# ---------- C26：阶段级模型路由 controller（w4_model_orch §3 方案 A）----------
+# 硬规约：独立 controller 类，不往 Bridge 主类摊。阶段级选模型的底层管道
+# （17 相位档位表 + stage_params[phase].slot：presets/__init__.py 校验、
+# stages._stream/_session_ask/_rewrite_phase/review 消费）早已存在，缺的只是
+# UI 出口——本类就是那个出口：四阶段组下拉 + 两张阶段级策略卡，读写全部走
+# 既有 stage_params 预设机制（存进项目题材预设 JSON），零新增配置键语义。
+
+class ModelPolicyController(QObject):
+    """四阶段组（大纲/草稿/审校/辅助）的模型选择。
+
+    组是 UI 概念：把相位档表划成四个用户可感的阶段组，每组一个
+    「跟随默认槽位 / 指定连接」二态下拉；写入只动该组相位的
+    stage_params[phase]["slot"] 键（其余参数键原样保留）。
+    存储落点＝项目题材预设的 stage_params 段（save_preset → 用户仓，与导入/
+    固化模板同通道；内置预设因此落一份用户影子副本，load 链用户仓优先，既有语义）。
+
+    A14 纪律：写盘前校验连接 id 真实存在——悬空引用会在 slot_connection 兜底
+    链里静默换到第一条连接（静默换型），绝不落盘。组划分只收 slot 覆盖真实被
+    消费的相位：root_cause/canon_audit/canon_audit_review 三相位在 stages/
+    canon_audit 里直连审校槽（升级走 audit_strict_tier 显式闸门），slot 覆盖
+    对它们不生效，进下拉就是假旋钮——留在槽位层跟随审校槽绑定。
+    """
+
+    groupsChanged = Signal()
+
+    # 四组 × 13 相位，不重不漏；desc 里的默认槽 = stages.py 读码路径（未配置覆盖时）
+    GROUPS = (
+        {"id": "planning", "label": "大纲",
+         "desc": "核心设定 / 全书大纲（随写作槽）· 世界书 / 细纲（随辅助槽）",
+         "phases": ("core_setting", "volume_outline", "worldbook", "outline")},
+        {"id": "draft", "label": "草稿",
+         "desc": "正文 / 扩写 / 压缩 / 去 AI 味（随写作槽）",
+         "phases": ("prose", "enrich", "trim", "deslop")},
+        {"id": "review", "label": "审校",
+         "desc": "审校六维 / 审校修复（随审校槽）",
+         "phases": ("review", "review_fix")},
+        {"id": "helper", "label": "辅助",
+         "desc": "追踪更新 / 章节摘要 / 全局摘要（随辅助槽）",
+         "phases": ("tracking", "chapter_summary", "global_summary")},
+    )
+    FOLLOW_LABEL = "跟随默认槽位"
+
+    def __init__(self, bridge, parent=None):
+        super().__init__(parent)
+        self._bridge = bridge
+
+    # ---- 读路径 ----
+
+    def preset_id(self) -> str:
+        """项目当前题材预设 id（与 stages._preset_id 同口径；无项目/读不到=空）"""
+        proj = self._bridge.proj
+        if not proj:
+            return ""
+        try:
+            return st.load_state(proj).get("genre_preset", "") or ""
+        except Exception:
+            return ""
+
+    @Property("QVariantList", notify=groupsChanged)
+    def groupOptions(self) -> list:
+        """四组下拉视图：[{id,label,desc,current}]；current=空串即跟随默认。
+
+        组内各相位 override 不一致（手写 JSON 可能只配了部分相位）时按
+        「跟随默认」展示——读出来的东西必须是用户敢信的，宁可不合并。
+        """
+        from .. import presets as genre_presets
+        pid = self.preset_id()
+        out = []
+        for g in self.GROUPS:
+            slots_ = {genre_presets.stage_slot(pid, ph) for ph in g["phases"]} if pid else {""}
+            current = slots_.pop() if len(slots_) == 1 else ""
+            out.append({"id": g["id"], "label": g["label"], "desc": g["desc"],
+                        "current": current or ""})
+        return out
+
+    @Property(str, notify=groupsChanged)
+    def presetLabel(self) -> str:
+        """当前题材预设名（UI 提示行）；无项目/未启用预设返回空串"""
+        return self._preset_label()
+
+    def _preset_label(self) -> str:
+        from .. import presets as genre_presets
+        pid = self.preset_id()
+        if not pid:
+            return ""
+        return genre_presets.load_preset(pid).get("name") or pid
+
+    @Slot(result="QVariantList")
+    @_guarded
+    def strategyOptions(self) -> list:
+        """阶段级策略卡（model_strategy.PRESETS 里带 stage_params 的卡）"""
+        from .. import model_strategy
+        return model_strategy.strategy_card_options()
+
+    # ---- 写路径 ----
+
+    @Slot(str, str)
+    @_guarded
+    def setGroupSlot(self, group_id: str, conn_id: str):
+        """组下拉：指定连接（conn_id=空串恢复跟随默认）。只动 slot 键，其余参数保留。"""
+        from .. import presets as genre_presets
+        group = next((g for g in self.GROUPS if g["id"] == str(group_id or "")), None)
+        if group is None:
+            self._bridge.toast.emit("warn", f"未知阶段组：{group_id}")
+            return
+        conn_id = str(conn_id or "").strip()
+        if conn_id and not cfg_mod.find_connection(self._bridge.cfg, conn_id):
+            # A14：悬空连接引用会在兜底链里静默换型，拒绝落盘
+            self._bridge.toast.emit("warn", "该连接不存在（可能已删除），未保存")
+            self.groupsChanged.emit()       # 回读真实状态，别让下拉停在谎言上
+            return
+        pid = self.preset_id()
+        if not pid:
+            self._bridge.toast.emit(
+                "warn", "阶段路由存进题材预设：当前书未启用题材预设，请先在新建项目时选择")
+            return
+        err, data = self._stage_write(pid, group["phases"], conn_id)
+        if err:
+            self._bridge.toast.emit("warn", err)
+            return
+        if data is not None:
+            genre_presets.save_preset(data)     # 落盘证据在本函数体内（WP-13 回执门禁）
+        name = (cfg_mod.find_connection(self._bridge.cfg, conn_id).get("name", conn_id)
+                if conn_id else self.FOLLOW_LABEL)
+        self.groupsChanged.emit()
+        self._bridge.toast.emit("ok", f"{group['label']}组 → {name}（已存进预设「{self._preset_label()}」）")
+
+    @staticmethod
+    def _mutate_stage_params(preset_id: str) -> tuple:
+        """读预设 → (data, stage_params 引用)；预设不存在返回 (None, None)"""
+        from .. import presets as genre_presets
+        data = genre_presets.load_preset(preset_id)
+        if not data:
+            return None, None
+        sp = data.get("stage_params")
+        if not isinstance(sp, dict):
+            sp = {}
+        return data, sp
+
+    def _stage_write(self, preset_id: str, phases, conn_id: str) -> tuple:
+        """把一组相位的 slot 覆盖写进预设 stage_params（"" = 摘除 slot 键）。
+
+        其余参数键原样保留；清空后的空档位键不落盘（与读层「脏值即丢」同洁癖）。
+        返回 (错误说明, 待存预设字典)：err 非空=拒绝；data None=无变化不必落盘；
+        否则由调用方 save_preset 落盘（回执函数体内自持生效证据，WP-13）。
+        """
+        data, sp = self._mutate_stage_params(preset_id)
+        if data is None:
+            return f"预设「{preset_id}」读不到，无法保存阶段路由", None
+        changed = False
+        for ph in phases:
+            entry = dict(sp[ph]) if isinstance(sp.get(ph), dict) else {}
+            if conn_id:
+                if entry.get("slot") != conn_id:
+                    entry["slot"] = conn_id
+                    changed = True
+            elif "slot" in entry:
+                entry.pop("slot")
+                changed = True
+            if entry:
+                sp[ph] = entry
+            else:
+                sp.pop(ph, None)
+        if not changed:
+            return "", None
+        data["stage_params"] = sp
+        data.pop("_src", None)
+        data.pop("_builtin", None)
+        return "", data
+
+    def _card_write(self, preset_id: str, overrides: dict) -> tuple:
+        """把一张策略卡的 {phase: {参数: 值}} 合并进预设 stage_params（既有键保留）。
+
+        卡里钉的连接必须真实存在（apply_preset 已确保官方行在列）——悬空引用
+        会在兜底链里静默换型（A14），拒绝落盘。返回值语义同 _stage_write。
+        """
+        data, sp = self._mutate_stage_params(preset_id)
+        if data is None:
+            return f"预设「{preset_id}」读不到，无法保存阶段档", None
+        for ph, vals in overrides.items():
+            if not isinstance(vals, dict):
+                continue
+            slot_val = str(vals.get("slot") or "").strip()
+            if slot_val and not cfg_mod.find_connection(self._bridge.cfg, slot_val):
+                return f"策略卡引用的连接 {slot_val} 不存在，未保存", None
+            entry = dict(sp[ph]) if isinstance(sp.get(ph), dict) else {}
+            entry.update(vals)
+            sp[ph] = entry
+        data["stage_params"] = sp
+        data.pop("_src", None)
+        data.pop("_builtin", None)
+        return "", data
+
+    @Slot(str)
+    @_guarded
+    def applyStrategy(self, card_id: str):
+        """阶段级策略卡：三槽层复用既有 applyModelPreset 入口（§11.1 认可范式：
+        换新字典后回写共享 self.cfg + 运行守卫 + 连接模型刷新），阶段层写进题材预设。
+
+        运行中拒绝：三槽层会换 self.cfg 新字典，orchestrator 持旧引用，
+        运行中切会劈成两半——与 applyModelPreset 同款守卫，这里前置挡一次。
+        """
+        from .. import model_strategy
+        spec = model_strategy.PRESETS.get(str(card_id or ""))
+        if not spec or not spec.get("stage_params"):
+            self._bridge.toast.emit("warn", f"未知模型策略：{card_id}")
+            return
+        if self._bridge._running:
+            self._bridge.toast.emit("warn", "流水线运行中不能切换模型策略，请先停止")
+            return
+        self._bridge.applyModelPreset(card_id)          # 三槽层（含落盘+回执，既有 audited 路径）
+        applied = all(self._bridge.cfg.get("slots", {}).get(s) == c
+                      for s, c in spec["slots"].items())
+        if not applied:
+            return                                      # 三槽层未成（守卫拦下）——阶段档不写半套
+        self._bridge.slotsTextChanged.emit()
+        pid = self.preset_id()
+        if not pid:
+            self._bridge.toast.emit("warn", "当前书未启用题材预设，阶段档未落——仅三槽生效")
+            return
+        err, data = self._card_write(pid, spec["stage_params"])
+        if err:
+            self._bridge.toast.emit("warn", err)
+            return
+        if data is not None:
+            from .. import presets as genre_presets
+            genre_presets.save_preset(data)             # 落盘证据在本函数体内（WP-13 回执门禁）
+        self.groupsChanged.emit()
+        self._bridge.toast.emit("ok", f"阶段档已存进预设「{self._preset_label()}」"
+                                      f"（{spec.get('label', card_id)}）")
+
 
 class Bridge(QObject):
     # 属性变更信号
@@ -1131,6 +1362,9 @@ class Bridge(QObject):
         self.logModel = LogListModel(self)
         self.cwMessageModel = CwMessageModel(self)
         self.connectionModel = ConnectionListModel(self)
+        # C26：阶段级模型路由 controller——独立类不往主类摊（w4 方案 A 硬规约），
+        # 桥只持引用 + 一个常量 Property 出口（QML 经 bridge.modelPolicy 调用）
+        self._model_policy = ModelPolicyController(self, parent=self)
         # 上次项目自动打开
         last = self.cfg.get("last_project", "")
         if last and project.is_project(last):
@@ -1279,6 +1513,7 @@ class Bridge(QObject):
     chapterModelProp = Property(QObject, lambda self: self.chapterModel, constant=True)
     logModelProp = Property(QObject, lambda self: self.logModel, constant=True)
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
+    modelPolicy = Property(QObject, lambda self: self._model_policy, constant=True)  # C26
 
     # ============ 项目管理 ============
 

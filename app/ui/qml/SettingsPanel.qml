@@ -1031,6 +1031,116 @@ Item {
                         }
                     }
 
+                    // ---- C26：阶段模型路由（四阶段组下拉 + 两张阶段级策略卡）----
+                    // 存进题材预设 stage_params（既有管道），与上方三槽层互补不混列
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
+                        implicitHeight: stageCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: stageCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            spacing: 8
+                            Text {
+                                text: "阶段模型路由（按阶段组选模型）"
+                                color: Theme.textPrimary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsBody
+                                font.weight: Font.DemiBold   // U-02：font.bold 字面量只准降，新代码走字重令牌
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: {
+                                    var p = bridge.modelPolicy.presetLabel
+                                    return p ? ("阶段档存进当前题材预设「" + p + "」，下一章生成即生效；「跟随默认槽位」= 摘除该组覆盖，回到上方三槽绑定。")
+                                             : "阶段档存进题材预设：当前书未启用题材预设，暂不能按阶段指定（上方三槽绑定仍可用）。"
+                                }
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                            }
+                            Repeater {
+                                model: bridge.modelPolicy.groupOptions
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    spacing: 10
+                                    Text {
+                                        Layout.preferredWidth: 44
+                                        text: modelData.label
+                                        color: Theme.textSecondary
+                                        font.pixelSize: Theme.fsSmall
+                                        font.family: Theme.uiFont
+                                    }
+                                    AppSelect {
+                                        id: stageCombo
+                                        Layout.fillWidth: true
+                                        function refreshCurrent() {
+                                            var cur = modelData.current
+                                            if (!cur) { currentIndex = 0; return }
+                                            var opts = bridge.connectionOptions()
+                                            for (var i = 0; i < opts.length; i++) {
+                                                if (opts[i].id === cur) { currentIndex = i + 1; return }
+                                            }
+                                            currentIndex = 0      // 连接已被删除：按跟随默认展示
+                                        }
+                                        model: ["跟随默认槽位"].concat(
+                                            bridge.connectionOptions().map(function (c) { return c.name }))
+                                        Component.onCompleted: refreshCurrent()
+                                        onActivated: {
+                                            if (currentIndex <= 0) {
+                                                bridge.modelPolicy.setGroupSlot(modelData.id, "")
+                                                return
+                                            }
+                                            var opts = bridge.connectionOptions()
+                                            if (currentIndex - 1 < opts.length)
+                                                bridge.modelPolicy.setGroupSlot(modelData.id, opts[currentIndex - 1].id)
+                                        }
+                                        Connections {
+                                            target: bridge.modelPolicy
+                                            function onGroupsChanged() { stageCombo.refreshCurrent() }
+                                        }
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.desc
+                                        color: Theme.textTertiary
+                                        font.pixelSize: Theme.fsTiny
+                                        font.family: Theme.uiFont
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "审校/根因/设定清算始终跟随审校槽绑定（Pro 升级由清算独立开关把守，不做静默换型）。"
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                            }
+                            Repeater {
+                                model: bridge.modelPolicy.strategyOptions()
+                                delegate: AppButton {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    text: modelData.label
+                                    kind: "secondary"
+                                    onClicked: bridge.modelPolicy.applyStrategy(modelData.id)
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: modelData.desc
+                                }
+                            }
+                        }
+                    }
+
                     Text {
                         text: "备份与统计"
                         color: Theme.textPrimary

@@ -38,6 +38,7 @@ EVIDENCE_CALLEES = {
     "_cw_save_state": "写共写阶段状态盘",
     "migrate_mode": "配置迁移写盘",
     "apply_preset": "预设写入配置",
+    "save_preset": "预设 JSON 落盘（C26：阶段路由/策略卡写用户预设仓，presets.save_preset 真实写文件）",
     "_patch_updates": "写 updates 配置域（save_config 链，WP-05 补）",
     "record_forced_lock": "强锁登记写状态",
     "set_chapter_locked": "终稿锁状态写盘",
