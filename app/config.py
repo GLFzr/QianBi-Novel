@@ -118,7 +118,11 @@ DEFAULT_CONFIG = {
                 # C43 桥段码账本（0.22.0 卡5，缺省关）：开时正文轮 craft_block 按
                 # 细纲「- 桥段：」码行直路由场景卡并追加打法卡；关时装配字节与
                 # 现状逐字一致（变量隔离纪律）。
-                "bridge_codes_enabled": False},
+                "bridge_codes_enabled": False,
+                # C17 G1 字数预算断路器（0.22.0 卡8-G1，出厂 3）：首稿字数 > 目标
+                # ×(1+容差)×N → 不进压缩/去味/审校，直转人工（word_overflow）。
+                # 文青书 P90 16k 字 vs 目标 3k 已 >5×，N 必须可配；0/负值=关。
+                "word_overflow_breaker": 3},
     # 成本实验开关区（A/B 用，缺省全关；开=请求体字节变化，做对照实验的公共前提
     # 是「关态与旧版逐字节一致」）
     "cost": {"a8_opening_compress": False},    # A8 开幕轮密度压缩（L5-A1）：与 system

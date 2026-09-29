@@ -1602,6 +1602,7 @@ class _MicroCycle:
     advisory: list = field(default_factory=list)
     deslop_extra_text: str = ""
     skip_scan_deslop: bool = False
+    word_overflow: bool = False   # C17 G1 字数断路器：True=跳过 scan/deslop/review 直转人工
 
     def _mc_assemble(self) -> None:
         """① 上下文组装（G4 门：回退=改材料后重新组装读盘，T4.1 内侧门）+ 断点恢复"""
@@ -1873,6 +1874,37 @@ class _MicroCycle:
                 ctx.log("ok" if low_ok else "warn",
                         f"扩写后 {actual} 字" + ("，达标" if low_ok
                                                 else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
+            # C17/卡8-G1 字数预算断路器：首稿字数 > 目标×(1+容差)×N（writing.
+            # word_overflow_breaker，出厂 3，可配；0/负值=关）→ 不进压缩/去味/审校：
+            # 无效稿不得进闸门链烧 token（T3-1 病一「章章 10 倍稿」的止血保险丝）。
+            # 直转 need_human + record 带 word_overflow；strict 策略经 resolve_failed
+            # → auto_pause。断路即 return：trim 循环与本段尾部的断点保存一并跳过
+            # （不把无效稿落成续跑断点）。
+            _breaker_n = _w_cfg.get("word_overflow_breaker", 3)
+            try:
+                _breaker_n = float(_breaker_n)
+            except (TypeError, ValueError):
+                _breaker_n = 3.0
+            _breaker_cap = int(chapter_words * (1 + tolerance) * _breaker_n) \
+                if _breaker_n and _breaker_n > 0 else 0
+            if _breaker_cap and actual > _breaker_cap:
+                ctx.log("error", f"第 {num} 章 G1 字数断路器：首稿 {actual} 字 > 断路器上限 "
+                                 f"{_breaker_cap} 字（目标 {chapter_words}×(1+{tolerance:.0%})×"
+                                 f"{_breaker_n:g}），跳过压缩/去味/审校直转人工（word_overflow）")
+                try:
+                    from .volume_session import record_event as _rec
+                    _rec(proj, "word_overflow", ch=int(num), actual=int(actual),
+                         target=int(chapter_words))
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    st.mark_chapter_need_human(proj, st.load_state(proj), num)
+                except Exception as e:  # noqa: BLE001
+                    ctx.log("warn", f"第 {num} 章 标记转人工失败（{e}）：下一轮会再次拦截本章")
+                gates.resolve_failed(ctx, f"第 {num} 章字数严重超标（{actual} 字 > 断路器上限 "
+                                          f"{_breaker_cap} 字）", self.gr)
+                self.word_overflow = True
+                return
             # A13（v16 总案 5.3）：超标通道不再被扩写轮豁免——ch26 实测 enrich 后 3291 字
             # （超标 65%）无 trim 直进审校。trim 后仍超 ≥15% 允许一次二次压缩；仍不达
             # 打标观测（A9：trim ≥2 次的章是细纲预算行质量的观测样本）。
@@ -1892,10 +1924,29 @@ class _MicroCycle:
                                must_block=_must_block(proj, ctx.cfg),
                                chapter_header=_chap_header(ctx, proj, num),
                                project_header=project_header(proj))
-                self.prose = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_TRIM,
-                                            prompts.TRIM_PROMPT, trim_kw, prose=self.prose,
-                                            label="压缩" if trim_rounds == 1 else "压缩(二次)")
-                low_ok, high_ok, actual = gates.check_word_bounds(self.prose, chapter_words, tolerance)
+                rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_TRIM,
+                                           prompts.TRIM_PROMPT, trim_kw, prose=self.prose,
+                                           label="压缩" if trim_rounds == 1 else "压缩(二次)")
+                new_low, new_high, new_actual = gates.check_word_bounds(
+                    rewritten, chapter_words, tolerance)
+                # C17 G1 最低压缩量守卫：压缩量 < 应压缩量（pre_actual×cut_pct%）的一半
+                # 视为本轮失败，拒绝采纳——对照：扩写环有「越写越少即弃」守卫、审校修复环
+                # 有「未改善即弃」，唯独 trim 是无条件采纳。空压缩稿同拒（原实现会把正文
+                # 清空后按 high_ok 通过=空白章）。拒绝=回退原稿，该轮作废按 trim_over 打标。
+                _expect_cut = pre_actual * cut_pct / 100.0
+                if not rewritten.strip() or pre_actual - new_actual < _expect_cut / 2.0:
+                    self.prose = pre_prose
+                    low_ok, high_ok, actual = gates.check_word_bounds(
+                        self.prose, chapter_words, tolerance)
+                    if _session_usable(session):
+                        session.rollback_to(t_trim)   # 压缩稿被否决 → 历史截断回压缩前
+                    _why = "空稿" if not rewritten.strip() \
+                        else f"压缩量 {max(pre_actual - new_actual, 0)} < 应压缩 {_expect_cut:.0f} 字的一半"
+                    ctx.log("warn", f"第 {num} 章 压缩稿拒绝采纳（{_why}），已回退原稿"
+                                    f"（{pre_actual} 字）")
+                else:
+                    self.prose = rewritten
+                    low_ok, high_ok, actual = new_low, new_high, new_actual
                 if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
                     # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
                     self.prose, actual = pre_prose, pre_actual
@@ -1911,7 +1962,9 @@ class _MicroCycle:
                         _rec(proj, "trim_over", ch=int(num), actual=int(actual))
                     except Exception:  # noqa: BLE001
                         pass
-                    ctx.log("warn", f"压缩 {trim_rounds} 轮后仍超标（{actual} 字），打标观测（trim_over）")
+                    # C17：trim_over 打标从 warn 升 error（压缩链到头仍未收敛=预算行质量
+                    # 事故，与「字数不足 warn 不阻断」分居两个严重级）
+                    ctx.log("error", f"压缩 {trim_rounds} 轮后仍超标（{actual} 字），打标观测（trim_over）")
         # 断点保存（方案 H）：草稿即文件——此后扫描/去味/审校/定稿任何位置停止，
         # 重启都从盘上这份草稿继续，不再整章重写
         project.write_file(project.chapter_draft_path(proj, num), self.prose)
@@ -2411,6 +2464,8 @@ class _MicroCycle:
         _save_session_checkpoint(ctx, session, "定稿后")
         gr.word_actual = project.count_chars(prose)
         record = {"num": num, "title": title, **gr.to_record()}
+        if self.word_overflow:   # C17 G1：断路章的记录显式携带 word_overflow（台账/告警消费）
+            record["word_overflow"] = True
         return record
 
 
@@ -2555,9 +2610,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     mc._mc_assemble()
     mc._mc_draft()
     mc._mc_word_gate()
-    mc._mc_scan()
-    mc._mc_deslop()
-    mc._mc_review()
+    if not mc.word_overflow:   # C17 G1 字数断路器：无效稿不进扫描/去味/审校链
+        mc._mc_scan()
+        mc._mc_deslop()
+        mc._mc_review()
     return mc._mc_finalize()
 
 
