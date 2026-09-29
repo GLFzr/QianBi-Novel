@@ -273,6 +273,38 @@ def _is_thinking_param_host(host: str) -> bool:
     return any(t in host for t in _THINKING_PARAM_HOSTS)
 
 
+# ---- D1 预算宪法：进程级调用观察者（0.23.0）----
+# 计数事件在本层只广播不裁决：orchestrator 注册章周期计数器（GenBudget），共写/
+# 探针等旁路不注册则零开销。事件 = 每个网关回了 usage 的物理响应一条（chat 与
+# _stream_messages 的成功记账与 W-4 白付 empty/abort/retry 都汇经 _record_usage），
+# 形状 {slot, phase, status, tin, tout, latency}；网关全程不回 usage 的失败不计次
+# （时长轴兜底）。观察者异常绝不穿回调用链。
+_call_observers = []
+
+
+def add_call_observer(fn) -> None:
+    """注册 LLM 调用观察者（D1 预算宪法接入口；重复注册幂等）"""
+    if fn not in _call_observers:
+        _call_observers.append(fn)
+
+
+def remove_call_observer(fn) -> None:
+    """注销调用观察者（未注册过则静默）"""
+    try:
+        _call_observers.remove(fn)
+    except ValueError:
+        pass
+
+
+def _emit_call_event(ev: dict) -> None:
+    """向全部观察者广播一次调用事件（订阅方异常吞掉——预算是观测件，不碰调用链）"""
+    for fn in list(_call_observers):
+        try:
+            fn(ev)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("调用观察者失败（忽略）: %s", e)
+
+
 def _cache_split(usage: dict, tin: int) -> tuple:
     """一次响应的 usage → (hit, miss)。W-5 口径：**"报了 0"与"没报"不是同一件事**。
 
@@ -368,6 +400,12 @@ class LLMClient:
         try:
             tin = int(usage.get("prompt_tokens", 0) or 0)
             tout = int(usage.get("completion_tokens", 0) or 0)
+            if _call_observers:
+                # D1：调用事件在记账前广播（0/0 usage 的响应也计次——物理响应真实
+                # 发生了；tokens 按实报数，没报就是 0）
+                _emit_call_event({"slot": self.slot, "phase": phase or "",
+                                  "status": status or "", "tin": tin, "tout": tout,
+                                  "latency": float(latency or 0.0)})
             # DeepSeek 上下文缓存命中/未命中 tokens（其他网关可能不返回）
             hit, miss = _cache_split(usage, tin)
             # 推理 tokens 口径（OpenAI 兼容 completion_tokens_details.reasoning_tokens，

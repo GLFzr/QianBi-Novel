@@ -129,7 +129,20 @@ DEFAULT_CONFIG = {
                 # C17 G1 字数预算断路器（0.22.0 卡8-G1，出厂 3）：首稿字数 > 目标
                 # ×(1+容差)×N → 不进压缩/去味/审校，直转人工（word_overflow）。
                 # 文青书 P90 16k 字 vs 目标 3k 已 >5×，N 必须可配；0/负值=关。
-                "word_overflow_breaker": 3},
+                "word_overflow_breaker": 3,
+                # D1 预算宪法（0.23.0，源自 AI-Novel-Writer generation-harness 的
+                # 会话级硬顶 GENERATION_ABSOLUTE_BUDGET_LIMITS）：单章生成周期内
+                # LLM 四轴上限，任一超限即熔断（auto_pause + 异常落账
+                # gen_budget_exceeded + toast，回执=次数/tokens/分钟/章号）。
+                #   max_calls          章周期物理调用次数（网关回了 usage 的响应记
+                #                      一次，W-4 白付的 empty/abort/retry 同样计入）
+                #   max_total_tokens   章周期累计 tokens（in+out，网关实报口径）
+                #   max_single_tokens  单次响应 tokens 峰值上限（in+out）
+                #   max_minutes        章周期耗时硬顶（墙钟）
+                # 全部可配；0/负值=该轴不设限。出厂值=AINW 宪法原值（32/147456/
+                # 32768/60）。
+                "gen_budget": {"max_calls": 32, "max_total_tokens": 147456,
+                               "max_single_tokens": 32768, "max_minutes": 60}},
     # 成本实验开关区（A/B 用，缺省全关；开=请求体字节变化，做对照实验的公共前提
     # 是「关态与旧版逐字节一致」）
     "cost": {"a8_opening_compress": False},    # A8 开幕轮密度压缩（L5-A1）：与 system

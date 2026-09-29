@@ -30,6 +30,101 @@ LOG_TAIL_MAX = 50  # 日志环形缓冲条数（失败 dump 用）
 
 G4_PAUSE_AFTER = 2  # 相位看门狗：连续 N 章记账产物缺失 → auto_pause（T3 连停 30 章的翻案线）
 
+# D1 预算宪法出厂值（0.23.0，源自 AI-Novel-Writer generation-harness 的会话级硬顶）：
+# 可被 writing.gen_budget 全量覆盖；0/负值=该轴不设限。
+GEN_BUDGET_DEFAULTS = {"max_calls": 32, "max_total_tokens": 147456,
+                       "max_single_tokens": 32768, "max_minutes": 60}
+
+
+class GenBudget:
+    """章生成周期预算表（D1）：调用次数/累计 tokens/单次峰值/耗时四轴硬顶计数器。
+
+    数据源 = app.llm.client 的调用观察者事件（每个网关回了 usage 的物理响应一条，
+    含 W-4 白付的 empty/abort/retry；网关全程不回 usage 的失败不计次，时长轴兜底）。
+    轴口径：
+      calls         物理响应次数（不是逻辑调用——重试白付同样烧真钱，一并计）
+      total_tokens  章周期累计 in+out（网关实报口径，盲区不算）
+      single_tokens 单次响应 in+out 峰值（宪法原意是「单次输出意图上限」，intent
+                    我方事后不可知，以实耗峰值记账——诚实口径）
+      minutes       章周期墙钟耗时
+    feed 从 LLM 工作线程到账，exceeded/receipt 从流水线线程查询——纯数字读改，
+    单轴更新原子（CPython GIL），不加锁。
+    """
+
+    AXES = ("max_calls", "max_total_tokens", "max_single_tokens", "max_minutes")
+
+    def __init__(self, limits: dict = None):
+        self.configure(limits)
+        self.reset()
+
+    def configure(self, limits: dict = None):
+        """装载上限（缺省键回出厂值；垃圾值按 0=不设限处理——诚实放行好过误杀）"""
+        src = dict(GEN_BUDGET_DEFAULTS)
+        src.update(limits or {})
+        out = {}
+        for k in self.AXES:
+            try:
+                v = float(src.get(k) or 0)
+            except (TypeError, ValueError):
+                v = 0.0   # 垃圾值按「不设限」处理（诚实放行好过误杀）
+            out[k] = v if v > 0 else 0.0   # 0/负统一归 0=该轴不设限
+        self.limits = out
+
+    def reset(self, num: int = 0):
+        """本章窗口重开（orchestrator 每章起点调用；计数归零、计时重起）"""
+        self.num = int(num or 0)
+        self.calls = 0
+        self.total_tokens = 0
+        self.single_tokens = 0
+        self.t0 = time.monotonic()
+        self.tripped = False      # 本窗口已熔断（一章只熔一次，重跑算新窗口）
+        self.violations = []      # 触发时违限轴清单（回执用）
+
+    @property
+    def elapsed_minutes(self) -> float:
+        return (time.monotonic() - self.t0) / 60.0
+
+    def feed(self, tin: int = 0, tout: int = 0, **_):
+        """一次物理调用到账（client 观察者事件）。返回违限轴列表（空=未超限）"""
+        self.calls += 1
+        used = int(tin or 0) + int(tout or 0)
+        self.total_tokens += used
+        self.single_tokens = max(self.single_tokens, used)
+        return self.exceeded()
+
+    def exceeded(self) -> list:
+        """任一轴超限的轴名清单（空=未超限）；0/负上限的轴不参与判定"""
+        lim = self.limits
+        v = []
+        if lim["max_calls"] > 0 and self.calls > lim["max_calls"]:
+            v.append("max_calls")
+        if lim["max_total_tokens"] > 0 and self.total_tokens > lim["max_total_tokens"]:
+            v.append("max_total_tokens")
+        if lim["max_single_tokens"] > 0 and self.single_tokens > lim["max_single_tokens"]:
+            v.append("max_single_tokens")
+        if lim["max_minutes"] > 0 and self.elapsed_minutes > lim["max_minutes"]:
+            v.append("max_minutes")
+        return v
+
+    def receipt(self, violations: list = None) -> dict:
+        """预算消耗回执（超限时随异常落账；只含计数与上限，无 prompt 无正文）"""
+        v = self.violations if violations is None else violations
+        return {"ch": self.num, "calls": self.calls,
+                "total_tokens": self.total_tokens,
+                "single_tokens": self.single_tokens,
+                "minutes": round(self.elapsed_minutes, 1),
+                "limits": dict(self.limits), "violated": list(v)}
+
+    def receipt_text(self, violations: list = None) -> str:
+        """回执人话版（次数/tokens/分钟/章号），日志与异常台账共用一份措辞"""
+        r = self.receipt(violations)
+        lim = r["limits"]
+        return (f"第 {r['ch']} 章预算消耗报告——调用 {r['calls']} 次（顶 {lim['max_calls']:.0f}），"
+                f"tokens {r['total_tokens']}（顶 {lim['max_total_tokens']:.0f}），"
+                f"单次峰值 {r['single_tokens']}（顶 {lim['max_single_tokens']:.0f}），"
+                f"耗时 {r['minutes']} 分钟（顶 {lim['max_minutes']:.0f}）；"
+                f"违限轴：{'+'.join(r['violated']) or '无'}")
+
 
 class Orchestrator(QThread):
     sig_log = Signal(str, str)          # level, msg
@@ -113,6 +208,9 @@ class Orchestrator(QThread):
         # C35 G4 相位看门狗：连续缺失计数与去重游标（章循环收尾维护）
         self._g4_missing_run = 0
         self._g4_last_missing = 0
+        # D1 预算宪法：章生成周期计数器（观察者在 run() 注册；窗口每章重开）
+        self._budget = GenBudget((cfg or {}).get("writing", {}).get("gen_budget"))
+        self._budget_active = False
 
     # ---------- 外部控制 ----------
 
@@ -199,6 +297,55 @@ class Orchestrator(QThread):
         if self._g4_missing_run >= G4_PAUSE_AFTER:
             self.auto_pause(f"G4 相位看门狗：连续 {self._g4_missing_run} 章记账产物"
                             f"缺失（正文已落库而追踪/摘要未更新）")
+
+    # ---------- D1 预算宪法（章生成周期硬顶+熔断）----------
+
+    def _on_llm_call(self, ev: dict):
+        """client 调用观察者：章窗口内计数，任一轴超限即熔断（LLM 工作线程到账）。
+
+        观察者侧已兜异常，这里再兜一层——预算是观测件，绝不碰调用链。
+        """
+        try:
+            if not self._budget_active or self._budget.tripped:
+                return
+            v = self._budget.feed(tin=ev.get("tin", 0), tout=ev.get("tout", 0))
+            if v:
+                self._budget.tripped = True
+                self._budget.violations = list(v)
+                self._budget_trip(v)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("预算计数失败（忽略）: %s", e)
+
+    def _budget_trip(self, violations: list):
+        """熔断三连：消耗回执（error 日志）+ 异常落账（C35 G5 通道，规则
+        gen_budget_exceeded → state.anomalies + session_events）+ 闸门暂停
+        （sig_auto_paused → UI toast）。之后下一个 checkpoint 即停等人处置。"""
+        text = self._budget.receipt_text(violations)
+        rep = self._budget.receipt(violations)
+        self.log("error", f"预算熔断：{text}")
+        try:
+            lv.report_anomaly("gen_budget_exceeded", "error", ch=rep["ch"], msg=text,
+                              calls=rep["calls"], total_tokens=rep["total_tokens"],
+                              single_tokens=rep["single_tokens"],
+                              minutes=rep["minutes"],
+                              violated="+".join(violations))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("预算熔断落账失败（忽略）: %s", e)
+        self.auto_pause(f"预算宪法熔断：第 {rep['ch']} 章 {'+'.join(violations)} "
+                        f"超限（调用{rep['calls']}次/tokens {rep['total_tokens']}/"
+                        f"{rep['minutes']}分钟），已暂停等人处置")
+
+    def _budget_finish(self):
+        """本章窗口收口：关闭观察计数 + 末次裁决（最后一次调用到账后磨掉的
+        时间/尾差越限，在这里兜住——观察者只评「调用到账」时刻）。"""
+        self._budget_active = False
+        if self._budget.tripped:
+            return
+        v = self._budget.exceeded()
+        if v:
+            self._budget.tripped = True
+            self._budget.violations = list(v)
+            self._budget_trip(v)
 
     # ---------- 步骤决策门（Step Gates）----------
 
@@ -378,6 +525,14 @@ class Orchestrator(QThread):
         self.sig_thinking.emit(slot, self._cur_stage or "", self._cur_num, text)
 
     def checkpoint(self):
+        # D1 预算宪法：时长轴的章内兜底裁决——观察者只在调用到账时评，两次调用
+        # 之间磨掉的时间越限，在下一个 checkpoint 立即熔断（不等章尾收口）
+        if self._budget_active and not self._budget.tripped:
+            _v = self._budget.exceeded()
+            if _v:
+                self._budget.tripped = True
+                self._budget.violations = list(_v)
+                self._budget_trip(_v)
         if self._stop:
             raise PipelineStopped()
         while self._pause.is_set():
@@ -399,6 +554,8 @@ class Orchestrator(QThread):
     # ---------- 主流程 ----------
 
     def run(self):
+        from ..llm import client as llm_client
+        llm_client.add_call_observer(self._on_llm_call)   # D1：章周期计数接入口
         try:
             self.volume_sessions = {}   # S1：卷会话实例随本次连跑重建（每卷一个）
             # C35 G5：登记告警落账目标——此后 record() 命中规则 → 本项目
@@ -491,6 +648,10 @@ class Orchestrator(QThread):
                 if num in done_nums:
                     num += 1
                     continue
+                # D1 预算宪法：本章生成周期窗口重开（细纲批与微循环都在窗口内计数；
+                # 上一章的消耗不带入——正常章零误伤的前提）
+                self._budget.reset(num)
+                self._budget_active = True
                 if not os.path.exists(project.get_outline_path(self.proj, num)):
                     self._cur_stage = st.STAGE_CH_OUTLINE
                     self.sig_stage.emit(st.STAGE_CH_OUTLINE)
@@ -548,6 +709,7 @@ class Orchestrator(QThread):
                                      f"（草稿与已投审校票已保留，方案 H）")
                 record = stages.chapter_microcycle(self, num, guidance=guidance, ideas=ideas)
                 stages.write_gen_config(self, num)   # 先落快照再发信号：闸门/信号链异常不该丢可追溯性
+                self._budget_finish()   # D1：本章预算窗口收口（时长轴末次裁决）
                 self.sig_chapter_done.emit(record)
                 done_nums.add(num)
 
@@ -596,6 +758,9 @@ class Orchestrator(QThread):
         except Exception as e:
             self._dump_failure(e)
             self.sig_failed.emit(f"流水线异常: {e}")
+        finally:
+            llm_client.remove_call_observer(self._on_llm_call)
+            self._budget_active = False
 
     def _dump_failure(self, error: BaseException):
         """失败现场落盘：阶段/章号/最后 prompt/日志尾部"""
