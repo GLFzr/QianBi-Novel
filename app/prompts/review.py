@@ -4,7 +4,26 @@
 审校槽（SLOT_REVIEW）负责，检测结果分两级：
 - BLOCKING：与既有设定直接冲突（改），必须处理
 - ADVISORY：可疑但可商榷（提示人工复核）
+
+C34-2（T2 钩子账本·段2）：维 F 升级为「钩型回写」——审校按 hook_vocab 七型判据
+判钩型/回写烈度三档/裁事件钩，判定是钩子账本的权威值，覆盖细纲自报值；判据与
+app/prompts/hook_vocab.py **import 同源**（不复制文本，test_hook_review 逐行钉）。
+解析端 parse_hook_writeback / apply_hook_writeback 在本模块（纯函数），stages 的
+落账接线为 TODO（B3 领地，数据形状与 hook_vocab.HookRecord 对齐）。
 """
+import re
+
+from .hook_vocab import HOOK_TYPE_CRITERIA, HOOK_TYPES, extract_hook_type
+
+
+def hook_criteria_block() -> str:
+    """七钩型判据块：逐字来自 hook_vocab.HOOK_TYPE_CRITERIA（单一出处）。
+
+    细纲词表（planning.HOOK_VOCAB_BLOCK）、审校 F 维 rubric、共写 supervisor
+    应答核对三处共用同一份判据文本——改词表即三处同改，钉测逐行核对。
+    块内禁止 ASCII 花括号：拼接进 .format() 模板（test_hook_review 钉）。
+    """
+    return "\n".join(f"- {t}：{HOOK_TYPE_CRITERIA[t]}" for t in HOOK_TYPES)
 
 REVIEW_PROMPT = """你是长篇小说的连续性审校。请审阅刚写完的第 {chapter_num} 章正文，与全书既有记忆对照，找出**一致性冲突**。
 
@@ -166,13 +185,16 @@ FINAL_REVIEW_PROMPT = """{project_header}
 - 硬规则：多角色台词可互换说话人/弧光倒退（已觉醒无敌却仍被普通怪吓退）→ 必 fail；配角声口与时代身份轻微不符、主角变化微弱 → 必 marginal；主角全程稳定无变化 → 至多 marginal，不得判 fail
 - 锚定（真实金标）：「陈屿被面前的怪物吓得倒退两步」（前文已觉醒无敌）→ fail（弧光倒退）；「宰相说：'这件事我得想想'」→ marginal（声口现代化）
 
-### 维 F：钩子与期待感
-- 章末事件钩（不是心理宣告/计划陈述/总结陈词）？
-- 钩子烈度：有可指认的"不点下一章会死"或"信息缺口"吗？仅靠惯性→ marginal
+### 维 F：钩子与期待感（钩型回写：本维判定是钩子账本的权威值，覆盖细纲自报值）
+- 【钩型判定】章末钩子对照下方七型判据逐条对照，指认唯一钩型；对照不上任何判据 → 记「无型」
+- 【烈度回写】按判据成立度回写期待度三档：强=判据完整成立且信息缺口尖锐；中=判据成立但缺口偏钝；弱=判据不成立/仅靠惯性/纯氛围——你的回写覆盖细纲自报的期待度（原「不点下一章会死/信息缺口」口径并入：缺可指认的信息缺口即不得回写「强」）
+- 【事件钩回写】章末停在可指认的外部事件/异象/动作/台词上 → 事件钩=是；停在心理宣告/计划陈述/总结陈词/纯氛围定格 → 事件钩=否——你的回写覆盖细纲自报的事件钩认定
 - 期待感是否被经营：伏笔/悬念/账本悬念在章末有露出？
 - **结构与句式新鲜度（先快数再判，本流水线已知残留指纹）**：①"盯着/看向/望向/注视/目光"合计 ≥8 处（按 2 千字章）= 凝视循环；②"没有动/没有回头/没有说话"类刹车句 ≥4 处或 ≥2 处独立成段；③≤15 字单句独立段超过全章段落 45%。任一命中 → 本维至多 marginal 并在理由中点名；命中两类 → fail
-- 硬规则：章末以入睡/总结陈词/纯心理宣告收束、无事件钩 → 必 fail；有钩但仅靠惯性无信息缺口、或结构指纹命中一类 → 必 marginal；已有事件钩（新信息/未决冲突定格）→ 不得因"烈度不够"判 fail
-- 锚定（真实金标）：「他回到小屋，沉沉睡去」→ fail（章末无钩）；「他翻到最后一页，第 7 条规则被红笔划掉」→ pass（信息缺口钩）
+- 七钩型判据（与细纲「钩型受控词表」同一份文本，逐条对照）：
+""" + hook_criteria_block() + """
+- 硬规则：章末以入睡/总结陈词/纯心理宣告收束、无事件钩 → 必 fail；有钩但仅靠惯性无信息缺口、或结构指纹命中一类 → 必 marginal；已有事件钩（新信息/未决冲突定格）→ 不得因"烈度不够"判 fail；钩型记「无型」（对照不上任何判据）→ 至多 marginal 并在理由点名
+- 锚定（真实金标）：「他回到小屋，沉沉睡去」→ fail（章末无钩）；「他翻到最后一页，第 7 条规则被红笔划掉」→ pass（信息缺口钩）；细纲自报「钩型：危机迫近」而章末无时限无逼近威胁 → 烈度回写「弱」、钩型记「无型」（自报失真，以你的判定为准）
 
 ## 你必须遵守的硬纪律（DeepSeek V4 flash 特化）
 
@@ -191,7 +213,7 @@ FINAL_REVIEW_PROMPT = """{project_header}
 ===C_FINGER=== ...
 ===D_PLOT=== ...
 ===E_CHARACTER=== ...
-===F_HOOK=== ...
+===F_HOOK=== [pass/marginal/fail] + 1 句理由（≤30 字）+ 【钩型：七型之一或无型｜烈度：强/中/弱｜事件钩：是/否】（回写标签必填，判据见维 F，程序据此回写钩子账本）+ 【原文引证："..."】（fail/marginal 必填）
 （六维之后直接输出 ===VERDICT=== / ===ITEMS=== / ===END===。**不要**再输出
  ===WORST_QUOTES=== 与 ===TOTAL===：两者无任何下游消费方，属每票最厚的死重输出，
  且会随会话历史永久留在栈里被后续每一章重读。总评由程序按门禁自动判定，不需要你复述。）
@@ -501,6 +523,7 @@ REVIEW_COMPACT_PROTOCOL = """## 评审输出格式（紧凑 JSON 协议，严格
 - score 三选一：pass/marginal/fail；不打太极纪律照旧（每维明确等级，禁模糊词）
 - quote_ref 定位格式「段N句M」：N=正文第 N 段（按出现顺序计数，标题行算第 1 段），M=该段第 M 句（以。！？；分句）。程序据此回原文**逐字验真**——定位不到原文 = 该条作废降级，宁可少引不可假引
 - one_line ≤40 字：写具体问题，禁止复述正文；每次评审至少指出 2 个具体问题（反聚拢反向指令照旧）
+- F_HOOK 维的 one_line 句末必须附回写标签【钩型：七型之一或无型｜烈度：强/中/弱｜事件钩：是/否】（判据见 rubric 维 F，程序据此回写钩子账本、覆盖细纲自报值）——该维 one_line 放宽到 ≤60 字以容纳标签
 - 维度独立判定、题材纯度、先扫节奏指纹再评级（维 F 第三条）等硬纪律全部照旧适用
 - verdict 门禁：fail=0 且 marginal≤1→PASS；fail=1 或 marginal≥3→PASS_WITH_NOTES；fail≥2→REJECT；任一 fail 涉及设定硬伤/金手指越界/因果空悬→REJECT-HARD
 - confidence：每条 fail 都核到真实原文引证才给 high；拿不准的判据较多给 low
@@ -512,6 +535,71 @@ REVIEW_COMPACT_PROTOCOL = """## 评审输出格式（紧凑 JSON 协议，严格
 def review_compact_protocol() -> str:
     """紧凑票输出协议段（必须近场，同 review_output_protocol 的回声教训）"""
     return REVIEW_COMPACT_PROTOCOL
+
+
+# ========== C34-2：F 维钩型回写解析端（纯函数；stages 落账接线 TODO，B3 消费） ==========
+
+# F_HOOK 行回写标签：【钩型：…｜烈度：…｜事件钩：…】（全角｜为主，容忍半角 |）
+_HOOK_WB_RE = re.compile(
+    r"【\s*钩型\s*[：:]\s*([^｜|】]*)\s*[｜|]\s*烈度\s*[：:]\s*([^｜|】]{0,2})"
+    r"\s*[｜|]\s*事件钩\s*[：:]\s*([^｜|】]{0,2})\s*】")
+
+# 长文票原文引证：【原文引证："..."】（event_kw 的事件锚来源）
+_REVIEW_QUOTE_RE = re.compile(r'原文引证\s*[：:]\s*[“"]?([^”"】【\n]{2,48})["”]?')
+
+
+def parse_hook_writeback(f_hook_text: str) -> dict:
+    """F_HOOK 维评审文本 → 钩子账本回写值（审校裁决覆盖细纲自报值的解析端）。
+
+    返回 {"type","strength","is_event_hook","event_kw"}：
+    - type：标签钩型经 hook_vocab.extract_hook_type 归一——七型之外（含「无型」、
+      乱填）→ ""，落账侧以 "" 为「不覆盖自报」的哨兵；
+    - strength：强/中/弱明确回写才带值（标签缺失或档位非法 → ""，不覆盖自报）；
+    - is_event_hook：三态 True/False/None（None = 标签缺失或未标注，不覆盖自报）；
+    - event_kw：长文票【原文引证】截取的事件锚（≤24 字，紧凑票无引证 → ""）。
+    """
+    out = {"type": "", "strength": "", "is_event_hook": None, "event_kw": ""}
+    text = f_hook_text or ""
+    m = _HOOK_WB_RE.search(text)
+    if m:
+        out["type"] = extract_hook_type(m.group(1).strip())
+        strength = m.group(2).strip()
+        if strength in ("强", "中", "弱"):
+            out["strength"] = strength
+        ev = m.group(3).strip()
+        if ev in ("是", "否"):
+            out["is_event_hook"] = (ev == "是")
+    q = _REVIEW_QUOTE_RE.search(text)
+    if q:
+        out["event_kw"] = q.group(1).strip().strip("。，；！？、.、,;!?")[:24]
+    return out
+
+
+def apply_hook_writeback(row: dict, wb: dict) -> dict:
+    """细纲自报账本行 ← F 维审校回写（审校裁决覆盖自报值；返回新 dict，不改原行）。
+
+    - type/strength：回写值非空才覆盖（"" = 审校未给出可归一的判定，保留自报）；
+    - is_event_hook：True/False 明确裁决才覆盖——裁「否」时同步清空 event_kw
+      （自报引文不再可信，保住账本 is_event_hook↔event_kw 一致性）；
+      裁「是」而自报与审校引证都没有事件词 → 覆盖为 True 且 event_kw 留空，
+      validate_hook_row 会点名「不一致」，留待账本侧转 LLM 轨补词
+      （hook_vocab 卡4 风险②既定链路，prompt 层不硬造关键词）。
+    """
+    new = dict(row or {})
+    wb = wb or {}
+    if wb.get("type"):
+        new["type"] = wb["type"]
+    if wb.get("strength"):
+        new["strength"] = wb["strength"]
+    ev = wb.get("is_event_hook")
+    if ev is True:
+        new["is_event_hook"] = True
+        if not new.get("event_kw") and wb.get("event_kw"):
+            new["event_kw"] = wb["event_kw"]
+    elif ev is False:
+        new["is_event_hook"] = False
+        new["event_kw"] = ""
+    return new
 
 
 def _esc(t: str) -> str:

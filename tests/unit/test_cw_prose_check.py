@@ -92,13 +92,20 @@ def test_review_worker_prompt_assembly(tmp_path):
     assert w.result_text == report
     assert "本章正文样本。" in w.last_prompt  # 工作副本正文进 prompt
     assert "乙事件标记物" in w.last_prompt    # 本章细纲注入
-    # W0c：共写查验与流水线共用同一终审装配点——两条渲染路径逐字相等
+    # W0c：共写查验与流水线共用同一终审装配点——两条渲染路径逐字相等。
+    # C34-2 显式改钉 W0c：终审 rubric 维 F 升级为钩型回写（判据与 hook_vocab 同源），
+    # 钉值随升级同步扩——原三路 SHA 等值断言保留（本就随单源装配自动跟随，无静默绕开），
+    # 新增钩型判据在两条装配路径产物中的逐字在场断言（同源块漏注入任一档即红）。
     from app.core import stages
+    from app.prompts.hook_vocab import HOOK_TYPE_CRITERIA, HOOK_TYPES
 
     pipeline = stages.build_final_review_prompt(proj, cfg, 2, prose)
     ctx = SimpleNamespace(proj=proj, cfg=cfg)
     assert _sha(w.last_prompt) == _sha(pipeline) == _sha(
         stages._build_final_review_prompt(ctx, 2, prose))
+    for _t in HOOK_TYPES:                       # F 维判据 import 同源，两档装配共用
+        _line = f"{_t}：{HOOK_TYPE_CRITERIA[_t]}"
+        assert _line in pipeline and _line in w.last_prompt
 
 
 def test_review_worker_short_circuits_on_word_count(tmp_path):
