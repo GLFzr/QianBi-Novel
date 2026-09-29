@@ -190,6 +190,38 @@ Dialog {
             }
         }
 
+        // C40 DOC-10：应用内帮助入口（w4_docs §3.2 B 方案）。
+        // 安装版/便携版：打开随包离线帮助 <程序目录>/help/index.html（发布流水线渲染，
+        // 断网可用；版本一致性由 app/selftest 的 help 段在打包态断言）。
+        // 开发态：程序目录是 <仓库>/app，直接打开仓库内手册原文。
+        // TODO(C40 收口轮)：F1 全局快捷键打开帮助（Main.qml 全局 Shortcut 与编辑器
+        // 焦点链有交互，本轮暂缓——入口先落在「关于」，不抢主窗口键位）。
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            AppButton {
+                objectName: "openHelpButton"
+                text: "帮助 · 使用手册（离线）"
+                kind: "secondary"
+                onClicked: {
+                    var st = bridge.updateState
+                    if (st.installMode === "dev")
+                        bridge.openPath(st.installDir + "/../docs/用户手册_v2.md")
+                    else
+                        bridge.openPath(st.installDir + "/help/index.html")
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                text: "手册、报错对照表随包内置，不联网也能看。"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsMicro
+                wrapMode: Text.Wrap
+            }
+        }
+
         RowLayout {
             spacing: 8
             AppButton { text: "打开日志目录"; onClicked: bridge.openLogDir() }

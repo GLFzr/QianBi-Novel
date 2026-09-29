@@ -8,12 +8,12 @@
      （抓的就是 README「1061 passed」「EN 594 tests / 44 probe」这类数字腐烂）。
      口径说明：README 测试节的命令是 `pytest tests/unit -q`，所以核对基准取
      tests/unit 收集数（全仓 --co 口径更大，不混用）。
-  2. 手册行数下限：docs/用户手册_v1.md ≥ 200 行（当前 236；手册 v2 扩容（C40，≥500）
-     落地后把 MANUAL_MIN_LINES 提到 500）。
+  2. 手册行数下限：docs/用户手册_v2.md ≥ 500 行（C40 手册 v2 落地，判据 C 数字要件；
+     仍保留 v1 ≥ 200 的下限——v1 作为 0.20.0 口径快照随仓库留档，防误删）。
   3. 内链有效：扫描 README.md / README.en.md / CHANGELOG.md / docs/用户手册_v1.md /
-     docs/排障_v1.md / docs/README.md 的全部 markdown 相对链接（含图片），
-     目标文件不存在即红；指向 README.md / README.en.md 的 #锚点与同文件 #锚点
-     按 GitHub slug 规则核对（抓的就是 CHANGELOG 曾出现的 `README.md#使用指南` 死锚）。
+     docs/用户手册_v2.md / docs/排障_v1.md / docs/README.md 的全部 markdown 相对链接
+     （含图片），目标文件不存在即红；指向 README.md / README.en.md 的 #锚点与同文件
+     #锚点按 GitHub slug 规则核对（抓的就是 CHANGELOG 曾出现的 `README.md#使用指南` 死锚）。
   4. 排障页文案对照：docs/排障_v1.md「错误对照表」每条屏幕文案必须能在 app/ 源码
      里 grep 到（逐字碎片匹配：f-string 变量处写「…」或照抄 {name}，变量两侧的文案
      必须逐字命中）——防文档文案与屏幕文案漂移，这是排障页的生命线。
@@ -37,7 +37,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-MANUAL_MIN_LINES = 200          # 检查 2：手册行数下限（v2 扩容后提到 500）
+MANUAL_MIN_LINES = 500          # 检查 2：手册 v2 行数下限（C40 判据 C 数字要件）
+MANUAL_V1_MIN_LINES = 200       # 检查 2：v1 快照下限（留档防误删）
 TROUBLE_TABLE_MIN_ROWS = 10     # 检查 5：排障对照表条数下限
 DOC_LINE_MIN_PREFIX = 6         # 检查 4：文案逐字前缀的最短长度（字符）
 
@@ -46,6 +47,7 @@ LINK_SCAN_FILES = [
     "README.en.md",
     "CHANGELOG.md",
     "docs/用户手册_v1.md",
+    "docs/用户手册_v2.md",
     "docs/排障_v1.md",
     "docs/README.md",
 ]
@@ -139,12 +141,16 @@ def check_numbers(fails: list) -> dict:
 
 # ---------- 检查 2：手册行数下限 ----------
 
-def check_manual_lines(fails: list) -> int:
-    rel = "docs/用户手册_v1.md"
-    n = len((ROOT / rel).read_text(encoding="utf-8", errors="replace").splitlines())
-    if n < MANUAL_MIN_LINES:
-        fails.append(f"[2] {rel} 只有 {n} 行 < 下限 {MANUAL_MIN_LINES}（手册被误删/大幅缩水？）")
-    return n
+def check_manual_lines(fails: list) -> dict:
+    """v2（正式手册，下限 500）+ v1（0.20.0 口径快照，下限 200）双查。"""
+    out = {}
+    for rel, floor in (("docs/用户手册_v2.md", MANUAL_MIN_LINES),
+                       ("docs/用户手册_v1.md", MANUAL_V1_MIN_LINES)):
+        n = len((ROOT / rel).read_text(encoding="utf-8", errors="replace").splitlines())
+        out[rel] = n
+        if n < floor:
+            fails.append(f"[2] {rel} 只有 {n} 行 < 下限 {floor}（手册被误删/大幅缩水？）")
+    return out
 
 
 # ---------- 检查 3：内链有效 ----------
@@ -268,7 +274,7 @@ def check_troubleshoot(fails: list) -> dict:
 def main() -> int:
     fails: list = []
     truth = check_numbers(fails)
-    manual_lines = check_manual_lines(fails)
+    manuals = check_manual_lines(fails)
     links = check_links(fails)
     trouble = check_troubleshoot(fails)
 
@@ -276,8 +282,9 @@ def main() -> int:
     print("check_docs —— 文档口径核对（规格：C03/QW-D3，w4_docs §4.2）")
     print("=" * 64)
     print(f"实跑口径：tests/unit 收集 {truth['collect']} 项；"
-          f"探针 {truth['probes']} 支；手册 {manual_lines} 行；"
-          f"内链 {links['links']} 条（其中锚点 {links['anchors']} 条）")
+          f"探针 {truth['probes']} 支；"
+          + "；".join("%s %d 行" % (k.split('/')[-1], v) for k, v in manuals.items())
+          + f"；内链 {links['links']} 条（其中锚点 {links['anchors']} 条）")
     if trouble.get("skip"):
         print("[4]/[5] SKIP：docs/排障_v1.md 尚未创建（待 C13）")
     else:

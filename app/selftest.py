@@ -15,6 +15,10 @@
 - manifest ：随包分发的资源文件逐文件 sha256（少一个 .qml / 预设 json 立刻红）
 - assembly ：真实装配/扫描/payload 函数在固定夹具上的输出摘要（同码不同效也抓得到）
 - qml      ：offscreen 真装载 Main.qml + 真 Bridge，报对象在位情况与 QML 接线错误
+- help     ：随包离线帮助断言（C40 DOC-10）——只在打包态咬人：`<程序目录>/help/index.html`
+             必须存在且内嵌版本标记与 `__version__` 一致；开发态是构建产物无从断言，记 skip。
+             probe_packaged 的摘要对拍只比 imports/manifest/assembly/qml 四段（--only 指定），
+             本段不参与两侧对拍，不会因开发态无 help 而假红。
 
 纪律（改本文件前必读）：
 1. **导入任何 app 模块之前**先重定向 HOME/USERPROFILE——`config.py`、`presets`、`crash.py`、
@@ -30,7 +34,7 @@ import os
 import sys
 import tempfile
 
-SECTIONS = ("imports", "manifest", "assembly", "qml")
+SECTIONS = ("imports", "manifest", "assembly", "qml", "help")
 
 # ---- 关键导入目标：缺一个就是打包事故 ----
 _IMPORT_TARGETS = [
@@ -481,6 +485,40 @@ def _sec_qml() -> dict:
 
 # ================= 入口 =================
 
+def _sec_help() -> dict:
+    """C40 DOC-10：随包离线帮助断言。
+
+    help/ 是发布流水线（build_release.py 4.5 步）渲染的构建产物，落在 exe 同级目录
+    （dist/QianBi-Novel/help/），不在源码树——开发态无从断言，记 dev-skip 不算失败；
+    打包态（frozen）help 必须在位，且内嵌版本标记与 app.__version__ 一致
+    （help/index.html 与本次构建不同步 = 用户看到的文档对不上手上的版本）。
+    """
+    out = {"mode": "packaged" if getattr(sys, "frozen", False) else "dev-skip"}
+    if not getattr(sys, "frozen", False):
+        return out
+    from app import __version__
+    # frozen 时 _resource_dir() = sys._MEIPASS = <程序目录>/_internal
+    exe_dir = os.path.dirname(_resource_dir())
+    help_dir = os.path.join(exe_dir, "help")
+    index = os.path.join(help_dir, "index.html")
+    if not os.path.isfile(index):
+        out["fatal"] = ("随包帮助缺失：%s（发布流水线 DOC-10 渲染步骤没跑，"
+                        "或安装包漏打 help/）" % help_dir)
+        return out
+    try:
+        with open(index, "rb") as f:
+            head = f.read(4096).decode("utf-8", "replace")
+    except OSError as e:
+        out["fatal"] = "随包帮助不可读：%s" % e
+        return out
+    out["index_bytes"] = os.path.getsize(index)
+    marker = 'name="qianbi-help-version" content="%s"' % __version__
+    out["version_match"] = marker in head
+    if marker not in head:
+        out["fatal"] = ("随包帮助版本标记不符（期望 %s）：help/index.html 与本次构建不同步"
+                        % __version__)
+    return out
+
 def run(out_path: str = "-", sections=SECTIONS) -> int:
     # 第一件事：任何 app 模块导入之前把 home 换到沙箱（见模块 docstring 纪律 1）
     home = tempfile.mkdtemp(prefix="qianbi_selftest_")
@@ -503,7 +541,8 @@ def run(out_path: str = "-", sections=SECTIONS) -> int:
     for name in sections:
         try:
             report[name] = {"imports": _sec_imports, "manifest": _sec_manifest,
-                            "assembly": _sec_assembly, "qml": _sec_qml}[name]()
+                            "assembly": _sec_assembly, "qml": _sec_qml,
+                            "help": _sec_help}[name]()
         except Exception as e:  # noqa: BLE001
             report[name] = {"fatal": "%s: %s" % (type(e).__name__, _norm(str(e)))}
             rc = 1

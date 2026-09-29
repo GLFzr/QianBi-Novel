@@ -2,7 +2,8 @@
 """一键发布流水线（封装计划 T1.2）
 
 步骤：版本 → 质量闸门（可跳过）→ version_info 生成 → PyInstaller onedir
-    → 打包版冒烟探针 → 代码签名（配了证书才做）→ 便携 zip → SHA256SUMS
+    → 随包帮助 HTML（DOC-10）→ 打包版冒烟探针 → 代码签名（配了证书才做）
+    → 便携 zip → SHA256SUMS
     → （可选）Inno Setup 安装包 + 签名 → latest.json 回填与 Ed25519 签名
 
 签名：设 QIANBI_SIGN_PFX（+ QIANBI_SIGN_PASS / QIANBI_SIGN_SUBJECT）或
@@ -27,6 +28,94 @@ import zipfile
 
 # PRIVACY.md 在仓库的 docs/ 下（与 :354 的 out_dir 拷贝清单同源）；zip 内落根目录
 PORTABLE_DOCS = ("LICENSE", "THIRD-PARTY-LICENSES.md", "docs/PRIVACY.md")
+
+# ---- C40 DOC-10：随包离线帮助（w4_docs §3.2 B 方案）----
+# 目标用户一大半 GitHub 连不上（四通道更新就是为此设计的），在线文档救不了他们；
+# 把手册 v2 + 排障页渲染成单文件 HTML 随包走，AboutDialog「帮助」打开本地文件。
+# 纯 stdlib：不做完整 markdown 渲染——标题行转真标题（挂锚点、进目录），
+# 其余行原样转义进 <pre>（pre-wrap 折行），零三方依赖、零误渲染风险。
+HELP_SOURCES = ("docs/用户手册_v2.md", "docs/排障_v1.md")
+
+_HELP_CSS = (
+    "body{margin:0;font-family:'Microsoft YaHei',system-ui,sans-serif;"
+    "background:#f6f6f4;color:#26251f;line-height:1.55}"
+    "header{position:sticky;top:0;background:#26251f;color:#f6f6f4;padding:10px 18px}"
+    "header a{color:#9ecbff;margin-right:16px}"
+    "main{max-width:920px;margin:0 auto;padding:8px 18px 48px}"
+    "h1{font-size:22px;border-bottom:2px solid #d8d4c8;padding-bottom:6px;margin-top:28px}"
+    "h2{font-size:18px;margin-top:22px}"
+    "h3,h4{font-size:16px}"
+    "pre{white-space:pre-wrap;word-break:break-word;font-family:inherit;"
+    "font-size:14px;margin:0}"
+    "footer{max-width:920px;margin:0 auto;padding:12px 18px;color:#8a877d;font-size:12px}"
+)
+
+
+def _md_escape(line: str) -> str:
+    return (line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def _md_slug(title: str, used: set) -> str:
+    """标题 → ASCII 稳定锚 id：h1/h2 顺序号前缀，中文标题也不怕（不依赖 slug 规则）"""
+    i = len(used) + 1
+    slug = "sec-%d" % i
+    used.add(slug)
+    return slug
+
+
+def render_help(dest_dir: str, version: str) -> str:
+    """docs 手册 v2 + 排障页 → dest_dir/index.html（单文件、内联 CSS、无外链）。
+
+    缺任何一份源文档即抛错中止（N-21 同款纪律：承诺文档不许静默少打）。
+    返回写入的 html 路径。"""
+    missing = [s for s in HELP_SOURCES if not os.path.exists(os.path.join(ROOT, s))]
+    if missing:
+        raise FileNotFoundError("DOC-10 门禁：随包帮助源文档缺失 %s（拒绝静默出包）" % missing)
+    used: set = set()
+    toc_parts, body_parts = [], []
+    for src in HELP_SOURCES:
+        with open(os.path.join(ROOT, src), encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        # 单遍交织：# 与 ## 转真标题（挂锚点、进目录，锚点落在正文原位），
+        # 其余行（含 ### 深级标题/表格/列表/代码围栏）逐字转义进 <pre> 折行展示
+        buf: list = []
+
+        def _flush() -> None:
+            if buf:
+                body_parts.append("<pre>%s</pre>" % "\n".join(buf))
+                del buf[:]
+
+        for ln in lines:
+            m = re.match(r"^(#{1,2})\s+(.+?)\s*$", ln)
+            if m:
+                _flush()
+                level, title = len(m.group(1)), m.group(2)
+                slug = _md_slug(title, used)
+                toc_parts.append('<a href="#%s">%s</a>' % (slug, _md_escape(title)))
+                body_parts.append("<h%d id=\"%s\">%s</h%d>"
+                                  % (level, slug, _md_escape(title), level))
+            else:
+                buf.append(_md_escape(ln))
+        _flush()
+        body_parts.append("<hr/>")
+    html = (
+        "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"utf-8\"/>\n"
+        "<meta name=\"qianbi-help-version\" content=\"%s\"/>\n"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>\n"
+        "<title>千笔一文 v%s · 离线帮助</title>\n<style>%s</style>\n</head>\n<body>\n"
+        "<header><strong>千笔一文 v%s · 随包离线帮助</strong>　%s</header>\n"
+        "<main>\n%s\n</main>\n"
+        "<footer>生成于发布流水线（scripts/build_release.py DOC-10 步骤），"
+        "内容与 docs/用户手册_v2.md、docs/排障_v1.md 同源；"
+        "在线最新版见 GitHub 仓库 docs/ 目录。</footer>\n"
+        "</body>\n</html>\n"
+        % (version, version, _HELP_CSS, version,
+           "\n".join(toc_parts), "\n".join(body_parts)))
+    os.makedirs(dest_dir, exist_ok=True)
+    out_path = os.path.join(dest_dir, "index.html")
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(html)
+    return out_path
 
 
 def write_portable_zip(zip_path: str, dist_dir: str, readme_name: str,
@@ -338,6 +427,14 @@ def main():
     size_mb = sum(os.path.getsize(os.path.join(dp, f)) / 1048576
                   for dp, _, fs in os.walk(dist_dir) for f in fs)
     print(f"       onedir 体积: {size_mb:.0f} MB")
+
+    # ---- 4.5 随包帮助 HTML（C40 DOC-10）----
+    # 渲染进 dist/QianBi-Novel/help/（exe 同级）：AboutDialog「帮助」按 installDir 找它；
+    # 便携 zip 在第 6 步 walk dist_dir 装配，help/ 自然随包。缺源文档在 render_help 内
+    # 抛错中止（不静默出包）；版本标记内嵌 meta，app/selftest help 段在打包态断言。
+    help_html = render_help(os.path.join(dist_dir, "help"), __version__)
+    step("随包帮助 HTML", os.path.getsize(help_html) > 0,
+         "%s（手册 v2 + 排障页 · 版本 v%s 内嵌）" % (help_html, __version__))
 
     # ---- 5. 打包版验证（资源清单审计 + 启动冒烟 + 打包态/开发态摘要对拍）----
     if not args.skip_probe:
