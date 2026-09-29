@@ -1751,6 +1751,151 @@ class _MicroCycle:
         actual = project.count_chars(self.prose)
         ctx.log("ok", f"第 {num} 章 草稿完成：{actual} 字（目标 {chapter_words}）")
 
+    def _mc_word_gate(self) -> None:
+        """字数闸门：不足自动扩写（enrich 多轮）/超标压缩（trim）+ 断点保存（方案 H）"""
+        ctx = self.ctx
+        num = self.num
+        proj = self.proj
+        session = self.session
+        chapter_words = self.chapter_words
+        gates_cfg = self.gates_cfg
+        tolerance = self.tolerance
+        _w_cfg = self._w_cfg
+        if self.resume_at == "":
+            # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
+            max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
+            low_ok, high_ok, actual = gates.check_word_bounds(self.prose, chapter_words, tolerance)
+            # S5 注册窗口节拍：正文是长生成（130s+），紧随其后的快调用会在前轮输出单元
+            # 注册完成前发车，吃全价 miss（S1 实测 enrich 12.7k miss/笔）。在会话模式下
+            # 等一个注册窗口再发（本地扫描/断点保存已消耗一部分窗口）。
+            _pace_after_long_call(ctx, session, boundary="prose_tail")
+            enrich_rounds = 0
+            _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
+            while not low_ok and enrich_rounds < max_enrich_rounds:
+                enrich_rounds += 1
+                ctx.step(num, st.STEP_ENRICH)
+                ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
+                ctx.checkpoint()
+                # V7（writing.enrich_tail，缺省关）：补尾式扩写——只续写缺口（400-600 字），
+                # 输出∝缺口；旧全量重写每轮输出整章且模型对「扩写」天然保守（每轮只加
+                # 300-400 字、常需 2 轮）。续写完成后把「完整正文」固化进会话，保持
+                # 「最近一条章正文消息」语义不变。
+                if _enrich_tail:
+                    gap = max(chapter_words - actual, 200)
+                    tail_kw = dict(chapter_num=num, actual=actual, target=chapter_words,
+                                   gap=gap,
+                                   ending=self.prose[-400:],
+                                   tic_blacklist=_tic_blacklist(proj),
+                                   must_block=_must_block(proj, ctx.cfg),
+                                   chapter_header=_chap_header(ctx, proj, num),
+                                   project_header=project_header(proj))
+                    _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or SLOT_WRITING
+                    req = prompts.ENRICH_TAIL_PROMPT.format(**tail_kw)
+                    ctx.last_prompt = req
+                    # A4（v16 总案 5.3 定案）：tail 分支原设计单发直调（12 笔 in 中位 9k
+                    # 独立单发签名）——补齐接线：会话可用时补尾作为会话追加轮（前缀命中
+                    # 价），成功后废轮回滚、固化合并稿轮（「最近一条章正文消息」语义不变，
+                    # 免正文双份）。会话不可用回退独立单发（原路径）。
+                    t_tail = session.turn_count() if _session_usable(session) else None
+                    if t_tail is not None:
+                        cont = _session_ask(ctx, session, SLOT_WRITING, req,
+                                            label=f"字数补尾（会话轮）第 {enrich_rounds} 轮",
+                                            phase=PHASE_ENRICH)
+                    else:
+                        cont = clean_llm_output(ctx.router.client(_slot).chat(
+                            req, phase=PHASE_ENRICH))
+                    cont = (cont or "").strip()
+                    if cont and len(cont) >= gap * 0.35:
+                        self.prose = self.prose.rstrip("\n") + "\n\n" + cont
+                        if _session_usable(session):
+                            try:
+                                if t_tail is not None:
+                                    session.rollback_to(t_tail)   # 补尾轮由合并稿轮替代
+                                session.commit_turn(
+                                    f"（字数补尾第 {enrich_rounds} 轮已并入，以下为并入后的完整本章正文）",
+                                    self.prose)
+                            except Exception:  # noqa: BLE001
+                                pass
+                    else:
+                        ctx.log("warn", f"补尾产出过短（{len(cont)} 字），本轮回退全量扩写")
+                        enrich_full_kw = dict(chapter_num=num, actual=actual,
+                                              target=chapter_words, prose=self.prose,
+                                              tic_blacklist=_tic_blacklist(proj),
+                                              must_block=_must_block(proj, ctx.cfg),
+                                              chapter_header=_chap_header(ctx, proj, num),
+                                              project_header=project_header(proj))
+                        rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
+                                                   prompts.ENRICH_PROMPT, enrich_full_kw,
+                                                   prose=self.prose,
+                                                   label=f"扩写(全量) 第{enrich_rounds}轮")
+                        if rewritten.strip() and project.count_chars(rewritten) >= actual:
+                            self.prose = rewritten
+                    low_ok, high_ok, actual = gates.check_word_bounds(self.prose, chapter_words, tolerance)
+                    continue
+                enrich_kw = dict(chapter_num=num, actual=actual,
+                                 target=chapter_words, prose=self.prose,
+                                 tic_blacklist=_tic_blacklist(proj),
+                                 must_block=_must_block(proj, ctx.cfg),
+                                 chapter_header=_chap_header(ctx, proj, num),
+                                 project_header=project_header(proj))
+                rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
+                                           prompts.ENRICH_PROMPT, enrich_kw, prose=self.prose,
+                                           label=f"扩写 第{enrich_rounds}轮")
+                # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
+                if rewritten.strip() and project.count_chars(rewritten) >= actual:
+                    self.prose = rewritten
+                low_ok, high_ok, actual = gates.check_word_bounds(self.prose, chapter_words, tolerance)
+            if enrich_rounds:
+                ctx.log("ok" if low_ok else "warn",
+                        f"扩写后 {actual} 字" + ("，达标" if low_ok
+                                                else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
+            # A13（v16 总案 5.3）：超标通道不再被扩写轮豁免——ch26 实测 enrich 后 3291 字
+            # （超标 65%）无 trim 直进审校。trim 后仍超 ≥15% 允许一次二次压缩；仍不达
+            # 打标观测（A9：trim ≥2 次的章是细纲预算行质量的观测样本）。
+            trim_rounds = 0
+            while not high_ok and trim_rounds < 2:
+                trim_rounds += 1
+                ctx.step(num, st.STEP_ENRICH)
+                ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），"
+                                + ("二次压缩…" if trim_rounds == 2 else "自动压缩…"))
+                ctx.checkpoint()
+                pre_prose, pre_actual = self.prose, actual
+                cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
+                t_trim = session.turn_count() if _session_usable(session) else 0
+                trim_kw = dict(chapter_num=num, actual=actual, target=chapter_words,
+                               cut_pct=cut_pct, prose=self.prose,
+                               tic_blacklist=_tic_blacklist(proj),
+                               must_block=_must_block(proj, ctx.cfg),
+                               chapter_header=_chap_header(ctx, proj, num),
+                               project_header=project_header(proj))
+                self.prose = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_TRIM,
+                                            prompts.TRIM_PROMPT, trim_kw, prose=self.prose,
+                                            label="压缩" if trim_rounds == 1 else "压缩(二次)")
+                low_ok, high_ok, actual = gates.check_word_bounds(self.prose, chapter_words, tolerance)
+                if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
+                    # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
+                    self.prose, actual = pre_prose, pre_actual
+                    if _session_usable(session):
+                        session.rollback_to(t_trim)   # 压缩稿被否决 → 历史截断回压缩前
+                    ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
+                    break   # 回退后再压只会重蹈：结束压缩循环，打标交人工/观测
+                if high_ok:
+                    ctx.log("ok", f"压缩后 {actual} 字，达标")
+                else:
+                    try:
+                        from .volume_session import record_event as _rec
+                        _rec(proj, "trim_over", ch=int(num), actual=int(actual))
+                    except Exception:  # noqa: BLE001
+                        pass
+                    ctx.log("warn", f"压缩 {trim_rounds} 轮后仍超标（{actual} 字），打标观测（trim_over）")
+        # 断点保存（方案 H）：草稿即文件——此后扫描/去味/审校/定稿任何位置停止，
+        # 重启都从盘上这份草稿继续，不再整章重写
+        project.write_file(project.chapter_draft_path(proj, num), self.prose)
+        st.save_chapter_step(proj, num, step_done="enrich",
+                             draft_path=self.draft_rel, votes=self.saved_votes, outline_fp=self.outline_fp)
+        # W-3 里程碑①：与草稿同步把卷栈落一次盘（此后崩在扫描/去味/审校都不用重打整卷）
+        _save_session_checkpoint(ctx, session, "enrich 后")
+
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
@@ -1892,144 +2037,9 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                      resume_prose=resume_prose, draft_rel=draft_rel)
     mc._mc_assemble()
     mc._mc_draft()
+    mc._mc_word_gate()
     # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
     prose = mc.prose
-
-    if resume_at == "":
-        # ---- 字数闸门：不足自动扩写（最多 word_enrich_rounds 轮，真机缺陷④收紧）/ 超标自动压缩一次 ----
-        max_enrich_rounds = max(1, int(gates_cfg.get("word_enrich_rounds", 2)))
-        low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-        # S5 注册窗口节拍：正文是长生成（130s+），紧随其后的快调用会在前轮输出单元
-        # 注册完成前发车，吃全价 miss（S1 实测 enrich 12.7k miss/笔）。在会话模式下
-        # 等一个注册窗口再发（本地扫描/断点保存已消耗一部分窗口）。
-        _pace_after_long_call(ctx, session, boundary="prose_tail")
-        enrich_rounds = 0
-        _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
-        while not low_ok and enrich_rounds < max_enrich_rounds:
-            enrich_rounds += 1
-            ctx.step(num, st.STEP_ENRICH)
-            ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
-            ctx.checkpoint()
-            # V7（writing.enrich_tail，缺省关）：补尾式扩写——只续写缺口（400-600 字），
-            # 输出∝缺口；旧全量重写每轮输出整章且模型对「扩写」天然保守（每轮只加
-            # 300-400 字、常需 2 轮）。续写完成后把「完整正文」固化进会话，保持
-            # 「最近一条章正文消息」语义不变。
-            if _enrich_tail:
-                gap = max(chapter_words - actual, 200)
-                tail_kw = dict(chapter_num=num, actual=actual, target=chapter_words,
-                               gap=gap,
-                               ending=prose[-400:],
-                               tic_blacklist=_tic_blacklist(proj),
-                               must_block=_must_block(proj, ctx.cfg),
-                               chapter_header=_chap_header(ctx, proj, num),
-                               project_header=project_header(proj))
-                _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or SLOT_WRITING
-                req = prompts.ENRICH_TAIL_PROMPT.format(**tail_kw)
-                ctx.last_prompt = req
-                # A4（v16 总案 5.3 定案）：tail 分支原设计单发直调（12 笔 in 中位 9k
-                # 独立单发签名）——补齐接线：会话可用时补尾作为会话追加轮（前缀命中
-                # 价），成功后废轮回滚、固化合并稿轮（「最近一条章正文消息」语义不变，
-                # 免正文双份）。会话不可用回退独立单发（原路径）。
-                t_tail = session.turn_count() if _session_usable(session) else None
-                if t_tail is not None:
-                    cont = _session_ask(ctx, session, SLOT_WRITING, req,
-                                        label=f"字数补尾（会话轮）第 {enrich_rounds} 轮",
-                                        phase=PHASE_ENRICH)
-                else:
-                    cont = clean_llm_output(ctx.router.client(_slot).chat(
-                        req, phase=PHASE_ENRICH))
-                cont = (cont or "").strip()
-                if cont and len(cont) >= gap * 0.35:
-                    prose = prose.rstrip("\n") + "\n\n" + cont
-                    if _session_usable(session):
-                        try:
-                            if t_tail is not None:
-                                session.rollback_to(t_tail)   # 补尾轮由合并稿轮替代
-                            session.commit_turn(
-                                f"（字数补尾第 {enrich_rounds} 轮已并入，以下为并入后的完整本章正文）",
-                                prose)
-                        except Exception:  # noqa: BLE001
-                            pass
-                else:
-                    ctx.log("warn", f"补尾产出过短（{len(cont)} 字），本轮回退全量扩写")
-                    enrich_full_kw = dict(chapter_num=num, actual=actual,
-                                          target=chapter_words, prose=prose,
-                                          tic_blacklist=_tic_blacklist(proj),
-                                          must_block=_must_block(proj, ctx.cfg),
-                                          chapter_header=_chap_header(ctx, proj, num),
-                                          project_header=project_header(proj))
-                    rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
-                                               prompts.ENRICH_PROMPT, enrich_full_kw,
-                                               prose=prose,
-                                               label=f"扩写(全量) 第{enrich_rounds}轮")
-                    if rewritten.strip() and project.count_chars(rewritten) >= actual:
-                        prose = rewritten
-                low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-                continue
-            enrich_kw = dict(chapter_num=num, actual=actual,
-                             target=chapter_words, prose=prose,
-                             tic_blacklist=_tic_blacklist(proj),
-                             must_block=_must_block(proj, ctx.cfg),
-                             chapter_header=_chap_header(ctx, proj, num),
-                             project_header=project_header(proj))
-            rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
-                                       prompts.ENRICH_PROMPT, enrich_kw, prose=prose,
-                                       label=f"扩写 第{enrich_rounds}轮")
-            # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
-            if rewritten.strip() and project.count_chars(rewritten) >= actual:
-                prose = rewritten
-            low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-        if enrich_rounds:
-            ctx.log("ok" if low_ok else "warn",
-                    f"扩写后 {actual} 字" + ("，达标" if low_ok
-                                            else f"，{enrich_rounds} 轮后仍不足，标记不阻断"))
-        # A13（v16 总案 5.3）：超标通道不再被扩写轮豁免——ch26 实测 enrich 后 3291 字
-        # （超标 65%）无 trim 直进审校。trim 后仍超 ≥15% 允许一次二次压缩；仍不达
-        # 打标观测（A9：trim ≥2 次的章是细纲预算行质量的观测样本）。
-        trim_rounds = 0
-        while not high_ok and trim_rounds < 2:
-            trim_rounds += 1
-            ctx.step(num, st.STEP_ENRICH)
-            ctx.log("warn", f"第 {num} 章 字数超标（{actual} > 目标 {chapter_words}×{1 + tolerance:.0%}），"
-                            + ("二次压缩…" if trim_rounds == 2 else "自动压缩…"))
-            ctx.checkpoint()
-            pre_prose, pre_actual = prose, actual
-            cut_pct = max(5, int(100 * (1 - chapter_words * (1 + tolerance) / max(actual, 1))))
-            t_trim = session.turn_count() if _session_usable(session) else 0
-            trim_kw = dict(chapter_num=num, actual=actual, target=chapter_words,
-                           cut_pct=cut_pct, prose=prose,
-                           tic_blacklist=_tic_blacklist(proj),
-                           must_block=_must_block(proj, ctx.cfg),
-                           chapter_header=_chap_header(ctx, proj, num),
-                           project_header=project_header(proj))
-            prose = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_TRIM,
-                                   prompts.TRIM_PROMPT, trim_kw, prose=prose,
-                                   label="压缩" if trim_rounds == 1 else "压缩(二次)")
-            low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
-            if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
-                # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
-                prose, actual = pre_prose, pre_actual
-                if _session_usable(session):
-                    session.rollback_to(t_trim)   # 压缩稿被否决 → 历史截断回压缩前
-                ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
-                break   # 回退后再压只会重蹈：结束压缩循环，打标交人工/观测
-            if high_ok:
-                ctx.log("ok", f"压缩后 {actual} 字，达标")
-            else:
-                try:
-                    from .volume_session import record_event as _rec
-                    _rec(proj, "trim_over", ch=int(num), actual=int(actual))
-                except Exception:  # noqa: BLE001
-                    pass
-                ctx.log("warn", f"压缩 {trim_rounds} 轮后仍超标（{actual} 字），打标观测（trim_over）")
-
-    # 断点保存（方案 H）：草稿即文件——此后扫描/去味/审校/定稿任何位置停止，
-    # 重启都从盘上这份草稿继续，不再整章重写
-    project.write_file(project.chapter_draft_path(proj, num), prose)
-    st.save_chapter_step(proj, num, step_done="enrich",
-                         draft_path=draft_rel, votes=saved_votes, outline_fp=outline_fp)
-    # W-3 里程碑①：与草稿同步把卷栈落一次盘（此后崩在扫描/去味/审校都不用重打整卷）
-    _save_session_checkpoint(ctx, session, "enrich 后")
 
     # ---- ③ AI 味扫描（本地，零成本；断点在此步之后时跳过）----
     skip_scan_deslop = resume_at in ("deslop", "review", "finalize")
