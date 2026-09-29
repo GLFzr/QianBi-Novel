@@ -842,4 +842,15 @@ class MemoryBackflowWorker(QThread):
             report += "\n".join("- " + d for d in parsed["deviations"][:10])
         self.report = report
         st.mark_backflowed(self.proj, st.load_state(self.proj), self.num, report)
+        # C42/P1（卡9）：反哺落账后同步校验事实账本 freshness——对接 CW-G6
+        # backflow_is_fresh 的「锁定⇒账本行必须存在」对账前置。抽取闸门未接入
+        # 时本章无账本行为预期态：只在报告尾附提示，不判失败（fail-open）。
+        try:
+            from . import fact_ledger
+            if (st.backflow_is_fresh(self.proj, st.load_state(self.proj), self.num)
+                    and not fact_ledger.ledger_is_fresh(self.proj, self.num)):
+                self.report += (f"\n事实账本：第{self.num}章暂无新鲜账本行"
+                                f"（抽取闸门接入前为预期态，CW-G6 对账项）")
+        except Exception:  # noqa: BLE001
+            pass
         self.done.emit(self.num, report)

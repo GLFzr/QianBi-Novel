@@ -2418,6 +2418,21 @@ class _MicroCycle:
         except Exception as e:
             ctx.log("warn", f"追踪更新失败（不阻断）：{e}")
 
+        # ---- C42（卡9 P1）：事实账本入账（追踪落账区，fail-open）——有抽取结果
+        # （ctx.fact_extraction，抽取闸门属后续卡）则两级锚定逐条入账（strict→归一化，
+        # 锚定失败逐条拒收不连坐），无则整段跳过；账本是独立 追踪/事实账本.jsonl，
+        # 绝不进 state（worker 丢失窗口，卡9 裁决）。
+        try:
+            from . import fact_ledger
+            _fl = fact_ledger.ingest_from_extraction(
+                proj, num, getattr(ctx, "fact_extraction", None), prose)
+            if _fl:
+                ctx.log("info", f"第 {num} 章 事实账本入账：保留 {_fl['kept']}"
+                                f"（strict {_fl['strict']} · 归一化 {_fl['norm']}）· "
+                                f"拒收 {_fl['rejected']}——详见 追踪/事实账本.jsonl")
+        except Exception as e:  # noqa: BLE001
+            ctx.log("warn", f"事实账本入账失败（不阻断）：{e}")
+
         # C33（writing.satisfaction_ledger_enabled，缺省 on）：本章记录落账——declared
         # 已在 _mc_assemble 立据，此处以审校 B_PAYOFF 维（六维 ===B_PAYOFF===，经
         # _chapter_review 存于 ctx.review_v2.items）回写 delivered：B_PAYOFF 无 fail=
