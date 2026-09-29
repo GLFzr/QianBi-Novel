@@ -392,7 +392,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 ```bash
 # Offline unit tests (no API key, ~25 seconds)
 .venv/Scripts/python -m pytest tests/unit -q --tb=no -p no:cacheprovider
-# → 1516 tests collected (2026-09-30, --collect-only snapshot; scripts/check_docs.py
+# → 1744 tests collected (2026-09-30, --collect-only snapshot; scripts/check_docs.py
 #   re-runs the count and goes red when this number rots)
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
@@ -466,7 +466,7 @@ scripts/
   build_release.py      one-shot release pipeline (quality gates → version info → packaging →
                           smoke test → digest diff)
 tests/
-  unit/                 1516 offline tests (collect-only snapshot)
+  unit/                 1744 offline tests (collect-only snapshot)
   probe_*.py            50 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice

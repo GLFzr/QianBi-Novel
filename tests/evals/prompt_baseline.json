@@ -26,22 +26,22 @@
    "i": 3,
    "kind": "outline",
    "slot": "helper",
-   "chars": 8440,
-   "sha256": "2c29384070538880e8f75ca5fa831d22e99ac54c4a605516f80547bf5158964e"
+   "chars": 10169,
+   "sha256": "822661bc4312996a84ffff250cc8e070426db640c35af8f9e6d463b851766b3b"
   },
   {
    "i": 4,
    "kind": "prose",
    "slot": "writing",
-   "chars": 9473,
-   "sha256": "3ddf32d0ef3051ef72423fa8d039620a2011424fdb491234583d8bd6b1d28e49"
+   "chars": 9938,
+   "sha256": "1ac9d6645bea35c3766c83022c5c57900df8d0a405a15f22f538d28dd4648e48"
   },
   {
    "i": 5,
    "kind": "review",
    "slot": "review",
-   "chars": 13231,
-   "sha256": "e7f3940ca42b2018a0e0db7bd0c514f5d77ebbf92903acda947426cb8795c1c1"
+   "chars": 13474,
+   "sha256": "6427722e179f55861e960e9cac397b8a7112599ed60ed502dbda52a41dcd7307"
   },
   {
    "i": 6,
@@ -82,15 +82,15 @@
    "i": 11,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10915,
-   "sha256": "b93d45b0e7b645efe84839d1d49294350cd22e67d33474f3ef56a45cb6b63e0a"
+   "chars": 11380,
+   "sha256": "eb0744108684be2aced10c1ad11a3adc4af021b02b6673e63c0622ac36099a5d"
   },
   {
    "i": 12,
    "kind": "review",
    "slot": "review",
-   "chars": 14802,
-   "sha256": "c7dcacf96828affdba2b6a4e2d17cfbf7c12c63af54ab9ea54959907898f002b"
+   "chars": 15045,
+   "sha256": "577253c0354f23f3262f592d7d43480325e751df195d719b7e1844e635126b51"
   },
   {
    "i": 13,
@@ -103,8 +103,8 @@
    "i": 14,
    "kind": "review",
    "slot": "review",
-   "chars": 14802,
-   "sha256": "c7dcacf96828affdba2b6a4e2d17cfbf7c12c63af54ab9ea54959907898f002b"
+   "chars": 15045,
+   "sha256": "577253c0354f23f3262f592d7d43480325e751df195d719b7e1844e635126b51"
   },
   {
    "i": 15,
@@ -124,8 +124,8 @@
    "i": 17,
    "kind": "review",
    "slot": "review",
-   "chars": 14802,
-   "sha256": "c7dcacf96828affdba2b6a4e2d17cfbf7c12c63af54ab9ea54959907898f002b"
+   "chars": 15045,
+   "sha256": "577253c0354f23f3262f592d7d43480325e751df195d719b7e1844e635126b51"
   },
   {
    "i": 18,
@@ -166,8 +166,8 @@
    "i": 23,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10942,
-   "sha256": "305d8c45ff93ef098a0bccadd3282211e4839979ffb34bf99ade0c2bf7b6db30"
+   "chars": 11407,
+   "sha256": "21a6655a049e92229caf05b2a457de1274b7e33add786b8d8738382abf6ac669"
   },
   {
    "i": 24,
@@ -222,8 +222,8 @@
    "i": 31,
    "kind": "prose",
    "slot": "writing",
-   "chars": 10817,
-   "sha256": "c1c9517e347e7e8e8b0e57af27b964614384a1c1ddca6391580792722041e397"
+   "chars": 11282,
+   "sha256": "3450efc29f6ba2f53ef676d302e901378158727c510ac1f825df74beaab1cd0e"
   },
   {
    "i": 32,
@@ -243,8 +243,8 @@
    "i": 34,
    "kind": "review",
    "slot": "review",
-   "chars": 16428,
-   "sha256": "506d5ce8ed42115be99d455385855660714b54a104aab5594c8fa18efa68ff55"
+   "chars": 16671,
+   "sha256": "964ea004a3836c14609418ad1b4bb50919b6391854a673e5774dcd7a6ddd6047"
   },
   {
    "i": 35,
@@ -292,8 +292,8 @@
    "i": 41,
    "kind": "review",
    "slot": "review",
-   "chars": 13274,
-   "sha256": "afdb3cf427174fe82f41599cefc4476637f4079449dc929147435841fe9bd5e2"
+   "chars": 13517,
+   "sha256": "49e17f596e82d208807295ca69e62a5b05886b91ede40a5969de6b19370e3641"
   },
   {
    "i": 42,
