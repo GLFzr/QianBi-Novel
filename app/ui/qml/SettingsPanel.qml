@@ -1401,6 +1401,139 @@ Item {
                         }
                     }
 
+                    // ---- E1：装配预览（Context Viewer，只读）----
+                    // 取数走 bridge.snapshotPanel（独立 controller，同 C26/C39 先例不摊主类）。
+                    // 数据源＝ctx.prompt_snapshots（内存只留本章最新一份，章入口清零）：
+                    // kind=装配相位（prose/deslop/chapter_summary…），未触发的相位不出现。
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: Theme.rCard
+                        color: Theme.bgCard
+                        border.width: 1
+                        border.color: Theme.border
+                        implicitHeight: snapCol.implicitHeight + 24
+                        ColumnLayout {
+                            id: snapCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 12
+                            spacing: 8
+
+                            function reload() {
+                                bridge.snapshotPanel.refresh()
+                                var kinds = bridge.snapshotPanel.promptSnapshotKinds
+                                if (snapKind.currentIndex < 0 || snapKind.currentIndex >= kinds.length)
+                                    snapKind.currentIndex = kinds.length > 0 ? 0 : -1
+                                snapView.text = bridge.snapshotPanel.promptSnapshot(snapKind.currentText)
+                            }
+                            Component.onCompleted: reload()
+                            Connections {
+                                target: bridge.snapshotPanel
+                                function onDataChanged() {
+                                    var kinds = bridge.snapshotPanel.promptSnapshotKinds
+                                    if (snapKind.currentIndex < 0 || snapKind.currentIndex >= kinds.length)
+                                        snapKind.currentIndex = kinds.length > 0 ? 0 : -1
+                                    snapView.text = bridge.snapshotPanel.promptSnapshot(snapKind.currentText)
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "装配预览（Context Viewer）"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsBody
+                                    font.weight: Font.DemiBold
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    visible: bridge.snapshotPanel.promptSnapshotChapter > 0
+                                    text: "第 " + bridge.snapshotPanel.promptSnapshotChapter + " 章"
+                                    color: Theme.textTertiary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsTiny
+                                }
+                                AppButton {
+                                    text: "刷新"
+                                    kind: "secondary"
+                                    height: 24
+                                    onClicked: snapCol.reload()
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: "重读内存快照（只保留本章最新装配，章入口清零）"
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "本章各阶段最终发给模型的 prompt 原文（只读，只保留本章最新一份，不落盘）：kind=装配相位，未触发的阶段不出现。"
+                                color: Theme.textTertiary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsTiny
+                                wrapMode: Text.Wrap
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: bridge.snapshotPanel.promptSnapshotKinds.length > 0
+                                spacing: 8
+                                Text {
+                                    text: "阶段"
+                                    color: Theme.textSecondary
+                                    font.pixelSize: Theme.fsSmall
+                                    font.family: Theme.uiFont
+                                }
+                                AppSelect {
+                                    id: snapKind
+                                    Layout.preferredWidth: 180
+                                    model: bridge.snapshotPanel.promptSnapshotKinds
+                                    onCurrentTextChanged:
+                                        snapView.text = bridge.snapshotPanel.promptSnapshot(currentText)
+                                }
+                                Item { Layout.fillWidth: true }
+                                AppButton {
+                                    text: "复制全文"
+                                    kind: "secondary"
+                                    height: 24
+                                    enabled: snapView.text !== ""
+                                    onClicked: bridge.copyText(snapView.text)
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: "复制当前阶段装配 prompt 全文到剪贴板"
+                                }
+                            }
+                            AppEmptyState {
+                                visible: bridge.snapshotPanel.promptSnapshotKinds.length === 0
+                                Layout.fillWidth: true
+                                title: "暂无装配快照"
+                                hint: "生成一章后可查看：草稿/去味/摘要等各阶段最终发给模型的 prompt 原文"
+                            }
+                            Rectangle {
+                                visible: bridge.snapshotPanel.promptSnapshotKinds.length > 0
+                                Layout.fillWidth: true
+                                height: 360
+                                radius: Theme.rCard
+                                color: Theme.bgLog
+                                border.width: 1
+                                border.color: Theme.border
+                                clip: true
+                                TextArea {
+                                    id: snapView
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    readOnly: true
+                                    textFormat: Text.PlainText
+                                    wrapMode: TextArea.Wrap
+                                    selectByMouse: true
+                                    persistentSelection: true
+                                    color: Theme.textSecondary
+                                    selectionColor: Theme.accent
+                                    font.family: Theme.monoFont
+                                    font.pixelSize: Theme.fsSmall
+                                    background: null
+                                }
+                            }
+                        }
+                    }
+
                     Item { height: 8 }
                 }
             }

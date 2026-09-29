@@ -1293,6 +1293,70 @@ class CostPanelController(QObject):
         return self._generated
 
 
+# ---------- E1：装配预览 controller（Context Viewer，只读）----------
+# 硬规约：独立 controller 类，不往 Bridge 主类摊（照 C26/C39 先例）。
+# 数据源＝orchestrator 的 stage ctx——stages.chapter_microcycle(self, …) 把
+# orchestrator 自身当 ctx 传进去，ctx.prompt_snapshots[kind] 存九挂点最终装配
+# prompt（章入口清零，只留本章最新一份），ctx.prompt_snapshot_ch 是章号。
+# 本类只读不写：kind 列表 + 指定 kind 全文 + 当前章号；全程 fail-open
+# （无项目/流水线未跑/属性缺失 → 空列表/0/空串，绝不抛进 UI）。零新增配置键。
+
+class SnapshotPanelController(QObject):
+    """装配预览（Context Viewer）：本章各阶段最终装配 prompt 的只读出口。
+
+    kind = stages 的装配相位键（prose/enrich/trim/deslop/review_fix/
+    root_cause/chapter_summary/global_summary…九挂点写入；未触发的相位不留
+    陈旧键——章入口清零纪律）。QML 面板 = kind 下拉 + 只读等宽大文本框 +
+    刷新 + 复制全文；数据就在内存，refresh() 只重发一次通知。
+    """
+
+    dataChanged = Signal()
+
+    # 面板下拉展示顺序＝流水线装配顺序（未知 kind 追加在后，字母序兜底）
+    KIND_ORDER = ("prose", "enrich", "trim", "deslop", "review_fix",
+                  "root_cause", "tracking", "chapter_summary", "global_summary")
+
+    def __init__(self, bridge, parent=None):
+        super().__init__(parent)
+        self._bridge = bridge
+
+    # ---- 读路径（全部 fail-open）----
+
+    def _snaps(self) -> dict:
+        """ctx.prompt_snapshots（orchestrator 即 stage ctx）；缺失/坏型 → 空"""
+        orch = getattr(self._bridge, "orch", None)
+        snaps = getattr(orch, "prompt_snapshots", None)
+        return snaps if isinstance(snaps, dict) else {}
+
+    @Slot()
+    @_guarded
+    def refresh(self):
+        """QML 打开面板 / 点刷新 / 章完成后调用——重发通知让属性回读最新内存"""
+        self.dataChanged.emit()
+
+    @Property("QVariantList", notify=dataChanged)
+    def promptSnapshotKinds(self) -> list:
+        """可用 kind（本章已装配过的相位），按流水线顺序排（未知 kind 字母序垫底）"""
+        kinds = set(self._snaps())
+        known = [k for k in self.KIND_ORDER if k in kinds]
+        return known + sorted(kinds - set(self.KIND_ORDER))
+
+    @Property(int, notify=dataChanged)
+    def promptSnapshotChapter(self) -> int:
+        """快照归属章号（章入口由 chapter_microcycle 写入；无项目/未跑=0）"""
+        try:
+            return int(getattr(getattr(self._bridge, "orch", None),
+                               "prompt_snapshot_ch", 0) or 0)
+        except Exception:  # noqa: BLE001
+            return 0
+
+    @Slot(str, result=str)
+    def promptSnapshot(self, kind: str) -> str:
+        """指定 kind 的最新装配 prompt 全文；未装配过 → 空串（QML 显空态）"""
+        v = self._snaps().get(str(kind or ""))
+        return v if isinstance(v, str) else ""
+
+
 class Bridge(QObject):
     # 属性变更信号
     bookTitleChanged = Signal()
@@ -1491,6 +1555,9 @@ class Bridge(QObject):
         self._model_policy = ModelPolicyController(self, parent=self)
         # C39：成本面板 controller——同款规约（w4 方案 B），QML 经 bridge.costPanel 调用
         self._cost_panel = CostPanelController(self, parent=self)
+        # E1：装配预览 controller——同款规约（只读 ctx.prompt_snapshots），
+        # QML 经 bridge.snapshotPanel 调用
+        self._snapshot_panel = SnapshotPanelController(self, parent=self)
         # 上次项目自动打开
         last = self.cfg.get("last_project", "")
         if last and project.is_project(last):
@@ -1642,6 +1709,7 @@ class Bridge(QObject):
     connectionModelProp = Property(QObject, lambda self: self.connectionModel, constant=True)
     modelPolicy = Property(QObject, lambda self: self._model_policy, constant=True)  # C26
     costPanel = Property(QObject, lambda self: self._cost_panel, constant=True)  # C39
+    snapshotPanel = Property(QObject, lambda self: self._snapshot_panel, constant=True)  # E1
 
     # ============ 项目管理 ============
 
