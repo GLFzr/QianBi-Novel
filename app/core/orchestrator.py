@@ -16,8 +16,9 @@ from PySide6.QtCore import QThread, Signal
 
 from .. import project
 from .. import diagnostics
-from .. import usage
 from ..llm import ModelRouter
+from . import anomaly_persist   # S6a：导入即向 ledger_view 装订告警落账（core→core 合法）
+from . import ledger_view as lv   # S6a：台账视图/告警查询（原 usage 上探已拆，core→core）
 from . import stages, state as st
 from .stages import StageError, PipelineStopped
 
@@ -158,7 +159,7 @@ class Orchestrator(QThread):
              真实写成了的场景，如他进程写入后本进程内存视图未刷新）。
         两路皆缺 =「正文已落库、收尾记账窗口被中断」（T3 记账停摆 30 章的指纹）。
         """
-        if usage.chapter_accounted(num):
+        if lv.chapter_accounted(num):
             return True
         try:
             with open(os.path.join(self.proj, "追踪", "章节摘要.md"),
@@ -191,8 +192,8 @@ class Orchestrator(QThread):
                f"章节摘要链亦无本章条目）——收尾记账窗口被中断的典型信号")
         self.log("error", msg)
         try:
-            usage.report_anomaly("bookkeeping_missing", "error", ch=num, msg=msg,
-                                 source="G4")
+            lv.report_anomaly("bookkeeping_missing", "error", ch=num, msg=msg,
+                              source="G4")
         except Exception as e:  # noqa: BLE001
             logger.debug("G4 告警落账失败（忽略）: %s", e)
         if self._g4_missing_run >= G4_PAUSE_AFTER:
@@ -402,7 +403,8 @@ class Orchestrator(QThread):
             self.volume_sessions = {}   # S1：卷会话实例随本次连跑重建（每卷一个）
             # C35 G5：登记告警落账目标——此后 record() 命中规则 → 本项目
             # state.anomalies + session_events；阈值随 cfg.usage_alerts 下发
-            usage.set_project(self.proj, self.cfg)
+            # （S6a：set_project 迁 core.ledger_view，usage 侧仅门面转发）
+            lv.set_project(self.proj, self.cfg)
             project.ensure_tracking_files(self.proj)
             state = st.load_state(self.proj)
             # 恢复上次回退时持久化的用户想法（G2 回退后重启仍携带）

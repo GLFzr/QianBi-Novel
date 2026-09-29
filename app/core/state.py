@@ -11,6 +11,8 @@ import threading
 import time
 from typing import TypedDict
 
+from . import ledger_view as _lv   # S6a：章级成本视图（core→core 合法；原 usage 上探已拆）
+
 STATE_FILENAME = "pipeline_state.json"
 
 # H-4/C32：save_state 会被 GUI 线程（add_idea/set_guidance 等 Slot）与流水线
@@ -339,8 +341,9 @@ DEFAULT_STATE: PipelineStateTD = {
     "review_chain": {},         # {章号: {issues, reworks, rounds, verdict_history}} v3 反馈闭环状态
     "chapter_need_human": {},   # {章号: ts} 3 次 REJECT 不收敛时标 human，跳过本轮继续
     # C35 G5：台账/看门狗异常告警（[{ts, rule, ch, level, msg, ...}]，尾部保留 500 条）。
-    # 写入方=app.usage.report_anomaly（G5 规则命中）与 orchestrator._watch_phase_products
-    # （G4 相位看门狗）；UI 常驻横幅与跑后汇总消费。
+    # 写入方=core.ledger_view.report_anomaly（G5 规则命中；经 anomaly_persist 落账，
+    # app.usage 门面转发）与 orchestrator._watch_phase_products（G4 相位看门狗）；
+    # UI 常驻横幅与跑后汇总消费。
     "anomalies": [],            # [{ts, rule, ch, level, msg, ...}]
 }
 
@@ -733,15 +736,16 @@ def append_history(proj: str, state: dict, record: dict):
     import datetime
     record = dict(record)
     record["ts"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # C39 成本面板：章级成本随定稿入 history 行（台账聚合，见 usage.chapter_cost）。
-    # 调用时刻＝章微循环收尾，本章 prose/审校/追踪/清算的台账行已全部入账；
-    # 台账无该章任何行 → 保持缺字段（「没记账」不伪装成 0，与盲区口径同一句话）。
-    # 历史行无 cost 键属正常（旧存档不回填）；类型在此处收口，validate_state 的
-    # 键型注册只覆盖顶层键（history: list），行内字段无注册机制。
+    # C39 成本面板：章级成本随定稿入 history 行（台账聚合，取数口 S6a 起为
+    # core.ledger_view.chapter_cost——视图由 usage.record/_load 喂入，查询走
+    # ledger_view 的 ensure 钩子懒加载台账文件）。调用时刻＝章微循环收尾，本章
+    # prose/审校/追踪/清算的台账行已全部入账；台账无该章任何行 → 保持缺字段
+    # （「没记账」不伪装成 0，与盲区口径同一句话）。历史行无 cost 键属正常
+    # （旧存档不回填）；类型在此处收口，validate_state 的键型注册只覆盖顶层键
+    # （history: list），行内字段无注册机制。
     if "cost" not in record:
         try:
-            from .. import usage as _usage
-            c = _usage.chapter_cost(record.get("num"))
+            c = _lv.chapter_cost(record.get("num"))
             if c is not None:
                 record["cost"] = float(c)
         except Exception:  # noqa: BLE001
