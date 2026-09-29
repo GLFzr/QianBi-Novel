@@ -55,6 +55,102 @@ Item {
             }
         }
 
+        // OB-M3：书架就绪横幅——Key/模型/首书三态 checklist，缺啥点啥直达。
+        // 判定与首启向导同一源头（bridge.connReadySummary ← _slot_readiness），
+        // 配好即消失（零噪音）；缺项行可点：连接类直达设置，缺书直达新建。
+        Rectangle {
+            id: readyBanner
+            Layout.fillWidth: true
+            visible: shelf.items.length === 0
+                     || bridge.connReadySummary.some(function (r) { return !r.ready })
+            height: visible ? readyCol.implicitHeight + 18 : 0
+            color: Theme.warnSoft
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.border }
+            ColumnLayout {
+                id: readyCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 9
+                spacing: 3
+                Text {
+                    text: "开写前还差这几件事——点一条直达："
+                    color: Theme.textPrimary
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.fsSmall
+                    font.weight: Font.DemiBold
+                }
+                Repeater {
+                    model: bridge.connReadySummary
+                    delegate: RowLayout {
+                        id: connRow
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Text {
+                            text: modelData.ready ? "✓" : "○"
+                            color: modelData.ready ? "#3a9d5f" : Theme.warn
+                            font.pixelSize: Theme.fsSmall
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData.ready ? modelData.label + "：就绪"
+                                                  : modelData.label + "：" + modelData.reason
+                            color: modelData.ready ? Theme.textSecondary : Theme.textPrimary
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.fsSmall
+                            wrapMode: Text.Wrap
+                        }
+                        Text {
+                            visible: !modelData.ready && hoverArea.containsMouse
+                            text: "去设置 →"
+                            color: Theme.accent
+                            font.pixelSize: Theme.fsSmall
+                        }
+                        MouseArea {
+                            id: hoverArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: mainWindow.activePanel = "settings"
+                        }
+                    }
+                }
+                // 首书一行：书架空着时点亮（与连接缺项并列，同为「开写前的一件事」）
+                RowLayout {
+                    visible: shelf.items.length === 0
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Text {
+                        text: "○"
+                        color: Theme.warn
+                        font.pixelSize: Theme.fsSmall
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "第一本书：还没有书——新建一本，或先看 5 分钟演示"
+                        color: Theme.textPrimary
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.fsSmall
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        text: "新建 →"
+                        color: Theme.accent
+                        font.pixelSize: Theme.fsSmall
+                        visible: newFirstHover.containsMouse
+                    }
+                    MouseArea {
+                        id: newFirstHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: newProjectDialog.open()
+                    }
+                }
+            }
+        }
+
         // 项目列表（v1.2 修复：Layout 子项 anchors.margins 无效导致的左贴边右 20px 空隙）
         ListView {
             Layout.fillWidth: true
