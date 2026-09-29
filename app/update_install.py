@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 
 from . import update_check as uc
@@ -142,3 +143,56 @@ def stale_partial(dest: str, max_age: float = 6 * 3600.0) -> None:
             os.remove(dest)
     except OSError:
         pass
+
+
+# U-C：旧安装包保留策略（当前+上一版，更早删除）
+_VER_IN_NAME = re.compile(r"v(\d+(?:\.\d+){1,2})", re.IGNORECASE)
+
+
+def prune_old_installers(directory: str, current_version: str = None,
+                         keep: int = 2) -> dict:
+    """updates/ 目录的旧安装包清理：保留当前版+上一版（共 keep 份），更早的删掉
+
+    一份 setup 51MB，下载新版成功后调用方（bridge.installUpdateNow，接线归
+    B8b/U-A 轮——本轮只交付函数与单测）拿落盘目录调这里，用户不该手动管磁盘。
+
+    只删「确定是更老的安装包」的东西：
+    - 文件名解析不出版本段（`v<数字[.数字]>`）→ 跳过不动，绝不顺手删文件；
+    - 版本比 current_version 还新（时钟错乱/手动放置）→ 跳过不动；
+    - 其余按版本从新到旧保留 keep 份（current_version 那份必在其中）。
+    current_version 缺省取 app.__version__（单测 monkeypatch 它验证缺省路径）。
+    返回 {"deleted"/"kept"/"skipped": [路径或文件名…]}，全路径便于上层回执。
+    """
+    if current_version is None:
+        from . import __version__ as current_version
+    report = {"deleted": [], "kept": [], "skipped": []}
+    try:
+        names = sorted(n for n in os.listdir(directory)
+                       if n.lower().endswith(".exe"))
+    except OSError as e:
+        report["skipped"].append("%s（%s）" % (directory, e))
+        return report
+    cur = uc.parse_ver(current_version)
+    scored = []
+    for n in names:
+        m = _VER_IN_NAME.search(n)
+        if not m:
+            report["skipped"].append(n)
+            continue
+        v = uc.parse_ver(m.group(1))
+        if v > cur:
+            report["skipped"].append(n)   # 比当前还新：不是「旧安装包」，清理无权动它
+            continue
+        scored.append((v, n))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    keep = max(int(keep), 0)
+    for _v, n in scored[:keep]:
+        report["kept"].append(os.path.join(directory, n))
+    for _v, n in scored[keep:]:
+        p = os.path.join(directory, n)
+        try:
+            os.remove(p)
+            report["deleted"].append(p)
+        except OSError as e:
+            report["skipped"].append("%s（%s）" % (n, e))
+    return report

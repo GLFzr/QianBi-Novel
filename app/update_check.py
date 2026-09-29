@@ -433,9 +433,14 @@ def check(cfg: dict, local_version: str, *, timeout: float = TIMEOUT,
 
     代理只解析一次；若解析出的代理让全链都失败，再无任何代理跑一遍——陈旧的系统代理
     配置（本机就有 git 指着死掉的 127.0.0.1:7997 的先例）不该把本来能成的更新挡死。
+
+    U-2：未验签的清单**不写缓存、不短路**——被投毒/被劫持的单条通道没资格占住缓存
+    与首屏，后面的干净通道照常试；全链都没有可信结果时才回退显示第一条未验签结果
+    （保持「未验签也看得见」的既有 UX，can_install 门仍然关着）。
     """
     started = time.monotonic()
     errs: list = []
+    fallback = None   # 第一条「有内容但未验签」的清单，全链无可信结果时回退用它
     plan = resolve_proxy(cfg)
     passes = [plan]
     if plan.proxy:
@@ -444,6 +449,9 @@ def check(cfg: dict, local_version: str, *, timeout: float = TIMEOUT,
         for key, url in channels(cfg):
             if time.monotonic() - started > deadline:
                 errs.append({"channel": key, "reason": "超过总时限 %ds，后面的通道没试" % int(deadline)})
+                if fallback is not None:
+                    fallback.errors = errs
+                    return fallback
                 return CheckResult(errors=errs, proxy_label=p.label, checked_at=time.time())
             text, reason = fetch_text(url, p, timeout)
             if not text:
@@ -459,11 +467,19 @@ def check(cfg: dict, local_version: str, *, timeout: float = TIMEOUT,
                                  manifest=data, verified=verified, verify_reason=why,
                                  channel=key, proxy_label=p.label, errors=errs,
                                  checked_at=time.time())
-            if result.is_new:
-                save_cache(text, key)
-            return result
+            if verified:
+                if result.is_new:
+                    save_cache(text, key)
+                return result
+            # U-2：未验签不短路。errors 仍只收 fetch/decode 死因（面板「逐条死法」的
+            # 口径不变）；未验签这件事由结果自带的 verify_reason 说。
+            if fallback is None:
+                fallback = result
         if p is passes[0] and len(passes) > 1:
             errs.append({"channel": "proxy", "reason": "带代理全链失败，改用直连再试一次"})
+    if fallback is not None:
+        fallback.errors = errs
+        return fallback
     return CheckResult(state=STATE_FAILED, errors=errs, proxy_label=plan.label,
                        checked_at=time.time())
 
