@@ -12,8 +12,16 @@
 import inspect
 import os
 
+from app import project
 from app.core import co_dialogue, co_writing, state as st
 from app.ui import bridge as bmod
+
+
+class _Recorder:
+    """构造即失败——被断言「零请求」的路径上出现任何 worker/客户端实例化即红"""
+
+    def __init__(self, *a, **kw):
+        raise AssertionError("该路径不应构造 LLM worker/客户端（零网络请求）")
 
 
 class _Sig:
@@ -41,10 +49,14 @@ class _SlotSelf:
         self.cwReportChanged = _Sig()
         self.supervisorFailedChanged = _Sig()
         self.supervisorAttentionChanged = _Sig()
+        self.cwStageChanged = _Sig()
         self.refreshUsage = lambda: None
 
     def _cw_save_state(self, state):
         st.save_state(self.proj, state)
+
+    def _get_cw_stage_key(self):
+        return st.ensure_cw(st.load_state(self.proj)).get("stage", st.STAGE_CW_PROJECT)
 
 
 # ---------- F1：supervisor 唯一定义 + C2 接线 ----------
@@ -188,3 +200,124 @@ def test_supervisor_report_has_conclusion():
     assert co_dialogue.supervisor_report_has_conclusion(NO_CONCLUSION) is False
     assert co_dialogue.supervisor_report_has_conclusion("") is False
     assert co_dialogue.supervisor_report_has_conclusion(None) is False
+
+
+# ---------- C07：单元范围即时校验（A6）/ 阶段预告表（A8）/ 自动开章（A7）----------
+
+class _EditorSelf(_SlotSelf):
+    """带编辑器工作副本桩的 self（_autopen_prose_chapter → openChapter 所需）"""
+
+    def __init__(self, proj):
+        super().__init__(proj)
+        from types import SimpleNamespace
+        self._cur_num = 0
+        self._chapter_path = ""
+        self._chapter_text = ""
+        self._chapter_findings = []
+        self._editor_dirty = False
+        self._working_text = ""
+        self._last_edit_action = ""
+        self._draft_timer = SimpleNamespace(stop=lambda: None)
+        self.chapterTextChanged = _Sig()
+        self.chapterFindingsChanged = _Sig()
+        self.currentChapterChanged = _Sig()
+        self.editorDirtyChanged = _Sig()
+        self.openChapter = lambda num: bmod.Bridge.openChapter(self, num)
+
+
+def _mk_chapter(proj, num):
+    os.makedirs(os.path.join(str(proj), "正文"), exist_ok=True)
+    path = os.path.join(str(proj), "正文", f"第{num:04d}章.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("正文内容。")
+    return path
+
+
+def test_cw_unit_range_span_warn_zero_request(tmp_path, monkeypatch):
+    """A6 护栏：跨度 >10 即时 warn（登记照常落盘）；≤10 维持 ok 口径；全程零请求"""
+    fs = _SlotSelf(_seed_proj(tmp_path, "span"))
+    monkeypatch.setattr(bmod.co_dialogue, "DialogueWorker", _Recorder)
+    monkeypatch.setattr(bmod.co_dialogue, "SummarizeWorker", _Recorder)
+    bmod.Bridge.setCwUnitRange(fs, 1, 15, "开篇单元")
+    toasts = " | ".join(str(c) for c in fs.toast.calls)
+    assert "超过 10 章" in toasts
+    unit = st.ensure_cw(st.load_state(fs.proj)).get("unit", {})
+    assert unit.get("start") == 1 and unit.get("target_end") == 15   # 登记仍落盘
+    fs.toast.calls.clear()
+    bmod.Bridge.setCwUnitRange(fs, 1, 10, "开篇单元")
+    toasts = " | ".join(str(c) for c in fs.toast.calls)
+    assert "单元已登记" in toasts and "超过" not in toasts
+
+
+def test_cw_next_stage_preview_table():
+    """A8 护栏：五张「下一步」预告逐字在表——键=推进后的新阶段，覆盖②③④⑤⑥"""
+    table = bmod.CW_NEXT_PREVIEW
+    assert set(table) == {"cw_core", "cw_outline", "cw_worldbook", "cw_unit", "cw_prose"}
+    assert table["cw_core"] == "下一步「核心设定」：直接点「生成草案」让 Agent 先出一版，你再挑毛病"
+    assert table["cw_outline"] == "下一步「剧情总纲」：同样可以先「生成草案」"
+    assert table["cw_worldbook"] == (
+        "下一步「世界书与正则」：这里的「正则」默认是必须成立的规则清单，不用懂正则表达式")
+    assert table["cw_unit"] == "下一步「单元细纲」：先登记写作范围（已帮你预填第 1~10 章）"
+    assert table["cw_prose"] == "下一步「正文写作」：稿纸已替你打开，点「生成草案」让写作 Agent 出第一版"
+
+
+def test_cw_sum_done_advance_carries_preview(tmp_path):
+    """A8 行为面：确定推进 toast 带下一站预告（cw_core → cw_outline）"""
+    fs = _SlotSelf(_seed_proj(tmp_path, "prev"))
+    _state = st.load_state(fs.proj)
+    st.ensure_cw(_state)["stage"] = st.STAGE_CW_CORE
+    st.save_state(fs.proj, _state)
+    fs._write_cw_products = lambda stage, product: None
+    fs._cw_open_product = lambda stage: None
+    fs._cw_refresh = lambda: None
+    fs.refreshQueue = lambda: None
+    bmod.Bridge._on_cw_sum_done(fs, "## 题材定位\n（总结产物）")
+    assert st.ensure_cw(st.load_state(fs.proj)).get("stage") == st.STAGE_CW_OUTLINE
+    text = " | ".join(str(c) for c in fs.toast.calls)
+    assert "已确定定稿" in text and "剧情总纲" in text and "生成草案" in text
+
+
+def test_cw_autopen_prose_chapter(tmp_path):
+    """A7 护栏：进正文阶段自动打开第 1 个未锁章；已有未锁章开着时不抢编辑器（返回 0）"""
+    proj = _seed_proj(tmp_path, "autopen")
+    _mk_chapter(proj, 1)
+    _mk_chapter(proj, 2)
+    project.set_chapter_locked(proj, 1, True)     # 第 1 章已锁 → 应开第 2 章
+    fs = _EditorSelf(proj)
+    assert bmod.Bridge._autopen_prose_chapter(fs) == 2
+    assert fs._cur_num == 2
+    # 已有未锁章开着：不扰动（返回 0，调用方不发回执 toast）
+    fs2 = _EditorSelf(proj)
+    fs2._cur_num = 2
+    assert bmod.Bridge._autopen_prose_chapter(fs2) == 0
+    assert fs2._cur_num == 2
+
+
+def test_cw_validate_pass_autopens_with_toast(tmp_path):
+    """A7 行为面：细纲校验 PASS → 进 prose + toast 交代稿纸已开（回执有据：advance 在函数内）"""
+    fs = _EditorSelf(_seed_proj(tmp_path, "vdpass"))
+    _state = st.load_state(fs.proj)
+    st.ensure_cw(_state)["stage"] = st.STAGE_CW_UNIT
+    st.save_state(fs.proj, _state)
+    fs._cw_open_product = lambda stage: None
+    fs._cw_sync_messages = lambda: None
+    fs._cw_refresh = lambda: None
+    fs.refreshQueue = lambda: None
+    fs._autopen_prose_chapter = lambda: bmod.Bridge._autopen_prose_chapter(fs)
+    bmod.Bridge._on_cw_validate_done(fs, "校验完成，未发现阻塞项。")
+    assert st.ensure_cw(st.load_state(fs.proj)).get("stage") == st.STAGE_CW_PROSE
+    toasts = " | ".join(str(c) for c in fs.toast.calls)
+    assert "正文写作" in toasts and "稿纸" in toasts and fs._cur_num == 1
+
+
+def test_wizard_conn_ready_summary():
+    """A9 护栏：connReadySummary 三槽就绪清单——缺因复用 _slot_readiness 人话"""
+    from app import config as cfg_mod
+    b = bmod.Bridge()
+    b.cfg = {"connections": [], "slots": {}}
+    summary = b.connReadySummary
+    assert [r["label"] for r in summary] == [cfg_mod.SLOT_LABELS[s] for s in cfg_mod.SLOT_ORDER]
+    assert all(r["ready"] is False and r["reason"] for r in summary)
+    b.cfg = {"connections": [{"id": "a", "name": "就绪", "base_url": "https://x/v1",
+                              "api_key": "sk", "model": "m"}], "slots": {}}
+    assert all(r["ready"] is True and r["reason"] == "" for r in b.connReadySummary)

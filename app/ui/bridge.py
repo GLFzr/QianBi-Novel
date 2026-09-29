@@ -926,6 +926,18 @@ def _guarded(fn):
     return wrapper
 
 
+# A8：五张「下一步」预告（六阶段每次「确定」推进后说清下一站——阶梯不用自己悟）。
+# ①→② 在 _confirm_cw_project，②→③→④→⑤ 在 _on_cw_sum_done advance 分支，
+# ⑤→⑥ 在 _on_cw_validate_done——键 = 推进后的新阶段。
+CW_NEXT_PREVIEW = {
+    "cw_core": "下一步「核心设定」：直接点「生成草案」让 Agent 先出一版，你再挑毛病",
+    "cw_outline": "下一步「剧情总纲」：同样可以先「生成草案」",
+    "cw_worldbook": "下一步「世界书与正则」：这里的「正则」默认是必须成立的规则清单，不用懂正则表达式",
+    "cw_unit": "下一步「单元细纲」：先登记写作范围（已帮你预填第 1~10 章）",
+    "cw_prose": "下一步「正文写作」：稿纸已替你打开，点「生成草案」让写作 Agent 出第一版",
+}
+
+
 
 class Bridge(QObject):
     # 属性变更信号
@@ -4039,6 +4051,33 @@ class Bridge(QObject):
             self.toast.emit("info", "共写六步在共写区：选题 → 核心设定 → 剧情总纲 → "
                                     "世界书与正则 → 单元细纲 → 正文。每步你确认后才往下走")
 
+    def _autopen_prose_chapter(self) -> int:
+        """A7：共写进入正文阶段自动打开第 1 个未锁章（不开章点「生成草案/确定」的两处
+        拦截保留为兜底）。已有未锁章开着时不抢编辑器；空项目开第 1 章稿纸（空打开）。
+
+        返回打开的章号；0=已有未锁章开着，未打扰。回执 toast 由调用方发
+        （回执三态护栏：本函数只做打开动作，不自带「已X」文案）。
+        """
+        target = next((n for n, _nm, _p in project.list_chapters(self.proj)
+                       if not project.is_chapter_locked(self.proj, n)), 1)
+        if self._cur_num and not project.is_chapter_locked(self.proj, self._cur_num):
+            return 0
+        self.openChapter(target)
+        return target
+
+    @Property("QVariantList", notify=slotsTextChanged)
+    def connReadySummary(self) -> list:
+        """A9：三槽位连接就绪清单（首启向导 checklist 与后续就绪横幅共用同一判定）。
+
+        每项 {label, ready, reason}；reason 复用 _slot_readiness 人话缺因。
+        """
+        out = []
+        for slot in cfg_mod.SLOT_ORDER:
+            reason = self._slot_readiness(slot)
+            out.append({"label": cfg_mod.SLOT_LABELS.get(slot, slot),
+                        "ready": not reason, "reason": reason})
+        return out
+
     # ---- 对话（每轮输入 → 一次性 DialogueWorker）----
 
     @Slot(str, str)
@@ -4426,10 +4465,16 @@ class Bridge(QObject):
         self._cw.set_unit(state, int(start or 0), int(targetEnd or 0), topic or "")
         self._cw_save_state(state)
         self.cwStageChanged.emit()
+        s, e = int(start or 0), int(targetEnd or 0)
+        if s and e and (e - s + 1) > 10:
+            # A6：超界即时提醒（登记照常落盘，批次生成的硬校验仍在）——此刻零网络请求
+            self.toast.emit("warn", f"单元跨度超过 10 章：第 {s}~{e} 共 {e - s + 1} 章。"
+                                    "建议拆单元——细纲质量在小批次更稳")
+            return
         hint = ""
-        if int(targetEnd or 0) and int(start or 0) > int(targetEnd or 0):
+        if e and s > e:
             hint = "（起始章大于目标完结章，请检查）"
-        self.toast.emit("ok", f"单元已登记：第 {start} 章 ~ 第 {targetEnd} 章{hint}，点「确定」生成单元总纲")
+        self.toast.emit("ok", f"单元已登记：第 {s} 章 ~ 第 {e} 章{hint}，点「确定」生成单元总纲")
 
     @Slot()
     @_guarded
@@ -4500,7 +4545,14 @@ class Bridge(QObject):
         self._cw_sync_messages()
         self._cw_refresh()
         self.refreshQueue()
-        self.toast.emit("ok", "细纲校验通过，进入「正文写作」")
+        # A8：⑤→⑥ 预告 + A7：进正文阶段自动打开第 1 个未锁章
+        self.toast.emit("ok", "细纲校验通过，进入「正文写作」——"
+                        + CW_NEXT_PREVIEW.get(st.STAGE_CW_PROSE, ""))
+        if nxt == st.STAGE_CW_PROSE:
+            opened = self._autopen_prose_chapter()
+            if opened:
+                self.toast.emit("info", f"已为你打开第 {opened} 章的稿纸——"
+                                        "点「生成草案」让写作 Agent 出第一版正文")
 
     def _start_cw_outline_batch(self, state: dict):
         """确定单元后：滚动生成下一批 5 章细纲（helper 槽，≈200 字/章）"""
@@ -5191,7 +5243,8 @@ class Bridge(QObject):
         self._cw_view = self._get_cw_stage_key()
         self._cw_open_product(st.STAGE_CW_CORE)
         self._cw_refresh()
-        self.toast.emit("ok", "项目创建完成，进入「核心设定」：与设定 Agent 讨论后点确定")
+        self.toast.emit("ok", "项目创建完成，进入「核心设定」——"
+                        + CW_NEXT_PREVIEW.get(st.STAGE_CW_CORE, ""))
 
     @Slot(str)
     @_guarded
@@ -5238,12 +5291,21 @@ class Bridge(QObject):
             self.toast.emit("ok", "世界书/正则已写回，返回「%s」阶段" % st.CW_STAGE_LABELS.get(ret, ret))
             if self._cw_worldbook_changed_notice(state):
                 self.toast.emit("warn", "世界书已变更：已锁定章节不会自动修改，建议解锁重核（见报告区）")
+            if ret == st.STAGE_CW_PROSE:
+                # A7：回到正文阶段同样接住稿纸
+                opened = self._autopen_prose_chapter()
+                if opened:
+                    self.toast.emit("info", f"已为你打开第 {opened} 章的稿纸——"
+                                            "点「生成草案」让写作 Agent 出第一版正文")
         elif stage == st.STAGE_CW_UNIT:
             self.toast.emit("ok", "「单元细纲」已定稿，正在收尾本阶段…")
         else:
             nxt = self._cw.advance(state)
-            self.toast.emit("ok", "「%s」已确定定稿，进入「%s」"
-                            % (st.CW_STAGE_LABELS.get(stage, stage), st.CW_STAGE_LABELS.get(nxt, nxt)))
+            # A8：确定成功 toast 固定带下一站预告——六阶段阶梯不用用户自己悟
+            self.toast.emit("ok", "「%s」已确定定稿，进入「%s」——%s"
+                            % (st.CW_STAGE_LABELS.get(stage, stage),
+                               st.CW_STAGE_LABELS.get(nxt, nxt),
+                               CW_NEXT_PREVIEW.get(nxt, "与 Agent 继续讨论后点「确定」")))
         # v5 修（本机走查实测）：上面已 _cw_save_state 落过盘，而 advance()/confirm_reopen_return()
         # 只改内存 ⇒ 阶段指针从不持久。现象＝toast 说「已进入剧情总大纲」而盘上 cw.stage
         # 仍是 cw_core。指针变更后必须再落一次，否则界面与 state.json 各说一套。

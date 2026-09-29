@@ -359,7 +359,8 @@ Rectangle {
                 AppSpinBox {
                     id: unitEndBox
                     from: 1; to: 9999; stepSize: 1
-                    value: bridge.cwUnitInfo.target_end > 0 ? bridge.cwUnitInfo.target_end : 1
+                    // A6：未登记时预填 10——与起始 1 组成 1~10 默认单元（登记后跟随已存值）
+                    value: bridge.cwUnitInfo.target_end > 0 ? bridge.cwUnitInfo.target_end : 10
                 }
                 TextField {
                     id: unitTopic
