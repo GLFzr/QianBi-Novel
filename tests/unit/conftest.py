@@ -3,6 +3,8 @@
 import os
 import sys
 
+import pytest
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -38,3 +40,20 @@ except Exception:  # pragma: no cover
 def qianbi_isolated_dir():
     """给锁测试用：当前单测进程的配置落盘目标。"""
     return _ISO_DIR
+
+
+# ---- 死函数治理：公共函数零调用豁免登记（B1/0.22.0，参照 test_receipt_guards.EVIDENCE_CALLEES）----
+# 规约（CONTRIBUTING 同步）：新增公共函数必须当批就有调用方或测试引用；确需
+# 「先落名、后续批次才接线」的，必须在此登记「函数名 → 复活理由」，否则
+# test_dead_function_governance 判红。豁免不许用于绕过写错的代码。
+DEAD_FUNC_EVIDENCE = {
+    # 卡6S（C16 deslop 度量层）将复活 summarize_findings——函数头已挂「勿删」注释，
+    # 复活前在此登记豁免（w5_quickwins F3 裁决）。
+    "summarize_findings": "卡6S 度量层将复活（app/deslop.py），豁免期内保留",
+}
+
+
+@pytest.fixture
+def dead_func_evidence():
+    """零调用公共函数的豁免登记表（副本；守卫测试消费）。"""
+    return dict(DEAD_FUNC_EVIDENCE)

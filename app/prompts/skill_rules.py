@@ -51,14 +51,11 @@ BOUNDARY_ADAPTED_PARA = (
 _RESEARCH_LINK = "[RESEARCH.md](./RESEARCH.md)"
 
 
-_cache = {
-    "inited": False,        # 是否已完成初始化（进程内只初始化一次）
-    "mode": "builtin",      # "lieflat" | "builtin"（读不到/解析失败回退 builtin）
-    "union": None,          # lieflat 生效时的并集静态段全文（内置切片 + skill 后缀）
-    "builtin_slice": None,  # 内置静态段（原始模板切片，builtin 模式返回值）
-    "skill_suffix": None,   # skill 贡献的追加段
-    "reason": "",           # 回退原因（builtin 时告警/文档用）
-}
+# B2c 拆环：缓存真身在 deslop_rules（与 writing 共享的同一 dict 对象），此处
+# 以同名导入持有（skill_rules._cache 的外部读写原样落在共享缓存上）；装载所需
+# 的 builtin 切片经 deslop_rules 钩子取（writing 导入时注册），不再 import writing。
+from . import deslop_rules  # noqa: E402
+from .deslop_rules import _cache, builtin_slice_text  # noqa: E402,F401
 
 def init_rules_cache(cfg: dict = None) -> dict:
     """应用启动时调用一次（main.py）；测试/探针未调用时由首次访问懒初始化。
@@ -78,8 +75,7 @@ def init_rules_cache(cfg: dict = None) -> dict:
     _cache["skill_suffix"] = None
     _cache["reason"] = ""
 
-    from . import writing as writing_mod
-    _cache["builtin_slice"] = writing_mod.builtin_deslop_static_rules()
+    _cache["builtin_slice"] = builtin_slice_text()
 
     if source != "lieflat":
         _cache["mode"] = "builtin"
@@ -113,13 +109,8 @@ def init_rules_cache(cfg: dict = None) -> dict:
 
 
 def _ensure_init() -> None:
-    if not _cache["inited"]:
-        try:
-            init_rules_cache()
-        except Exception as e:  # noqa: BLE001
-            _cache["inited"] = True
-            _cache["mode"] = "builtin"
-            logger.warning("去 AI 味规则源懒初始化失败，回退 builtin：%s", e)
+    # B2c：懒初始化统一走共享枢纽（失败回退 builtin 的兜底在 deslop_rules.ensure_init）
+    deslop_rules.ensure_init()
 
 
 def active_mode() -> str:
@@ -130,17 +121,6 @@ def active_mode() -> str:
 def builtin_slice() -> str:
     _ensure_init()
     return _cache["builtin_slice"] or ""
-
-
-def union_text() -> str:
-    """lieflat 生效时的并集静态段；builtin 模式返回空串（调用方回退内置切片）。"""
-    _ensure_init()
-    return _cache["union"] or ""
-
-
-def skill_suffix_text() -> str:
-    _ensure_init()
-    return _cache["skill_suffix"] or ""
 
 
 def fallback_reason() -> str:
@@ -254,3 +234,8 @@ def _lean_rules(rules_text: str) -> str:
             blank = 0
         out.append(ln)
     return chr(10).join(out).strip(chr(10))
+
+
+# B2c：把 vendor 装载入口注册给共享枢纽——writing.deslop_static_rules 的懒初始化
+# 经 deslop_rules.ensure_init() 回调到这里，skill_rules↔writing 互引清零。
+deslop_rules.set_init_hook(init_rules_cache)

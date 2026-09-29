@@ -8,8 +8,8 @@
 import logging
 import re
 
-from .. import config as cfg_mod
 from .. import deslop, project
+from ..slots import GATE_MARK_CONTINUE, GATE_STRICT
 
 
 class GateResult:
@@ -79,8 +79,8 @@ def resolve_failed(ctx, reason: str, gr: GateResult):
     - strict：自动暂停等人处理（用户点「继续」后仍按待修继续）
     """
     gr.final_status = "needs_fix"
-    strategy = ctx.cfg.get("gates", {}).get("strategy", cfg_mod.GATE_MARK_CONTINUE)
-    if strategy == cfg_mod.GATE_STRICT:
+    strategy = ctx.cfg.get("gates", {}).get("strategy", GATE_MARK_CONTINUE)
+    if strategy == GATE_STRICT:
         ctx.auto_pause(f"{reason}，自动修复后仍未通过，请人工处理")
     else:
         ctx.log("warn", f"{reason}，已标记「待修」，继续写作（可在章节详情中人工修改）")

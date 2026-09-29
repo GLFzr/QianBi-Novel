@@ -17,7 +17,7 @@ import os
 import re
 from contextlib import contextmanager as _contextmanager
 
-from .. import config as cfg_mod
+from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
 from .. import project, prompts, deslop, mustscan, wb
 from ..llm import clean_llm_output
 from ..prompts import scene_cards
@@ -571,7 +571,7 @@ def _pace_seconds(cfgw: dict, boundary: str = "", default_seconds: int = 0) -> i
     return max(0, seconds)
 
 
-def _pace_after_long_call(ctx, cfg_mod, session, default_seconds: int = 0,
+def _pace_after_long_call(ctx, session, default_seconds: int = 0,
                           boundary: str = "") -> None:
     """S5/调整二：长生成后的注册窗口节拍——给服务端缓存单元注册留时间。
 
@@ -642,7 +642,7 @@ def _apply_volume_effort(ctx, proj: str, num: int) -> None:
             ctx.log("warn", f"卷 {volume} effort 已钉住 {pinned}，拒绝中途改为 {effort}"
                             f"（卷内统一纪律，卷界才可切换）")
             effort = pinned
-        for slot in (cfg_mod.SLOT_WRITING, cfg_mod.SLOT_REVIEW, cfg_mod.SLOT_HELPER):
+        for slot in (SLOT_WRITING, SLOT_REVIEW, SLOT_HELPER):
             try:
                 ctx.router.client(slot).reasoning_effort = effort
             except Exception:  # noqa: BLE001
@@ -948,7 +948,7 @@ def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
     t_before = session.turn_count()
     try:
         ctx.last_prompt = req
-        raw = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, req,
+        raw = _session_ask(ctx, session, SLOT_WRITING, req,
                            label=f"去味定点修复 第{num}章", phase=PHASE_DESLOP, stream=True)
         spans = _parse_pinned_output(raw)
         if not spans:
@@ -1004,7 +1004,7 @@ def stage_core_setting(ctx) -> str:
     if g1_carry:
         prompt += f"\n\n作者对核心设定的想法（务必吸收）：\n{g1_carry}"
     ctx.last_prompt = prompt
-    result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="核心设定",
+    result = _stream(ctx, SLOT_WRITING, prompt, label="核心设定",
                      phase=PHASE_CORE_SETTING)
     if not result:
         raise StageError("核心设定生成失败：模型返回为空")
@@ -1043,7 +1043,7 @@ def stage_volume_outline(ctx, total_words_wan: int = 0) -> str:
     outline_carry = ctx.consume_gate_idea()
     if outline_carry:
         prompt += "\n\n作者对全书大纲的想法（务必吸收）：\n\n" + outline_carry
-    result = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label="全书大纲",
+    result = _stream(ctx, SLOT_WRITING, prompt, label="全书大纲",
                      phase=PHASE_VOLUME_OUTLINE)
     if not result:
         raise StageError("全书大纲生成失败：模型返回为空")
@@ -1073,7 +1073,7 @@ def stage_worldbook_gen(ctx) -> str:
             genre_block=_genre_block(proj, "worldbook"),
         )
         ctx.last_prompt = prompt
-        result = _stream(ctx, cfg_mod.SLOT_HELPER, prompt, label="世界书首版",
+        result = _stream(ctx, SLOT_HELPER, prompt, label="世界书首版",
                          phase=PHASE_WORLDBOOK)
         doc = (result or "").strip()
         if not doc:
@@ -1203,7 +1203,7 @@ def _generate_outline_batch(ctx, todo: list, chapter_words: int,
     ) + _satisfaction_outline_directive(ctx.cfg) + _dyn_directives(ctx, PHASE_OUTLINE)
     ctx.last_prompt = prompt  # 失败现场 dump 用
     try:
-        result = _stream(ctx, cfg_mod.SLOT_HELPER, prompt, label="细纲",
+        result = _stream(ctx, SLOT_HELPER, prompt, label="细纲",
                          phase=PHASE_OUTLINE)
         outlines = parse_outlines(result)
         valid = [o for o in outlines if o[0] in todo]
@@ -1315,7 +1315,7 @@ def _ensure_outline_in_session(ctx, session, num: int) -> bool:
                 "全书前缀/卷纲/细纲快照已在系统与历史中，不重复注入。）\n\n" + prompt.strip())
         ctx.last_prompt = turn
         ctx.checkpoint()
-        result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn,
+        result = _session_ask(ctx, session, SLOT_HELPER, turn,
                               label=f"细纲 第{num}章（会话内）", phase=PHASE_OUTLINE)
         outlines = [o for o in parse_outlines(result) if o[0] == num]
         if not outlines:
@@ -1424,7 +1424,7 @@ def _acquire_volume_session(ctx, proj: str, num: int, static_freeze: bool = Fals
         vol = resolve_volume_number(proj, num)
         sess = cache.get(vol)
         if sess is None:
-            probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+            probe = ctx.router.client(SLOT_HELPER)
             if not callable(getattr(probe, "chat_turn", None)):
                 return None
             # S4-a：指令库开启时 system = 全书冻结前缀 + PROSE 指令库（模板化
@@ -1526,7 +1526,7 @@ def _compaction_step(ctx, proj: str, num: int, session):
                             f"{ob.reason}——沿用当前会话（fail-open）")
             return session, ""
         from .volume_session import VolumeSession
-        probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+        probe = ctx.router.client(SLOT_HELPER)
         new = VolumeSession(probe, system_text=session.system_text,
                             volume=session.volume, proj=proj, gen=session.gen + 1)
         cache = getattr(ctx, "volume_sessions", None)
@@ -1591,7 +1591,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # volume_session/chapter_session；compaction 在此模式下无意义（栈不过章）。
     if _w_cfg.get("head_rebuild", False):
         try:
-            probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+            probe = ctx.router.client(SLOT_HELPER)
             if callable(getattr(probe, "chat_turn", None)):
                 from .volume_session import (VolumeSession, volume_system_text,
                                              head_rebuild_system_text,
@@ -1622,7 +1622,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
             session, _comp_preface = _compaction_step(ctx, proj, num, session)
     elif _w_cfg.get("chapter_session", True):
         try:
-            probe = ctx.router.client(cfg_mod.SLOT_HELPER)
+            probe = ctx.router.client(SLOT_HELPER)
             if callable(getattr(probe, "chat_turn", None)):
                 from .chapter_session import ChapterSession
                 session = ChapterSession(
@@ -1802,12 +1802,12 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                         chapter_num=num,
                         preface=_comp_preface)
             ctx.last_prompt = turn_text
-            prose = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, turn_text,
+            prose = _session_ask(ctx, session, SLOT_WRITING, turn_text,
                                  label=f"草稿 第{num}章", phase=PHASE_PROSE)
         else:
             prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _prose_directives
             ctx.last_prompt = prompt
-            prose = _stream(ctx, cfg_mod.SLOT_WRITING, prompt, label=f"草稿 第{num}章",
+            prose = _stream(ctx, SLOT_WRITING, prompt, label=f"草稿 第{num}章",
                             phase=PHASE_PROSE)
         if not prose.strip():
             raise StageError(f"第 {num} 章草稿生成失败：模型返回为空")
@@ -1820,7 +1820,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         # S5 注册窗口节拍：正文是长生成（130s+），紧随其后的快调用会在前轮输出单元
         # 注册完成前发车，吃全价 miss（S1 实测 enrich 12.7k miss/笔）。在会话模式下
         # 等一个注册窗口再发（本地扫描/断点保存已消耗一部分窗口）。
-        _pace_after_long_call(ctx, cfg_mod, session, boundary="prose_tail")
+        _pace_after_long_call(ctx, session, boundary="prose_tail")
         enrich_rounds = 0
         _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
         while not low_ok and enrich_rounds < max_enrich_rounds:
@@ -1841,7 +1841,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                must_block=_must_block(proj, ctx.cfg),
                                chapter_header=_chap_header(ctx, proj, num),
                                project_header=project_header(proj))
-                _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or cfg_mod.SLOT_WRITING
+                _slot = genre_presets.stage_slot(_preset_id(proj), PHASE_ENRICH) or SLOT_WRITING
                 req = prompts.ENRICH_TAIL_PROMPT.format(**tail_kw)
                 ctx.last_prompt = req
                 # A4（v16 总案 5.3 定案）：tail 分支原设计单发直调（12 笔 in 中位 9k
@@ -1850,7 +1850,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 # 免正文双份）。会话不可用回退独立单发（原路径）。
                 t_tail = session.turn_count() if _session_usable(session) else None
                 if t_tail is not None:
-                    cont = _session_ask(ctx, session, cfg_mod.SLOT_WRITING, req,
+                    cont = _session_ask(ctx, session, SLOT_WRITING, req,
                                         label=f"字数补尾（会话轮）第 {enrich_rounds} 轮",
                                         phase=PHASE_ENRICH)
                 else:
@@ -1876,7 +1876,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                                           must_block=_must_block(proj, ctx.cfg),
                                           chapter_header=_chap_header(ctx, proj, num),
                                           project_header=project_header(proj))
-                    rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_ENRICH,
+                    rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
                                                prompts.ENRICH_PROMPT, enrich_full_kw,
                                                prose=prose,
                                                label=f"扩写(全量) 第{enrich_rounds}轮")
@@ -1890,7 +1890,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                              must_block=_must_block(proj, ctx.cfg),
                              chapter_header=_chap_header(ctx, proj, num),
                              project_header=project_header(proj))
-            rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_ENRICH,
+            rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
                                        prompts.ENRICH_PROMPT, enrich_kw, prose=prose,
                                        label=f"扩写 第{enrich_rounds}轮")
             # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
@@ -1920,7 +1920,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                            must_block=_must_block(proj, ctx.cfg),
                            chapter_header=_chap_header(ctx, proj, num),
                            project_header=project_header(proj))
-            prose = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_TRIM,
+            prose = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_TRIM,
                                    prompts.TRIM_PROMPT, trim_kw, prose=prose,
                                    label="压缩" if trim_rounds == 1 else "压缩(二次)")
             low_ok, high_ok, actual = gates.check_word_bounds(prose, chapter_words, tolerance)
@@ -2000,7 +2000,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                              must_block=_must_block(proj, ctx.cfg),
                              chapter_header=_chap_header(ctx, proj, num),
                              project_header=project_header(proj))
-            rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_WRITING, PHASE_DESLOP,
+            rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_DESLOP,
                                        prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=prose,
                                        label=f"去味改写 第{rounds}轮",
                                        strip_static=_deslop_strip,
@@ -2062,7 +2062,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 pre_review_prose=pre_review_prose, session=session,
                 post_review_turns=post_review_turns, gr=gr, gates_cfg=gates_cfg)
             post_review_turns = session.turn_count() if _session_usable(session) else 0
-    elif review_enabled and cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
+    elif review_enabled and slot_connection(ctx.cfg, SLOT_REVIEW):
         # resume="review" = 审校与 G8 都已走完 → 一并跳过，不二次问门
         review_ran = not skip_review
         if skip_review:
@@ -2121,7 +2121,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     )
                     ctx.last_prompt = root_prompt
                     root_result = clean_llm_output(
-                        ctx.router.client(cfg_mod.SLOT_REVIEW).chat_stream(
+                        ctx.router.client(SLOT_REVIEW).chat_stream(
                             root_prompt, on_chunk=ctx.stream_chunk,
                             temperature=gates_cfg.get("review_temperature", 0.2),
                             phase=PHASE_ROOT_CAUSE
@@ -2142,7 +2142,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                               project_header=project_header(proj),
                               chapter_header=_chap_header(ctx, proj, num))
             t_fix = session.turn_count() if _session_usable(session) else 0
-            rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_REVIEW, PHASE_REVIEW_FIX,
+            rewritten = _rewrite_phase(ctx, session, SLOT_REVIEW, PHASE_REVIEW_FIX,
                                        prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
                                        label=f"审校修改 第{review_rounds}轮")
             # 修复稿健全性守卫（真机缺陷修复：模型可能返回 ===REVISIONS=== 修订计划
@@ -2270,16 +2270,16 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                              chapter_header=_chap_header(ctx, proj, num))
             merged_prompt = prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT.format(**merged_kw)
             ctx.last_prompt = merged_prompt
-            if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
+            if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
                 _session_seed(session, prose)
                 turn_text = prompts.session_turn_text(
                     prompts.CHAPTER_AND_GLOBAL_SUMMARY_PROMPT,
                     prose_sentinel="{prose_excerpt}").format(**merged_kw)
                 ctx.last_prompt = turn_text
-                _raw_m = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                _raw_m = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                                       phase=PHASE_CH_SUMMARY, stream=False)
             else:
-                _raw_m = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+                _raw_m = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
                     merged_prompt, phase=PHASE_CH_SUMMARY))
             chapter_summary, new_global = _split_merged_summary(_raw_m)
             if not chapter_summary:
@@ -2291,18 +2291,18 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                 prose_excerpt=excerpt, project_header=project_header(proj),
                 chapter_header=_chap_header(ctx, proj, num))
             ctx.last_prompt = summary_prompt
-            if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_CH_SUMMARY):
+            if _use_session(ctx, session, SLOT_HELPER, PHASE_CH_SUMMARY):
                 _session_seed(session, prose)
                 turn_text = prompts.session_turn_text(
                     prompts.CHAPTER_SUMMARY_PROMPT, prose_sentinel="{prose_excerpt}").format(
                     chapter_num=num, title=title or f"第{num}章", prose_excerpt=excerpt,
                     project_header=project_header(proj), chapter_header=_chap_header(ctx, proj, num))
                 ctx.last_prompt = turn_text
-                chapter_summary = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                chapter_summary = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                                                phase=PHASE_CH_SUMMARY, stream=False
                                                ).splitlines()[0].strip()
             else:
-                chapter_summary = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+                chapter_summary = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
                     summary_prompt, phase=PHASE_CH_SUMMARY)).splitlines()[0].strip()
         if chapter_summary:
             memory.append_chapter_summary(proj, num, title or f"第{num}章", chapter_summary)
@@ -2327,7 +2327,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                     chapter_header=_chap_header(ctx, proj, num),
                     project_header=project_header(proj))
                 ctx.last_prompt = global_prompt
-                if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_G_SUMMARY):
+                if _use_session(ctx, session, SLOT_HELPER, PHASE_G_SUMMARY):
                     # W-2 ②-c：既有全局摘要＝上一章本相位自己的回复，多半已逐字节固化在
                     # 栈里（t3b 实测 ~2.4k han 字/章、类内重复率 95%）。**可证才替换**：
                     # 判定命中才换引用行，否则与改造前逐字相同（崩溃续跑/无历史时必然走这条）
@@ -2341,10 +2341,10 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
                         chapter_num=num, chapter_summary=chapter_summary,
                         chapter_header=_chap_header(ctx, proj, num), project_header=project_header(proj))
                     ctx.last_prompt = turn_text
-                    new_global = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+                    new_global = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                                               phase=PHASE_G_SUMMARY, stream=False)
                 else:
-                    new_global = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+                    new_global = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
                         global_prompt, phase=PHASE_G_SUMMARY))
                 if new_global.strip():
                     memory.write_global_summary(proj, new_global)
@@ -2360,7 +2360,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
         # v10 audit 鲸鱼修复（深化计划 §8）：审校票的缓存单元注册需要写延迟窗——
         # 13/13 章实测清算首笔在审校末票（hit 99%）后 2-5 秒只记到头部（-65~-81pp）。
         # 调整二：迁移为 pace_boundaries 边界配置（review_audit），未配置回退全局值。
-        _pace_after_long_call(ctx, cfg_mod, session, boundary="review_audit")
+        _pace_after_long_call(ctx, session, boundary="review_audit")
         audit = audit_chapter(proj, num, prose, ctx.cfg, ctx.router, session=session)
         v = audit.get("violations") or []
         hard = [x for x in v if x.get("severity") == "硬伤"]
@@ -2749,7 +2749,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
     if remaining <= 0:
         return merge_review_votes(parsed_list) if len(parsed_list) > 1 else (parsed_list[0] if parsed_list else {})
     raws = []
-    _review_slot = genre_presets.stage_slot(_preset_id(getattr(ctx, "proj", "")), PHASE_REVIEW) or cfg_mod.SLOT_REVIEW
+    _review_slot = genre_presets.stage_slot(_preset_id(getattr(ctx, "proj", "")), PHASE_REVIEW) or SLOT_REVIEW
 
     _RETRY_PROTOCOL = ("\n\n（重申：上一条回复没有按协议输出。必须逐维输出 "
                        "===A_GOLDEN_OPEN=== … ===F_HOOK=== 六段，再输出 ===VERDICT===/===ITEMS===/===END===，"
@@ -2761,7 +2761,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         body = (turn_text if use_sess else prompt) if text is None else text
         body = body + _vote_extra(1) + extra
         if use_sess:
-            raw = _session_ask(ctx, session, cfg_mod.SLOT_REVIEW, body,
+            raw = _session_ask(ctx, session, SLOT_REVIEW, body,
                                label=f"审校投票 第{num}章", phase=PHASE_REVIEW,
                                temperature=temp)
         else:
@@ -2852,7 +2852,7 @@ def review_with_votes(ctx, num: int, prose: str, votes: int,
         # 调整二（pace_boundaries["vote_replicas"]）：首票回复的缓存单元需要注册
         # 窗口——副本票立即发车会把首票输出整体按 miss 重读（v12/v13 review miss
         # 的主要成分）。缺省 0 不改变既有行为。
-        _pace_after_long_call(ctx, cfg_mod, session, boundary="vote_replicas")
+        _pace_after_long_call(ctx, session, boundary="vote_replicas")
         _collect(remaining - 1)
     if vote_saver:
         try:
@@ -2937,7 +2937,7 @@ def _author_review_entry(ctx, num: int, prose: str, *,
                 ctx.log("warn", f"第 {num} 章 放行结论落盘失败（{e}）：本轮放行不会被记住，下次仍会拦")
             ctx.log("ok", f"第 {num} 章 人工审校通过（作者放行）")
             break
-        if not cfg_mod.slot_connection(ctx.cfg, cfg_mod.SLOT_REVIEW):
+        if not slot_connection(ctx.cfg, SLOT_REVIEW):
             ctx.log("warn", f"第 {num} 章 人工审校填了 {len(lines)} 条问题，但审校槽未绑定连接，无法自动修复")
             blocking_review, gr.review_blocking = lines, lines
             gates.resolve_failed(ctx, f"第 {num} 章人工审校问题无法修复（审校槽未绑定连接）", gr)
@@ -2958,7 +2958,7 @@ def _author_review_entry(ctx, num: int, prose: str, *,
         fix_kwargs = dict(chapter_num=num, findings=chr(10).join(lines), prose=prose,
                           project_header=project_header(proj),
                           chapter_header=_chap_header(ctx, proj, num))
-        rewritten = _rewrite_phase(ctx, session, cfg_mod.SLOT_REVIEW, PHASE_REVIEW_FIX,
+        rewritten = _rewrite_phase(ctx, session, SLOT_REVIEW, PHASE_REVIEW_FIX,
                                    prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
                                    label=f"人工审校修复 第{manual_rounds}轮")
         # 修复稿健全性守卫（与自动修复环同款）
@@ -2993,7 +2993,7 @@ def _chapter_review(ctx, num: int, prose: str, votes: int = None,
     proj = ctx.proj
     # 调整二（pace_boundaries["deslop_review"]）：去味/扩写轮刚写入的缓存单元在
     # 首票发车前需要注册窗口——v12 实测 review miss/章 19.8k 中相当部分是写延迟。
-    _pace_after_long_call(ctx, cfg_mod, session, boundary="deslop_review")
+    _pace_after_long_call(ctx, session, boundary="deslop_review")
     # 字数预检（本地，零 LLM）：短章直接 REJECT，不花审校调用
     wc_items, wc_blocking, wc_verdict = gates.word_count_precheck(proj, num, prose, ctx.cfg)
     if wc_verdict:
@@ -3474,7 +3474,7 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
         chapter_header=_chap_header(ctx, proj, num),
     )
     ctx.last_prompt = prompt
-    if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
+    if _use_session(ctx, session, SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
         _s4_freeze = bool(((ctx.cfg or {}).get("writing", {}) or {})
                           .get("s4_static_freeze", False)) \
@@ -3508,10 +3508,10 @@ def _update_tracking_full(ctx, num: int, prose: str, session=None) -> dict:
                 project_header=project_header(proj),
                 chapter_header=_chap_header(ctx, proj, num))
         ctx.last_prompt = turn_text
-        result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+        result = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                               phase=PHASE_TRACKING, stream=False)
     else:
-        result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(prompt,
+        result = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(prompt,
                                                         phase=PHASE_TRACKING))
     updates = parse_tracking_updates(result)
     # 反哺自动档⑤：同一次输出里的新实体/新规则/实体演进/世界观揭示 → 回写世界书（零新增 LLM）
@@ -3639,7 +3639,7 @@ def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
         project_header=project_header(proj),
         chapter_header=_chap_header(ctx, proj, num),
     )
-    if _use_session(ctx, session, cfg_mod.SLOT_HELPER, PHASE_TRACKING):
+    if _use_session(ctx, session, SLOT_HELPER, PHASE_TRACKING):
         _session_seed(session, prose)
         turn_text = prompts.session_turn_text(prompts.TRACKING_PATCH_PROMPT).format(**kw)
         # 调整一（writing.instruction_in_head）：输出 schema 与硬规则已在卷级冻结头
@@ -3654,12 +3654,12 @@ def _update_tracking_delta(ctx, num: int, prose: str, session=None) -> dict:
                 logging.getLogger("qianbi.stages").warning(
                     "第 %s 章追踪轮未匹配到输出协议标记（模板变了？），本轮保留全文指令", num)
         ctx.last_prompt = turn_text
-        result = _session_ask(ctx, session, cfg_mod.SLOT_HELPER, turn_text,
+        result = _session_ask(ctx, session, SLOT_HELPER, turn_text,
                               phase=PHASE_TRACKING, stream=False)
     else:
         prompt = prompts.TRACKING_PATCH_PROMPT.format(**kw)
         ctx.last_prompt = prompt
-        result = clean_llm_output(ctx.router.client(cfg_mod.SLOT_HELPER).chat(
+        result = clean_llm_output(ctx.router.client(SLOT_HELPER).chat(
             prompt, phase=PHASE_TRACKING))
     patch = _extract_json_block(result)
 

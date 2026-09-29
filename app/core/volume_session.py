@@ -101,16 +101,10 @@ def record_event(proj: str, event: str, **fields) -> None:
 def lines_size(lines) -> tuple:
     """落盘行 →（轮数, 估算 token）。按**原始行**计而非解析后内容：坏行本来就读不出
     内容，且 JSON 转义只会让报出的"丢弃体积"偏大——作废是坏事，宁可报高。
-    token 用仓库既有 han 口径（懒导入，避免与 history_compaction 成环）。"""
-    try:
-        from .history_compaction import han_tokens
-    except Exception:  # noqa: BLE001
-        han_tokens = None
+    token 用仓库既有 han 口径（B2d 下沉 text_metrics，与 history_compaction 不再互引）。"""
+    from .text_metrics import han_tokens
     lines = list(lines or [])
-    if han_tokens is None:
-        tok = int(sum(len(ln) for ln in lines) * 0.5)
-    else:
-        tok = sum(han_tokens(ln) for ln in lines)
+    tok = sum(han_tokens(ln) for ln in lines)
     return max((len(lines) - 1) // 2, 0), tok
 
 
@@ -587,14 +581,6 @@ class VolumeSession(ChapterSession):
     #
     # 兼容注记：_rewrite_phase 的 span 路径用 snapshot()+commit_turn() 合成修订轮，
     # 对卷栈同样成立——历史里「最近一条章正文消息」仍指向最新正文。
-
-
-def new_volume_session(client, system_text: str, *, proj: str, num: int,
-                       enabled: bool = True) -> VolumeSession:
-    """按章号解析卷号并构造 VolumeSession（便捷入口，卷号解析失败回退卷 1）。"""
-    return VolumeSession(client, system_text,
-                         volume=resolve_volume_number(proj, num), proj=proj,
-                         enabled=enabled)
 
 
 # ==================== L4 头 v2：卷级冻结快照（深化计划 §1-L4） ====================

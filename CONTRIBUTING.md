@@ -28,7 +28,10 @@ python -m venv .venv
 - 动了**提示词装配**（`app/prompts/`、预设字段、装配层）：`tests/probe_prompt_baseline.py` 会红，
   逐字确认 diff 是你有意为之后 `--update-baseline`，并在 PR 里说明改了哪条链路；
 - 动了**共享业务核心**（`app/core`、`app/llm`、`app/prompts`、`app/presets`、`app/wb.py`）：
-- 新功能请带测试：纯逻辑进 `tests/unit`，链路行为写成 `probe_*.py`。
+- 新功能请带测试：纯逻辑进 `tests/unit`，链路行为写成 `probe_*.py`；
+- **新增公共函数须登记**：当批就要有调用方或测试引用；确需「先落名、后续批次才接线」的，
+  必须在 `tests/unit/conftest.py` 的 `DEAD_FUNC_EVIDENCE` 登记复活理由，否则
+  `test_dead_function_governance` 判红（B1/0.22.0 起）。
 
 ## 提交与 PR
 

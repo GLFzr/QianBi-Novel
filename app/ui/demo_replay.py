@@ -104,7 +104,3 @@ class DemoReplayer(QObject):
 def Qt_CoarseTimer():
     from PySide6.QtCore import Qt
     return Qt.TimerType.CoarseTimer
-
-
-def book_rel(pack_base: str, rel: str) -> str:
-    return os.path.join(pack_base, "book", rel)

@@ -16,9 +16,9 @@ import logging
 import os
 import re
 
-from .. import config as cfg_mod
 from .. import mustscan, project
 from ..llm.client import LLMClient
+from ..slots import SLOT_REVIEW, slot_connection
 from . import state as st
 from .shared_prefix import constraints_block, project_header
 
@@ -299,7 +299,7 @@ def _degenerate(violations: list) -> bool:
 def _client_for(cfg: dict, router=None, strict: bool = False):
     if router is not None:
         return router.client("review")
-    conn = cfg_mod.slot_connection(cfg, cfg_mod.SLOT_REVIEW)
+    conn = slot_connection(cfg, SLOT_REVIEW)
     if strict:
         pro = next((c for c in cfg.get("connections", [])
                     if str(c.get("model", "")).endswith("pro")), None)

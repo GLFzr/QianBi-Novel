@@ -109,28 +109,6 @@ def chapter_header(proj: str, num: int, volume_mode: bool = False,
     return "\n\n".join(parts) + "\n"
 
 
-def _chapter_fingerprint(proj: str, num: int) -> str:
-    """章头失效指纹：覆盖八节全部数据源（含全局/章节摘要与上一章正文）"""
-    import hashlib
-    from . import memory
-    paths = [project.get_outline_path(proj, num),
-             project.get_tracking_path(proj, "角色状态"),
-             project.get_tracking_path(proj, "时间线"),
-             project.get_tracking_path(proj, "伏笔"),
-             memory.chapter_summaries_path(proj),
-             memory.global_summary_path(proj)]
-    prev = project.nearest_chapter_before(proj, num)
-    if prev:
-        paths.append(prev[2])
-    h = hashlib.sha1()
-    for p in paths:
-        try:
-            h.update(str(os.path.getmtime(p)).encode())
-        except OSError:
-            pass
-    return h.hexdigest()[:12]
-
-
 
 @functools.lru_cache(maxsize=8)
 def _header_cached(proj: str, fp: str) -> str:

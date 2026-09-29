@@ -487,9 +487,3 @@ def preset_from_snapshot(snap: dict, book_title: str, source: dict = None) -> di
         "stage_params": per_phase,
     })
     return out
-
-
-def validate_sample() -> None:
-    for it in list_presets():
-        if it["id"]:
-            load_preset(it["id"])

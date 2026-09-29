@@ -376,6 +376,7 @@ def scan_text(text: str) -> list:
 
 
 def summarize_findings(findings: list) -> dict:
+    # 卡6S 度量层将复活，勿删（B1 豁免；零调用豁免登记见 tests/unit/conftest.py 的 DEAD_FUNC_EVIDENCE）
     """按规则聚合统计"""
     stats = {}
     for f in findings:

@@ -106,6 +106,8 @@ for fp in py_files:
 
 # ---------- layer assignment ----------
 def layer_of(mod):
+    if mod == "app.slots":
+        return "base"   # B2a：零依赖基础层（常量+槽位解析），B5c 将并入 secrets/logger
     if mod.startswith("app.ui"):
         return "ui"
     if mod.startswith("app.core"):
@@ -122,7 +124,8 @@ def layer_of(mod):
         return "app-top"   # config, project, update_*, main, export ...
     return "other"
 
-LAYER_ORDER = {"llm": 0, "vendor": 0, "prompts": 0, "presets": 0, "core": 1, "app-top": 2, "ui": 3}
+LAYER_ORDER = {"llm": 0, "vendor": 0, "prompts": 0, "presets": 0, "base": 0,
+               "core": 1, "app-top": 2, "ui": 3}
 
 ALLOWED = {
     # from-layer -> set of to-layers allowed (lower or same index, plus a few exceptions)

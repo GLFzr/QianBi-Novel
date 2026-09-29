@@ -225,6 +225,13 @@ def builtin_deslop_static_rules() -> str:
     return _ORIGINAL_DESLOP_REWRITE_PROMPT[i:j] if 0 <= i < j else ""
 
 
+# B2c 拆环：把 builtin 切片能力注册给共享缓存 deslop_rules（skill_rules 装载时经
+# 钩子取用），本模块对 skill_rules 的缓存读取也改走 deslop_rules——skill_rules↔
+# writing 互引清零（本包 __init__ 先导 writing，注册时序天然满足）。
+from . import deslop_rules as _deslop_rules  # noqa: E402
+_deslop_rules.set_builtin_slice_provider(builtin_deslop_static_rules)
+
+
 # 当前已拼接进模板的并集文本（None=模板处于原始态）。支持进程内重初始化后的
 # 任意档位切换（lean↔full↔builtin）——生产上模式启动即固定，切换只发生在测试。
 _ACTIVE_UNION = None
@@ -255,12 +262,11 @@ def deslop_static_rules() -> str:
     装载失败或 rules_source="builtin" → 返回内置切片（逐字节旧行为），模板还原。
     """
     global _ACTIVE_UNION
-    from . import skill_rules
-    skill_rules._ensure_init()
-    union = skill_rules._cache["union"]
-    if skill_rules._cache["mode"] == "lieflat" and union:
+    _deslop_rules.ensure_init()
+    union = _deslop_rules._cache["union"]
+    if _deslop_rules._cache["mode"] == "lieflat" and union:
         if union not in DESLOP_REWRITE_PROMPT:
-            base = skill_rules._cache["builtin_slice"]
+            base = _deslop_rules._cache["builtin_slice"]
             if _ACTIVE_UNION and _ACTIVE_UNION in DESLOP_REWRITE_PROMPT:
                 # 旧并集在模板上（重初始化换档：lean↔full）——原位换新并集
                 _set_active_template(DESLOP_REWRITE_PROMPT.replace(_ACTIVE_UNION, union, 1))
@@ -269,7 +275,7 @@ def deslop_static_rules() -> str:
             else:
                 # 模板既无内置切片也无并集（不可能态）——保险回退 builtin
                 logger.warning("去味模板切片失配，规则回退 builtin（模板被外部改动？）")
-                skill_rules._cache.update(mode="builtin", union=None, reason="模板切片失配")
+                _deslop_rules._cache.update(mode="builtin", union=None, reason="模板切片失配")
                 _ACTIVE_UNION = None
                 _set_active_template(_ORIGINAL_DESLOP_REWRITE_PROMPT)
                 return builtin_deslop_static_rules()

@@ -158,11 +158,6 @@ def diff_texts(a: str, b: str) -> list:
     return out
 
 
-def diff_versions(proj: str, num: int, v1: int, v2: int) -> list:
-    """两版本对比（v1 → v2 的变化）"""
-    return diff_texts(read_version(proj, num, v1), read_version(proj, num, v2))
-
-
 # ---------- 草稿暂存（不产生版本，防丢稿）----------
 
 def save_draft(proj: str, num: int, content: str):

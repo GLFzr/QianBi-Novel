@@ -66,8 +66,9 @@ LEDGER_BUDGET_CHARS = 2000     # 台账快照单节上限（与 chapter_header �
 MAX_HOME_UPWARD = 5            # 用量落点上溯层数上限（项目→…→假 home；防翻到别书/用户真实数据）
 
 # ---- 保险丝④的计量口径 ----
-TOKENS_PER_HAN = 0.6           # 仓库既有口径：1 汉字 ≈ 0.6 token（scripts/header_audit.py）
-_HAN_RE = re.compile(r"[\u4e00-\u9fff]")
+# B2d 拆环：han_tokens 口径下沉 app/core/text_metrics.py（volume_session 反向引用
+# 曾成环）；此处同名 re-export 保持本模块与外部消费方（stages/tests）原样。
+from .text_metrics import TOKENS_PER_HAN, _HAN_RE, han_tokens  # noqa: E402,F401
 
 # 卷会话相位（这些相位的单笔 in 才是「会话输入有多长」的真值来源）
 _SESSION_PHASES = ("prose", "enrich", "trim", "deslop", "review", "review_fix",
@@ -145,12 +146,7 @@ class OpeningBlock:
 
 
 # ==================== 保险丝④：token 计量 ====================
-
-def han_tokens(text: str) -> int:
-    """字符 → token 的仓库既有口径：中文字符数 × 0.6（同 scripts/header_audit.py
-    的 est_metrics；非中文字符不计）。**不是** DSH 的 4 字符/token 启发式——
-    那个口径系统性低估 CJK，会把长卷的压缩触发点推晚（§4.3.1 ④）。"""
-    return int(len(_HAN_RE.findall(text or "")) * TOKENS_PER_HAN + 0.5)
+# han_tokens / TOKENS_PER_HAN / _HAN_RE 已下沉 app/core/text_metrics.py（见头部 re-export）。
 
 
 def usage_path(proj: str) -> str:
