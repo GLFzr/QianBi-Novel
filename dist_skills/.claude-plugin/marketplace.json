@@ -1,0 +1,29 @@
+{
+ "name": "qianbi-skills",
+ "owner": {
+  "name": "qianbi",
+  "url": "https://github.com/GLFzr/qianbi-novel"
+ },
+ "plugins": [
+  {
+   "description": "千笔网文方法论 skill 包：去 AI 味 lint / 桥段码表路由 / 续写状态卡契约（确定性脚本，纯标准库）",
+   "keywords": [
+    "novel",
+    "writing",
+    "chinese",
+    "webnovel",
+    "deslop",
+    "consistency"
+   ],
+   "license": "MIT",
+   "name": "qianbi-skills",
+   "skills": [
+    "./qianbi-deslop",
+    "./qianbi-bridge-codes",
+    "./qianbi-state-card"
+   ],
+   "source": "./",
+   "version": "0.22.0"
+  }
+ ]
+}

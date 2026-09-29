@@ -1,0 +1,52 @@
+{
+ "advisory": 0,
+ "blocking": 5,
+ "chars": 143,
+ "findings": [
+  {
+   "end": 46,
+   "fix_hint": "直接写 B，或拆成动作",
+   "level": "blocking",
+   "message": "「不是A，（而）是B」翻转句式（最毒）",
+   "rule": "not-is-comparison",
+   "start": 25,
+   "text": "不是他想要的结局，而是他此刻唯一能选的结局"
+  },
+  {
+   "end": 63,
+   "fix_hint": "保留一项或改白描",
+   "level": "blocking",
+   "message": "「没有X，没有Y」否定排比",
+   "rule": "negation-parade",
+   "start": 53,
+   "text": "没有动静，没有脚步声"
+  },
+  {
+   "end": 121,
+   "fix_hint": "用具体钩子物件/事件收束",
+   "level": "blocking",
+   "message": "「他不知道的是……」章末预告",
+   "rule": "trailer-ending",
+   "start": 115,
+   "text": "他不知道的是"
+  },
+  {
+   "end": 99,
+   "fix_hint": "用句号、逗号或动作断句",
+   "level": "blocking",
+   "message": "破折号高密度（1 处 / 0.1 千字）",
+   "rule": "em-dash",
+   "start": 97,
+   "text": "——"
+  },
+  {
+   "end": 68,
+   "fix_hint": "替换为具体动作/白描",
+   "level": "blocking",
+   "message": "一级禁用词「一丝」",
+   "rule": "cliche-word",
+   "start": 66,
+   "text": "一丝"
+  }
+ ]
+}

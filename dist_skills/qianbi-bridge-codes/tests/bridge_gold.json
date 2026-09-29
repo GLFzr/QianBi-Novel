@@ -1,0 +1,651 @@
+{
+ "codes": [
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "DL",
+   "group": "爽点",
+   "name": "打脸",
+   "position": "章中后段（压抑完成后兑现）",
+   "route_kw": [
+    "打脸",
+    "当众",
+    "揭穿"
+   ],
+   "rule": "前文占上风的人或论断，在本章被公开事实当众推翻",
+   "spans": [
+    1,
+    3
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "LT",
+   "group": "爽点",
+   "name": "亮底牌",
+   "position": "章末",
+   "route_kw": [
+    "亮底牌",
+    "摊牌",
+    "亮出"
+   ],
+   "rule": "此前隐藏的关键筹码（底牌/关系/凭证）首次摊开使用",
+   "spans": [
+    2,
+    6
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "PK",
+   "group": "爽点",
+   "name": "公开价值确认",
+   "position": "章中后段",
+   "route_kw": [
+    "拍卖",
+    "鉴定",
+    "定价",
+    "竞价"
+   ],
+   "rule": "主角的货物/作品/本事在公开场合被权威或市场定价确认",
+   "spans": [
+    1,
+    3
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "PZ",
+   "group": "爽点",
+   "name": "扮猪吃虎",
+   "position": "章中段入场、章末亮底",
+   "route_kw": [
+    "扮猪吃虎",
+    "深藏不露",
+    "藏拙"
+   ],
+   "rule": "主角以低于实力的姿态入场，底牌只在冲突现场分层亮出",
+   "spans": [
+    3,
+    10
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "battle",
+   "code": "QC",
+   "group": "爽点",
+   "name": "绝境翻盘",
+   "position": "章末",
+   "route_kw": [
+    "绝境",
+    "翻盘",
+    "反败为胜"
+   ],
+   "rule": "本章先入必败之局，再靠此前埋下的条件反败为胜",
+   "spans": [
+    1,
+    3
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "SJ",
+   "group": "爽点",
+   "name": "收获兑现",
+   "position": "章中后段",
+   "route_kw": [
+    "收获",
+    "到手",
+    "进账",
+    "落袋"
+   ],
+   "rule": "前文铺垫的收益（资源/宝物/名次/报酬）本章实际到手落袋",
+   "spans": [
+    1,
+    2
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "TP",
+   "group": "爽点",
+   "name": "突破进阶",
+   "position": "章末或章中高潮点",
+   "route_kw": [
+    "突破",
+    "进阶",
+    "破境",
+    "晋升"
+   ],
+   "rule": "境界/能力/职级发生一次可量化的档位跃升",
+   "spans": [
+    1,
+    3
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "WS",
+   "group": "爽点",
+   "name": "身份地位跃升",
+   "position": "章末",
+   "route_kw": [
+    "册封",
+    "升职",
+    "座次",
+    "地位"
+   ],
+   "rule": "社会身份/头衔/座次可见改变，旁人态度随之重排",
+   "spans": [
+    2,
+    6
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "battle",
+   "code": "DB",
+   "group": "冲突",
+   "name": "大比",
+   "position": "章中后段（多章跨度）",
+   "route_kw": [
+    "大比",
+    "擂台",
+    "排名赛",
+    "比武大会"
+   ],
+   "rule": "有规则、有轮次、有公开观众席的定期竞技场合",
+   "spans": [
+    3,
+    8
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "dialogue",
+   "code": "DC",
+   "group": "冲突",
+   "name": "派系内斗",
+   "position": "章中段",
+   "route_kw": [
+    "内斗",
+    "派系",
+    "倾轧",
+    "内讧"
+   ],
+   "rule": "同一阵营内部两股以上势力为利益互相使绊",
+   "spans": [
+    3,
+    10
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "mystery",
+   "code": "MO",
+   "group": "冲突",
+   "name": "算计",
+   "position": "章末收网",
+   "route_kw": [
+    "设局",
+    "算计",
+    "圈套",
+    "下套"
+   ],
+   "rule": "一方设局，布局痕迹可回看，局在章内或近章收网",
+   "spans": [
+    2,
+    8
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "battle",
+   "code": "TS",
+   "group": "冲突",
+   "name": "追杀",
+   "position": "章首入局",
+   "route_kw": [
+    "追杀",
+    "追捕",
+    "通缉",
+    "逃亡"
+   ],
+   "rule": "存在明确追捕方与逃亡方，且本章内未彻底解除",
+   "spans": [
+    2,
+    6
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "dialogue",
+   "code": "ZY",
+   "group": "冲突",
+   "name": "资源争夺",
+   "position": "章中段",
+   "route_kw": [
+    "争夺",
+    "竞价",
+    "抢占",
+    "矿脉"
+   ],
+   "rule": "两方以上围绕同一份稀缺资源正面对抗或竞价",
+   "spans": [
+    3,
+    8
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "mystery",
+   "code": "FY",
+   "group": "悬念",
+   "name": "世界观反转",
+   "position": "章中后段",
+   "route_kw": [
+    "颠覆",
+    "真相",
+    "史实",
+    "规则竟是"
+   ],
+   "rule": "本章给出一条颠覆读者既有认知的新规则或新史实",
+   "spans": [
+    5,
+    20
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "payoff",
+   "code": "HC",
+   "group": "悬念",
+   "name": "伏笔收",
+   "position": "章中后段",
+   "route_kw": [
+    "回收",
+    "揭晓",
+    "应验",
+    "兑现"
+   ],
+   "rule": "此前埋下的伏笔在本章回收，或显式改期（不许无声挂起）",
+   "spans": [
+    1,
+    2
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "mystery",
+   "code": "HT",
+   "group": "悬念",
+   "name": "伏笔种",
+   "position": "章中前段",
+   "route_kw": [
+    "埋下",
+    "种下",
+    "伏笔",
+    "留下"
+   ],
+   "rule": "本章植入一件当时不解释、后续章节回收的物件/信息/承诺",
+   "spans": [
+    5,
+    30
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "mystery",
+   "code": "MX",
+   "group": "悬念",
+   "name": "谜团",
+   "position": "章中段抛出",
+   "route_kw": [
+    "谜团",
+    "蹊跷",
+    "怪事",
+    "不解"
+   ],
+   "rule": "本章抛出至少一个与常识不符、暂不解释的未解之问",
+   "spans": [
+    2,
+    10
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "mystery",
+   "code": "NG",
+   "group": "悬念",
+   "name": "内鬼",
+   "position": "章末",
+   "route_kw": [
+    "内鬼",
+    "暗桩",
+    "细作",
+    "奸细"
+   ],
+   "rule": "阵营内存在暗桩，本章给出指向性证据（不必实锤）",
+   "spans": [
+    5,
+    20
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "mystery",
+   "code": "SF",
+   "group": "悬念",
+   "name": "身份揭露",
+   "position": "章末",
+   "route_kw": [
+    "真实身份",
+    "揭露",
+    "暴露",
+    "身份败露"
+   ],
+   "rule": "某角色或势力的真实身份在章内被部分或全部揭开",
+   "spans": [
+    3,
+    15
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "emotion",
+   "code": "BL",
+   "group": "情感",
+   "name": "背叛",
+   "position": "章末",
+   "route_kw": [
+    "背叛",
+    "倒戈",
+    "出卖"
+   ],
+   "rule": "信任关系的持有者做出实质背叛行为（超出误会级别）",
+   "spans": [
+    2,
+    8
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "emotion",
+   "code": "CC",
+   "group": "情感",
+   "name": "传承",
+   "position": "章中后段",
+   "route_kw": [
+    "传承",
+    "衣钵",
+    "接任"
+   ],
+   "rule": "技艺/意志/职责在两代人或师徒间完成一次正式交接",
+   "spans": [
+    2,
+    6
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "emotion",
+   "code": "CJ",
+   "group": "情感",
+   "name": "重逢",
+   "position": "章中后段",
+   "route_kw": [
+    "重逢",
+    "再会",
+    "久别"
+   ],
+   "rule": "久别分离的角色或势力在本章重新照面",
+   "spans": [
+    1,
+    3
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "emotion",
+   "code": "HW",
+   "group": "情感",
+   "name": "感情线",
+   "position": "章末",
+   "route_kw": [
+    "表白",
+    "心动",
+    "情愫",
+    "感情"
+   ],
+   "rule": "主角与情感对象的关系推进一小步（靠近/表白/误会加深）",
+   "spans": [
+    5,
+    30
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "emotion",
+   "code": "SX",
+   "group": "情感",
+   "name": "牺牲",
+   "position": "章末",
+   "route_kw": [
+    "牺牲",
+    "舍命",
+    "代价"
+   ],
+   "rule": "角色以让渡重大利益或生命为代价，换取他人存续或目标推进",
+   "spans": [
+    2,
+    8
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "emotion",
+   "code": "XL",
+   "group": "情感",
+   "name": "羁绊",
+   "position": "章中后段",
+   "route_kw": [
+    "羁绊",
+    "托付",
+    "并肩",
+    "和解"
+   ],
+   "rule": "两个角色的关系本章发生正向加固（共患难/托付/和解）",
+   "spans": [
+    2,
+    10
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "lowkey",
+   "code": "DH",
+   "group": "过渡",
+   "name": "换图升格",
+   "position": "全章",
+   "route_kw": [
+    "换图",
+    "迁往",
+    "抵达",
+    "新地图"
+   ],
+   "rule": "本章完成舞台的大规模切换（进城/跨域/升入更高一层世界）",
+   "spans": [
+    1,
+    1
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "lowkey",
+   "code": "GL",
+   "group": "过渡",
+   "name": "经营蒙太奇",
+   "position": "全章",
+   "route_kw": [
+    "经营",
+    "产业",
+    "扩张",
+    "蒙太奇"
+   ],
+   "rule": "以蒙太奇快写产业/势力/资产的经营增长",
+   "spans": [
+    2,
+    5
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "lowkey",
+   "code": "LX",
+   "group": "过渡",
+   "name": "日常缓冲",
+   "position": "全章",
+   "route_kw": [
+    "日常",
+    "休整",
+    "缓冲",
+    "生活"
+   ],
+   "rule": "无主线冲突的生活章，用于蓄压与关系存款",
+   "spans": [
+    1,
+    2
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "lowkey",
+   "code": "SJ2",
+   "group": "过渡",
+   "name": "闭关跳时",
+   "position": "章中段",
+   "route_kw": [
+    "闭关",
+    "死关",
+    "闭死关"
+   ],
+   "rule": "主角进入封闭修炼或打造状态，时间被显式压缩跳过",
+   "spans": [
+    1,
+    2
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "",
+   "code": "KT",
+   "group": "钩子",
+   "name": "章末钩",
+   "position": "章末（最后三段）",
+   "route_kw": [
+    "章末钩",
+    "翻页"
+   ],
+   "rule": "章末三段内抛出未闭合的新压力或新信息，迫使读者翻页",
+   "spans": [
+    1,
+    1
+   ]
+  },
+  {
+   "advisory_only": false,
+   "card": "",
+   "code": "YQ",
+   "group": "钩子",
+   "name": "危机开局",
+   "position": "章首",
+   "route_kw": [
+    "变故",
+    "异变",
+    "危机"
+   ],
+   "rule": "章首五百字内出现必须立刻应对的事件/异象/数字压力（非环境白描开局）",
+   "spans": [
+    1,
+    1
+   ]
+  },
+  {
+   "advisory_only": true,
+   "card": "",
+   "code": "BAL",
+   "group": "反例",
+   "name": "战力失衡",
+   "position": "战斗段（审校）",
+   "route_kw": [],
+   "rule": "交手结果与既有境界/资源设定矛盾，赢面无支撑",
+   "spans": [
+    1,
+    1
+   ]
+  },
+  {
+   "advisory_only": true,
+   "card": "",
+   "code": "LOGIC",
+   "group": "反例",
+   "name": "降智",
+   "position": "全章（审校）",
+   "route_kw": [],
+   "rule": "反派或配角为成全主角，做出明显低于其智力设定的选择",
+   "spans": [
+    1,
+    1
+   ]
+  },
+  {
+   "advisory_only": true,
+   "card": "",
+   "code": "OOC",
+   "group": "反例",
+   "name": "崩坏",
+   "position": "全章（审校）",
+   "route_kw": [],
+   "rule": "角色言行与已确立的动机、口吻、底线相悖",
+   "spans": [
+    1,
+    1
+   ]
+  },
+  {
+   "advisory_only": true,
+   "card": "",
+   "code": "REP",
+   "group": "反例",
+   "name": "爽点同质化",
+   "position": "跨章·近 10 章窗口（账本/L0）",
+   "route_kw": [],
+   "rule": "近 10 章内同主码桥段连排 ≥3，套路感可指认",
+   "spans": [
+    10,
+    10
+   ]
+  },
+  {
+   "advisory_only": true,
+   "card": "",
+   "code": "WATER",
+   "group": "反例",
+   "name": "注水",
+   "position": "全章（审校）",
+   "route_kw": [],
+   "rule": "删除后不影响任何后续因果的段落占比过高",
+   "spans": [
+    1,
+    1
+   ]
+  }
+ ]
+}
