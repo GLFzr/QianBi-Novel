@@ -7,6 +7,9 @@
 [![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#download)
 [![Tests](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml)
 
+> 内容以中文 README 为准，可能滞后 —— The Chinese README is the source of truth;
+> this English file may lag behind it.
+
 **A long-form fiction workbench where a human and an AI co-write** — the AI writes in full
 view, and the human stays the author.
 
@@ -21,7 +24,7 @@ where you can intervene at every step.
 > longer threads and your novels go to
 > [Discussions](https://github.com/GLFzr/QianBi-Novel/discussions).
 
-![30-second tour: a pipeline that lights up as it writes](docs/hero.gif)
+![Automatic-mode cockpit: stage cards, step gates, quality trend](docs/hero_cw.png)
 
 
 > **From the author**: I believe the endgame for a writing agent is not "a model that writes
@@ -211,7 +214,8 @@ Plus two supporting roles: the **Supervisor** handles cross-chapter continuity a
 control; the **Readback** agent infers what you meant when you hand-edit prose and points
 upstream at what should have changed.
 
-![Automatic mode cockpit: stage cards, step gates, quality trend](docs/shot_pipeline.png)
+> The automatic-mode cockpit screenshot is at the top of this page (hero slot) — same UI,
+> not repeated here.
 
 ---
 
@@ -349,10 +353,19 @@ On first launch, add your API key under *Settings → Connections & models*.
 **Keys go into the Windows Credential Manager** (`app/secrets.py`); `config.json` keeps only a
 fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all redacted.
 
-> **Prompt tuning scope**: the built-in prompt engineering (prose / de-taste / review) is tuned
-> for the **DeepSeek API** — its thinking, reasoning_effort and parameter habits. That is why
-> **all three slots ship pointing at DeepSeek V4 Pro**: one key gets the entire pipeline running.
-> Twelve OpenAI-compatible platforms are preconfigured — eight domestic (DeepSeek / Alibaba
+> **Prompt tuning scope**: the built-in prompt engineering (prose / de-taste / review) is
+> tuned for the **DeepSeek API** — its thinking, reasoning_effort and parameter habits. That
+> is why **all three slots (writing / helper / review) ship pointing at the
+> 「DeepSeek 官方 Flash（推荐）」 row** (ruling A14: zero Pro out of the box — the Pro row
+> becomes reachable only when you switch a slot yourself or turn on the strict canon-audit
+> profile). Slot binding is honored literally: a slot pointed at Flash calls Flash — no
+> silent model swapping or filtering.
+> **Factory presets deliberately carry no model name** (model names are the fastest-changing
+> parameter; hardcoding one guarantees stale guidance): fill in the key for that row first,
+> then pick a model from the form's dropdown (or "Pull" the live list) — only then does the
+> whole pipeline run end to end.
+> Twelve OpenAI-compatible platforms are preinstalled (13 connection rows; DeepSeek has a
+> Flash and a Pro row) — eight domestic (DeepSeek / Alibaba
 > Bailian / Zhipu / Kimi / Volcengine Ark / Tencent Hunyuan / MiniMax / SiliconFlow) and four
 > overseas (OpenRouter / Google Gemini / xAI Grok / Groq); every address was probed from this
 > machine against `<base>/chat/completions`, and each platform's note in the app records what
@@ -374,14 +387,16 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 ## Tests
 
 ```bash
-# Offline unit tests (no API key, ~20 seconds)
-.venv/Scripts/python -m pytest tests/unit -q        # 594 tests
+# Offline unit tests (no API key, ~25 seconds)
+.venv/Scripts/python -m pytest tests/unit -q --tb=no -p no:cacheprovider
+# → 1244 tests collected (2026-09-29, --collect-only snapshot; scripts/check_docs.py
+#   re-runs the count and goes red when this number rots)
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
 .venv/Scripts/python tests/probe_agent_relay.py
 .venv/Scripts/python tests/probe_word_block.py
 .venv/Scripts/python tests/probe_update_ui.py
-# …… 44 probe_*.py in total: the offline probes plus the unit tests form the release gate; a few
+# …… 50 probe_*.py in total: the offline probes plus the unit tests form the release gate; a few
 #     (probe_models, probe_flash_reasoning …) are real-LLM experiments needing QIANBI_TEST_KEY;
 #     probe_packaged is invoked by the release pipeline with --exe, and probe_ui_gallery
 #     renders the full UI screenshot set.
@@ -448,8 +463,8 @@ scripts/
   build_release.py      one-shot release pipeline (quality gates → version info → packaging →
                           smoke test → digest diff)
 tests/
-  unit/                 50 files / 594 offline tests
-  probe_*.py            45 headless chain probes
+  unit/                 129 test files / 1244 offline tests (collect-only snapshot)
+  probe_*.py            50 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice
 ```
