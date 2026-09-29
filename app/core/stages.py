@@ -1896,6 +1896,35 @@ class _MicroCycle:
         # W-3 里程碑①：与草稿同步把卷栈落一次盘（此后崩在扫描/去味/审校都不用重打整卷）
         _save_session_checkpoint(ctx, session, "enrich 后")
 
+    def _mc_scan(self) -> None:
+        """③ AI 味本地扫描（零成本）+ ③.5 决策门 G6（回退=阻断降建议、跳过去味）"""
+        ctx = self.ctx
+        num = self.num
+        max_deslop_rounds = self.max_deslop_rounds
+        gr = self.gr
+        self.skip_scan_deslop = self.resume_at in ("deslop", "review", "finalize")
+        self.blocking, self.advisory = ([], []) if self.skip_scan_deslop else ([], [])
+        ctx.step(num, st.STEP_SCAN)
+        self.blocking, self.advisory = ([], []) if self.skip_scan_deslop else gates.scan_deslop(self.prose)
+        gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+        ctx.log("info", "第 %d 章 本地扫描：阻断 %d 处 / 建议 %d 处%s"
+                % (num, len(self.blocking), len(self.advisory), "（断点续跑：跳过扫描与去味）" if self.skip_scan_deslop else ""))
+
+        # ---- ③.5 决策门 G6：扫描完成后（T4.1 内侧门；回退=保留原稿跳过去味）----
+        self.deslop_extra_text = ""
+        g6_idea = ""
+        if not self.skip_scan_deslop:
+            g6_idea = ctx.gate("G6", f"AI 味扫描完成：阻断 {len(self.blocking)} / 建议 {len(self.advisory)}"
+                                 f"（下一步去味改写，最多 {max_deslop_rounds} 轮）", chapter=num)
+        if g6_idea is None:
+            g6_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
+            ctx.log("warn", f"G6 回退：保留原稿继续（{len(self.blocking)} 处阻断按人工裁决保留，跳过去味）")
+            self.advisory = self.advisory + self.blocking
+            self.blocking = []
+            gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+        elif g6_idea:
+            self.deslop_extra_text = f"\n【人工补充要求（G6 想法）】{g6_idea}"
+
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
@@ -2038,32 +2067,12 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     mc._mc_assemble()
     mc._mc_draft()
     mc._mc_word_gate()
+    mc._mc_scan()
     # C11 过渡同步：未迁移的段仍读局部名（全部迁完后移除）
     prose = mc.prose
-
-    # ---- ③ AI 味扫描（本地，零成本；断点在此步之后时跳过）----
-    skip_scan_deslop = resume_at in ("deslop", "review", "finalize")
-    blocking, advisory = ([], []) if skip_scan_deslop else ([], [])
-    ctx.step(num, st.STEP_SCAN)
-    blocking, advisory = ([], []) if skip_scan_deslop else gates.scan_deslop(prose)
-    gr.blocking_findings, gr.advisory_findings = blocking, advisory
-    ctx.log("info", "第 %d 章 本地扫描：阻断 %d 处 / 建议 %d 处%s"
-            % (num, len(blocking), len(advisory), "（断点续跑：跳过扫描与去味）" if skip_scan_deslop else ""))
-
-    # ---- ③.5 决策门 G6：扫描完成后（T4.1 内侧门；回退=保留原稿跳过去味）----
-    deslop_extra_text = ""
-    g6_idea = ""
-    if not skip_scan_deslop:
-        g6_idea = ctx.gate("G6", f"AI 味扫描完成：阻断 {len(blocking)} / 建议 {len(advisory)}"
-                             f"（下一步去味改写，最多 {max_deslop_rounds} 轮）", chapter=num)
-    if g6_idea is None:
-        g6_idea = ctx.consume_gate_idea()   # 回退想法就地消费，防串章
-        ctx.log("warn", f"G6 回退：保留原稿继续（{len(blocking)} 处阻断按人工裁决保留，跳过去味）")
-        advisory = advisory + blocking
-        blocking = []
-        gr.blocking_findings, gr.advisory_findings = blocking, advisory
-    elif g6_idea:
-        deslop_extra_text = f"\n【人工补充要求（G6 想法）】{g6_idea}"
+    blocking, advisory = mc.blocking, mc.advisory
+    deslop_extra_text = mc.deslop_extra_text
+    skip_scan_deslop = mc.skip_scan_deslop
 
     # ---- ④ 去味改写（仅阻断级触发，最多 max_deslop_rounds 轮）----
     pre_deslop_prose = prose   # G7 回退还原点
