@@ -23,6 +23,7 @@ from ..core.orchestrator import Orchestrator
 from ..core import co_writing
 from ..core.co_writing import CoWriting
 from ..core import co_dialogue
+from ..core import writing_rules  # D4：共写反馈→写作规约沉淀（报告区「沉淀为规约」槽）
 from ..llm import LLMClient, LLMError, ModelRouter
 from ..llm import clean_llm_output
 from ..llm.providers import PROVIDERS, PROVIDER_ORDER
@@ -5971,6 +5972,40 @@ class Bridge(QObject):
             self.toast.emit("warn", "没有可派单的报告/改写指令")
             return
         self._dispatch_cw_rewrite(num, directive, report_ts=str(report.get("ts", "")))
+
+    # ---------- D4 写作规约沉淀（共写审校反馈区局部；反馈→规约→下章最高优先注入）----------
+
+    @Slot(str)
+    @_guarded
+    def addWritingRule(self, content: str):
+        """把共写审校反馈理由沉淀为持久「写作规约」（追踪/写作规约.json sidecar）。
+
+        反馈理由优先取报告里的【改写指令】（真正可执行的那句），解析不出退回
+        原文；之后每章状态卡「写作规约(最高优先级)」段注入，改过的错不再犯。
+        """
+        if not self.proj:
+            return
+        text = (content or "").strip()
+        if not text:
+            self.toast.emit("warn", "没有可沉淀的反馈文本")
+            return
+        # parse_supervisor_report 是纯函数（str 进 regex 出），无异常面，不需吞护
+        _needs_fix, directive = co_dialogue.parse_supervisor_report(text)
+        rule_text = (directive or text).strip() or text
+        res = writing_rules.add_rule(self.proj, rule_text,
+                                     source_ch=self._cur_num or None)
+        if res is None:
+            self.toast.emit("warn", "写作规约沉淀失败：内容为空")
+            return
+        head = res["rule"]["content"][:24]
+        if res["created"]:
+            self.toast.emit("ok", f"已沉淀为写作规约「{head}…」——之后每章状态卡最高优先级注入")
+        else:
+            self.toast.emit("ok", f"写作规约已更新（相似条目去重合并）「{head}…」")
+        if res["evicted"]:
+            self.toast.emit("info",
+                            f"规约已达 {writing_rules.MAX_RULES} 条上限，"
+                            f"{len(res['evicted'])} 条最久未命中者转入归档")
 
     def _cw_worldbook_changed_notice(self, state: dict) -> bool:
         """触发点②：世界书变更后影响提示（不发 LLM）；locked 章建议显式解锁后重核"""

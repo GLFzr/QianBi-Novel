@@ -706,6 +706,14 @@ Rectangle {
                                       : "按报告里的【改写指令】派写作 Agent 改写（不受自动轮次限制；无指令时不可用）"
                     }
                     AppButton {
+                        text: "沉淀为规约"
+                        kind: "ghost"
+                        height: 18
+                        onClicked: bridge.addWritingRule(bridge.cwReportText)
+                        ToolTip.visible: hovered
+                        ToolTip.text: "把本条反馈理由存为持久写作规约（D4）——之后每章状态卡最高优先级注入，改过的错不再犯；相似条目自动去重合并"
+                    }
+                    AppButton {
                         iconName: "close"
                         text: ""
                         kind: "ghost"

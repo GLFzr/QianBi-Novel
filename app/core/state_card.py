@@ -10,6 +10,10 @@
 P0（当前位置/下一章承诺）永不丢，整项取舍不截半句，逐项留审计日志
 （logging.getLogger("qianbi.state_card") + build_state_card_detail 返回值）。
 
+D4 增段：「写作规约(最高优先级)」插在 P0 之后（prio=0 永不裁——共写反馈
+沉淀的持久规约全文注入，app/core/writing_rules.py；无规约/off 开关时零字节，
+输出与 0.22 逐字一致）。
+
 三条原型修正随移植（w2_proto 坑①②③）：
 ① 「计划回收」区间取 [min,max]（第5-10章落在窗口内不算逾期）；
 ② 角色只认结构化 sidecar 登记名（子字段噪声在 tracking_store 层已被排除），
@@ -24,6 +28,7 @@ from . import memory as _memory
 from . import reader_belief as _reader_belief
 from . import setting_ledger as _setting_ledger
 from . import tracking_store
+from . import writing_rules as _writing_rules
 
 # S6a：原 from .. import project 上探边拆除（卡9-P2 引入的 core->app-top 违规）——
 # 文件读取/章节枚举/正则契约取块改由调用方以 proj_io（project 模块）注入，
@@ -234,8 +239,15 @@ def _sec_risks(ranked: list, zero_roles: list, num: int, has_outline: bool) -> l
 
 # ---------------- 组装与预算裁剪 ----------------
 
-def _build_sections(proj_io, proj: str, num: int, stress: bool = False) -> list:
-    """→ [(标题, 优先级, items)]；数字大者先丢，P0 永不丢"""
+def _build_sections(proj_io, proj: str, num: int, stress: bool = False,
+                    cfg: dict | None = None) -> list:
+    """→ [(标题, 优先级, items)]；数字大者先丢，P0 永不丢
+
+    D4：第 3 段「写作规约(最高优先级)」——共写反馈沉淀的持久规约全文注入
+    （writing_rules.card_items，enabled 条目入库序），prio=0 永不裁=「预算不够
+    先裁设定不裁规约」的最高优先语义；无规约/off 开关时 items 为空 → 零字节
+    注入，卡片输出与 0.22 逐字一致（证据在场才注入，不读配置）。
+    """
     ranked = []
     try:
         rows = (tracking_store.load_foreshadow(proj) or {}).get("rows") or []
@@ -252,7 +264,16 @@ def _build_sections(proj_io, proj: str, num: int, stress: bool = False) -> list:
         pass
     roles, zero_roles = _sec_roles(proj_io, proj, num, stress)
     outline = _outline_doc(proj_io, proj, num)
-    return [
+    # D4 写作规约（fail-open：sidecar 缺失/损坏 → 空段；注入侧 hits 回写在
+    # writing_rules.card_items 内，写失败静默不挡卡片）。
+    # 运行时 insert 而非进静态 sections 字面量：E7 skills 导出的 schema 抽取
+    # （build_skills.extract_state_card_schema）按源码七个栏位元组出金标——规约
+    # 段是证据在场的动态可选段，不进 skill 包的静态七栏 schema。
+    try:
+        rule_items = _writing_rules.card_items(proj, cfg=cfg)
+    except Exception:  # noqa: BLE001
+        rule_items = []
+    sections = [
         ("当前位置", 0, _sec_position(proj_io, proj, num)),
         ("下一章承诺", 0, _sec_promise(proj_io, proj, num)),
         ("活跃伏笔(作者真相)", 1, fs_items),
@@ -261,6 +282,9 @@ def _build_sections(proj_io, proj: str, num: int, stress: bool = False) -> list:
         ("长期约束(正则must)", 4, _sec_must(proj_io, proj)),
         ("近三章速记(读者已知)", 5, _sec_recent(proj_io, proj, num, stress)),
     ]
+    if rule_items:
+        sections.insert(2, ("写作规约(最高优先级)", 0, rule_items))
+    return sections
 
 
 def _render(sections: list, num: int) -> str:
@@ -296,7 +320,8 @@ def _trim_to_budget(sections: list, budget: int, num: int) -> tuple:
 
 
 def build_state_card_detail(proj: str, num: int, *, budget: int = BYTE_BUDGET,
-                            stress: bool = False, proj_io) -> tuple:
+                            stress: bool = False, proj_io,
+                            cfg: dict | None = None) -> tuple:
     """(card, audit)——audit 为逐项裁剪记录（常规书为空，压力样本才非空）
 
     stress=True 解除结构性上限（角色 6/伏笔 8/近章 3），移植原型的压力形态：
@@ -304,15 +329,19 @@ def build_state_card_detail(proj: str, num: int, *, budget: int = BYTE_BUDGET,
 
     proj_io：project 模块（read_file/list_chapters/regex_block）——S6a 参数注入，
     路径类依赖不上探 app-top，由调用方（core 消费方本就持有 project）传入。
+
+    cfg：app 配置 dict（D4 写作规约开关 writing.writing_rules_enabled，缺省
+    on）——同样参数注入不上探 app-top；None=按 on 处理。
     """
     n = int(num or 0)
-    sections = _build_sections(proj_io, proj, n, stress)
+    sections = _build_sections(proj_io, proj, n, stress, cfg)
     return _trim_to_budget(sections, int(budget), n)
 
 
 def build_state_card(proj: str, num: int, *, budget: int = BYTE_BUDGET,
-                     stress: bool = False, proj_io) -> str:
+                     stress: bool = False, proj_io,
+                     cfg: dict | None = None) -> str:
     """七栏续写状态卡（≤budget 字节，超限按 P5→P1 优先级整项裁剪+审计日志）"""
     card, _audit = build_state_card_detail(proj, num, budget=budget, stress=stress,
-                                           proj_io=proj_io)
+                                           proj_io=proj_io, cfg=cfg)
     return card
