@@ -1024,6 +1024,7 @@ class Bridge(QObject):
         super().__init__(parent)
         self.cfg = cfg_mod.load_config()
         self.proj = None
+        self._session_projects = []   # C29：本会话打开过的项目（关应用时逐个自动备份）
         self.orch = None
         self._workers = []
         self._running = False
@@ -1336,7 +1337,10 @@ class Bridge(QObject):
         self._open_project(path)
 
     def _open_project(self, path: str, silent: bool = False):
+        # C29：关书即备份——换书前对当前在读书目做一次自动 zip（不阻断换书）
+        self._auto_backup_on_close_book(path)
         self.proj = path
+        self._remember_session_project(path)
         # WP-27：对话全量落盘绑定到本书（R14②③：位置可发现/可关闭；默认开）
         from .. import dialogue_log
         _dlcfg = (self.cfg or {}).get("dialogue_log", {}) or {}
@@ -2221,6 +2225,12 @@ class Bridge(QObject):
                         logger.warning("%s 未在限时内收尾", attr)
             except Exception as e:  # noqa: BLE001
                 logger.warning("%s 收尾异常：%s", attr, e)
+        # C29 自动备份：关应用时对本会话打开过的项目逐个 zip（core 层保证
+        # 永不抛出，这里再兜一层——备份失败绝不阻断退出）
+        try:
+            self._auto_backup_on_shutdown()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("退出自动备份异常（不阻断关闭）：%s", e)
         logger.info("退出收尾完成")
 
     @_guarded
@@ -5696,32 +5706,84 @@ class Bridge(QObject):
             self.toast.emit("error", f"备份失败: {e}")
             return ""
 
-    def _maybe_auto_backup(self):
-        """每日自动备份（设置开启后，打开项目时检查，一天最多一次）"""
-        b = self.cfg.get("backup", {})
-        if not b.get("auto"):
+    def _auto_backup_dir(self, proj: str) -> str:
+        """C29 自动备份落点：CONFIG_DIR/backups/<书名>/（与 app/config.py 的
+        用户数据目录约定一致；放用户目录不污染项目同级，排除规则也不再需要
+        防「备份套备份」）。"""
+        return os.path.join(cfg_mod.CONFIG_DIR, "backups",
+                            os.path.basename(os.path.normpath(proj or "")))
+
+    def _auto_backup_tick(self, proj: str) -> str:
+        """C29：单项目自动备份一笔（开关→当日去重→zip→落标记→落盘）。
+
+        core 层保证 create_backup 永不抛出；本方法自身的异常由调用方兜
+        （关书/关应用路径只记日志，不阻断关闭流程）。返回 zip 路径或 ""。
+        """
+        from ..core import auto_backup
+        if not proj or not os.path.isdir(proj):
+            return ""
+        if not auto_backup.enabled(self.cfg) or not auto_backup.due(self.cfg, proj):
+            return ""
+        out = auto_backup.create_backup(
+            proj, self._auto_backup_dir(proj), keep=auto_backup.keep_n(self.cfg))
+        if out:
+            auto_backup.mark_done(self.cfg, proj)
+            cfg_mod.save_config(self.cfg)
+            self.logModel.append("ok", f"自动备份完成：{os.path.basename(out)}")
+        return out
+
+    def _remember_session_project(self, path: str):
+        """C29：登记本会话打开过的项目（去重保序，关应用时逐个备份）。"""
+        norm = os.path.normpath(str(path or ""))
+        if norm and norm not in self._session_projects:
+            self._session_projects.append(norm)
+
+    def _auto_backup_on_close_book(self, next_path: str = ""):
+        """C29：关书（换书前收尾）对当前在读书目自动备份；同书重开不触发。"""
+        cur = self.proj
+        if not cur:
             return
-        if b.get("last") == datetime.date.today().isoformat():
+        if next_path and os.path.normpath(str(next_path)) == os.path.normpath(cur):
             return
         try:
-            out = self._zip_backup()
-            b["last"] = datetime.date.today().isoformat()
-            cfg_mod.save_config(self.cfg)
-            self.logModel.append("ok", f"每日自动备份完成：{os.path.basename(out)}")
+            self._auto_backup_tick(cur)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("关书自动备份异常（不阻断换书）：%s", e)
+
+    def _auto_backup_on_shutdown(self):
+        """C29：关应用对本会话打开过的项目逐个自动备份（各自当日去重）。"""
+        for p in list(self._session_projects):
+            try:
+                if os.path.isdir(p):
+                    self._auto_backup_tick(p)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("退出自动备份 %s 失败：%s", p, e)
+
+    def _maybe_auto_backup(self):
+        """每日自动备份（C29 完善雏形：打开项目时对当前项目检查，每项目一天
+        最多一份；关书/关应用路径走 _auto_backup_on_close_book/_on_shutdown）"""
+        if not self.proj:
+            return
+        try:
+            self._auto_backup_tick(self.proj)
         except Exception as e:  # noqa: BLE001
             self.logModel.append("warn", f"自动备份失败: {e}")
 
     @Slot(bool)
     @_guarded
     def setAutoBackup(self, on: bool):
-        self.cfg.setdefault("backup", {})["auto"] = bool(on)
+        """C29：开关落新键 auto_backup.enabled（旧 backup.auto 停写，
+        _migrate_auto_backup 已把显式关过的老用户迁过来）。"""
+        self.cfg.setdefault("auto_backup", {})["enabled"] = bool(on)
         cfg_mod.save_config(self.cfg)
-        self.toast.emit("ok", on and "已开启每日自动备份（打开项目时执行）" or "已关闭自动备份")
+        self.toast.emit("ok", on and "已开启自动备份（关书/关应用时自动 zip，每书每日一份）"
+                        or "已关闭自动备份")
 
     @Slot(result=bool)
     @_guarded
     def autoBackupEnabled(self) -> bool:
-        return bool(self.cfg.get("backup", {}).get("auto"))
+        from ..core import auto_backup
+        return auto_backup.enabled(self.cfg)
 
     @Slot(result="QVariantMap")
     @_guarded

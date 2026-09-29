@@ -88,6 +88,12 @@ DEFAULT_CONFIG = {
     # WP-27 对话全量落盘（R14：默认开=用户指派；本地 .dialogue/ JSONL，不上网；
     # enabled=False 即整体停写；keep_files=滚动分片上限，总量硬上界见 app/dialogue_log.py）
     "dialogue_log": {"enabled": True, "keep_files": 40},
+    # C29 自动备份（BACKUP｜成熟度短板补齐：novelWriter「关项目自动 zip」品类标配）：
+    # 关书/关应用/打开项目时对项目自动 zip 到 CONFIG_DIR/backups/<书名>/，
+    # 每项目每日一份；keep=保留最近份数（<=0 不裁剪）；done=当日去重标记（运行时状态）。
+    # enabled 出厂即开（短板补齐的题眼）；老用户曾显式关过旧「每日备份」开关
+    # （backup.auto=False）的，_migrate_auto_backup 迁移时尊重其选择。
+    "auto_backup": {"enabled": True, "keep": 5, "done": {}},
     # 去 AI 味规则源（lieflat-less-ai-tone 集成，方案 docs/lieflat-less-ai-tone-integration-plan.md）
     # rules_source: "lieflat"=vendor skill 并集（缺省）/ "builtin"=内置 10 条原则
     # rules_render: "lean"=裁示例只留触发标记+改法（缺省，token 成本低）/ "full"=带 ❌/✅ 示例
@@ -372,6 +378,24 @@ def _migrate_updates(cfg: dict) -> dict:
     return cfg
 
 
+def _migrate_auto_backup(cfg: dict) -> dict:
+    """C29：旧「每日备份」开关（backup.auto）→ 新 auto_backup.enabled 的选择性迁移
+
+    新出厂默认开（成熟度短板补齐），但老用户若在界面上**显式关过**旧开关
+    （setAutoBackup(False) 落盘 backup.auto=False，从未动过则无此键），
+    升级后尊重其选择落到新键；显式开过或从未表过态 → 按新默认开。
+    """
+    ab = cfg.get("auto_backup")
+    if not isinstance(ab, dict) or "enabled" in ab:
+        return cfg
+    legacy = cfg.get("backup")
+    if isinstance(legacy, dict) and legacy.get("auto") is False:
+        ab["enabled"] = False
+        logging.getLogger("qianbi.config").info(
+            "C29 迁移：检测到旧「每日自动备份」开关曾显式关闭，新自动备份保持关闭")
+    return cfg
+
+
 def load_config() -> dict:
     os.makedirs(CONFIG_DIR, exist_ok=True)
     _migrate_legacy_dir()
@@ -401,6 +425,7 @@ def load_config() -> dict:
         _migrate_builtin_connections(merged)
         _retire_builtin_connections(merged)
         _migrate_updates(merged)
+        _migrate_auto_backup(merged)
         # 补全新内置连接模板（v0.18.1 起十余家预设；退役腾出的 id 在这里补上新的出厂行，
         # 所以 ids 必须在退役之后才算——提前算会把换血后的 id 当成已存在）
         ids = {c["id"] for c in merged["connections"]}
