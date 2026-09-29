@@ -8,6 +8,7 @@
 """
 import datetime
 import os
+import re
 import shutil
 
 from .. import project
@@ -15,6 +16,38 @@ from . import state as st
 from .co_dialogue import prev_handoff, transcript_text
 
 logger = __import__("logging").getLogger("qianbi.core")
+
+# 追踪文件里以表格记登的两份（伏笔表/时间线）：表头+分隔行之后仍有非空行才算登记
+_TRACK_TABLE_FILES = ("伏笔.md", "时间线.md")
+
+
+def _read_lines(path: str) -> list:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return f.readlines()
+    except OSError:
+        return []
+
+
+def tracking_has_entries(proj: str) -> bool:
+    """追踪文件是否有真登记（CW-G7 确认卡判据；模板骨架不算）。
+
+    伏笔表/时间线：跳过表头与分隔行，其后任一行存在非空单元格即算；
+    角色状态：存在一条非标题/非引语提示的正文行即算。读不了 = 没登记。
+    """
+    track_dir = os.path.join(proj, "追踪")
+    for name in _TRACK_TABLE_FILES:
+        rows = [ln for ln in _read_lines(os.path.join(track_dir, name))
+                if ln.strip().startswith("|")]
+        for ln in rows[2:]:
+            cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+            if any(cells):
+                return True
+    for ln in _read_lines(os.path.join(track_dir, "角色状态.md")):
+        t = ln.strip()
+        if t and not t.startswith(("#", ">", "|")):
+            return True
+    return False
 
 
 class CoWriting:
@@ -110,6 +143,29 @@ class CoWriting:
 
     # ---------- 打回（级联失效下游产物 + 归档）----------
 
+    def preview_rollback(self, state: dict, stage_key: str = None) -> dict:
+        """打回预演（CW-G7 确认卡数据源）：零删除、零写入、零 state 变更。
+
+        返回 {stage, label, files, count, locked, tracking_nonempty}：
+        - files/count：级联矩阵命中且盘上存在的产物（确认后将失效归档的清单）；
+        - locked：全书已锁定章名单（打回不回滚锁定终稿，但确认卡必须点名）；
+        - tracking_nonempty：追踪文件是否有真登记（同样不回滚，须提前告知）。
+        """
+        cw = st.ensure_cw(state)
+        stage = stage_key or cw.get("stage", st.STAGE_CW_PROJECT)
+        patterns = st.CW_ROLLBACK_CASCADE.get(stage, [])
+        files = [p for p in self._resolve_patterns(patterns) if os.path.isfile(p)]
+        locked = [n for n, _name, _p in project.list_chapters(self.proj)
+                  if project.is_chapter_locked(self.proj, n)]
+        return {
+            "stage": stage,
+            "label": st.CW_STAGE_LABELS.get(stage, stage),
+            "files": files,
+            "count": len(files),
+            "locked": locked,
+            "tracking_nonempty": tracking_has_entries(self.proj),
+        }
+
     def rollback(self, state: dict, stage_key: str = None) -> dict:
         """打回指定阶段（缺省=当前阶段）：级联失效下游产物并归档，阶段回退到该阶段"""
         cw = st.ensure_cw(state)
@@ -122,7 +178,27 @@ class CoWriting:
         idx = self.stage_index(stage)
         for k in st.CW_STAGE_ORDER[idx:]:
             cw.get("handoff", {}).pop(k, None)
-        return {"archived": archived}
+        # CW-G7：被删细纲对应章的 supervised/auto_fix 痕属下游——产物没了，
+        # 「已比对/已自动改写过」的账就不能再挂着（否则下次确定会被旧痕放行）
+        cleared = self._clear_downstream_marks(cw, archived)
+        return {"archived": archived, "cleared_marks": cleared}
+
+    @staticmethod
+    def _clear_downstream_marks(cw: dict, archived: list) -> list:
+        """清除归档细纲对应章的 supervised/auto_fix 键；返回被清章号"""
+        nums = set()
+        for p in archived:
+            m = re.search(r"细纲_第(\d+)章\.md$", os.path.basename(p))
+            if m:
+                nums.add(int(m.group(1)))
+        if not nums:
+            return []
+        for key in ("supervised", "auto_fix"):
+            marks = cw.get(key)
+            if isinstance(marks, dict):
+                cw[key] = {k: v for k, v in marks.items()
+                           if not str(k).isdigit() or int(k) not in nums}
+        return sorted(nums)
 
     def _invalidate(self, stage: str, patterns: list) -> list:
         if not patterns:

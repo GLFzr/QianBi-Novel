@@ -1008,6 +1008,7 @@ class Bridge(QObject):
     lockBlocked = Signal(int, str, int, int, str)  # 锁定被闸门拦截：num, reason, actual, target, kind
     gateDetail = Signal(str, int, "QVariantMap")    # Q6（只加不改）：九门停靠详情，伴随 gateAsked
     lockBlockedDetail = Signal(int, "QVariantMap")  # Q6（只加不改）：锁门全量违规+当前值/阈值+两侧后果
+    rollbackConfirm = Signal(str, "QVariantMap")    # C25 CW-G7：打回确认卡（stage, 级联清单/锁定章/追踪态）
     # kind: "word"=字数未达标（有 actual/target）| "contract"=正则 must 契约违规（无字数概念）
     gateAsked = Signal(str, int, str)           # 步骤决策门：key, chapter, summary
     gateClosed = Signal()                       # 门已失效（停止/失败/完成时清决策条，真机缺陷②）
@@ -1095,7 +1096,9 @@ class Bridge(QObject):
         self._cw_batch_files = []              # 编辑器正处于「一批细纲」视图时的 [(章号, 路径)]
         self._cw_busy = False
         self._cw_confirming = False            # 确定按钮重入锁（#3）
-        self._cw_cancelled = False             # 用户取消在途请求（#8）
+        self._cw_cancelled = False             # 用户取消在途请求（#8；C25b 起升级为代际 token）
+        self._cw_gen = 0                       # C25 CW-G5：共写 worker 代际（spawn 自增，done 比对）
+        self._pending_rollback = ""            # C25 CW-G7：待确认的打回目标阶段
         self._cw_busy_seconds = 0
         self._cw_reply = ""                    # 本轮 agent 流式回复缓冲
         self._cw_mode = "discuss"              # 本轮回应模式（讨论/撰写，方案 A）
@@ -4504,13 +4507,23 @@ class Bridge(QObject):
         if not self._cw_open_outline_batch(want):
             self.toast.emit("warn", "这批细纲的文件已经不在了（可能被打回清除）")
 
-    def _start_cw_outline_validation(self):
-        """起细纲校验 worker（无守卫版：供「确定细纲」定稿后直接续链）"""
+    def _start_cw_outline_validation(self, full: bool = False):
+        """起细纲校验 worker（无守卫版：供「确定细纲」定稿后直接续链）
+
+        CW-G4：默认只校验「最新批 ±2」章（对齐 OutlineBatchWorker 的邻批口径）——
+        60 章书的全书校验 prompt 随书厚线性膨胀，且旧批早已定稿无再校价值；
+        全量模式必须经显式入口（full=True）才允许。
+        """
         nums = [n for n, _p in project.list_outlines(self.proj)]
         if not nums:
             self.toast.emit("warn", "还没有细纲可校验——先点「生成下一批」出细纲")
             return
         state = self._cw.load()
+        if not full:
+            latest = self._cw_outline_nums(state)
+            if latest:
+                lo, hi = min(latest) - 2, max(latest) + 2
+                nums = [n for n in nums if lo <= n <= hi] or nums
         unit = self._cw.unit(state)
         self._set_cw_busy(True)
         worker = co_dialogue.ReviewOutlinesWorker(self.cfg, self.proj, nums, unit, parent=self)
@@ -4600,6 +4613,8 @@ class Bridge(QObject):
         ② 正则 must 契约：本地可判的规则被违反 → lockBlocked(kind="contract")。
         用户点强锁走 forceConfirmChapterLocked。契约不凌驾于作者——
         但绕过它必须留下署名记录，而不是悄悄发生。
+        另有 CW-G4 上限入账：超上限不拦锁定，但「超标 N%」必须进
+        lockBlockedDetail.violations 留账（不弹拦截框）。
         """
         if not self.proj or not self._cur_num:
             self.toast.emit("warn", "请先打开要锁定的章节")
@@ -4644,6 +4659,25 @@ class Bridge(QObject):
                                         "不做任何锁定动作",
             })
             return
+        # CW-G4：上限入账（不拦但必须入账）——超上限的章锁定时，「超标 N%」必须出现在
+        # lockBlockedDetail.violations 里（复用 Q6 管道，QML 只入账不弹窗）。
+        # 口径对齐自动档字数通道（gates.check_word_bounds）：上限 = 目标×(1+20%)。
+        _cap_default = int(self.cfg.get("writing", {}).get("chapter_word_target", 3000))
+        _cap_target = gates.chapter_word_target(self.proj, self._cur_num, _cap_default)
+        _cap_actual = project.count_chars(prose)
+        _cap = int(_cap_target * 1.2)
+        if _cap_actual > _cap:
+            _over_pct = round((_cap_actual - _cap_target) / _cap_target * 100)
+            self.lockBlockedDetail.emit(self._cur_num, {
+                "gate_key": "G9",
+                "gate_label": "字数上限（超标入账，不拦锁定）",
+                "violations": [f"字数超标 {_over_pct}%（{_cap_actual} 字 / 目标 {_cap_target}，"
+                               f"上限 {_cap}）——按作者锁定放行，此处仅入账留痕"],
+                "current_value": _cap_actual,
+                "threshold": _cap,
+                "continue_consequence": "锁定照常执行；超标账目随本条详情留存备查",
+                "rollback_consequence": "回到编辑器压缩字数后再锁定，不做任何锁定动作",
+            })
         self._do_lock_chapter(forced=False)
 
     @Slot()
@@ -5375,7 +5409,21 @@ class Bridge(QObject):
             return
         self._rollback_to(key)
 
-    def _rollback_to(self, stage: str):
+    def _rollback_to(self, stage: str, confirmed: bool = False):
+        """打回到指定阶段（CW-G7：级联删产物且存在锁定章/非空追踪时先出确认卡）
+
+        - 未确认且预演到级联删除 → 暂存目标、发 rollbackConfirm（QML 确认卡）；
+          确认卡文案承诺「已锁定章与追踪/伏笔表不会回滚」——所以这两样永远不动；
+        - 无级联（如 cw_prose 重议本章）或已确认 → 直接执行；
+        - 执行时 supervised/auto_fix 中属下游（被删细纲对应章）的痕随打回清除。
+        """
+        if not confirmed:
+            detail = self._cw.preview_rollback(self._cw.load(), stage)
+            if detail.get("files"):
+                self._pending_rollback = stage
+                self.rollbackConfirm.emit(stage, detail)
+                return
+        self._pending_rollback = ""
         state = self._cw.load()
         result = self._cw.rollback(state, stage)
         self._cw_save_state(state)
@@ -5384,8 +5432,24 @@ class Bridge(QObject):
         self._cw_refresh()
         self.refreshQueue()
         n = len(result.get("archived", []))
+        cleared = result.get("cleared_marks") or []
         self.toast.emit("warn", f"「{st.CW_STAGE_LABELS.get(stage, stage)}」已打回，"
-                        + (f"级联失效并归档 {n} 个下游产物" if n else "本阶段产物将重议"))
+                        + (f"级联失效并归档 {n} 个下游产物" if n else "本阶段产物将重议")
+                        + (f"；已清除 {len(cleared)} 章的比对/自动改写痕" if cleared else ""))
+
+    @Slot()
+    @_guarded
+    def confirmRollbackCw(self):
+        """打回确认卡「仍要打回」（CW-G7）：确认后才真正级联"""
+        if not self.proj or not self._pending_rollback:
+            return
+        self._rollback_to(self._pending_rollback, confirmed=True)
+
+    @Slot()
+    @_guarded
+    def cancelRollbackCw(self):
+        """打回确认卡「取消」（CW-G7）：什么都不动"""
+        self._pending_rollback = ""
 
     @Slot()
     @_guarded

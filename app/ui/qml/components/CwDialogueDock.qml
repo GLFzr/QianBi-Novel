@@ -716,4 +716,96 @@ Rectangle {
             }
         }
     }
+
+    // ---- CW-G7：打回确认卡（级联会删下游产物，且已锁定章/追踪不回滚）----
+    property var rbDetail: ({})
+    Connections {
+        target: bridge
+        function onRollbackConfirm(stage, detail) {
+            cwDock.rbDetail = detail || {}
+            rbConfirmDialog.open()
+        }
+    }
+    Dialog {
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.durNormal; easing: Theme.easeOut }
+        }
+        exit: Transition {
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.durFast }
+        }
+        id: rbConfirmDialog
+        objectName: "cwRollbackConfirmDialog"
+        parent: Overlay.overlay
+        modal: true
+        width: 480
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.max(30, Math.round((parent.height - height) / 2)) : 0
+        padding: 18
+        background: DialogBg {}
+        header: Text {
+            text: "打回到「" + (cwDock.rbDetail.label || "") + "」？将删除 "
+                  + (cwDock.rbDetail.count || 0) + " 个下游产物"
+            color: Theme.textPrimary
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.fsTitle
+            font.weight: Font.DemiBold
+            wrapMode: Text.Wrap
+            padding: 16
+        }
+        contentItem: Column {
+            spacing: 8
+            width: parent.width
+            Text {
+                width: parent.width
+                text: "级联失效并归档：" + ((cwDock.rbDetail.files || []).length)
+                      + " 个产物（细纲/世界书/单元总纲等，可回看归档不丢失）"
+                color: Theme.textPrimary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+            Text {
+                width: parent.width
+                visible: (cwDock.rbDetail.locked || []).length > 0
+                text: "已锁定第 " + (cwDock.rbDetail.locked || []).join("、")
+                      + " 章与追踪/伏笔表不会回滚——终稿原样保留"
+                color: Theme.danger
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+                wrapMode: Text.Wrap
+            }
+            Text {
+                width: parent.width
+                visible: (cwDock.rbDetail.locked || []).length === 0
+                text: "追踪/伏笔表不会回滚"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsBody
+            }
+            Text {
+                width: parent.width
+                text: "被删细纲对应章的「已比对/自动改写」痕迹会一并清除，重写后需重新比对"
+                color: Theme.textTertiary
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.fsMicro
+                wrapMode: Text.Wrap
+            }
+        }
+        footer: RowLayout {
+            width: parent.width
+            Item { Layout.fillWidth: true }
+            AppButton {
+                text: "取消"
+                kind: "ghost"
+                onClicked: { bridge.cancelRollbackCw(); rbConfirmDialog.close() }
+            }
+            AppButton {
+                objectName: "cwRollbackConfirmButton"
+                text: "仍要打回"
+                kind: "danger"
+                onClicked: { bridge.confirmRollbackCw(); rbConfirmDialog.close() }
+            }
+        }
+    }
 }
