@@ -82,30 +82,43 @@ Item {
                 }
                 Repeater {
                     model: bridge.connReadySummary
-                    delegate: RowLayout {
+                    // 行容器用 Item（非 Layout 子项）承载 MouseArea——红线⑤：
+                    // Layout 直接子项上 anchors 是 Qt 未定义行为
+                    delegate: Item {
                         id: connRow
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: 6
-                        Text {
-                            text: modelData.ready ? "✓" : "○"
-                            color: modelData.ready ? "#3a9d5f" : Theme.warn
-                            font.pixelSize: Theme.fsSmall
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: modelData.ready ? modelData.label + "：就绪"
-                                                  : modelData.label + "：" + modelData.reason
-                            color: modelData.ready ? Theme.textSecondary : Theme.textPrimary
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.fsSmall
-                            wrapMode: Text.Wrap
-                        }
-                        Text {
-                            visible: !modelData.ready && hoverArea.containsMouse
-                            text: "去设置 →"
-                            color: Theme.accent
-                            font.pixelSize: Theme.fsSmall
+                        height: connCol.implicitHeight
+                        Column {
+                            id: connCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 2
+                            RowLayout {
+                                width: parent.width
+                                spacing: 6
+                                Text {
+                                    text: connRow.modelData.ready ? "✓" : "○"
+                                    color: connRow.modelData.ready ? "#3a9d5f" : Theme.warn
+                                    font.pixelSize: Theme.fsSmall
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: connRow.modelData.ready
+                                          ? connRow.modelData.label + "：就绪"
+                                          : connRow.modelData.label + "：" + connRow.modelData.reason
+                                    color: connRow.modelData.ready ? Theme.textSecondary : Theme.textPrimary
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.fsSmall
+                                    wrapMode: Text.Wrap
+                                }
+                                Text {
+                                    visible: !connRow.modelData.ready && hoverArea.containsMouse
+                                    text: "去设置 →"
+                                    color: Theme.accent
+                                    font.pixelSize: Theme.fsSmall
+                                }
+                            }
                         }
                         MouseArea {
                             id: hoverArea
@@ -117,28 +130,38 @@ Item {
                     }
                 }
                 // 首书一行：书架空着时点亮（与连接缺项并列，同为「开写前的一件事」）
-                RowLayout {
+                Item {
                     visible: shelf.items.length === 0
                     Layout.fillWidth: true
-                    spacing: 6
-                    Text {
-                        text: "○"
-                        color: Theme.warn
-                        font.pixelSize: Theme.fsSmall
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: "第一本书：还没有书——新建一本，或先看 5 分钟演示"
-                        color: Theme.textPrimary
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.fsSmall
-                        wrapMode: Text.Wrap
-                    }
-                    Text {
-                        text: "新建 →"
-                        color: Theme.accent
-                        font.pixelSize: Theme.fsSmall
-                        visible: newFirstHover.containsMouse
+                    height: visible ? firstCol.implicitHeight : 0
+                    Column {
+                        id: firstCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        spacing: 2
+                        RowLayout {
+                            width: parent.width
+                            spacing: 6
+                            Text {
+                                text: "○"
+                                color: Theme.warn
+                                font.pixelSize: Theme.fsSmall
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: "第一本书：还没有书——新建一本，或先看 5 分钟演示"
+                                color: Theme.textPrimary
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.fsSmall
+                                wrapMode: Text.Wrap
+                            }
+                            Text {
+                                text: "新建 →"
+                                color: Theme.accent
+                                font.pixelSize: Theme.fsSmall
+                                visible: newFirstHover.containsMouse
+                            }
+                        }
                     }
                     MouseArea {
                         id: newFirstHover

@@ -2066,7 +2066,9 @@ class Bridge(QObject):
         if os.path.isdir(path):
             try:
                 marked = bool(st.load_state(path).get("demo"))
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                # WP-13：吞掉判定异常但必须留日志——「按真书处理」是有后果的决定
+                logger.warning("示例书 demo 旗判定失败（%s）——按真书处理，不覆盖", e)
                 marked = False
             if not marked:
                 self.toast.emit("warn", f"已有一本自己的《{name}》——示例书绝不覆盖真书；"

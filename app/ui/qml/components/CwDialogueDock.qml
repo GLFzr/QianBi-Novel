@@ -456,7 +456,7 @@ Rectangle {
                                     color: Theme.info
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.fsSmall
-                                    font.bold: true
+                                    font.weight: Font.DemiBold
                                 }
                                 Text {
                                     visible: !softCard.editMode
