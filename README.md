@@ -404,7 +404,7 @@ python -m venv .venv
 ```bash
 # 离线单测（无需 API Key，约 25 秒）
 .venv/Scripts/python -m pytest tests/unit -q --tb=no -p no:cacheprovider
-# → 收集 1423 项单测（2026-09-29 实测 --collect-only 口径，命令即口径；
+# → 收集 1516 项单测（2026-09-30 实测 --collect-only 口径，命令即口径；
 #   scripts/check_docs.py 会实跑复核，数字腐烂即红）
 
 # 离线探针舰队：真实 Bridge + QML 无头驱动，覆盖闸门/锁定/反哺/接力/导入/导出/更新等链路
