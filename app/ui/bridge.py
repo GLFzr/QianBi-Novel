@@ -4869,7 +4869,9 @@ class Bridge(QObject):
             auto_fix[str(num)] = used + 1
             self._cw_save_state(state)
             self.cwReportChanged.emit()
-            self.toast.emit("info", f"主 Agent 判定第 {num} 章需调整，已自动派写作 Agent 改写")
+            # F2：toast 说清落稿动作与复检下一步——不再虚报「已改写完成」
+            self.toast.emit("info", f"主 Agent 判定第 {num} 章需调整，已自动派写作 Agent 改写（撰写模式）"
+                                    "——产稿后在对话区点「提取正文到编辑器」落稿，改完再点「确定」复检")
             QTimer.singleShot(0, lambda n=num, d=directive, ts=cw["report"]["ts"]:
                               self._dispatch_cw_rewrite(n, d, report_ts=ts))
             return
@@ -4920,7 +4922,9 @@ class Bridge(QObject):
         state = self._cw.load()
         co_dialogue.transcript_append(state, st.STAGE_CW_PROSE, "user", text)
         self._cw_save_state(state)
-        self._spawn_cw_dialogue(text, st.STAGE_CW_PROSE, focus_chapter=num)
+        # F2：改写派单必须走撰写模式——讨论模式禁产正文 + 回复 320 字截断，
+        # 结构上产不出改写稿；compose 才挂 <<<正文>>> 契约并走写作槽
+        self._spawn_cw_dialogue(text, st.STAGE_CW_PROSE, focus_chapter=num, mode="compose")
 
     @Slot()
     @_guarded

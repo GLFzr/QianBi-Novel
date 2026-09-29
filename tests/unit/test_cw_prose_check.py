@@ -145,8 +145,9 @@ class _DispatchSelf:
     def _get_cw_stage_key(self):
         return st.STAGE_CW_PROSE
 
-    def _spawn_cw_dialogue(self, text, stage, focus_chapter=0):
-        self.spawned.append((text, focus_chapter))
+    def _spawn_cw_dialogue(self, text, stage, focus_chapter=0, mode="discuss"):
+        # F2：显式捕获 mode——旧桩 (*args) 式签名吞掉 mode，正是 F2 逃过测试的原因
+        self.spawned.append((text, stage, focus_chapter, mode))
 
 
 def _seed_report(proj, ts="08-31 20:00", text="- 结论：需调整（测试）\n- 【改写指令】把开头改紧凑。"):
@@ -162,6 +163,7 @@ def test_dispatch_consumed_blocks_second_run(tmp_path):
     bmod.Bridge._dispatch_cw_rewrite(fs, 2, "把开头改紧凑。", report_ts="08-31 20:00")
     assert len(fs.spawned) == 1
     assert "（主 Agent 派单）" in fs.spawned[0][0]
+    assert fs.spawned[0][3] == "compose"    # F2：派单必须走撰写模式
     rep = st.ensure_cw(st.load_state(proj)).get("report", {})
     assert rep.get("consumed") is True
     # 第二次进入（自动链重入 / 手动重点）→ 拒绝，不再 spawn

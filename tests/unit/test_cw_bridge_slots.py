@@ -66,3 +66,54 @@ def test_f1_error_lights_escape(tmp_path):
     bmod.Bridge._on_cw_supervisor_error(fs, "review 槽 401")
     assert fs._cw_supervisor_failed is True
     assert any("跳过比对" in str(c) for c in fs.toast.calls)
+
+
+# ---------- F2：改写派单走撰写模式（compose） ----------
+
+class _DispatchSelfMode:
+    """_dispatch_cw_rewrite 的轻量 self（捕获 spawn 的 mode 形参）"""
+
+    def __init__(self, proj):
+        os.makedirs(os.path.join(str(proj), "正文"), exist_ok=True)
+        os.makedirs(os.path.join(str(proj), "大纲"), exist_ok=True)
+        with open(os.path.join(str(proj), "大纲", "细纲_第002章.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("核心事件：乙\n故事内容：略。")
+        st.save_state(str(proj), {"current_chapter": 2, "total_chapters": 10})
+        self.proj = str(proj)
+        self._cw = co_writing.CoWriting(self.proj)
+        self._cw_worker = None               # worker 已释放路径（不触发 QTimer 重试）
+        self.toast = _Sig()
+        self.cwReportChanged = _Sig()
+        self.spawned = []
+
+    def _cw_save_state(self, state):
+        st.save_state(self.proj, state)
+
+    def _get_cw_mode(self):
+        return "cw"
+
+    def _get_cw_stage_key(self):
+        return st.STAGE_CW_PROSE
+
+    def _spawn_cw_dialogue(self, text, stage, focus_chapter=0, mode="discuss"):
+        self.spawned.append((text, stage, focus_chapter, mode))
+
+
+def test_f2_dispatch_sends_compose_mode(tmp_path):
+    """F2 护栏：自动派单必须 compose（prompt 挂 <<<正文>>> 契约、不受 320 字截断）"""
+    from app.prompts import co_writing as cp
+
+    fs = _DispatchSelfMode(tmp_path / "f2")
+    _state = st.load_state(fs.proj)
+    st.ensure_cw(_state)["report"] = {
+        "ts": "08-31 20:00", "num": 2,
+        "text": "- 结论：需调整\n- 【改写指令】把开头改紧凑。"}
+    st.save_state(fs.proj, _state)
+    bmod.Bridge._dispatch_cw_rewrite(fs, 2, "把开头改紧凑。", report_ts="08-31 20:00")
+    assert len(fs.spawned) == 1
+    assert fs.spawned[0][3] == "compose", \
+        "改写派单走了 discuss：禁产正文+截断，结构上产不出改写稿"
+    # compose 在 cw_prose 阶段挂正文提取契约，不含讨论禁产令
+    block = cp.mode_block_for("cw_prose", "compose", "改写")
+    assert "<<<正文>>>" in block and "禁止展开" not in block
