@@ -34,3 +34,11 @@ def test_trim_over_deletion_guard_uses_low_ok():
     # 压缩结果日志必须区分「达标」与「低于下限带」（旧版把 45 字报成"达标"）
     assert 'f"压缩后 {actual} 字，达标"' in src
     assert "低于下限带" in src
+
+
+def test_deslop_rewrite_min_length_guard():
+    """变异守护：去味改写采纳必须有长度骤减守卫（max(300, 原稿×50%)）。"""
+    src = open(STAGES_SRC, encoding="utf-8").read()
+    assert "_min_keep = max(300, int(len(pre_round_prose) * 0.5))" in src, (
+        "去味改写采纳点缺长度骤减守卫——qwen 实测把 2239 字换成 35 字被直接收货")
+    assert "改写稿长度骤减" in src

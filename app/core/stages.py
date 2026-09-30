@@ -2264,6 +2264,26 @@ class _MicroCycle:
                     self.blocking, self.advisory = gates.scan_deslop(self.prose, proj=proj)
                     gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
                     continue
+            # 0.23 二测阻断修复：改写稿长度骤减守卫（与 bridge 修复稿健全性守卫同哲学）——
+            # qwen 去味改写把 2239 字换成 35 字被直接采纳（原守卫只查非空）。改写稿
+            # < max(300, 原稿×50%) = 毁稿式重写：拒绝采纳回退本轮（烧轮次，不另起重试）。
+            _min_keep = max(300, int(len(pre_round_prose) * 0.5))
+            if rewritten.strip() and len(rewritten) < _min_keep:
+                if _session_usable(session):
+                    session.rollback_to(t_round)
+                try:
+                    from .volume_session import record_event as _rec
+                    _rec(proj, "rewrite_retry", ch=int(num), round=rounds, new_must=0)
+                except Exception:  # noqa: BLE001
+                    pass
+                ctx.log("warn", f"第 {num} 章 改写稿长度骤减（{len(pre_round_prose)}→"
+                                f"{len(rewritten)} 字，低于保全下限 {_min_keep}），"
+                                f"拒绝采纳回退本轮（剩余轮次 {max_deslop_rounds - rounds}）")
+                _round_tics = list(dict.fromkeys(
+                    _round_tics + _high_freq_new_trigrams(pre_round_prose, rewritten)))
+                self.blocking, self.advisory = gates.scan_deslop(self.prose, proj=proj)
+                gr.blocking_findings, gr.advisory_findings = self.blocking, self.advisory
+                continue
             if rewritten.strip():
                 self.prose = rewritten
                 _round_tics = list(dict.fromkeys(
