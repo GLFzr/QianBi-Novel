@@ -2100,15 +2100,29 @@ class _MicroCycle:
                 else:
                     self.prose = rewritten
                     low_ok, high_ok, actual = new_low, new_high, new_actual
-                if not high_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
-                    # 压缩过度删减（<60%）且原稿未严重超标（≤150%）→ 回退原稿，防章节被压残
+                if not low_ok and actual < chapter_words * 0.6 and pre_actual <= chapter_words * 1.5:
+                    # 压缩过度删减（低于下限带且 <60% 目标）且原稿未严重超标（≤150%）→
+                    # 回退原稿，防章节被压残。0.23 二测实弹：qwen span 压缩把 2572 字压到
+                    # 45 字——旧条件 `not high_ok` 恒假（high_ok 语义=未超上限，压残稿
+                    # 必然"未超上限"），守卫从未生效，压残稿直接被"达标"收货。
                     self.prose, actual = pre_prose, pre_actual
+                    low_ok, high_ok, _ = gates.check_word_bounds(
+                        self.prose, chapter_words, tolerance)
                     if _session_usable(session):
                         session.rollback_to(t_trim)   # 压缩稿被否决 → 历史截断回压缩前
-                    ctx.log("warn", f"压缩过度删减（{actual} < 60% 目标），已回退原稿（{pre_actual} 字）")
+                    ctx.log("warn", f"压缩过度删减（{actual} 字低于下限带且 <60% 目标），"
+                                    f"已回退原稿（{pre_actual} 字），打标 trim_over 交观测")
+                    try:
+                        from .volume_session import record_event as _rec
+                        _rec(proj, "trim_over", ch=int(num), actual=int(actual))
+                    except Exception:  # noqa: BLE001
+                        pass
                     break   # 回退后再压只会重蹈：结束压缩循环，打标交人工/观测
-                if high_ok:
+                if high_ok and low_ok:
                     ctx.log("ok", f"压缩后 {actual} 字，达标")
+                elif not low_ok:
+                    ctx.log("warn", f"压缩后 {actual} 字，低于下限带（目标 {chapter_words} "
+                                    f"×{1 - tolerance:.0%}），不判达标")
                 else:
                     try:
                         from .volume_session import record_event as _rec

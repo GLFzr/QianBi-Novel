@@ -25,15 +25,19 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ["QIANBI_TEST_COST_STACK"] = "1"
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(_ROOT)
-os.environ["QIANBI_CONFIG_DIR"] = os.path.join(_ROOT, "tests_output", "_phase1_cfg")
+# 二测参数化：QIANBI_TEST_PROJ / QIANBI_TEST_CFG_DIR / QIANBI_TEST_BASE / QIANBI_TEST_MODEL
+os.environ.setdefault("QIANBI_CONFIG_DIR",
+                      os.environ.get("QIANBI_TEST_CFG_DIR")
+                      or os.path.join(_ROOT, "tests_output", "_phase1_cfg"))
 sys.path.insert(0, _ROOT)
 
-PROJ = os.path.join(_ROOT, "tests_output", "or_长测_改命笔记")
+PROJ = os.environ.get("QIANBI_TEST_PROJ") or os.path.join(
+    _ROOT, "tests_output", "or_长测_改命笔记")
 RESULTS = os.path.join(PROJ, "_phase1_results.jsonl")
 DRIVELOG = os.path.join(PROJ, "_phase1_drive.log")
-CONN_ID = "or-stealth"
-MODEL = "stealth/space-bunny-alpha"
-BASE_URL = "https://openrouter.ai/api/v1"
+CONN_ID = os.environ.get("QIANBI_TEST_CONN_ID", "or-stealth")
+MODEL = os.environ.get("QIANBI_TEST_MODEL", "stealth/space-bunny-alpha")
+BASE_URL = os.environ.get("QIANBI_TEST_BASE", "https://openrouter.ai/api/v1")
 
 _t0 = time.time()
 
@@ -448,6 +452,12 @@ class Driver:
         self.sleep(1.0)
         snap = self.snapshot()
         if 1 not in snap["locked"]:
+            # 字数闸门弹出确认框（lockBlocked）——作者点「仍要锁定」＝强锁留痕
+            log("字数闸门拦截——按作者决断走 forceConfirmChapterLocked（强锁留痕）")
+            self.bridge.forceConfirmChapterLocked()
+        self.sleep(1.0)
+        snap = self.snapshot()
+        if 1 not in snap["locked"]:
             die(f"第1章仍未锁定：locked={snap['locked']}")
         state = self.cw.load()
         locked_meta = (st.ensure_cw(state).get("locked") or {}).get("1") or {}
@@ -479,11 +489,18 @@ class Driver:
         self.sleep(1.0)
         snap = self.snapshot()
         if 2 not in snap["locked"]:
+            # 字数闸门弹出确认框——作者点「仍要锁定」＝强锁留痕
+            log("字数闸门拦截——按作者决断走 forceConfirmChapterLocked（强锁留痕）")
+            self.bridge.forceConfirmChapterLocked()
+        self.sleep(1.0)
+        snap = self.snapshot()
+        if 2 not in snap["locked"]:
             die(f"第2章未锁定：locked={snap['locked']}")
         log("第2章已锁定（F1 跳过比对出口，强锁留痕）✓")
         # D4 注入验证：状态卡应含写作规约段
         from app.core import state_card
-        card = state_card.build_state_card(PROJ, 2)
+        from app import project as proj_mod
+        card = state_card.build_state_card(PROJ, 2, proj_io=proj_mod)
         has_rules = "写作规约" in card if isinstance(card, str) else None
         record("prose2_extra", rule_added=bool(r), state_card_has_rules=has_rules)
 
