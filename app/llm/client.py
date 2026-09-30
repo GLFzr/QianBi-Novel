@@ -678,12 +678,36 @@ class LLMClient:
             # v0.18.2 起出厂预设只预置提供方：空模型不该变成 API 400 的一堆英文
             raise LLMError("这条连接还没选模型——到 设置 · 连接与模型 里为它选一个（下拉候选或「拉取」）")
         self.last_prompt = prompt
+        return self._chat_nonstream(self._build_messages(prompt, system),
+                                    temperature=temperature, phase=phase,
+                                    log_prompt=prompt, log_system=system)
+
+    def chat_messages(self, messages: list, temperature: float = None,
+                      *, phase: str = "") -> str:
+        """多轮消息**非流式**直通（chat_turn 的非流式对偶，C44）。
+
+        messages 原样作为请求体；诊断字段 last_prompt 取最后一条 user 轮。
+        重试/退避/降级/用量埋点语义与 chat() 完全一致，只是不走流式。
+        """
+        last_user = ""
+        for _m in messages:
+            if isinstance(_m, dict) and _m.get("role") == "user":
+                last_user = _m.get("content")
+        self.last_prompt = last_user
+        return self._chat_nonstream(list(messages), temperature=temperature,
+                                    phase=phase, log_prompt=last_user, log_system="")
+
+    def _chat_nonstream(self, messages: list, *, temperature, phase,
+                        log_prompt: str, log_system: str) -> str:
+        """非流式内核（chat / chat_messages 共用）：messages 原样作为请求体。
+
+        请求/重试/退避/降级/用量埋点即原 chat 主体（逐字保留）。
+        """
         self.last_error = ""
         self.last_phase = phase or ""
         self.last_degraded = False
         self.last_finish_reason = ""
         headers = self._headers()
-        messages = self._build_messages(prompt, system)
         payload = self._build_payload(messages, stream=False, phase=phase,
                                       temperature=temperature)
         t0 = time.monotonic()
@@ -695,8 +719,8 @@ class LLMClient:
                 return
             _dl_done["n"] = attempt + 1
             dialogue_log.record_chat(
-                client=self, phase=phase, outcome=outcome, prompt=prompt,
-                system=system, reply=reply, usage=usage, error=err, note=note,
+                client=self, phase=phase, outcome=outcome, prompt=log_prompt,
+                system=log_system, reply=reply, usage=usage, error=err, note=note,
                 attempt=attempt + 1, degraded=self.last_degraded,
                 latency=time.monotonic() - t0, stream=False)
 
@@ -812,6 +836,13 @@ class LLMClient:
         PipelineStopped 属 core 的语义，本层只置 last_aborted 并回已收增量，
         由调用方决定怎么中止。abort=None 时行为与改动前逐字一致。
         """
+        if not getattr(self, "stream_enabled", True):
+            # C44：非流式连接——模型不支持流式（长 prompt 流式只会拿到空流），
+            # 走 chat() 全文路径；on_chunk 在全文到手后整段补发一次。
+            return self._nonstream_fallback(
+                lambda: self.chat(prompt, system=system, temperature=temperature,
+                                  phase=phase),
+                on_chunk, abort)
         messages = self._build_messages(prompt, system)
         return self._stream_messages(messages, on_chunk=on_chunk,
                                      on_reasoning=on_reasoning, phase=phase,
@@ -825,9 +856,30 @@ class LLMClient:
         只是不再从 prompt+system 构造 messages。诊断字段 last_prompt 取
         messages 中最后一条 user 轮内容。
         """
+        if not getattr(self, "stream_enabled", True):
+            # C44：非流式连接——走 chat_messages() 全文路径（章会话/卷会话直通）
+            return self._nonstream_fallback(
+                lambda: self.chat_messages(list(messages), temperature=temperature,
+                                           phase=phase),
+                on_chunk, abort)
         return self._stream_messages(list(messages), on_chunk=on_chunk,
                                      on_reasoning=on_reasoning, phase=phase,
                                      temperature=temperature, abort=abort)
+
+    def _nonstream_fallback(self, call, on_chunk, abort) -> str:
+        """C44：非流式连接的统一兜底（chat_stream / chat_turn 入口路由到此）。
+
+        一次非流式请求拿全文；on_chunk 在全文到手后**整段补发一次**（流式消费方
+        语义不变，从多增量变一次到位）；abort 无法打断在途 HTTP 调用，返回后
+        补查一次——命中即置 last_aborted 交调用方丢弃。
+        """
+        self.last_aborted = False
+        text = call()
+        if abort is not None and abort():
+            self.last_aborted = True
+        if callable(on_chunk):
+            on_chunk(text)
+        return text
 
     def _stream_messages(self, messages: list, *, on_chunk=None, on_reasoning=None,
                          phase: str = "", temperature=None, abort=None) -> str:

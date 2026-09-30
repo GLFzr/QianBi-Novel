@@ -171,10 +171,11 @@ def test_default_on():
 
 def test_client_chokepoint_records_every_path():
     """变异「把 client 里的 dialogue_log 记录摘掉」在此红：
-    chat() 与 _stream_messages() 两条咽喉都必须引用记录器。"""
+    非流式内核 _chat_nonstream()（chat / chat_messages 共用）与流式内核
+    _stream_messages()（chat_stream / chat_turn 共用）两条咽喉都必须引用记录器。"""
     src = open(os.path.join(ROOT, "app", "llm", "client.py"), encoding="utf-8").read()
     tree = ast.parse(src)
-    for fname in ("chat", "_stream_messages"):
+    for fname in ("_chat_nonstream", "_stream_messages"):
         fn = next(f for f in ast.walk(tree)
                   if isinstance(f, ast.FunctionDef) and f.name == fname)
         body = ast.get_source_segment(src, fn) or ""

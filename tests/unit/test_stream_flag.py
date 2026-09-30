@@ -117,3 +117,70 @@ def test_stream_off_records_call():
     ctx = _FakeCtx(fc)
     stages._stream(ctx, "review", "提示词", phase="review")
     assert ctx.gen_trace and ctx.gen_trace[-1]["phase"] == "review"
+
+
+# ---- C44 收口：路由下沉到客户端本体（覆盖共写/审校等 chat_stream 直调点）----
+
+def _real_client(stream_enabled):
+    c = LLMClient.from_connection({"base_url": "https://x", "model": "m",
+                                   "stream": stream_enabled})
+    return c
+
+
+def test_client_chat_stream_routes_to_chat_when_disabled():
+    c = _real_client(False)
+    calls = {"chat": 0, "stream_kernel": 0}
+    c.chat = lambda prompt, system="", temperature=None, phase="": (
+        calls.__setitem__("chat", calls["chat"] + 1) or "全文")
+    c._stream_messages = lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("非流式连接不得进流式内核"))
+    chunks = []
+    text = c.chat_stream("提示词", on_chunk=chunks.append, phase="prose")
+    assert text == "全文" and calls["chat"] == 1
+    assert chunks == ["全文"]
+
+
+def test_client_chat_turn_routes_to_chat_messages_when_disabled():
+    c = _real_client(False)
+    seen = {}
+    c.chat_messages = lambda messages, temperature=None, phase="": (
+        seen.update(messages=list(messages), phase=phase) or "会话全文")
+    c._stream_messages = lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("非流式连接不得进流式内核"))
+    msgs = [{"role": "system", "content": "s"},
+            {"role": "user", "content": "第一轮"},
+            {"role": "assistant", "content": "答"},
+            {"role": "user", "content": "第二轮"}]
+    text = c.chat_turn(msgs, on_chunk=lambda t: seen.update(chunk=t))
+    assert text == "会话全文"
+    assert seen["messages"] == msgs and seen["phase"] == ""
+    assert seen["chunk"] == "会话全文"
+
+
+def test_client_stream_enabled_still_streams():
+    c = _real_client(True)
+    c.chat = lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("流式连接不得走 chat 兜底"))
+    c._stream_messages = lambda *a, **k: "流式全文"
+    assert c.chat_stream("提示词") == "流式全文"
+    assert c.chat_turn([{"role": "user", "content": "x"}]) == "流式全文"
+
+
+def test_client_fallback_sets_last_aborted():
+    c = _real_client(False)
+    c.chat = lambda *a, **k: "全文"
+    c.chat_stream("提示词", abort=lambda: True)
+    assert c.last_aborted is True
+    c2 = _real_client(False)
+    c2.chat = lambda *a, **k: "全文"
+    c2.chat_stream("提示词")
+    assert c2.last_aborted is False
+
+
+def test_chat_messages_last_prompt_from_user_turn():
+    c = _real_client(False)
+    c._chat_nonstream = lambda messages, temperature=None, phase="", **k: "ok"
+    c.chat_messages([{"role": "user", "content": "第一轮"},
+                     {"role": "assistant", "content": "答"},
+                     {"role": "user", "content": "第二轮"}])
+    assert c.last_prompt == "第二轮"
