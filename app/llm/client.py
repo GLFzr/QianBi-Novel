@@ -697,6 +697,41 @@ class LLMClient:
         return self._chat_nonstream(list(messages), temperature=temperature,
                                     phase=phase, log_prompt=last_user, log_system="")
 
+    def _post_nonstream(self, payload: dict, headers: dict):
+        """非流式 POST，带**总时钟死线**（0.23.0 实测阻断修复 #3）。
+
+        httpx 的 read timeout 是空闲超时：OpenRouter 非流式长调用会周期性下发
+        keep-alive 空白填充，每次填充都重置空闲计时 → timeout=900 形同虚设，
+        调用可无限悬挂（实测 36 分钟零完成）。此处用守护线程 + join(总死线) 强制
+        收口：超线即放弃该响应（线程 daemon 化，socket 由网关收尾）按可重试超时
+        处理。死线 = timeout 秒（与流式路径的用户等待预期一致）。
+        """
+        import threading
+        out = {"resp": None, "err": None}
+
+        def _do():
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    out["resp"] = client.post(self._chat_url(), json=payload,
+                                              headers=headers)
+            except Exception as e:  # noqa: BLE001
+                out["err"] = e
+
+        th = threading.Thread(target=_do, daemon=True)
+        th.start()
+        th.join(max(1.0, float(self.timeout)))
+        if th.is_alive():
+            # 抛 ReadTimeout（而非自定义 LLMError）——让既有 timeout 分支统一
+            # 接住：_dl("timeout") 台账 + 可重试 + 退避全链复用。
+            logger.warning(
+                "非流式调用超过总时限（%ss 无完整响应）——网关 keep-alive 填充"
+                "会不断重置空闲超时，按总时钟强制收口", self.timeout)
+            raise httpx.ReadTimeout(
+                f"non-stream total deadline {self.timeout}s exceeded")
+        if out["err"] is not None:
+            raise out["err"]
+        return out["resp"]
+
     def _chat_nonstream(self, messages: list, *, temperature, phase,
                         log_prompt: str, log_system: str) -> str:
         """非流式内核（chat / chat_messages 共用）：messages 原样作为请求体。
@@ -727,8 +762,7 @@ class LLMClient:
         for attempt in range(self.max_retries + 1):
             last_retry_after = None   # Retry-After 只对引发本次等待的那一发生效
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    resp = client.post(self._chat_url(), json=payload, headers=headers)
+                resp = self._post_nonstream(payload, headers)
                 if resp.status_code != 200:
                     err = LLMError(
                         f"API 返回 {resp.status_code}: {resp.text[:500]}",
