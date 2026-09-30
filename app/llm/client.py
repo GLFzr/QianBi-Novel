@@ -753,7 +753,24 @@ class LLMClient:
                         last_err = err
                         _dl(f"http_{resp.status_code}", err=str(err), note="downgraded")
                 else:
-                    data = resp.json()
+                    try:
+                        data = resp.json()
+                    except json.JSONDecodeError as e:
+                        # 0.23.0 实测阻断修复：网关偶发 200 + 畸形 body（长非流式
+                        # 调用两连发，JSON 在中途断裂）。旧行为＝裸抛 JSONDecodeError，
+                        # 绕过重试/对话台账/用量记账三套管线。改按可重试处理并留痕，
+                        # body 头 300 字节进错误现场（SSE 误发/截断由此可辨）。
+                        head = resp.text[:300].replace("\n", "\\n")
+                        last_err = LLMError(
+                            f"API 响应格式异常（JSON 解析失败：{e}）；body头300字符={head}",
+                            retryable=True)
+                        _dl("bad_json", err=str(last_err), note="retryable")
+                        if attempt < self.max_retries:
+                            self._retry_wait(attempt, None, last_err)
+                            continue
+                        self.last_error = str(last_err)
+                        self.last_latency = time.monotonic() - t0
+                        raise last_err
                     content = ""
                     try:
                         content = data["choices"][0]["message"]["content"] or ""
