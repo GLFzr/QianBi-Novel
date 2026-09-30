@@ -32,7 +32,7 @@ class _FakeCtx:
         self.stopped = False
         self.chunks = []
         self.router = _FakeRouter(client)
-        self._trace_log = []
+        self.gen_trace = []
 
     def step(self, num, step_const):
         pass
@@ -47,7 +47,7 @@ class _FakeCtx:
         pass
 
     def _trace(self):
-        return self._trace_log
+        return self.gen_trace
 
 
 class _FakeClient:
@@ -116,4 +116,4 @@ def test_stream_off_records_call():
     fc = _FakeClient(stream_enabled=False)
     ctx = _FakeCtx(fc)
     stages._stream(ctx, "review", "提示词")
-    assert ctx._trace_log and ctx._trace_log[-1]["phase"] == "review"
+    assert ctx.gen_trace and ctx.gen_trace[-1]["phase"] == "review"
