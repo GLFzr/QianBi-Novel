@@ -87,13 +87,13 @@ def main():
         "connections": [
             {"id": "t-write", "name": f"{MODEL}（写作槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
-             "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": 900,
+             "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": int(os.environ.get("QIANBI_TEST_TIMEOUT", "900")),
              "thinking": THINKING, "reasoning_effort": EFFORT,
              # C44：连接级流式开关（0.23.0 实测：stealth 系不支持流式 → QIANBI_TEST_STREAM=false）
              "stream": os.environ.get("QIANBI_TEST_STREAM", "true").lower() != "false"},
             {"id": "t-helper", "name": f"{MODEL}（辅助槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
-             "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": 900,
+             "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": int(os.environ.get("QIANBI_TEST_TIMEOUT", "900")),
              "thinking": THINKING, "reasoning_effort": EFFORT,
              "stream": os.environ.get("QIANBI_TEST_STREAM", "true").lower() != "false"},
         ],
@@ -105,6 +105,9 @@ def main():
                 "backoff_base": 2.0},
         "writing": {"chapter_word_target": CHAPTER_WORDS, "default_genre": "",
                     "default_platform": "番茄",
+                    # 0.23.0 实测适配：V7 补尾式扩写——只续缺口(400-600字)而非全量重写，
+                    # 输出∝缺口，躲开本网关「非流式长生成必悬挂」的墙
+                    "enrich_tail": True,
                     # QIANBI_TEST_COST_STACK=1：开 0.19.5 全栈（卷会话/S4 冻结/台账补丁/审校前置）——
                     # T3 判据（命中 ≥90%）按出货架构预注册；缺省不设时跑基线架构（v1 口径）
                     **({"volume_session": True, "s4_static_freeze": True,
