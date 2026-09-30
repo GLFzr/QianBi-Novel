@@ -12,6 +12,13 @@ import os
 import sys
 import time
 
+# 0.23.0 实测环境：剥死代理（本机 127.0.0.1:7897 已死，httpx trust_env 会撞上）
+for _k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy",
+           "https_proxy", "all_proxy"):
+    os.environ.pop(_k, None)
+os.environ["NO_PROXY"] = "*"
+os.environ["no_proxy"] = "*"
+
 if os.name == "nt":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -21,7 +28,7 @@ if os.name == "nt":
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.getcwd())
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 
 from app import project
@@ -81,16 +88,21 @@ def main():
             {"id": "t-write", "name": f"{MODEL}（写作槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
              "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": 900,
-             "thinking": THINKING, "reasoning_effort": EFFORT},
+             "thinking": THINKING, "reasoning_effort": EFFORT,
+             # C44：连接级流式开关（0.23.0 实测：stealth 系不支持流式 → QIANBI_TEST_STREAM=false）
+             "stream": os.environ.get("QIANBI_TEST_STREAM", "true").lower() != "false"},
             {"id": "t-helper", "name": f"{MODEL}（辅助槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
              "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": 900,
-             "thinking": THINKING, "reasoning_effort": EFFORT},
+             "thinking": THINKING, "reasoning_effort": EFFORT,
+             "stream": os.environ.get("QIANBI_TEST_STREAM", "true").lower() != "false"},
         ],
         "slots": {"writing": "t-write", "helper": "t-helper", "review": "t-helper"},
         "gates": {"strategy": "mark_continue", "deslop_max_rounds": 2,
                   "word_tolerance": 0.1, "review_enabled": True, "review_max_rounds": 1},
-        "llm": {"max_retries": 1, "backoff_base": 2.0},
+        # 0.23.0 实测：stealth 网关间歇空响应/坏 JSON，max_retries 1→2 提升自愈率
+        "llm": {"max_retries": int(os.environ.get("QIANBI_TEST_RETRIES", "1")),
+                "backoff_base": 2.0},
         "writing": {"chapter_word_target": CHAPTER_WORDS, "default_genre": "",
                     "default_platform": "番茄",
                     # QIANBI_TEST_COST_STACK=1：开 0.19.5 全栈（卷会话/S4 冻结/台账补丁/审校前置）——
@@ -124,10 +136,18 @@ def main():
         fail["msg"] = msg
         mark(f"[e2e] 流水线失败: {msg}")
 
+    # 0.23.0 实测处置约定：预算宪法熔断＝预注册判据的**预期命中**（§5.3 超限必熔断）。
+    # 长跑驱动扮演「已阅报告的值班操作员」：记录熔断 → 1s 后点「继续」，让本轮
+    # 继续跑完 4 章口径；熔断事实已落 anomalies/session_events，评分照实扣。
+    def on_auto_paused(reason):
+        mark(f"[budget] 熔断命中并自动处置（模拟点「继续」）: {reason}")
+        QTimer.singleShot(1000, orch.resume)
+
     orch = Orchestrator(proj, cfg)
     orch.sig_log.connect(on_log, Qt.DirectConnection)
     orch.sig_finished.connect(on_finished, Qt.DirectConnection)
     orch.sig_failed.connect(on_failed, Qt.DirectConnection)
+    orch.sig_auto_paused.connect(on_auto_paused, Qt.DirectConnection)
 
     t0 = time.monotonic()
     mark(f"[run] 启动流水线（{MODEL} thinking={THINKING} effort={EFFORT}）…")

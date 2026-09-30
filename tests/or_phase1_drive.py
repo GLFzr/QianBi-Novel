@@ -123,6 +123,29 @@ class Driver:
             die(f"等待超时：{desc}（{timeout:.0f}s 后仍在 busy）")
         return time.time() - t0
 
+    def wait_idle_soft(self, timeout: float, desc: str = "idle"):
+        """同 wait_idle，但超时不 die（M4 读改揣摩有节流，可能根本不触发）"""
+        t0 = time.time()
+        loop = QEventLoop()
+        timer = QTimer()
+        timer.setInterval(2000)
+
+        def check():
+            if not self.bridge._cw_busy:
+                if time.time() - t0 > 2:
+                    log(f"[wait] {desc} 完成（{time.time() - t0:.0f}s）")
+                loop.quit()
+
+        timer.timeout.connect(check)
+        timer.start()
+        killer = QTimer()
+        killer.setSingleShot(True)
+        killer.timeout.connect(loop.quit)
+        killer.start(int(timeout * 1000))
+        loop.exec()
+        timer.stop()
+        return time.time() - t0
+
     def sleep(self, sec: float):
         loop = QEventLoop()
         QTimer.singleShot(int(sec * 1000), loop.quit)
@@ -143,7 +166,8 @@ class Driver:
             tr[k] = len(v or [])
         outlines = [n for n, _p in project.list_outlines(PROJ)]
         chapters = [n for n, _t, _p in project.list_chapters(PROJ)]
-        locked = cw.get("locked") or {}
+        # 共写锁定真源 = 章节标注 locked 标记（project.set_chapter_locked）
+        locked = [n for n in chapters if project.is_chapter_locked(PROJ, n)]
         supervised = cw.get("supervised") or {}
         return {"stage": cw.get("stage"), "mode": cw.get("mode"),
                 "products": prods, "transcript_lens": tr,
@@ -323,25 +347,67 @@ class Driver:
         snap = self.snapshot()
         log(f"unit 完成后：stage={snap['stage']} outlines={snap['outlines']}")
 
+    def step_unitfix(self):
+        """校验拦截后的作者修复路径：按校验意见改细纲 → 复检 → 进正文"""
+        p = os.path.join(PROJ, "大纲", "细纲_第004章.md")
+        text = open(p, encoding="utf-8").read()
+        bad = "陈默找到前主人留下的三步纸条，获得首次尝试的操作框架。"
+        good = ("陈默找到一张来源未明、疑似与前主人有关的纸条，"
+                "获得首次尝试的操作框架。")
+        if bad in text:
+            open(p, "w", encoding="utf-8").write(text.replace(bad, good))
+            log("细纲_第004章 已按校验意见修改（纸条归属改为来源未明）")
+        else:
+            log("细纲_第004章 未见预期原句（可能已改过），跳过编辑直接复检")
+        self.bridge.validateCwOutlines()
+        self.wait_idle(1800, "细纲复检")
+        snap = self.snapshot()
+        log(f"unitfix 后：stage={snap['stage']} outlines={snap['outlines']}")
+        if snap["stage"] != st.STAGE_CW_PROSE:
+            state = self.cw.load()
+            tr = ((st.ensure_cw(state).get("transcript") or {})
+                  .get(st.STAGE_CW_UNIT) or [])
+            tail = (tr[-1] or {}).get("text", "") if tr else ""
+            die(f"复检后未进入正文阶段。校验尾部：{tail[:500]}")
+
     def step_prose1(self):
         # ⑤ 正文：第 1 章 草案 → 提取落稿 → supervisor 比对 → 确定锁定
+        # （真作者路径：字数不足先扩写一轮；比对需调整走 F2 自动改写）
         self.bridge.openChapter(1)
         self.sleep(0.5)
-        self.bridge.generateCwDraft()
-        self.wait_idle(3600, "第1章正文草案")
+        body = (self.bridge._chapter_text or "").strip()
+        if not body:
+            self.bridge.generateCwDraft()
+            self.wait_idle(3600, "第1章正文草案")
         self.bridge.proseToEditor()
-        self.sleep(0.5)
-        body = self.bridge._chapter_text or self.bridge._working_text
-        if not (body or "").strip():
+        self.wait_idle_soft(600, "保存后读改揣摩（M4）")
+        body = (self.bridge._chapter_text or self.bridge._working_text or "").strip()
+        if not body:
             die("第1章正文未落稿")
         log(f"第1章草稿 {len(body)} 字")
+        if len(body) < 1800:
+            log("字数低于 2000 目标带（±15%），按作者路径扩写一轮")
+            self.bridge.submitCwMessage(
+                "本章正文约%d字，低于目标2000字。请在保持现有情节、人物、"
+                "证据链与结尾钩子完全不变的前提下扩写到1950~2300字："
+                "补足场景肌理与人物反应，不要新增独立支线。" % len(body),
+                "compose")
+            self.wait_idle(3600, "第1章扩写")
+            self.bridge.proseToEditor()
+            self.wait_idle_soft(600, "扩写后读改揣摩")
+            body = (self.bridge._chapter_text or self.bridge._working_text or "").strip()
+            log(f"第1章扩写后 {len(body)} 字")
         self.bridge.confirmCwStage()   # 触发 supervisor 比对
         self.wait_idle(3600, "第1章衔接比对")
         state = self.cw.load()
         sup = (st.ensure_cw(state).get("supervised") or {})
         if str(1) not in sup:
-            # 比对结论=需调整时已自动派改写（F2）——等改写+复检
-            self.wait_idle(3600, "第1章自动改写")
+            # 比对结论=需调整时已自动派改写（F2）——等改写完成再落稿复检
+            self.wait_idle(3600, "第1章自动改写（F2）")
+            self.bridge.proseToEditor()
+            self.wait_idle_soft(600, "改写后读改揣摩")
+            self.bridge.confirmCwStage()
+            self.wait_idle(3600, "第1章复检")
             state = self.cw.load()
             sup = (st.ensure_cw(state).get("supervised") or {})
         if str(1) not in sup:
@@ -355,9 +421,44 @@ class Driver:
             die(f"第1章未锁定：locked={snap['locked']}")
         log("第1章已锁定 ✓")
 
+    def step_prose1b(self):
+        """第1章收口续：按报告手动定向改写一轮 → 复检；仍未收口走越权出口（留痕）"""
+        self.bridge.openChapter(1)
+        self.sleep(0.5)
+        state = self.cw.load()
+        if str(1) not in (st.ensure_cw(state).get("supervised") or {}):
+            self.bridge.submitCwMessage(
+                "主 Agent 复检提出三处衔接缺口，请定向改写本章（其余内容不动）："
+                "①交代编号透明袋的拆袋/转接与双方见证，弥合证物保管链；"
+                "②让陈默的翻页决定有明确动机转变（由「今天不翻」到行动的理由）；"
+                "③明确临时保管期限（18:00 前）内的行动安排，为下章返回复核留出时间锚点。",
+                "compose")
+            self.wait_idle(3600, "第1章定向改写")
+            self.bridge.proseToEditor()
+            self.wait_idle_soft(600, "定向改写后读改揣摩")
+            self.bridge.confirmCwStage()
+            self.wait_idle(3600, "第1章三比对")
+            state = self.cw.load()
+        sup = (st.ensure_cw(state).get("supervised") or {})
+        if str(1) in sup:
+            self.bridge.confirmCwStage()   # 已比对 → 锁定
+        else:
+            log("两轮比对仍需调整——按作者判断走「无视报告并锁定（留痕）」出口")
+            self.bridge.forceLockChapter()
+        self.sleep(1.0)
+        snap = self.snapshot()
+        if 1 not in snap["locked"]:
+            die(f"第1章仍未锁定：locked={snap['locked']}")
+        state = self.cw.load()
+        locked_meta = (st.ensure_cw(state).get("locked") or {}).get("1") or {}
+        log(f"第1章已锁定 ✓ locked_meta={json.dumps(locked_meta, ensure_ascii=False)[:200]}")
+
     def step_prose2(self):
-        # 第 2 章：F1 跳过比对出口 + 写作规约沉淀 + F2 改写派单（真模型走一遍）
+        # 第 2 章：F1 跳过比对出口 + 写作规约沉淀 + 反哺补跑（真模型走一遍）
         from app.core import writing_rules
+        # 上一轮驱动退出打断了第1章反哺 worker——CW-G6 补跑（force 越过新鲜度去重）
+        self.bridge._maybe_backflow(1, force=True)
+        self.wait_idle_soft(1800, "第1章反哺补跑")
         # D4 写作规约沉淀：把第 1 章作者反馈沉淀为持久规约（下章注入验证 2/2）
         r = writing_rules.add_rule(
             PROJ, "章节开头三段内必须出现与上一章结尾直接挂钩的具体动作或对话，不写环境铺垫。",
@@ -368,22 +469,62 @@ class Driver:
         self.bridge.generateCwDraft()
         self.wait_idle(3600, "第2章正文草案")
         self.bridge.proseToEditor()
-        self.sleep(0.5)
-        # F1 出口：不等 supervisor，直接走锁定路径
-        state = self.cw.load()
-        st.ensure_cw(state).setdefault("supervised", {})["2"] = "跳过比对(F1 实测)"
-        self.cw.save(state)
-        self.bridge.confirmCwStage()
+        self.wait_idle_soft(600, "第2章读改揣摩")
+        body = (self.bridge._chapter_text or self.bridge._working_text or "").strip()
+        if not body:
+            die("第2章正文未落稿")
+        log(f"第2章草稿 {len(body)} 字")
+        # F1 出口：不走比对，直接「跳过比对并锁定」（= forceLockChapter，强锁留痕）
+        self.bridge.forceLockChapter()
         self.sleep(1.0)
         snap = self.snapshot()
         if 2 not in snap["locked"]:
             die(f"第2章未锁定：locked={snap['locked']}")
-        log("第2章已锁定（F1 跳过比对出口）✓")
+        log("第2章已锁定（F1 跳过比对出口，强锁留痕）✓")
         # D4 注入验证：状态卡应含写作规约段
         from app.core import state_card
         card = state_card.build_state_card(PROJ, 2)
         has_rules = "写作规约" in card if isinstance(card, str) else None
         record("prose2_extra", rule_added=bool(r), state_card_has_rules=has_rules)
+
+    def _wait_backflowed(self, nums, timeout: float):
+        """反哺 worker 不走 _cw_busy——轮询 state['backflowed'] 落账为准"""
+        import time as _t
+        t0 = _t.time()
+        pending = set(nums)
+        while pending and _t.time() - t0 < timeout:
+            self.sleep(3.0)
+            state = self.cw.load()
+            done = set((state.get("backflowed") or {}).keys())
+            pending -= {str(n) for n in nums} & done
+            if not pending:
+                break
+        return not pending
+
+    def step_prose2b(self):
+        """收尾：补跑两章反哺（前两轮 worker 被驱动退出杀死）+ D4 状态卡注入验证"""
+        for n in (1, 2):
+            state = self.cw.load()
+            if str(n) in (state.get("backflowed") or {}):
+                log(f"第{n}章反哺已有落账，跳过")
+                continue
+            self.bridge._maybe_backflow(n, force=True)
+            ok = self._wait_backflowed([n], 1800)
+            log(f"第{n}章反哺：{'完成' if ok else '超时未落账'}")
+        # D4 注入验证：状态卡应含写作规约段（proj_io 参数注入，S6a 口径）
+        from app.core import state_card
+        from app import project as proj_mod
+        card = state_card.build_state_card(PROJ, 2, proj_io=proj_mod)
+        has_rules = "写作规约" in card if isinstance(card, str) else None
+        rules = None
+        try:
+            rules = json.load(open(os.path.join(PROJ, "追踪", "写作规约.json"),
+                                   encoding="utf-8")).get("rules")
+        except Exception:  # noqa: BLE001
+            pass
+        record("prose2_extra", state_card_has_rules=has_rules,
+               rules=rules, backflowed=(self.cw.load().get("backflowed") or {}))
+        log(f"状态卡含写作规约段：{has_rules}；规约条数：{len(rules or [])}")
 
     def step_status(self):
         snap = self.snapshot()
