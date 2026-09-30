@@ -354,6 +354,9 @@ class LLMClient:
         self.payload_defaults = dict(payload_defaults or {})
         # 预设阶段参数表 {phase: {param: value}}：整体替换、只读，换预设时由路由重绑
         self.stage_params = dict(stage_params or {})
+        # C44 连接级流式开关：部分模型（如 OpenRouter stealth 系）不支持流式——
+        # 长 prompt 流式请求返回空内容。False 时 stages._stream 走 chat() 非流式。
+        self.stream_enabled = True
         # 调用统计
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
@@ -374,7 +377,7 @@ class LLMClient:
                         backoff_base: float = 2.0, slot: str = "",
                         payload_defaults: dict = None,
                         stage_params: dict = None) -> "LLMClient":
-        return cls(
+        client = cls(
             base_url=conn.get("base_url", ""),
             api_key=conn.get("api_key", ""),
             model=conn.get("model", ""),
@@ -390,6 +393,9 @@ class LLMClient:
             stage_params=stage_params,
             user_id=conn.get("user_id", ""),
         )
+        # C44：连接级流式开关（连接 dict 键 "stream"，缺省 True=维持流式）
+        client.stream_enabled = bool(conn.get("stream", True))
+        return client
 
     def _record_usage(self, usage: dict, latency: float, phase: str = "",
                       status: str = ""):

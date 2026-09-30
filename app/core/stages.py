@@ -409,6 +409,16 @@ def _stream(ctx, slot: str, prompt: str, label: str = "", *, phase: str = "") ->
     # 干净章最近的 checkpoint 在正文落盘之后，中间还白烧一轮多票审校。
     # 旧 ctx 桩（测试 FakeCtx）无此属性 → 恒 False，行为与改动前一致。
     _abort = (lambda: bool(getattr(ctx, "stopped", False)))
+    # C44 连接级流式开关：连接 dict 带 "stream": False 的模型（如不支持流式的
+    # stealth 系）走 chat() 非流式一次性返回——整段作为单 chunk 供给控制台。
+    if not getattr(client, "stream_enabled", True):
+        text = clean_llm_output(client.chat(prompt, phase=phase))
+        ctx.stream_chunk(text)
+        _record_call(ctx, phase, slot, client, prompt)
+        # 非流式无法中途打断：返回后再按停止标记收口（与流式 abort 语义对齐）
+        if _abort():
+            raise PipelineStopped()
+        return text
     text = clean_llm_output(client.chat_stream(
         prompt, on_chunk=on_chunk, on_reasoning=on_reasoning, phase=phase,
         abort=_abort))
