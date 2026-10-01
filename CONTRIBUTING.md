@@ -14,9 +14,19 @@
 git clone https://github.com/GLFzr/QianBi-Novel.git
 cd QianBi-Novel
 python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt
+.venv/Scripts/pip install -r requirements.txt    # Windows（PowerShell 用 .venv\Scripts\）
 .venv/Scripts/python run.py
 ```
+
+macOS / Linux 把 `.venv/Scripts/` 换成 `.venv/bin/`（其余命令同）：
+
+```bash
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python run.py
+```
+
+CI 在 **Windows 与 macOS 两边**跑单测与探针舰队（`tests.yml` 的 matrix）；
+平台分支代码只在一侧跑通不算过。
 
 ## 提交前闸门（PR 必须全绿）
 
@@ -24,6 +34,9 @@ python -m venv .venv
 .venv/Scripts/python -m pytest tests/unit -q        # 离线单测，约 3 秒
 .venv/Scripts/python tests/probe_qml_compile.py     # 动过 UI/QML 就跑
 ```
+
+（macOS/Linux 用 `.venv/bin/python`。改了 `scripts/build_release.py`、`QianBi-Novel.spec`
+或打包探针，再补 `.venv/bin/python tests/probe_packaged.py --exe <产物>`。）
 
 - 动了**提示词装配**（`app/prompts/`、预设字段、装配层）：`tests/probe_prompt_baseline.py` 会红，
   逐字确认 diff 是你有意为之后 `--update-baseline`，并在 PR 里说明改了哪条链路；
