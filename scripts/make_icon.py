@@ -17,13 +17,23 @@ FONT_CANDIDATES = [
     r"C:\Windows\Fonts\simsun.ttc",      # 宋体（贴合正文气质）
     r"C:\Windows\Fonts\msyhbd.ttc",      # 微软雅黑 Bold（回退）
     r"C:\Windows\Fonts\msyh.ttc",
+    # macOS/Linux 出图位：.ico 仍在 Windows 生成，macOS 这几条供 make_icon_icns.py 找中文字族
+    ("/System/Library/Fonts/Supplemental/Songti.ttc", 6),   # Songti SC Regular
+    ("/System/Library/Fonts/Supplemental/Songti.ttc", 1),   # Songti SC Bold
+    "/System/Library/Fonts/Supplemental/STHeiti Light.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
 ]
 
 
 def load_font(size: int) -> ImageFont.FreeTypeFont:
-    for path in FONT_CANDIDATES:
-        if os.path.exists(path):
-            return ImageFont.truetype(path, size)
+    for cand in FONT_CANDIDATES:
+        path, index = (cand, 0) if isinstance(cand, str) else cand
+        if not os.path.exists(path):
+            continue
+        try:
+            return ImageFont.truetype(path, size, index=index)
+        except OSError:
+            continue
     return ImageFont.load_default()
 
 
