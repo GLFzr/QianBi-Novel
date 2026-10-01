@@ -11,8 +11,13 @@ concurrency:
 
 jobs:
   unit:
-    # 仓库面向 Windows（凭据管理器/路径约定），单测也在 Windows 环境验证
-    runs-on: windows-latest
+    # 单测在 Windows（凭据管理器/路径约定的主场）与 macOS（本 PR 新增的发行平台）
+    # 两边都验：平台分支代码只在一侧跑 = 另一侧的回归只能等用户踩。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +41,11 @@ jobs:
     # tests/unit/test_workflow_probe_list.py 保证这里点名的每支 probe_*.py 真实存在。
     # 名单=WP-06 本地实测 34 支离线全绿（rc=0+自打结论行）；需真 Key/真机/--exe 的
     # 一律不进（8b3fb80 教训：名单里有不存在的名字；CI 无 Key，真 Key 探针必红）。
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +65,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: fleet-logs
+          name: fleet-logs-${{ matrix.os }}
           path: .tmp_fleet_logs/
           retention-days: 7

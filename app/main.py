@@ -132,6 +132,9 @@ def main():
     win = engine.rootObjects()[0]
     single._on_raise = lambda: (_raise_window_impl(win))
     bridge.mainWindowReady.emit()
+    # 发版冒烟的正向标记：QML 根对象在位（= 主窗口建出来了）才会打这一行，
+    # 反面是上面的 error「QML 加载失败」+ exit(1)。tests/probe_packaged 按这行判活。
+    logger.info("主窗口就绪")
 
     # A-10/H-9：退出收尾——运行中关窗必须停线程后正常退（旧实测 RC=127）
     app.aboutToQuit.connect(bridge.shutdown)
@@ -141,7 +144,12 @@ def main():
 
 
 def _raise_window_impl(win):
-    """把既有实例的主窗口提到前台（Windows）"""
+    """把既有实例的主窗口提到前台（Windows 用 Win32；macOS/Linux 走 Qt）"""
+    if sys.platform != "win32":
+        # Qt 的 raise_/requestActivate 在 macOS 上会连带激活应用（NSApp 前台化）
+        win.raise_()
+        win.requestActivate()
+        return
     try:
         import ctypes
         hwnd = int(win.winId())

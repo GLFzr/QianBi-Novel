@@ -181,13 +181,16 @@ QtObject {
 
     // ===== 字体 =====
     // MiSans 由 main.py 启动时经 QFontDatabase 注册（assets/fonts，四字重一个家族，
-    // font.weight 直接可用）；未注册（理论上仅开发环境异常）时回落系统雅黑。
+    // font.weight 直接可用）；未注册（理论上仅开发环境异常）时回落系统无衬线中文字族。
     readonly property string uiFont: "MiSans"
-    readonly property string uiFontFallback: "Microsoft YaHei UI"
-    // U-06：衬线/等宽不随包（控制体积），改为全 Windows 保证存在的家族回落链
-    // ——干净机器上不再静默消失（思源宋体/JetBrains Mono 仅开发者机器有）
-    readonly property string serifFont: "SimSun, NSimSun, serif"
-    readonly property string monoFont: "Consolas, Courier New, monospace"
+    // U-06：衬线/等宽不随包（控制体积），改为各平台出厂必有的家族回落链
+    // ——干净机器上不再静默消失（思源宋体/JetBrains Mono 仅开发者机器有）。
+    // macOS 没有雅黑/宋体/Consolas：按平台选链，拿 Windows 字族名去问 mac 只会整段落到
+    // 系统兜底，中文正文与等宽区一起变味。
+    readonly property bool _onMac: Qt.platform.os === "osx"
+    readonly property string uiFontFallback: _onMac ? "PingFang SC" : "Microsoft YaHei UI"
+    readonly property string serifFont: _onMac ? "Songti SC, serif" : "SimSun, NSimSun, serif"
+    readonly property string monoFont: _onMac ? "Menlo, monospace" : "Consolas, Courier New, monospace"
     // 动效令牌（v1.2 波次1 地基：全库 Behavior/Animation 时长一律引用这里，禁止字面量）
     readonly property int durFast: 120    // hover/press/focus/色值微反馈
     readonly property int durNormal: 200  // 面板切换、抽屉、门条、日志渐入

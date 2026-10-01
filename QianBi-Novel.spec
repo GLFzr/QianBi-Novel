@@ -13,10 +13,15 @@ sys.path.insert(0, os.getcwd())   # 让 spec 能读取 app.__version__
 from PyInstaller.utils.hooks import collect_submodules  # noqa: E402
 from app import __version__  # noqa: E402
 
+# 凭据后端按平台惰性选择：漏收时导入不报错、行为悄悄退化成 Fail*Keyring（读写全废），
+# 所以按平台点名——Windows 是凭据管理器，macOS 是钥匙串，两者不同包。
+_KEYRING_BACKEND = {'win32': 'keyring.backends.Windows',
+                    'darwin': 'keyring.backends.macOS'}.get(sys.platform)
+
 hiddenimports = [
     'httpx', 'httpcore', 'h11', 'certifi', 'anyio',
     'PySide6.QtQml', 'PySide6.QtQuick', 'PySide6.QtQuickControls2', 'PySide6.QtNetwork',
-    'keyring.backends.Windows',
+    *([_KEYRING_BACKEND] if _KEYRING_BACKEND else []),
 ]
 hiddenimports += collect_submodules('app')
 
@@ -61,7 +66,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\icon.ico'],
+    # EXE 只有 Windows 认 icon/version_info；macOS 的图标在下面的 BUNDLE 里给
+    icon=[os.path.join('assets', 'icon.ico')] if sys.platform == 'win32' else None,
     version='version_info.txt' if os.path.exists('version_info.txt') else None,
 )
 
@@ -74,3 +80,19 @@ coll = COLLECT(
     upx_exclude=[],
     name='QianBi-Novel',
 )
+
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        coll,
+        name='QianBi-Novel.app',
+        icon=os.path.join('assets', 'icon.icns'),
+        bundle_identifier='com.glfzr.qianbinovel',
+        version=__version__,
+        info_plist={
+            'CFBundleShortVersionString': __version__,
+            'NSHighResolutionCapable': True,
+            'NSPrincipalClass': 'NSApplication',
+            'LSMinimumSystemVersion': '12.0',
+            'NSHumanReadableCopyright': 'MIT License. Copyright (c) 2026 GLFzr',
+        },
+    )

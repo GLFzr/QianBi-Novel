@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/GLFzr/QianBi-Novel?sort=semver&label=release&color=FF6B35)](https://github.com/GLFzr/QianBi-Novel/releases/latest)
 [![License](https://img.shields.io/github/license/GLFzr/QianBi-Novel?color=3BA7E6)](LICENSE)
 [![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#download)
+[![Platform](https://img.shields.io/badge/macOS%2012%2B-000000?logo=apple)](#download)
 [![Tests](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml)
 
 **A long-form fiction workbench where a human and an AI co-write** — the AI writes in full
@@ -65,7 +66,7 @@ where you can intervene at every step.
   blocking issues, the AI only fixes them. Zero review-model spend.
 - 🔑 **BYOK, fully local** — bring your own model key. Manuscripts, config and version history
   live on your machine (MIT, no cloud).
-- 🖥️ **Windows desktop app** — PySide6 + QML, one installer, no Python required.
+- 🖥️ **Desktop app (Windows / macOS)** — PySide6 + QML, one installer, no Python required.
 
 ![Co-writing mode: six-stage navigation, multi-turn discussion with the writing agent, live prose preview](docs/shot_co_writing.png)
 
@@ -76,7 +77,7 @@ where you can intervene at every step.
 | The human's role | feed a premise, receive a book | chat-style assistance | **six-stage co-writing — intervene and roll back at every step** |
 | Anti-hallucination | model's good will | model's good will | **quote verification: fabricated citations are voided on the spot, 3-vote ruling** |
 | Hard rules | prompt-level | prompt-level | **`must` contracts injected into every prose prompt + deterministic re-checks block the lock** |
-| Your data | vendor clouds | platform cloud | **fully local — manuscripts in your Documents folder, keys in Windows Credential Manager** |
+| Your data | vendor clouds | platform cloud | **fully local — manuscripts in your Documents folder, keys in the system credential store (Windows Credential Manager / macOS Keychain)** |
 | Cost | subscription / credits | subscription | **MIT + BYOK — real e2e: 5 chapters ≈ ¥0.07** |
 | Long-form consistency | stuff the context | chat window | **entry-based worldbook + plot backflow + summary chain** |
 
@@ -91,15 +92,18 @@ where you can intervene at every step.
 |---|---|---|
 | **Installer (recommended)** | `QianBi-Novel-v<version>-setup.exe` | Inno Setup, per-user (no admin rights); **creates a desktop shortcut**, uninstallable from *Settings → Apps*, and **uninstalling keeps your manuscripts** |
 | **Portable** | `QianBi-Novel-v<version>-portable.zip` | Unzip and double-click. Deliberately installs nothing: no shortcut, no registry, no uninstall entry — delete the folder to remove it. Includes a README inside. |
+| **macOS installer** | `QianBi-Novel-v<version>-mac.dmg` | Open it and drag `QianBi-Novel.app` into *Applications*. Ships a macOS README. |
+| **macOS portable** | `QianBi-Novel-v<version>-macos.zip` | Unzips into a complete `.app`; double-click to run. |
 
-Program and data are separate: config / presets / logs live in `%USERPROFILE%\.qianbi_novel\`,
-while manuscripts default to `%USERPROFILE%\Documents\千笔一文\` (the save location is editable
-per book). Both channels share these two places, so switching between them is free.
+Program and data are separate: config / presets / logs live in `%USERPROFILE%\.qianbi_novel\`
+(`~/.qianbi_novel/` on macOS), while manuscripts default to `%USERPROFILE%\Documents\千笔一文\`
+(`~/Documents/千笔一文/` on macOS; the save location is editable per book). Both channels share
+these two places, so switching between them is free.
 
 → **[Releases](https://github.com/GLFzr/QianBi-Novel/releases/latest)** ·
 every release ships a `SHA256SUMS.txt`. Verify before running.
 
-Requirements: Windows 10/11 x64. No Python needed.
+Requirements: Windows 10/11 x64; macOS 12+. No Python needed.
 
 ---
 
@@ -138,6 +142,12 @@ your machine". So the extra channels and the signature landed in the same releas
   refused outright. The manifest itself may come over http, because its signature, not the
   transport, is what carries the trust; a mirror you typed yourself is allowed too, and every
   byte it returns still has to match the signed SHA-256.
+
+### macOS refuses to open (unidentified developer)
+
+The macOS build is **unsigned**, so Gatekeeper blocks the first launch: right-click
+`QianBi-Novel.app` in Finder → **Open** → **Open** again (one-off). From the command line:
+`xattr -dr com.apple.quarantine /Applications/QianBi-Novel.app`.
 
 ### "Windows protected your PC"
 
@@ -346,7 +356,8 @@ python -m venv .venv
 ```
 
 On first launch, add your API key under *Settings → Connections & models*.
-**Keys go into the Windows Credential Manager** (`app/secrets.py`); `config.json` keeps only a
+**Keys go into the system credential store** (`app/secrets.py`: Windows Credential Manager /
+macOS Keychain); `config.json` keeps only a
 fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all redacted.
 
 > **Prompt tuning scope**: the built-in prompt engineering (prose / de-taste / review) is tuned
@@ -494,7 +505,8 @@ time" — if the watermark changed, the TUI was edited too, and it fails loudly.
   default at startup, at most once per 24 hours, **downloading** one ~1KB public version manifest
   from GitHub (or a mirror you configured) and uploading nothing — no book title, no config, no
   key. Switch it off in the Update panel and startup makes zero requests.
-- **API keys live in the Windows Credential Manager**; no plaintext in the config file. Logs and
+- **API keys live in the system credential store** (Windows Credential Manager / macOS Keychain);
+  no plaintext in the config file. Logs and
   crash dumps are redacted uniformly.
 - **Telemetry is off by default**, writes only to local files, and uploads nothing.
   See [docs/PRIVACY.md](docs/PRIVACY.md).
@@ -506,7 +518,10 @@ time" — if the watermark changed, the TUI was edited too, and it fails loudly.
 
 Listed honestly so you don't trip over them:
 
-- **Windows-only packaging.** Linux/macOS require running from source; no distribution testing done.
+- **macOS packaging is wired up, but releases are unsigned.** `scripts/build_release.py` produces
+  the dmg/zip on macOS and the packaged probe gates it (resource manifest, boot smoke,
+  packaged-vs-dev parity); without an Apple developer certificate the first launch needs the
+  right-click pass above. Linux still means running from source.
 - **Prompts tuned for DeepSeek.** Other providers produce shakier gate verdicts (the review
   phase now runs at uniformly low temperature to reduce that).
 - **Long requests depend on endpoint stability.** Some compatible gateways drop connections on
@@ -520,10 +535,12 @@ Listed honestly so you don't trip over them:
 - **External import is "excerpt + mapping", not "read the whole book".** Long documents are
   chunked at 30k characters, capped at 8 chunks; only content genuinely present is processed
   (missing targets are reported explicitly), and anything the model embellishes fails verification.
-- **Three things the update chain still cannot do**: ① the installer has **no code-signing
-  certificate**, so SmartScreen will always prompt; ② **Install** is offered only to the
-  installed build — portable and source builds must not overwrite the binary that is running,
-  so they get links and hashes instead; ③ a ~51MB payload **cannot conjure bandwidth**. What
+- **Three things the update chain still cannot do**: ① the installers have **no code-signing
+  certificate** — Windows always prompts SmartScreen, macOS always prompts Gatekeeper;
+  ② **Install** is gated per platform: on Windows it is offered only to the installed build
+  (portable and source builds must not overwrite the binary that is running), on macOS to any
+  `.app` (opening a dmg never touches the running program), and **source builds get links and
+  hashes on both**; ③ a ~51MB payload **cannot conjure bandwidth**. What
   the app does is shrink "is there a new version?" to one 1KB multi-channel manifest, make the
   offline route a first-class citizen, and pin integrity to the signature and the hash — it
   does not pretend to download a package for you when no network path exists.

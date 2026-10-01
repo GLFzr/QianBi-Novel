@@ -40,11 +40,20 @@ toasts = []
 requests = []            # 假 fetch_text 记的 (url, 是否带代理)
 NEW_VERSION = "99.0.0"
 PKG_SHA = hashlib.sha256(b"probe-installer-bytes").hexdigest()
+SETUP_ASSET = {"name": "QianBi-Novel-v99-setup.exe",
+               "url": "https://example.invalid/dl/setup.exe",
+               "sha256": PKG_SHA, "size": 4096}
+DMG_ASSET = {"name": "QianBi-Novel-v99-mac.dmg",
+             "url": "https://example.invalid/dl/QianBi-Novel-v99-mac.dmg",
+             "sha256": PKG_SHA, "size": 4096}
 BASE = {"version": NEW_VERSION, "url": "https://example.invalid/release/99",
         "notes": "探针新版说明", "sha256": PKG_SHA,
-        "assets": {"setup": {"name": "QianBi-Novel-v99-setup.exe",
-                             "url": "https://example.invalid/dl/setup.exe",
-                             "sha256": PKG_SHA, "size": 4096}}}
+        "assets": {"setup": SETUP_ASSET, "dmg": DMG_ASSET}}
+# 同一份清单挂两份资产，客户端各取各的：按钮文案/落盘名按平台认领的那一份走。
+IS_MAC = sys.platform == "darwin"
+BTN_DISABLED = "一键更新（源码版不可用）" if IS_MAC else "一键更新（仅安装版可用）"
+BTN_ARMED = "确认打开安装包" if IS_MAC else "确认退出并安装"
+BTN_LABEL = "打开安装包" if IS_MAC else "立即安装"
 _ORIG_FETCH = uc.fetch_text
 _ORIG_UPDATES = {}
 PRIV = None
@@ -90,6 +99,15 @@ def visible_items(root):
 
 def texts(root):
     return [str(v) for v in (it.property("text") for it in visible_items(root)) if v]
+
+
+def install_btn_texts(ts):
+    """所有「点了真会动」的安装类按钮文案：下载并校验 / 安装 / 两步确认后的确认态
+
+    按开头匹配：提示句里也有「…打开安装包一次完成」这种叙述，contains 会把话当按钮。
+    """
+    keys = ("下载并校验", BTN_LABEL, BTN_ARMED)
+    return [t for t in ts if t.startswith(keys)]
 
 
 def overflow(root):
@@ -202,8 +220,7 @@ def run_all():
     check("失败不说成已最新",
           any("检查更新失败" in m for _l, m in toasts) and not any("已是最新" in m for _l, m in toasts),
           str(toasts[:2]))
-    check("没查到东西时不给任何安装按钮",
-          not any("下载并校验" in t or "立即安装" in t for t in texts(dlg)))
+    check("没查到东西时不给任何安装按钮", not install_btn_texts(texts(dlg)))
     check("失败态也告诉用户一键更新何时出现",
           any("「一键更新」按钮会出现在这里" in t for t in texts(dlg)),
           "\n".join(texts(dlg))[:200])
@@ -233,11 +250,29 @@ def run_all():
     check("验签通过", st.get("verified") is True, str(st.get("verifyReason")))
     check("源码态下安装门是关的", st.get("canInstall") is False
           and st.get("installMode") == "dev", str(st.get("installMode")))
-    check("说清了为什么不能一键", "便携版" in str(st.get("whyNotInstall")),
+    check("说清了为什么不能一键",
+          ("源码运行" if IS_MAC else "便携版") in str(st.get("whyNotInstall")),
           str(st.get("whyNotInstall")))
+    if IS_MAC:
+        # 新增的平台资产门：清单只发了 .exe 时，Mac 端必须报「没有 Mac 包」而不是
+        # 拿 Windows 的字节当自己的包去校验（asset_sha/asset_url_list 同一处口径）
+        stub(raw=signed_manifest(assets={"setup": SETUP_ASSET}))
+        b.checkForUpdates(True)
+        pump(1500)
+        st = b.updateState
+        check("清单没发本平台的包时说清没有 macOS 包",
+              st.get("canInstall") is False and "macOS 安装包" in str(st.get("whyNotInstall")),
+              str(st.get("whyNotInstall")))
+        stub(raw=signed_manifest())
+        b.checkForUpdates(True)
+        pump(1500)
+        st = b.updateState
+        check("清单补上本平台的包后不再报缺包",
+              "macOS 安装包" not in str(st.get("whyNotInstall"))
+              and st.get("verified") is True, str(st.get("whyNotInstall")))
     # v0.18.2：一键更新不许静默消失——按钮还在，只是禁用并把原因写在按钮上
-    check("不能一键时按钮禁用但可见，写明仅安装版",
-          any("一键更新（仅安装版可用）" in t for t in texts(dlg))
+    check("不能一键时按钮禁用但可见，写明安装方式门槛",
+          any(BTN_DISABLED in t for t in texts(dlg))
           and not any("下载并校验" in t for t in texts(dlg)))
 
     # ---- ③½ 已是最新：一键更新的入口提示要在，不能像没这个功能 ----
@@ -250,8 +285,7 @@ def run_all():
     check("最新态提示一键更新入口",
           any("「一键更新」按钮会出现在这里" in t for t in texts(dlg)),
           "\n".join(texts(dlg))[:200])
-    check("最新态不给任何安装按钮",
-          not any("下载并校验" in t or "立即安装" in t for t in texts(dlg)))
+    check("最新态不给任何安装按钮", not install_btn_texts(texts(dlg)))
 
     # ---- ④ 假装是安装版：门开了按钮才出现 ----
     uc.install_mode = lambda: "installed"
@@ -264,13 +298,14 @@ def run_all():
     check("出现下载并校验按钮", any("下载并校验" in t for t in texts(dlg)))
 
     # ---- ⑤ 本机安装包对账 ----
-    exe = os.path.join(b.updateDownloadPath(), "QianBi-Novel-v99-setup.exe")
-    with open(exe, "wb") as f:
+    # 落盘名按本平台认领的那一份资产算（Windows .exe｜macOS .dmg），对账是按名字+哈希比的
+    pkg = os.path.join(b.updateDownloadPath(), uc.download_name(BASE))
+    with open(pkg, "wb") as f:
         f.write(b"probe-installer-bytes")
-    out = b.checkLocalPackage(QUrl.fromLocalFile(exe).toString())
+    out = b.checkLocalPackage(QUrl.fromLocalFile(pkg).toString())
     check("本机包 SHA-256 命中", out.get("ok") is True, str(out.get("reason")))
-    check("命中后给出立即安装按钮", any("立即安装" in t for t in texts(dlg)))
-    bad = os.path.join(b.updateDownloadPath(), "tampered.exe")
+    check("命中后给出安装按钮", any(BTN_LABEL in t for t in texts(dlg)))
+    bad = os.path.join(b.updateDownloadPath(), "tampered.bin")
     with open(bad, "wb") as f:
         f.write(b"tampered")
     out2 = b.checkLocalPackage(QUrl.fromLocalFile(bad).toString())
@@ -279,17 +314,18 @@ def run_all():
     # 哈希对上了但清单没验签 → 依然不许装（把门拆一半，看另一半年不拦）
     flag = b._update_result.verified
     b._update_result.verified = False
-    out3 = b.checkLocalPackage(QUrl.fromLocalFile(exe).toString())
+    out3 = b.checkLocalPackage(QUrl.fromLocalFile(pkg).toString())
     check("未验签清单不许为本地包背书",
           out3.get("ok") is False and "验签" in str(out3.get("reason")), str(out3.get("reason")))
     b._update_result.verified = flag
-    out4 = b.checkLocalPackage(QUrl.fromLocalFile(exe).toString())
+    out4 = b.checkLocalPackage(QUrl.fromLocalFile(pkg).toString())
     check("恢复验签后同一文件重新被接受", out4.get("ok") is True, str(out4.get("reason")))
 
-    # 两步确认：第一次点只把「确认」问出来，绝不直接退出
-    armed_texts = [t for t in texts(dlg) if "立即安装" in t or "确认退出并安装" in t]
-    check("安装是两步确认", any("立即安装" in t for t in armed_texts)
-          and not any("确认退出并安装" in t for t in armed_texts), str(armed_texts[:2]))
+    # 两步确认：第一次点只把「确认」问出来，绝不直接执行（Windows 退出｜macOS 打开 dmg）
+    armed_texts = install_btn_texts(texts(dlg))
+    first_state = [t for t in armed_texts if BTN_ARMED not in t]
+    check("安装是两步确认", bool(first_state)
+          and not any(BTN_ARMED in t for t in armed_texts), str(armed_texts[:2]))
 
     # ---- ⑥ 限流、开关与白名单 ----
     reset(auto_check=True)

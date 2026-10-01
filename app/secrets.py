@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
-"""API key 安全存储：Windows 凭据管理器（keyring）+ 配置脱敏
+"""API key 安全存储：系统凭据库（keyring）+ 配置脱敏
 
-- config.json 不再落明文 api_key：保存时抽出 key 入凭据管理器，json 中只留 key_ref 指纹
+- config.json 不再落明文 api_key：保存时抽出 key 入凭据库，json 中只留 key_ref 指纹
 - 读取时透明回填（load_config→hydrate），所有下游消费方（router/client）零改动
+  （Windows=凭据管理器，macOS=钥匙串 Keychain，Linux=Secret Service）
 - keyring 不可用时降级保留明文（功能优先，log 一次警告）
 - redact_text：崩溃 dump/遥测/日志的统一脱敏出口
 """
 import logging
 import re
+import sys
 
 logger = logging.getLogger("qianbi.secrets")
 
@@ -23,6 +25,15 @@ except Exception as e:  # noqa: BLE001
     _keyring = None
     _AVAILABLE = False
     logger.warning("keyring 不可用（%s），API key 将回退明文存储", e)
+
+
+def backend_name() -> str:
+    """用户能自己找到的那个系统凭据入口（报错文案与文档都从这里取）"""
+    if sys.platform == "darwin":
+        return "macOS 钥匙串访问"
+    if sys.platform.startswith("linux"):
+        return "系统密钥环"
+    return "Windows 凭据管理器"
 
 
 def available() -> bool:

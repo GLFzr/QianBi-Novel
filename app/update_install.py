@@ -22,18 +22,22 @@ CHUNK = 1 << 16
 TIMEOUT = 20.0
 
 
-def asset_urls(manifest: dict, kind: str = "setup", mirror_prefix: str = "") -> list:
+def asset_urls(manifest: dict, kind: str | None = None, mirror_prefix: str = "") -> list:
     """候选下载地址：官方直链 → 清单里作者签过名的镜像 → 用户自己配的镜像前缀
 
     顺序有意义——`mirror_prefix` 是用户填的陌生主机，排最后；它拼出来的字节照样要过
     sha256，所以「排在最后」只是省一次无谓的第三方流量，不是安全边界。
     """
-    out = [u for u in uc.asset_url_list(manifest, kind) if uc.safe_asset_url(u)]
+    k = uc.asset_kind() if kind is None else kind
+    out = [u for u in uc.asset_url_list(manifest, k) if uc.safe_asset_url(u)]
     seen = set(out)
     prefix = (mirror_prefix or "").strip()
     if prefix:
-        name = uc.setup_download_name(manifest)
-        cand = prefix if prefix.lower().endswith(".exe") else prefix.rstrip("/") + "/" + name
+        # 用户填的可能是完整下载地址（认 .exe/.dmg 后缀），也可能是目录前缀
+        if prefix.lower().endswith((".exe", ".dmg")):
+            cand = prefix
+        else:
+            cand = prefix.rstrip("/") + "/" + uc.download_name(manifest, k)
         if uc.is_http_url(cand) and cand not in seen:
             out.append(cand)
     return out
@@ -125,7 +129,7 @@ def verify_local(path: str, expected_sha: str) -> dict:
 
 def disk_space_ok(path: str, manifest: dict) -> bool:
     """下一半才发现盘满，等于给用户一个永远装不上的半截文件"""
-    need = int(((manifest or {}).get("assets") or {}).get("setup", {}).get("size") or 0)
+    need = int(((manifest or {}).get("assets") or {}).get(uc.asset_kind(), {}).get("size") or 0)
     if need <= 0:
         return True
     import shutil
