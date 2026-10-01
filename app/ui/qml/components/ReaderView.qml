@@ -325,7 +325,7 @@ Rectangle {
             color: reader.th.text
             selectionColor: reader.th.sel
             selectedTextColor: reader.th.bg
-            font.family: reader.prefs.serif !== false ? Theme.serifFont : "Microsoft YaHei UI"
+            font.family: reader.prefs.serif !== false ? Theme.serifFont : Theme.uiFontFallback
             font.pixelSize: reader.fontSize
             topPadding: 34
             bottomPadding: 60

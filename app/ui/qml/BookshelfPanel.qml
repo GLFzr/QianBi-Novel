@@ -284,7 +284,9 @@ Item {
             }
             Text {
                 width: parent.width
-                text: "· 仅移出书架：书架列表不再显示，书稿文件原样保留在电脑上。\n· 移入回收站：整个书稿目录移入 Windows 回收站，可在回收站还原（应用永不永久删除）。"
+                text: "· 仅移出书架：书架列表不再显示，书稿文件原样保留在电脑上。\n· 移入" + bridge.trashName
+                      + "：整个书稿目录移入系统" + bridge.trashName
+                      + "，可在" + bridge.trashName + "还原（应用永不永久删除）。"
                 color: Theme.textSecondary
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.fsSmall
@@ -308,7 +310,7 @@ Item {
                 }
                 AppButton {
                     objectName: "bookDeleteDiskBtn"
-                    text: "移入回收站"
+                    text: "移入" + bridge.trashName
                     kind: "danger"
                     onClicked: {
                         bridge.deleteBook(deleteDialog.bookPath, "disk")
@@ -477,7 +479,7 @@ Item {
         title: "导入原作世界书"
         nameFilters: ["世界书 / 设定文本 (*.json *.md *.txt)", "所有文件 (*)"]
         onAccepted: {
-            wbField.text = selectedFile.toString().replace("file:///", "")
+            wbField.text = bridge.urlToPath(selectedFile.toString())
         }
     }
 
@@ -486,7 +488,7 @@ Item {
         id: locationDialog
         title: "选择保存位置"
         onAccepted: {
-            var p = selectedFolder.toString().replace("file:///", "")
+            var p = bridge.urlToPath(selectedFolder.toString())
             locationField.text = p
         }
     }

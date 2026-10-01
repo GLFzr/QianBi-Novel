@@ -33,8 +33,12 @@ import tempfile
 SECTIONS = ("imports", "manifest", "assembly", "qml")
 
 # ---- 关键导入目标：缺一个就是打包事故 ----
+# 凭据后端按平台惰性选择：漏收时导入不报错、行为悄悄退化成 Fail*Keyring（读写全废），
+# 所以这里按平台点名该被收进包的那一个后端模块。
+_KEYRING_TARGET = {"win32": "keyring.backends.Windows",
+                   "darwin": "keyring.backends.macOS"}.get(sys.platform)
 _IMPORT_TARGETS = [
-    "httpx", "keyring.backends.Windows",
+    "httpx", *([_KEYRING_TARGET] if _KEYRING_TARGET else []),
     # 清单验签靠 cryptography：它漏收时症状是「更新静默不可用」而不是崩，只能靠这条抓
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "app.wb", "app.core.scan", "app.core.stages", "app.core.gates", "app.core.memory",
