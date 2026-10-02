@@ -144,7 +144,10 @@ def main():
     # 继续跑完 4 章口径；熔断事实已落 anomalies/session_events，评分照实扣。
     def on_auto_paused(reason):
         mark(f"[budget] 熔断命中并自动处置（模拟点「继续」）: {reason}")
-        QTimer.singleShot(1000, orch.resume)
+        # 直接调用：resume() 只操作 threading.Event（线程安全）。QTimer.singleShot
+        # 在 sig_auto_paused 的发射线程（无事件循环的管线线程）永远不会触发——
+        # 一测第4章的「扩写悬挂」实为管线卡死在 checkpoint 等这个不存在的定时器。
+        orch.resume()
 
     orch = Orchestrator(proj, cfg)
     orch.sig_log.connect(on_log, Qt.DirectConnection)
