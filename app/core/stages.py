@@ -24,6 +24,7 @@ from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
 from ..prompts import bridge_codes, scene_cards
 from . import deslop_metrics, gates, memory, scan, state as st, tracking_store, versions  # S6a：度量层下沉 core
+from . import rewrite_gate  # Q2-b（0.24.0）：改写净增益闸
 from .chapter_directive import (FIELD_ORDER as _CD_FIELD_ORDER,       # A1（0.23.0）章纲合同
                                 parse_directive as _parse_directive,
                                 to_prompt_block as _to_prompt_block,
@@ -819,10 +820,71 @@ def _use_session(ctx, session, slot: str, phase: str) -> bool:
     return (c_ext.base_url, c_ext.model) == (c_base.base_url, c_base.model)
 
 
+def _rewrite_gate_on(ctx) -> bool:
+    return bool((((ctx.cfg or {}).get("writing") or {}).get("rewrite_gate", True)))
+
+
+def _rewrite_tick(ctx):
+    """Q2-d：章内改写调用计数（chapter_microcycle 章入口清零）。"""
+    ctx._rewrite_used = int(getattr(ctx, "_rewrite_used", 0)) + 1
+
+
+def _rewrite_budget_exhausted(ctx, phase, num) -> bool:
+    w = (ctx.cfg or {}).get("writing", {}) or {}
+    cap = max(0, int(w.get("rewrite_budget", 6)))
+    used = int(getattr(ctx, "_rewrite_used", 0))
+    if used < cap:
+        return False
+    # 超预算：不再发起新改写——保留原稿（fail-safe），留痕+转人工
+    if not getattr(ctx, "_rewrite_budget_logged", False):
+        ctx._rewrite_budget_logged = True
+        ctx.log("error", f"第 {num} 章改写预算耗尽（{used}/{cap} 发，phase={phase}）——"
+                        "后续改写全部保留原稿，已标记转人工")
+        try:
+            from .volume_session import record_event as _rec
+            _rec(ctx.proj, "rewrite_budget_exhausted", ch=int(num or 0),
+                 used=used, cap=cap)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            st.mark_chapter_need_human(ctx.proj, st.load_state(ctx.proj), int(num or 0))
+        except Exception:  # noqa: BLE001
+            pass
+    return True
+
+
+def _rewrite_adopt(ctx, phase, num, prose, rewritten, session=None, t_turn=0):
+    """Q2-b：改写净增益闸——GATED_PHASES 的改写稿过 rewrite_gate 才放行。
+
+    拒收=回退原稿+会话截断（改写轮不留在历史）+留痕（rewrite_rejected 事件）。
+    非闸相位 / 空稿 / 零编辑原样透传（各调用方既有守卫语义不变）。"""
+    if phase not in rewrite_gate.GATED_PHASES or not _rewrite_gate_on(ctx):
+        return rewritten
+    if not (rewritten or "").strip() or rewritten == prose:
+        return rewritten
+    ok, reasons = rewrite_gate.gate_rewrite(prose, rewritten, proj=ctx.proj)
+    if ok:
+        return rewritten
+    if session is not None:
+        try:
+            session.rollback_to(t_turn)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        from .volume_session import record_event as _rec
+        _rec(ctx.proj, "rewrite_rejected", ch=int(num or 0), phase=phase,
+             reason="；".join(reasons)[:200])
+    except Exception:  # noqa: BLE001
+        pass
+    ctx.log("warn", f"第 {num} 章 {phase} 改写稿净增益闸拒收"
+                    f"（{'；'.join(reasons)}），保留原稿")
+    return prose
+
+
 def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
                    *, prose: str, label: str = "", stream: bool = True,
                    temperature=None, strip_static: str = "",
-                   strip_replacement: str = "") -> str:
+                   strip_replacement: str = "", num: int = 0) -> str:
     """修订类相位统一入口（deslop/trim/enrich/review_fix 四相位共用）。
 
     strip_static（调整一，instruction_in_head）：静态指令段已在卷级冻结头时，
@@ -839,9 +901,14 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
     返回改写后全文；完全失败返回空串（调用方既有守卫接管）。
     """
     use_sess = _use_session(ctx, session, slot, phase)
+    # Q2-b/Q2-d（0.24.0）：净增益闸只作用于毁稿高危相位；预算耗尽即不再发起新改写
+    _gated_phase = (phase in rewrite_gate.GATED_PHASES and _rewrite_gate_on(ctx))
+    if _gated_phase and _rewrite_budget_exhausted(ctx, phase, num):
+        return prose
     if _phase_param(ctx, phase, "output_mode") == "span" and prose.strip():
         from . import span_edit
         t_before = session.turn_count() if use_sess else 0
+        _rewrite_tick(ctx)   # Q2-d：span 尝试本身就是一发真实调用
         kw_span = dict(kw)
         kw_span["prose"] = span_edit.annotate(prose)
         try:
@@ -878,7 +945,8 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
                 except Exception:
                     pass
                 span_edit.record_event(ctx.proj, phase, "merged")
-                return merged
+                return _rewrite_adopt(ctx, phase, num, prose, merged,
+                                      session=session, t_turn=t_before)
             if merged == prose:
                 span_edit.record_event(ctx.proj, phase, "zero_edit")
                 return prose   # 模型认为无需改动：零编辑是合法结论，不算失败
@@ -892,6 +960,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
             span_edit.record_event(ctx.proj, phase, "fallback", str(e))
             ctx.log("warn", f"span 输出无效（{e}），回退全量模式重试")
     # —— 全量路径（改造前原语义）——
+    _rewrite_tick(ctx)   # Q2-d：全量改写一发
     prompt = template.format(**kw)
     ctx.last_prompt = prompt
     _snap_prompt(ctx, phase)   # E1：修订相位最终装配 prompt 快照（会话路径随后被 turn_text 覆盖）
@@ -906,9 +975,13 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
                 ctx.log("warn", f"{label or phase} 会话轮未匹配到静态指令段（模板变了？），本轮保留全文指令")
         ctx.last_prompt = turn_text
         _snap_prompt(ctx, phase)   # E1：会话轮为最终装配形态（最新一份）
-        return _session_ask(ctx, session, slot, turn_text, label=label,
-                            phase=phase, stream=stream, temperature=temperature)
-    return _stream(ctx, slot, prompt, label=label, phase=phase)
+        t_full = session.turn_count()
+        out = _session_ask(ctx, session, slot, turn_text, label=label,
+                           phase=phase, stream=stream, temperature=temperature)
+        return _rewrite_adopt(ctx, phase, num, prose, out,
+                              session=session, t_turn=t_full)
+    out = _stream(ctx, slot, prompt, label=label, phase=phase)
+    return _rewrite_adopt(ctx, phase, num, prose, out)
 
 
 # ============ 阶段①：核心设定 ============
@@ -2021,7 +2094,7 @@ class _MicroCycle:
                         rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
                                                    prompts.ENRICH_PROMPT, enrich_full_kw,
                                                    prose=self.prose,
-                                                   label=f"扩写(全量) 第{enrich_rounds}轮")
+                                                   label=f"扩写(全量) 第{enrich_rounds}轮", num=num)
                         if rewritten.strip() and project.count_chars(rewritten) >= actual:
                             self.prose = rewritten
                     low_ok, high_ok, actual = gates.check_word_bounds(self.prose, chapter_words, tolerance)
@@ -2034,7 +2107,7 @@ class _MicroCycle:
                                  project_header=project_header(proj))
                 rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_ENRICH,
                                            prompts.ENRICH_PROMPT, enrich_kw, prose=self.prose,
-                                           label=f"扩写 第{enrich_rounds}轮")
+                                           label=f"扩写 第{enrich_rounds}轮", num=num)
                 # 扩写稿健全性守卫：返回为空或比原稿更短 → 丢弃本轮结果（防越写越少）
                 if rewritten.strip() and project.count_chars(rewritten) >= actual:
                     self.prose = rewritten
@@ -2095,7 +2168,7 @@ class _MicroCycle:
                                project_header=project_header(proj))
                 rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_TRIM,
                                            prompts.TRIM_PROMPT, trim_kw, prose=self.prose,
-                                           label="压缩" if trim_rounds == 1 else "压缩(二次)")
+                                           label="压缩" if trim_rounds == 1 else "压缩(二次)", num=num)
                 new_low, new_high, new_actual = gates.check_word_bounds(
                     rewritten, chapter_words, tolerance)
                 # C17 G1 最低压缩量守卫：压缩量 < 应压缩量（pre_actual×cut_pct%）的一半
@@ -2251,7 +2324,7 @@ class _MicroCycle:
                                            label=f"去味改写 第{rounds}轮",
                                            strip_static=_deslop_strip,
                                            strip_replacement="（改写原则见系统「去味改写规则」"
-                                                             "（卷级冻结），本步照常执行。）")
+                                                             "（卷级冻结），本步照常执行。）", num=num)
             if rewritten.strip() and _must_rules:
                 # C23 采纳前双复扫（卡7）：deslop 规则复扫在下方 scan_deslop，这里补
                 # must 契约指纹复扫——改写稿「新引入」must 违规 = 本轮改写更糟（trim
@@ -2491,7 +2564,7 @@ class _MicroCycle:
                 t_fix = session.turn_count() if _session_usable(session) else 0
                 rewritten = _rewrite_phase(ctx, session, SLOT_REVIEW, PHASE_REVIEW_FIX,
                                            prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=self.prose,
-                                           label=f"审校修改 第{review_rounds}轮")
+                                           label=f"审校修改 第{review_rounds}轮", num=num)
                 # 修复稿健全性守卫（真机缺陷修复：模型可能返回 ===REVISIONS=== 修订计划
                 # 而非改后正文；采纳会把整章替换成指令清单，且空文本复检阻塞更少被误判改善）
                 looks_like_plan = rewritten.lstrip().startswith("===")
@@ -2836,6 +2909,10 @@ class _MicroCycle:
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
+    # Q2-d（0.24.0）：章内改写预算计数器清零（断点续跑重入本章也重新计）
+    ctx._rewrite_used = 0
+    ctx._rewrite_budget_logged = False
+
     # V2 审计（中危）：ctx 是 Orchestrator 跨章单例，review_v2 只在审校段赋值、
     # 无重置——断路/人工/字数拦截章的 finalize 会吃到上一章 B_PAYOFF 裁决，
     # 误记「兑现/空头支票」。章入口强制清零。
@@ -3558,7 +3635,7 @@ def _author_review_entry(ctx, num: int, prose: str, *,
                           chapter_header=_chap_header(ctx, proj, num))
         rewritten = _rewrite_phase(ctx, session, SLOT_REVIEW, PHASE_REVIEW_FIX,
                                    prompts.REVIEW_FIX_PROMPT, fix_kwargs, prose=prose,
-                                   label=f"人工审校修复 第{manual_rounds}轮")
+                                   label=f"人工审校修复 第{manual_rounds}轮", num=num)
         # 修复稿健全性守卫（与自动修复环同款）
         looks_like_plan = rewritten.lstrip().startswith("===")
         too_short = len(rewritten.strip()) < max(300, int(len(prose) * 0.5))

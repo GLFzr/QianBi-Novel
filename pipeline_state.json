@@ -1,0 +1,30 @@
+{
+  "review_findings": {},
+  "pending_ideas": [],
+  "history": [],
+  "cw": {
+    "mode": "auto",
+    "stage": "cw_project",
+    "preset": "",
+    "transcript": {},
+    "handoff": {},
+    "reopening": "",
+    "locked": {},
+    "unit": {},
+    "supervised": {},
+    "report": {},
+    "stage_mode": {}
+  },
+  "chapter_step": "",
+  "chapter_need_human": {
+    "5": "2026-10-02 20:40:05",
+    "7": "2026-10-02 20:40:05"
+  },
+  "current_chapter": 0,
+  "anomalies": [],
+  "paused": false,
+  "pending_guidance": {},
+  "stage": "init",
+  "total_chapters": 0,
+  "review_chain": {}
+}
