@@ -1560,8 +1560,24 @@ def _live_stack_gen(proj: str, vol: int) -> int:
     return best
 
 
+def _bk_session(ctx, session):
+    """Q1-c（0.24.0）：记账相位（tracking/章·全局摘要/canon_audit）脱离卷会话。
+
+    实测 E2：ch7 记账单发 179k 入 / 473 tok 出——记账只需要章文本+账本材料，
+    骑卷会话纯粹吃膨胀栈（成本与劣化双输）。writing.bookkeeping_off_session
+    缺省 True=脱离（返回 None → 既有独立单发路径接管，字节行为与无会话一致）；
+    显式 False 回到骑会话旧路径（deepseek 同网关前缀命中的成本档）。"""
+    if session is None:
+        return None
+    try:
+        w = (ctx.cfg or {}).get("writing", {})
+    except AttributeError:
+        w = {}
+    return None if w.get("bookkeeping_off_session", True) else session
+
+
 def _compaction_step(ctx, proj: str, num: int, session):
-    """长程压缩 §4.3「接力压缩」接线（writing.compaction，默认关）。
+    """长程压缩 §4.3「接力压缩」接线（writing.compaction，0.24.0 起默认开）。
 
     触发（§6.2 卷界 / 输入越阈 / 手动）时：把本卷历史折叠成装配式交接块（零 LLM
     调用），另起一代会话栈——system 逐字节沿用旧栈（它就是新前缀的共享段），
@@ -2556,7 +2572,9 @@ class _MicroCycle:
         ctx = self.ctx
         num = self.num
         proj = self.proj
-        session = self.session
+        # Q1-c（0.24.0）：本段全部是记账相位——统一脱离卷会话（膨胀栈不再拖累记账；
+        # 独立单发路径既有字节行为接管）。草稿/改写相位的 self.session 不受影响。
+        session = _bk_session(ctx, self.session)
         _w_cfg = self._w_cfg
         gr = self.gr
         prose = self.prose   # 本段只读（定稿不改写正文），局部别名保持段体逐字
@@ -2850,7 +2868,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     _s4_freeze = bool(_w_cfg.get("s4_static_freeze", False))
     # 长程压缩（writing.compaction，默认关，长程压缩文档 §6.2）：只在卷会话之上
     # 加一步「历史折叠成交接块 + 另起会话栈」，关闭时下方 _compaction_step 不触达。
-    _compaction = bool(_w_cfg.get("compaction", False))
+    _compaction = bool(_w_cfg.get("compaction", True))   # 0.24.0 Q1-a：默认开（质量标定）
     # 缺省无会话：纯单轮路径（旧客户端/配置全关），后续 _session_usable(None) 兜底
     session = None
     _comp_preface = ""

@@ -355,13 +355,13 @@ def test_trigger_volume_boundary(tmp_path):
 
 
 def test_trigger_input_threshold_boundary(tmp_path):
-    """触发器②：估算输入 ≥ 阈值（默认 800k tok）——阈值边界两侧各测一次"""
+    """触发器②：估算输入 ≥ 阈值（0.24.0 Q1-a 质量标定默认 48k）——阈值边界两侧各测一次"""
     _home, proj = _make_home(tmp_path)
-    assert hc.token_threshold({}) == hc.DEFAULT_TOKEN_THRESHOLD == 800_000
+    assert hc.token_threshold({}) == hc.DEFAULT_TOKEN_THRESHOLD == 48_000
     cfg = {"writing": {"compaction": True, "compaction_token_threshold": 100_000}}
     assert hc.should_compact(proj, 5, cfg=cfg, input_tokens=100_000).reason == "input_threshold"
     assert hc.should_compact(proj, 5, cfg=cfg, input_tokens=99_999).fire is False
-    assert hc.token_threshold({"writing": {"compaction_token_threshold": "坏值"}}) == 800_000
+    assert hc.token_threshold({"writing": {"compaction_token_threshold": "坏值"}}) == 48_000
 
 
 def test_trigger_manual_and_real_usage_reading(tmp_path):
@@ -375,18 +375,21 @@ def test_trigger_manual_and_real_usage_reading(tmp_path):
 # ==================== 五、flag 纪律：关闭时字节不变 ====================
 
 def test_flag_off_module_never_intervenes(tmp_path):
-    """flag 缺省关：装配拒绝、触发器不燃、开幕块零贡献（连手动请求也不放行）"""
+    """flag 显式关：装配拒绝、触发器不燃、开幕块零贡献（连手动请求也不放行）
+    （0.24.0 Q1-a 起缺省为开；「关」必须显式写 compaction=False）"""
     home, proj = _make_home(tmp_path)
     _write_usage(home, [{"phase": "prose", "in": 5_000_000}])
-    assert hc.compaction_enabled({}) is False
-    assert hc.compaction_enabled(None) is False
+    # 0.24.0 Q1-a：默认开——{} / None 均视为开；显式 False 才关（字节不变纪律仍由显式关承载）
+    assert hc.compaction_enabled({}) is True
+    assert hc.compaction_enabled(None) is True
     assert hc.compaction_enabled({"writing": {"compaction": False}}) is False
-    r = hc.build_handoff_block(proj, cfg={}, upto=8)
+    _OFF = {"writing": {"compaction": False}}
+    r = hc.build_handoff_block(proj, cfg=_OFF, upto=8)
     assert not r.ok and r.flag_on is False and r.text == "" and r.artifacts == ()
     assert "字节不变纪律" in r.reason
     for num in (8, 9):
-        assert hc.should_compact(proj, num, cfg={}, manual=True).fire is False
-    ob = hc.opening_block(proj, 9, cfg={})
+        assert hc.should_compact(proj, num, cfg=_OFF, manual=True).fire is False
+    ob = hc.opening_block(proj, 9, cfg=_OFF)
     assert ob.text == "" and ob.contributed is False and ob.tokens == 0
     assert ob.sha256 == hashlib.sha256(b"").hexdigest()
     assert not os.path.exists(hc.handoff_json_path(proj, 1))
@@ -402,7 +405,8 @@ def test_flag_off_open_turn_bytes_identical_to_legacy(tmp_path):
     header, dyn = "【第 9 章共享上下文】细纲+台账", "## 本章动态值\n- 本章章号：第 9 章"
     legacy = VolumeSession(_NoCallClient(), "SYS", volume=2, proj="").open_chapter(
         header, dyn, chapter_num=9)
-    for cfg in ({}, {"writing": {"compaction": False}}):
+    # 0.24.0 Q1-a：{} 已是默认开——字节不变纪律只由显式 False 承载
+    for cfg in ({"writing": {"compaction": False}},):
         mine = hc.compose_open_turn(proj, 9, header, dyn, cfg=cfg)
         assert mine == legacy
         assert mine.encode("utf-8") == legacy.encode("utf-8")     # 字节级
@@ -444,21 +448,23 @@ def test_wiring_via_open_chapter_prepend_is_byte_equivalent(tmp_path):
         built.text + "\n\n" + header, dyn, chapter_num=9)
     assert wired.encode("utf-8") == hc.compose_open_turn(
         proj, 9, header, dyn, cfg=CFG_ON).encode("utf-8")
-    # flag 关：前缀空串 → 与今天的调用逐字节一致（同一行代码，两种旗标态）
-    off = hc.opening_block(proj, 9, cfg={})
+    # flag 显式关：前缀空串 → 与今天的调用逐字节一致（同一行代码，两种旗标态）
+    # （0.24.0 Q1-a：cfg={} 已默认开，会产出交接块——这里必须显式 False）
+    off = hc.opening_block(proj, 9, cfg={"writing": {"compaction": False}})
     legacy = VolumeSession(_NoCallClient(), "SYS", proj="").open_chapter(
         (off.text + "\n\n" + header) if off.text else header, dyn, chapter_num=9)
     assert legacy.encode("utf-8") == VolumeSession(
         _NoCallClient(), "SYS", proj="").open_chapter(header, dyn, 9).encode("utf-8")
 
 
-def test_flag_not_registered_in_config_defaults(tmp_path):
-    """T6 flag 纪律：`writing.compaction` 既没写进 config 默认表也没进任何注册表——
-    不显式打开就永远是关"""
+def test_flag_registered_and_on_by_default(tmp_path):
+    """0.24.0 Q1-a：compaction 默认开并写进默认表（质量标定——旧「不注册默认关」
+    纪律反转，理由见 docs/0.24.0_质量全量提升计划.md §一 P0-1/E8）"""
     from app import config as cfg_mod
-    assert "compaction" not in cfg_mod.DEFAULT_CONFIG.get("writing", {})
-    assert hc.compaction_enabled(cfg_mod.DEFAULT_CONFIG) is False
-    assert hc.compaction_enabled({"writing": dict(cfg_mod.DEFAULT_CONFIG["writing"])}) is False
+    w = cfg_mod.DEFAULT_CONFIG.get("writing", {})
+    assert w.get("compaction") is True
+    assert w.get("compaction_token_threshold") == 48_000
+    assert hc.compaction_enabled(cfg_mod.DEFAULT_CONFIG) is True
 
 
 def test_public_api_surface_is_small():
