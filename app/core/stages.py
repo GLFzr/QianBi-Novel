@@ -987,8 +987,16 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
 # ============ 阶段①：核心设定 ============
 
 # ---- 调整五：deslop 定点修复（writing.deslop_pinned，缺省关）----
-DESLOP_PINNED_MAX_PARAS = 2      # 命中段上限：超过即回退整章重写
+DESLOP_PINNED_MAX_PARAS = 2      # 命中段上限（旧定点档）：超过即回退整章重写
 DESLOP_PINNED_MAX_GROW = 0.25    # 替换后全文长度变化上限，超过即回退
+
+# ---- Q2-c（0.24.0）去味卡片制：游蜂修改卡同构 ----
+# 卡级验收（三查）：①违规词必须消失（命中 tic 不在新段）②防搬运（新段不得含
+# 其他段 ≥16 字原文片段——堆料/复读的卡级形态）③段长带宽（0.3×~2.5×，卡级
+# 松界）。坏卡处置：定向返工一次（附违规原文+修法，DOC 爬升制）→ 仍坏则剔除
+# 该卡保留原段并留痕（rewrite_card 事件），好卡照常采纳——不再整章全弃。
+DESLOP_CARD_MAX_PARAS = 6         # 卡片制命中段上限（writing.deslop_cards，缺省开）
+DESLOP_CARD_TRANSPORT_CHARS = 16  # 防搬运窗口：与其他段重复 ≥16 字即判搬运
 
 _PINNED_LINE_RE = re.compile(r"^\s*⟦P(\d{1,4})⟧\s*(.+)$", re.M)
 
@@ -1030,19 +1038,43 @@ def _parse_pinned_output(raw: str) -> list:
     return [{"op": "replace", "para": p, "text": t} for p, t in spans.items()]
 
 
+def _card_violations(span: dict, para_map: dict, para_text: dict) -> list:
+    """Q2-c 卡级三查：违规词消失 / 防搬运 / 段长带宽。返回违规原因列表（空=好卡）。"""
+    p, new = int(span["para"]), span["text"] or ""
+    reasons = []
+    for f in para_map.get(p, []):
+        tic = str(getattr(f, "text", "") or "").strip()
+        if tic and tic in new:
+            reasons.append(f"违规词未消失（{tic[:20]}）")
+    others = "\n".join(t for k, t in para_text.items() if k != p)
+    win = DESLOP_CARD_TRANSPORT_CHARS
+    for i in range(max(0, len(new) - win)):
+        if new[i:i + win] in others:
+            reasons.append(f"搬运他段原文（…{new[i:i + win][:20]}…）")
+            break
+    orig = para_text.get(p, "")
+    if orig and (len(new) < len(orig) * 0.3 or len(new) > len(orig) * 2.5):
+        reasons.append(f"段长越带 {len(orig)}→{len(new)}")
+    return reasons
+
+
 def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
                            advisory: list, num: int) -> str:
-    """命中段 ≤DESLOP_PINNED_MAX_PARAS 处时只让模型输出替换段全文，本地按段号拼回。
+    """去味改写卡（Q2-c，0.24.0 升级旧定点修复）。
 
-    与 E11/T4b 失败版 span 模式的差异：输入只带命中段（不带整章）、输出是纯文本
-    替换对（无 JSON 编辑列表与推理膨胀）。返回新 prose；不适定/失败返回 ""
+    命中段 ≤上限（卡片制 6 / 旧档 2）时只让模型输出替换段全文。卡级三查
+    （_card_violations）逐卡验收：好卡采纳、坏卡定向返工一次（附违规原文+修法，
+    DOC 爬升制）、仍坏剔除留痕保留原段——不再整章全弃。全部卡坏/不适定返回 ""
     （调用方回退整章重写），失败轮一律 rollback 不留史。"""
     from . import span_edit
     if not _session_usable(session):
         return ""
+    w_cfg = (ctx.cfg or {}).get("writing", {}) or {}
+    cards_on = bool(w_cfg.get("deslop_cards", True))
+    cap = DESLOP_CARD_MAX_PARAS if cards_on else DESLOP_PINNED_MAX_PARAS
     para_map = _findings_para_map(prose, list(blocking) + list(advisory))
     paras = sorted(para_map)
-    if not paras or len(paras) > DESLOP_PINNED_MAX_PARAS:
+    if not paras or len(paras) > cap:
         return ""
     para_text, k = {}, 0
     for ln in prose.split("\n"):
@@ -1067,6 +1099,7 @@ def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
     try:
         ctx.last_prompt = req
         _snap_prompt(ctx, PHASE_DESLOP, num)   # E1：定点修复轮最终装配 prompt 快照
+        _rewrite_tick(ctx)   # Q2-d：卡轮也是真实改写调用
         raw = _session_ask(ctx, session, SLOT_WRITING, req,
                            label=f"去味定点修复 第{num}章", phase=PHASE_DESLOP, stream=True)
         spans = _parse_pinned_output(raw)
@@ -1074,6 +1107,55 @@ def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
             span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", "no_spans")
             session.rollback_to(t_before)
             return ""
+        # ---- Q2-c 卡级验收：坏卡返工一次 → 仍坏剔除留痕 ----
+        bad = {}
+        for sp in spans:
+            v = _card_violations(sp, para_map, para_text)
+            if v:
+                bad[int(sp["para"])] = v
+        if bad and cards_on:
+            # 定向返工（DOC 爬升制第 2 级：附违规原文 + 明确修法）
+            rework_lines = []
+            for sp in spans:
+                p = int(sp["para"])
+                if p in bad:
+                    rework_lines.append(
+                        "⟦P%02d⟧ 原段：%s\n  上一稿（不合格）：%s\n  不合格原因：%s\n"
+                        "  修法：保留原段情节与信息，重写本段消除上述问题；"
+                        "禁止搬运本章其他段落文字。" % (
+                            p, para_text.get(p, ""), sp["text"],
+                            "；".join(bad[p])[:120]))
+                else:
+                    rework_lines.append("⟦P%02d⟧ %s" % (p, para_text.get(p, "")))
+            req2 = (req + "\n\n【返工卡】以下段落上一稿不合格，仅重写这些段：\n"
+                    + "\n".join(rework_lines))
+            _rewrite_tick(ctx)
+            raw2 = _session_ask(ctx, session, SLOT_WRITING, req2,
+                                label=f"去味卡片返工 第{num}章", phase=PHASE_DESLOP,
+                                stream=True)
+            spans2 = {int(sp["para"]): sp for sp in _parse_pinned_output(raw2)}
+            keep = []
+            for sp in spans:
+                p = int(sp["para"])
+                if p in bad and p in spans2:
+                    v2 = _card_violations(spans2[p], para_map, para_text)
+                    if not v2:
+                        keep.append(spans2[p])   # 返工成功
+                        span_edit.record_event(ctx.proj, "deslop", "card_reworked",
+                                               f"para={p}")
+                        continue
+                    span_edit.record_event(
+                        ctx.proj, "deslop", "card_dropped",
+                        f"para={p} reasons={'；'.join(v2)[:120]}")
+                    continue   # 剔除：保留原段
+                if p not in bad:
+                    keep.append(sp)
+            spans = keep
+            if not spans:
+                span_edit.record_event(ctx.proj, "deslop", "pinned_fallback",
+                                       "all_cards_bad")
+                session.rollback_to(t_before)
+                return ""
         merged = span_edit.apply_spans(prose, spans)
         if not merged.strip() or merged == prose:
             span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", "empty_merge")
@@ -2293,7 +2375,10 @@ class _MicroCycle:
         _round_tics = []      # 3-gram 防复用黑名单（会话级不落盘，只进去味 prompt）
         # 调整五（writing.deslop_pinned，缺省关）：命中段 ≤2 处走定点修复——只输出
         # 替换段全文（无 JSON 编辑列表），本地拼回；不适定自动回退整章重写。
-        _deslop_pinned_on = bool(_w_cfg.get("deslop_pinned", False))
+        # Q2-c（0.24.0）：去味卡片制缺省开（deslop_cards=True → 走卡路径，上限 6 段）；
+        # 旧定点档 deslop_pinned 显式开时同路径（上限 2）。两者都关 = 整章重写旧路径。
+        _deslop_pinned_on = (bool(_w_cfg.get("deslop_pinned", False))
+                             or bool(_w_cfg.get("deslop_cards", True)))
         # 调整一（writing.instruction_in_head）：去味改写原则段已在卷级冻结头时，
         # 整章重写轮剥掉同段（定点修复模板自身不带该段，无需瘦身）。
         _deslop_strip = prompts.deslop_static_rules() \

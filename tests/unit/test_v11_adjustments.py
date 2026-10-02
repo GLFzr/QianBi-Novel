@@ -403,8 +403,9 @@ def test_parse_pinned_output_last_wins():
     assert stages._parse_pinned_output("没有任何标记的回复") == []
 
 
-def _pinned_env(tmp_path, prose, reply):
+def _pinned_env(tmp_path, prose, reply, _w=None):
     """构造定点修复的全套假件（session/ctx），返回 (ctx, session)"""
+    _w = dict(_w or {})
     class _Session:
         enabled = True
 
@@ -431,7 +432,7 @@ def _pinned_env(tmp_path, prose, reply):
             return _Client()
 
     sess = _Session()
-    ctx = _Ctx({"writing": {}}, _Router2(), str(tmp_path))
+    ctx = _Ctx({"writing": _w}, _Router2(), str(tmp_path))
     return ctx, sess
 
 
@@ -454,9 +455,15 @@ def test_deslop_pinned_happy_path_and_guards(tmp_path):
     big = "膨胀" * 2000
     ctx3, sess3 = _pinned_env(tmp_path, prose, f"⟦P03⟧ {big}")
     assert _deslop_pinned_rewrite(ctx3, sess3, prose, blocking, [], 1) == ""
-    # 命中段 >2 → 不进模型直接回退（无 ask、无 commit、无回滚）
+    # 命中段 >2 → 旧档（deslop_cards=False）不进模型直接回退（无 ask/commit/回滚）
     finds = [_F(0), _F(off), _F(prose.index("第三段干净"))]
     assert len(_findings_para_map(prose, finds)) == 3 > DESLOP_PINNED_MAX_PARAS
-    ctx4, sess4 = _pinned_env(tmp_path, prose, "⟦P02⟧ x")
+    ctx4, sess4 = _pinned_env(tmp_path, prose, "⟦P02⟧ x",
+                              _w={"deslop_cards": False})
     assert _deslop_pinned_rewrite(ctx4, sess4, prose, finds, [], 1) == ""
     assert sess4.committed is None and sess4.rolled_back == 0
+    # Q2-c（0.24.0）卡制默认开：3 命中段 ≤6 进入卡路径（旧行为的反转钉子）；
+    # 坏卡（"x" 段长越带）返工一次仍坏 → 剔除全部 → 空串回退（有回滚）
+    ctx5, sess5 = _pinned_env(tmp_path, prose, "⟦P02⟧ x")
+    assert _deslop_pinned_rewrite(ctx5, sess5, prose, finds, [], 1) == ""
+    assert sess5.rolled_back == 1
