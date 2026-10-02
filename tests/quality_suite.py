@@ -353,6 +353,17 @@ RUBRIC = """你是资深网文责编。对给定章节正文按 10 个维度打�
 评分定义：开篇抓力=前三段能否按住读者；节奏推进=有无注水/原地踏步；人物一致性=言行与前文设定自洽；对话自然度=像人话还是说明书；爽点兑现=期待-铺垫-兑现闭环；钩子力度=章末是否让人想点下一章；文笔流畅=语病/硬译腔；AI味读感=模板腔/排比堆砌/机械清单越少越高分；前后文连贯=承接上一章结尾；平台合规=无敏感内容。5 分=勉强及格，7 分=可发布，9 分=头部水准。"""
 
 
+def _length_normalize(text: str, lo: int = 1400, hi: int = 3600) -> str:
+    """W5-b（0.24.0）：盲评长度配平——超出 [lo,hi] 的稿按句边界截到 hi（评委有
+    长度偏好，LitBench 实证：不配平测的是长度不是质量）；过短稿保留原样（截无可截）。"""
+    t = text or ""
+    if len(t) <= hi:
+        return t
+    cut = t[:hi]
+    m = max(cut.rfind("。"), cut.rfind("！"), cut.rfind("？"))
+    return cut[:m + 1] if m >= lo else cut
+
+
 def cmd_blind():
     from app import project
     chapters = {n: project.read_file(p) for n, _t, p in project.list_chapters(PROJ)}
@@ -364,7 +375,7 @@ def cmd_blind():
     remote_j = _client(True) if _key_remote() else None
     results = {}
     for n in order:
-        text = chapters[n][:6000]
+        text = _length_normalize(chapters[n])
         lab = labels[n]
         scores = []
         for rep in (1, 2):
@@ -383,7 +394,10 @@ def cmd_blind():
             log(f"  B stealth {lab}：{rj.get('scores') if rj else '解析失败'}")
         results[lab] = {"chapter": n, "local_passes": scores, "remote": remote_res}
     summary = _blind_summary(results)
-    out = {"labels": labels, "results": results, "summary": summary}
+    out = {"labels": labels, "results": results, "summary": summary,
+           "protocol": {"length_normalize": "[1400,3600]句边界截断",
+                        "position_permutation": "乱序呈现（seed=42）",
+                        "passes": "local×2 + remote×1"}}
     json.dump(out, open(os.path.join(OUT, "_quality_blind.json"), "w",
                         encoding="utf-8"), ensure_ascii=False, indent=1)
     log(f"B 汇总：{json.dumps(summary, ensure_ascii=False)}")

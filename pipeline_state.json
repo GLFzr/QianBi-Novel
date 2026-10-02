@@ -1,18 +1,11 @@
 {
   "history": [],
-  "pending_guidance": {},
-  "chapter_step": "",
-  "total_chapters": 0,
+  "paused": false,
   "current_chapter": 0,
-  "chapter_need_human": {
-    "5": "2026-10-02 21:30:13",
-    "7": "2026-10-02 21:30:13"
-  },
-  "anomalies": [],
-  "review_chain": {},
-  "stage": "init",
   "pending_ideas": [],
   "review_findings": {},
+  "anomalies": [],
+  "pending_guidance": {},
   "cw": {
     "mode": "auto",
     "stage": "cw_project",
@@ -26,5 +19,12 @@
     "report": {},
     "stage_mode": {}
   },
-  "paused": false
+  "chapter_step": "",
+  "total_chapters": 0,
+  "stage": "init",
+  "review_chain": {},
+  "chapter_need_human": {
+    "5": "2026-10-02 21:32:45",
+    "7": "2026-10-02 21:32:45"
+  }
 }
