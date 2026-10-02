@@ -1,7 +1,18 @@
 {
-  "review_findings": {},
-  "pending_ideas": [],
   "history": [],
+  "pending_guidance": {},
+  "chapter_step": "",
+  "total_chapters": 0,
+  "current_chapter": 0,
+  "chapter_need_human": {
+    "5": "2026-10-02 21:30:13",
+    "7": "2026-10-02 21:30:13"
+  },
+  "anomalies": [],
+  "review_chain": {},
+  "stage": "init",
+  "pending_ideas": [],
+  "review_findings": {},
   "cw": {
     "mode": "auto",
     "stage": "cw_project",
@@ -15,16 +26,5 @@
     "report": {},
     "stage_mode": {}
   },
-  "chapter_step": "",
-  "chapter_need_human": {
-    "5": "2026-10-02 20:40:05",
-    "7": "2026-10-02 20:40:05"
-  },
-  "current_chapter": 0,
-  "anomalies": [],
-  "paused": false,
-  "pending_guidance": {},
-  "stage": "init",
-  "total_chapters": 0,
-  "review_chain": {}
+  "paused": false
 }

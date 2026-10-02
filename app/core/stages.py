@@ -25,6 +25,7 @@ from ..llm import clean_llm_output
 from ..prompts import bridge_codes, scene_cards
 from . import deslop_metrics, gates, memory, scan, state as st, tracking_store, versions  # S6a：度量层下沉 core
 from . import rewrite_gate  # Q2-b（0.24.0）：改写净增益闸
+from . import style_anchor, opening_score, hook_carry  # W3/W4（0.24.0）
 from .chapter_directive import (FIELD_ORDER as _CD_FIELD_ORDER,       # A1（0.23.0）章纲合同
                                 parse_directive as _parse_directive,
                                 to_prompt_block as _to_prompt_block,
@@ -1377,6 +1378,175 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
     return saved
 
 
+def _carry_block(proj: str, num: int) -> str:
+    """Q4-a/Q4-d（0.24.0）：承接义务块——上一章钩型+内容+应答义务+钩型轮换。
+
+    数据源=追踪/钩子账本.json（缺账本/首章 → 空串，fail-open）。三测 S2 实证：
+    上一章钩子被本章应答率 1/6、钩型 5/7 同型——账本早有数据，缺的就是这条
+    注入回路（计划 §一 P1-4）。"""
+    from .history_compaction import _read_hook_rows
+    rows = [r for r in _read_hook_rows(proj)
+            if isinstance(r, dict) and r.get("position", "章尾") == "章尾"]
+    by_num = {}
+    for r in rows:
+        try:
+            by_num[int(r.get("num") or 0)] = r
+        except (TypeError, ValueError):
+            continue
+    parts = []
+    prev = by_num.get(num - 1) if num > 1 else None
+    if prev:
+        htype = str(prev.get("type") or prev.get("hook_type") or "").strip()
+        summary = str(prev.get("summary") or prev.get("hook") or "").strip()[:100]
+        parts.append(
+            "\n【承接义务】上一章章末钩型：「%s」；钩子内容：%s。\n"
+            "本章前三分之一必须兑现或实质推进该钩子（正面回应/反转/代价落地均可）；"
+            "禁止在章首复述上一章情节。" % (htype or "（未登记）",
+                                            summary or "（见上一章结尾）"))
+    ty1 = str((by_num.get(num - 1) or {}).get("type") or "").strip()
+    ty2 = str((by_num.get(num - 2) or {}).get("type") or "").strip()
+    if ty1 and ty1 == ty2:
+        parts.append(f"\n【钩型轮换】上两章钩型均为「{ty1}」——本章章末钩子必须换型"
+                     "（七型词表任选其异）。")
+    return "".join(parts)
+
+
+def _beat_budget_block(outline: str, chapter_words: int) -> str:
+    """Q2-a（0.24.0）：拍段字数预算块——细纲 N 拍 → 每拍约 W/N 字均衡展开。
+
+    AgentWrite/Scene-Beats 思想：字数达标从「写后补救」前移到「写前预算」。
+    细纲无拍段（无 `- ` 行）→ 空串（fail-open，装配字节不变）。"""
+    n = len([ln for ln in (outline or "").splitlines()
+             if ln.strip().startswith("-")])
+    if n < 2 or not chapter_words:
+        return ""
+    per = max(120, chapter_words // n)
+    return (f"\n【拍段字数预算】本章目标约 {chapter_words} 字；细纲共 {n} 拍，"
+            f"每拍约 {per} 字均衡展开——禁止前松后凑，禁止末拍堆对话凑字。")
+
+
+def _opening_bestof_block(ctx, proj, num, outline, n_open):
+    """Q4-e（0.24.0）：章首 best-of-N 择优——前 300-500 字独立生成（短上下文避开
+    长程污染），本地评分择优（砍掉 bad beginning 分布左尾），胜者作已定稿章首前缀。
+    n_open<2 / 全部候选为空 / 任何异常 → 空串（直入正文相位，fail-open）。"""
+    if n_open < 2:
+        return ""
+    try:
+        _ptail = (memory.prev_chapter_pack(proj, num)[0] or "")[-300:]
+        _first_beat = next((ln.strip() for ln in (outline or "").splitlines()
+                            if ln.strip().startswith("-")), "")
+        _oc = []
+        for _i in range(n_open):
+            _rewrite_tick(ctx)
+            _oprompt = ("你是网文写手。只写本章正文开头的第 1 段（300-500 字），"
+                        "直接输出正文段落本身——不要标题、不要解释、不要加引号。\n"
+                        "要求：第一句就把读者按住（冲突/异常/悬念前置）；禁止天气"
+                        "开场、禁止回顾上一章情节、禁止「不是…而是…」句式。\n"
+                        f"上一章结尾：{_ptail or '（本书第一章）'}\n"
+                        f"本章细纲首拍：{_first_beat or (outline or '')[:200]}")
+            _raw = clean_llm_output(_stream(
+                ctx, SLOT_WRITING, _oprompt,
+                label=f"章首候选{_i + 1} 第{num}章", phase="opening"))
+            if _raw.strip():
+                _oc.append(_raw.strip()[:600])
+        if not _oc:
+            return ""
+        _best = _oc[opening_score.best_of(_oc, _ptail)]
+        ctx.log("ok", f"第 {num} 章 章首择优：{len(_oc)} 候选 → 选"
+                      f" {opening_score.score(_best, _ptail)} 分")
+        return ("\n【已定稿章首】以下开头必须原样作为本章正文的第一段"
+                "（只能从它续写，不得改写）：\n" + _best + "\n")
+    except PipelineStopped:
+        raise
+    except Exception as _e:  # noqa: BLE001
+        ctx.log("warn", f"第 {num} 章 章首择优失败（跳过，直入正文相位）：{_e}")
+        return ""
+
+
+def _enrich_para_rewrite(ctx, session, prose: str, gap: int, num: int,
+                         chapter_words: int) -> str:
+    """Q2-a（0.24.0）：段落级扩写——废除「整章不足→整章重写」的行业不存在形态。
+
+    定位最单薄段落（叙事段按长度升序取前 K 段），卡式调用逐段增厚（情节不变
+    约束），卡级验收（防搬运/段长带宽/总增益）。失败返回 ""（调用方跳出扩写环，
+    字数不足走既有「降级建议」路径——绝不回退整章重写）。"""
+    if not _session_usable(session) or gap < 150:
+        return ""
+    paras = [(i + 1, ln) for i, ln in enumerate(prose.split("\n"))
+             if ln.strip() and not ln.lstrip().startswith("#")
+             and not ln.lstrip().startswith("⟦")]
+    if not paras:
+        return ""
+    k = max(1, min(3, int(gap // 350) or 1))
+    thin = sorted(paras, key=lambda t: len(t[1]))[:k]
+    per_para = max(200, gap // max(len(thin), 1))
+    para_block = "\n".join("⟦P%02d⟧ %s" % (p, ln) for p, ln in thin)
+    kw = dict(chapter_num=num, actual=project.count_chars(prose),
+              target=chapter_words, gap=gap, per_para=per_para,
+              para_block=para_block,
+              project_header=project_header(ctx.proj),
+              chapter_header=_chap_header(ctx, ctx.proj, num))
+    req = ("（作用域：仅依据系统设定基准与本会话中的章正文消息执行本步；"
+           "本步为段落级增厚，只处理下方点名的段落。）\n\n" +
+           prompts.ENRICH_PARA_PROMPT.format(**kw))
+    t_before = session.turn_count()
+    from . import span_edit
+    try:
+        ctx.last_prompt = req
+        _snap_prompt(ctx, PHASE_ENRICH, num)
+        _rewrite_tick(ctx)
+        raw = _session_ask(ctx, session, SLOT_WRITING, req,
+                           label=f"段落级扩写 第{num}章", phase=PHASE_ENRICH,
+                           stream=True)
+        spans = _parse_pinned_output(raw)
+        if not spans:
+            session.rollback_to(t_before)
+            return ""
+        keep, added = [], 0
+        others = "\n".join(ln for ln in prose.split("\n"))
+        for sp in spans:
+            p, new = int(sp["para"]), sp["text"] or ""
+            orig = next((ln for q, ln in thin if q == p), "")
+            if not orig:
+                continue
+            win = DESLOP_CARD_TRANSPORT_CHARS
+            others_wo = "\n".join(ln for i, ln in enumerate(prose.split("\n"), 1)
+                                  if i != p)
+            transport = any(new[i:i + win] in others_wo
+                            for i in range(max(0, len(new) - win)))
+            hi = len(orig) + int(per_para * 1.8)
+            if transport or len(new) < len(orig) * 0.8 or len(new) > hi:
+                span_edit.record_event(ctx.proj, "enrich_para", "card_bad",
+                                       f"para={p}")
+                continue
+            keep.append(sp)
+            added += len(new) - len(orig)
+            span_edit.record_event(ctx.proj, "enrich_para", "card_ok",
+                                   f"para={p} +{len(new) - len(orig)}")
+        if not keep or added < gap * 0.35:
+            session.rollback_to(t_before)
+            span_edit.record_event(ctx.proj, "enrich_para", "gain_short",
+                                   f"added={added} gap={gap}")
+            return ""
+        merged = span_edit.apply_spans(prose, keep)
+        if not merged.strip() or merged == prose:
+            session.rollback_to(t_before)
+            return ""
+        session.commit_turn(req, merged)
+        ctx.log("ok", f"第 {num} 章 段落级扩写：{len(keep)} 段增厚 +{added} 字"
+                      f"（缺口 {gap}）")
+        return merged
+    except PipelineStopped:
+        raise
+    except Exception as e:  # noqa: BLE001
+        try:
+            session.rollback_to(t_before)
+        except Exception:  # noqa: BLE001
+            pass
+        span_edit.record_event(ctx.proj, "enrich_para", "error", str(e)[:120])
+        return ""
+
+
 def _generate_outline_batch(ctx, todo: list, chapter_words: int,
                             core_setting: str, volume_outline: str,
                             nearby_text: str, previous_ending: str = "",
@@ -1972,6 +2142,22 @@ class _MicroCycle:
             ctx.log("warn", f"第 {num} 章 细纲合同校验：缺必填字段 "
                             f"{', '.join(self.directive_missing)}"
                             f"（fail 候选，不阻断——大纲即法律的机器抓手）")
+        # Q4-b（0.24.0）：承接断链标记——cbn/cen 双缺（解析成功的合同书才判；
+        # 旧式细纲书 fail-open）。动作=error 警告+need_human 标记（仅 0.23 模板书），
+        # 不斩流程——承接质量的真闸是 _carry_block 注入与对偶检测两层闭环。
+        if self.directive is not None \
+                and {"cbn", "cen"} <= set(self.directive_missing or []):
+            self.directive_gap = ["cbn", "cen"]
+            ctx.log("error", f"第 {num} 章细纲缺承接关键字段 cbn/cen"
+                             "（承接断链标记——建议补细纲）")
+            if bool(_w_cfg.get("directive_intercept", True)) and any(
+                    k in (self.outline or "") for k in ("CBN", "CEN", "章末问题", "承接")):
+                try:
+                    st.mark_chapter_need_human(proj, st.load_state(proj), num)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            self.directive_gap = []
 
         # C33（writing.satisfaction_ledger_enabled，缺省 on）：细纲批解析处读 declared——
         # 本章账本行在此立据（类型/强度/声明拍段），finalize 落账。账本是记录+核对，
@@ -2001,6 +2187,12 @@ class _MicroCycle:
         chapter_words = self.chapter_words
         ctx.step(num, st.STEP_DRAFT)
         ctx.checkpoint()
+        # Q4-e（0.24.0）：章首 best-of-N 择优（短上下文砍 bad beginning 左尾）；
+        # 先于一切 try 语句独立执行（N-36 扫描面隔离）。
+        _opening_prefix = (_opening_bestof_block(
+            ctx, proj, num, outline,
+            int(_w_cfg.get("opening_bestof", 3) or 0))
+            if self.resume_at == "" else "")
         wb_block, rg_block, wb_meta = _worldbook_regex_blocks(ctx, num)
         _record_worldbook(ctx, PHASE_PROSE, wb_meta)
         # 阶段重生成时 bridge 写入的「阶段指导」：消费即删，拼进本章写作指导
@@ -2033,6 +2225,17 @@ class _MicroCycle:
             "author_note": _author_note(proj),
         }
         _prose_directives = _dyn_directives(ctx, PHASE_PROSE)   # E1.2/O2（未配置=空串）
+        # Q2-a（0.24.0）：拍段字数预算——细纲 N 拍均分目标字数（写前预算替代写后补救）
+        _budget_block = _beat_budget_block(outline, chapter_words)
+        # Q4-a/Q4-d：承接义务块（上一章钩子应答 + 钩型轮换）
+        _carry = _carry_block(proj, num)
+        # W3（0.24.0）文风纪律块：指纹+全书统计镜像+文风锚（末位纪律——动笔前
+        # 最后读入的是正文语态样本）；书未建基准/章数<2 时为空串（fail-open）。
+        try:
+            _style_block = style_anchor.assembly_block(proj)
+        except Exception as _e:  # noqa: BLE001
+            _style_block = ""
+            ctx.log("warn", f"文风纪律块装配失败（本章无末位锚）：{_e}")
         # B1（writing.satisfaction_engine，缺省关）：本章细纲携带真实节拍时，正文轮
         # 注入「三拍必须兑现」指令块；无节拍章/引擎关闭 = 空串（装配字节不变）。
         _beat_block = (_satisfaction_prose_block(outline)
@@ -2045,6 +2248,11 @@ class _MicroCycle:
         _directive_block = _directive_contract_block(getattr(self, "directive", None))
         # A8（cost.a8_opening_compress，缺省关）：开幕轮密度压缩——只作用于会话路径
         # （开幕轮与 system 前缀重复的指令性槽位收敛为短引用）；关时逐字节不变。
+        # Q1-d（0.24.0）：装配可观测——写前体检（各注入块字节数）
+        if _budget_block or _carry or _style_block:
+            ctx.log("info", f"第 {num} 章 装配体检：拍段预算 {len(_budget_block)}B "
+                            f"承接 {len(_carry)}B 合同 {len(_directive_block)}B "
+                            f"文风 {len(_style_block)}B")
         _a8_on = _a8_compress_enabled(ctx.cfg)
         if _session_usable(session):
             # 章会话：正文写作是本会话首轮，回复固化为章正文轮。
@@ -2066,7 +2274,7 @@ class _MicroCycle:
                     used_setpieces=prose_kw["used_setpieces"],
                     craft_block=prose_kw["craft_block"],
                     author_note=prose_kw["author_note"],
-                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _directive_block + _prose_directives
+                    tic_blacklist=prose_kw["tic_blacklist"]) + _beat_block + _budget_block + _carry + _directive_block + _prose_directives + _style_block + _opening_prefix
                 turn_text = session.open_chapter(
                     chapter_header(proj, num,
                                    volume_mode=not _w_cfg.get("head_rebuild", False),
@@ -2079,7 +2287,7 @@ class _MicroCycle:
                     # 收敛为短引用；卷会话（跨章历史已含前情正文）章头再跳三节。
                     prose_kw = _a8_opening_prose_kw(prose_kw)
                 turn_text = prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw) \
-                    + _beat_block + _directive_block + _prose_directives
+                    + _beat_block + _budget_block + _carry + _directive_block + _prose_directives + _style_block + _opening_prefix
                 if hasattr(session, "open_chapter"):
                     turn_text = session.open_chapter(
                         _chap_header(ctx, proj, num, volume_mode=_a8_on), turn_text,
@@ -2090,7 +2298,7 @@ class _MicroCycle:
             self.prose = _session_ask(ctx, session, SLOT_WRITING, turn_text,
                                       label=f"草稿 第{num}章", phase=PHASE_PROSE)
         else:
-            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _directive_block + _prose_directives
+            prompt = prompts.PROSE_WRITING_PROMPT.format(**prose_kw) + _beat_block + _budget_block + _carry + _directive_block + _prose_directives + _style_block + _opening_prefix
             ctx.last_prompt = prompt
             _snap_prompt(ctx, PHASE_PROSE, num)   # E1：草稿轮最终装配 prompt 快照
             self.prose = _stream(ctx, SLOT_WRITING, prompt, label=f"草稿 第{num}章",
@@ -2120,11 +2328,31 @@ class _MicroCycle:
             _pace_after_long_call(ctx, session, boundary="prose_tail")
             enrich_rounds = 0
             _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
+            # Q2-a（0.24.0）：段落级扩写缺省开（enrich_para=True）——废除「整章不足→
+            # 整章重写」的行业不存在形态；显式 enrich_tail 优先，enrich_para=False 走旧路。
+            _enrich_para = (bool(_w_cfg.get("enrich_para", True))
+                            and not _enrich_tail)
             while not low_ok and enrich_rounds < max_enrich_rounds:
                 enrich_rounds += 1
                 ctx.step(num, st.STEP_ENRICH)
                 ctx.log("warn", f"第 {num} 章 字数不足（{actual} / 目标 {chapter_words}），自动扩写（第 {enrich_rounds} 轮）…")
                 ctx.checkpoint()
+                if _enrich_para:
+                    # 段落级增厚优先——只扩最薄几段（情节不变），失败即止
+                    # （走「降级建议」，不回退整章重写——那是堆料的温床）。
+                    gap = max(chapter_words - actual, 200)
+                    rewritten = _enrich_para_rewrite(ctx, session, self.prose,
+                                                     gap, num, chapter_words)
+                    if rewritten.strip() and project.count_chars(rewritten) >= actual:
+                        self.prose = rewritten
+                    else:
+                        ctx.log("warn", f"第 {num} 章 段落级扩写未达标"
+                                        f"（缺口 {gap} 字），停止扩写——字数不足"
+                                        "降级为建议（请人工扩写或调高目标）")
+                        break
+                    low_ok, high_ok, actual = gates.check_word_bounds(
+                        self.prose, chapter_words, tolerance)
+                    continue
                 # V7（writing.enrich_tail，缺省关）：补尾式扩写——只续写缺口（400-600 字），
                 # 输出∝缺口；旧全量重写每轮输出整章且模型对「扩写」天然保守（每轮只加
                 # 300-400 字、常需 2 轮）。续写完成后把「完整正文」固化进会话，保持
@@ -2986,6 +3214,22 @@ class _MicroCycle:
         # 服务端前缀缓存继续有效（不重放、不重新 miss）。
         _save_session_checkpoint(ctx, session, "定稿后")
         gr.word_actual = project.count_chars(prose)
+        # Q4-c（0.24.0）：成品对偶检测——本章开头 500 字 vs 上一章钩子 → 应答
+        # 判定落 sidecar（true/partial/false；S2 口径复算与下章承接义务的数据源）。
+        try:
+            hook_carry.record_answer(
+                proj, num, hook_carry.detect(
+                    prose[:500], hook_carry._prev_hook_text(proj, num - 1)))
+        except Exception as _e:  # noqa: BLE001
+            ctx.log("warn", f"Q4-c 应答检测未落账（不影响本章定稿）：{_e}")
+        # W3-a（0.24.0）：首章定稿回填文风校准段（幂等，供后续章末位锚）。
+        if num == 1:
+            try:
+                if style_anchor.backfill_from_chapter(proj, 1):
+                    ctx.log("ok", "文风校准段回填生效：第 1 章钩子段+高张力段"
+                                  "作后续章末位锚")
+            except Exception as _e:  # noqa: BLE001
+                ctx.log("warn", f"文风校准段回填失败（后续章无末位锚）：{_e}")
         record = {"num": num, "title": title, **gr.to_record()}
         if self.word_overflow:   # C17 G1：断路章的记录显式携带 word_overflow（台账/告警消费）
             record["word_overflow"] = True

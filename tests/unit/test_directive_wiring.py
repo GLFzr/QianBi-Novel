@@ -327,7 +327,8 @@ def test_whitelist_wiring_passes_proj_at_all_call_sites():
     src = open(os.path.join(os.path.dirname(stages.__file__), "stages.py"),
                encoding="utf-8").read()
     n = len(re.findall(r"scan_deslop\(self\.prose, proj=", src))
-    assert n == 4, f"stages 内 scan_deslop 应 4 处全部传 proj（实测 {n}）"
+    assert n == 5, f"stages 内 scan_deslop 应 5 处全部传 proj（实测 {n}）"
+    # 0.24.0 Q2-b：+长度骤减守卫的采纳前复扫（第 5 处）
 
 
 def test_whitelist_actually_masks_blocking_phrase(tmp_path):
