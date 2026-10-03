@@ -21,9 +21,9 @@
 | 维度 | space-bunny-free | longcat-2.5-preview-free |
 |---|---|---|
 | 思考负担 | **重**（思考 tokens 从 max_tokens 里扣） | 无（直接出正文） |
-| max_tokens 要求 | **≥16384**：8192/4096 时思考吃光预算→正文 0 字（`finish=length`）；16384 时正常 | 不敏感（1287/474 tok 均正常收尾） |
+| max_tokens 要求 | **探针（短 prompt）≥16384 即可；重管线 prompt（入 ≥10k tok + effort=high）实测 16384 仍被思考吃光→0 字（`finish=length`），需 32768**。千笔的空内容升级链（16384→32768，`_ESCALATE_CEILING`）可自愈，但代价是首轮整段浪费（实测第 8 章：358s 空 + 1603s 成功 = 单草稿 33 分钟）。**建议：管线场景直接把 max_tokens 设 32768**，或 prose 相位降 effort | 不敏感（1287/474 tok 均正常收尾） |
 | `reasoning_effort` | `"high"` **生效**：思考 tok 稳定 230-340（无 0 样本）；`"xhigh"` 语法收下但思考反降（出现 0 样本，勿用）；`"x-high"` 直接 400 | 未观察到需求（缺省即可） |
-| 长 prompt 非流式 | 2364 字 prompt→16384 预算：**42s / 927 字 / finish=stop** ✅ | 同 prompt：**42s / 714 字 / stop** ✅ |
+| 长 prompt 非流式 | 2364 字 prompt→16384 预算：**42s / 927 字 / finish=stop** ✅；真管线（15k tok 入，effort=high）：首轮 empty→升级 32768 后 **1603s / 13,435 tok** ✅ | 同 prompt：**42s / 714 字 / stop** ✅ |
 | 短 prompt | ~1-3s | ~1-3s |
 | 已知怪癖 | 空内容时先查 max_tokens 是否被思考吃光（用法行 `usage.completion_tokens` 大而 content 空 = 思考超支） | 无 |
 
@@ -54,7 +54,7 @@
 | 症状 | 根因 | 处置 |
 |---|---|---|
 | `400 MissingSessionID` | 缺 `x-opencode-session` 头 | 千笔 `_headers()` 已自动带；裸 curl/httpx 必须手加 |
-| `finish=length` 且 content 空 | 思考吃光 max_tokens（space-bunny） | max_tokens 提到 16384；不要再低 |
+| `finish=length` 且 content 空 | 思考吃光 max_tokens（space-bunny） | 短 prompt：max_tokens ≥16384；**重管线 prompt（入 ≥10k tok）：直接 32768**（或 prose 相位降 effort）——16384 在重 prompt 下不够（10-04 实测） |
 | 输出突然变短/变敷衍 | `reasoning_effort` 填了 `xhigh`/`low`（思考被抑制） | 用 `high` 或干脆不发该参数 |
 | 内容疑似复读其他段 | 与模型无关——检查是否触发了扩写/去味环的旧路径 | 确认 `writing.enrich_para`/`deslop_cards` 开着（0.24.0 缺省开） |
 | 付费模型误用风险 | `/v1/models` 列出 35+ 模型 | 只允许白名单两个 ID；驱动层勿把用户输入透传为 model |
