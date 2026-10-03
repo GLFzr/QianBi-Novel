@@ -2643,12 +2643,21 @@ class _MicroCycle:
                                  must_block=_must_block(proj, ctx.cfg),
                                  chapter_header=_chap_header(ctx, proj, num),
                                  project_header=project_header(proj))
-                rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_DESLOP,
-                                           prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=self.prose,
-                                           label=f"去味改写 第{rounds}轮",
-                                           strip_static=_deslop_strip,
-                                           strip_replacement="（改写原则见系统「去味改写规则」"
-                                                             "（卷级冻结），本步照常执行。）", num=num)
+                try:
+                    rewritten = _rewrite_phase(ctx, session, SLOT_WRITING, PHASE_DESLOP,
+                                               prompts.DESLOP_REWRITE_PROMPT, deslop_kw, prose=self.prose,
+                                               label=f"去味改写 第{rounds}轮",
+                                               strip_static=_deslop_strip,
+                                               strip_replacement="（改写原则见系统「去味改写规则」"
+                                                                 "（卷级冻结），本步照常执行。）", num=num)
+                except PipelineStopped:
+                    raise
+                except LLMError as _e:
+                    # 0.24.0 实测修正：去味调用失败（通道上游对含正文请求的间歇 400）
+                    # 不得杀章——保留原稿、阻断照留、走既有「待修」出口。
+                    ctx.log("warn", f"第 {num} 章 去味调用失败（{_e}）——保留原稿"
+                                    "继续（阻断转待修）")
+                    rewritten = ""
             if rewritten.strip() and _must_rules:
                 # C23 采纳前双复扫（卡7）：deslop 规则复扫在下方 scan_deslop，这里补
                 # must 契约指纹复扫——改写稿「新引入」must 违规 = 本轮改写更糟（trim
