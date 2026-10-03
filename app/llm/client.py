@@ -479,9 +479,12 @@ class LLMClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         if "opencode" in self.base_url:
-            # 仅 opencode（omen-alpha / Console Go）要求；DS 与 TokenRhythm 不看，
-            # 多发一个头可能影响它们的路由/缓存，所以别的渠道一个字节都不加。
+            # 仅 opencode 要求；DS 与 TokenRhythm 不看，多发一个头可能影响它们的
+            # 路由/缓存，所以别的渠道一个字节都不加。
+            # - Console Go（omen-alpha）要 x-session-id
+            # - Go 网关（/go/v1，实测 400 MissingSessionID）要 x-opencode-session
             headers["x-session-id"] = self.session_id
+            headers["x-opencode-session"] = self.session_id
         return headers
 
     def _build_messages(self, prompt: str, system: str = "") -> list:

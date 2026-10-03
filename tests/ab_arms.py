@@ -67,10 +67,22 @@ def main():
     app = QGuiApplication(sys.argv)
 
     from app.core.orchestrator import Orchestrator
-    conn = {"id": "t", "name": "stealth-arm", "provider": "custom",
-            "base_url": "https://openrouter.ai/api/v1", "api_key": key,
-            "model": "stealth/space-bunny-alpha", "stream": False,
-            "max_tokens": 16384, "timeout": 900, "thinking": "", "reasoning_effort": ""}
+    # 0.24.0 起默认走 OpenCode Go 免费模型（用户限制：仅 space-bunny-free /
+    # longcat-2.5-preview-free，禁付费模型）；QIANBI_TEST_KEY 可覆盖为 OpenRouter。
+    oc_key = os.environ.get("QIANBI_OC_KEY", "").strip()
+    if oc_key:
+        conn = {"id": "t", "name": "opencode-go-free", "provider": "custom",
+                "base_url": "https://opencode.ai/zen/go/v1", "api_key": oc_key,
+                "model": os.environ.get("QIANBI_OC_MODEL", "space-bunny-free"),
+                "stream": False, "max_tokens": 16384, "timeout": 900,
+                "thinking": "", "reasoning_effort": "high",
+                "user_id": "qianbi-ab-" + arm}
+    else:
+        conn = {"id": "t", "name": "stealth-arm", "provider": "custom",
+                "base_url": "https://openrouter.ai/api/v1", "api_key": key,
+                "model": "stealth/space-bunny-alpha", "stream": False,
+                "max_tokens": 16384, "timeout": 900, "thinking": "",
+                "reasoning_effort": ""}
     cfg = {"connections": [conn], "slots": {"writing": "t", "helper": "t", "review": "t"},
            "gates": {"strategy": "mark_continue", "deslop_max_rounds": 2,
                      "word_tolerance": 0.1, "review_enabled": True,
