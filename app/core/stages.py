@@ -22,6 +22,7 @@ from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
 from .. import project, prompts, deslop, mustscan, wb
 from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
+from ..llm.client import LLMError  # 0.24.0：扩写失败降级（不杀章）
 from ..prompts import bridge_codes, scene_cards
 from . import deslop_metrics, gates, memory, scan, state as st, tracking_store, versions  # S6a：度量层下沉 core
 from . import rewrite_gate  # Q2-b（0.24.0）：改写净增益闸
@@ -2374,13 +2375,23 @@ class _MicroCycle:
                     # 价），成功后废轮回滚、固化合并稿轮（「最近一条章正文消息」语义不变，
                     # 免正文双份）。会话不可用回退独立单发（原路径）。
                     t_tail = session.turn_count() if _session_usable(session) else None
-                    if t_tail is not None:
-                        cont = _session_ask(ctx, session, SLOT_WRITING, req,
-                                            label=f"字数补尾（会话轮）第 {enrich_rounds} 轮",
-                                            phase=PHASE_ENRICH)
-                    else:
-                        cont = clean_llm_output(ctx.router.client(_slot).chat(
-                            req, phase=PHASE_ENRICH))
+                    try:
+                        if t_tail is not None:
+                            cont = _session_ask(ctx, session, SLOT_WRITING, req,
+                                                label=f"字数补尾（会话轮）第 {enrich_rounds} 轮",
+                                                phase=PHASE_ENRICH)
+                        else:
+                            cont = clean_llm_output(ctx.router.client(_slot).chat(
+                                req, phase=PHASE_ENRICH))
+                    except PipelineStopped:
+                        raise
+                    except LLMError as _e:
+                        # 0.24.0 实测修正：扩写调用失败（如 OpenCode space-bunny 对
+                        # 特定章尾内容的确定性 400 上游拒绝）不得杀章——字数不足本就
+                        # 有「降级为建议」出口，异常路径汇入同一出口（保留原稿继续）。
+                        ctx.log("warn", f"第 {num} 章 扩写调用失败（{_e}）——"
+                                        "字数不足降级为建议，保留原稿继续")
+                        break
                     cont = (cont or "").strip()
                     if cont and len(cont) >= gap * 0.35:
                         self.prose = self.prose.rstrip("\n") + "\n\n" + cont
