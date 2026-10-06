@@ -31,8 +31,13 @@ def log(msg):
 def main():
     assert KEY, "需要 QIANBI_TEST_KEY"
     from app import config as cfg_mod
-    from app import project, versions
+    from app import project
+    from app.core import versions
+    from app import prompts
     from app.core import gates, stages
+    from app.core.shared_prefix import project_header
+    from app.llm import clean_llm_output
+    from app.core.stages import project_header
     from app.core.chapter_session import ChapterSession
     from app.core.volume_session import build_corpus_snapshot
     from app.llm.client import LLMClient
@@ -64,34 +69,45 @@ def main():
         def stream_stage(self, label):
             pass
 
+    class _Router:
+        def client(self, slot):
+            return client
+
     ctx = _Ctx()
+    ctx.router = _Router()
     fixed = skipped = failed = 0
     for n, _t, p in project.list_chapters(PROJ):
         prose = project.read_file(p)
         cc = project.count_chars(prose)
-        low_ok, high_ok, _ = gates.check_word_bounds(prose, TARGET, 0.1)
+        low_ok, _high, _ = gates.check_word_bounds(prose, TARGET, 0.1)
         if low_ok:
             continue
         gap = max(TARGET - cc, 200)
-        log(f"第 {n} 章 {cc} 字（缺口 {gap}）——段落级增厚…")
-        system_text = (f"{project.project_header(PROJ)}\n\n"
-                       + build_corpus_snapshot(PROJ, n)[:6000])
-        session = ChapterSession(client, system_text=system_text)
+        log(f"第 {n} 章 {cc} 字（缺口 {gap}）——补尾续写（V7 语义）…")
+        kw = dict(chapter_num=n, actual=cc, target=TARGET, gap=gap,
+                  ending=prose[-400:],
+                  tic_blacklist=stages._tic_blacklist(PROJ),
+                  must_block=stages._must_block(PROJ, {"writing": {}}),
+                  chapter_header=stages.chapter_header(PROJ, n),
+                  project_header=project_header(PROJ))
+        prompt = prompts.ENRICH_TAIL_PROMPT.format(**kw)
         try:
-            merged = stages._enrich_para_rewrite(ctx, session, prose, gap, n, TARGET)
+            cont = clean_llm_output(client.chat(prompt, phase="word_fix"))
         except Exception as e:  # noqa: BLE001
-            log(f"  异常：{type(e).__name__}: {str(e)[:120]}")
+            log(f"  ✗ 调用失败：{type(e).__name__}: {str(e)[:120]}")
             failed += 1
             continue
-        new_cc = project.count_chars(merged) if merged else 0
-        if merged and new_cc >= cc:
+        cont = (cont or "").strip()
+        if cont and len(cont) >= gap * 0.35:
+            merged = prose.rstrip("\n") + "\n\n" + cont
             versions.snapshot(PROJ, n, prose, "字数增厚前备份")
             project.write_file(p, merged)
-            ok, _, final = gates.check_word_bounds(merged, TARGET, 0.1)
-            log(f"  ✓ {cc}→{new_cc} 字（{'达标' if ok else '仍低于下限'}）")
+            new_cc = project.count_chars(merged)
+            ok, _, _f = gates.check_word_bounds(merged, TARGET, 0.1)
+            log(f"  ✓ 续写 {len(cont)} 字：{cc}→{new_cc}（{'达标' if ok else '仍低于下限'}）")
             fixed += 1
         else:
-            log(f"  ✗ 增厚未采纳（返回空或未增长），保留原稿")
+            log(f"  ✗ 续写过短（{len(cont)} 字 < 阈值 {int(gap*0.35)}），保留原稿")
             failed += 1
     log(f"== 完成：增厚 {fixed} 章 / 失败 {failed} / 跳过（已达标）其余 ==")
 

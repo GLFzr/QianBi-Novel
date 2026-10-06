@@ -40,7 +40,7 @@ def main():
 
     from app import config as cfg_mod
     from app.core import state as st
-    from app.ui.bridge import RepairWorker, collect_needs_fix
+    from app.ui.bridge import ChapterRepairWorker as RepairWorker, collect_needs_fix
 
     cfg = {"connections": [{
         "id": "oc", "name": "OpenCode Go free", "provider": "custom",
