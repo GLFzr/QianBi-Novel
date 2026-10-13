@@ -46,6 +46,9 @@ Dialog {
     readonly property bool hasNew: st.hasNew === true
     readonly property bool verified: st.verified === true
     readonly property bool canInstall: st.canInstall === true
+    // 平台差异只在这一个文件里长：清单同时挂着 .exe 与 .dmg，客户端各取各的
+    readonly property bool mac: String(st.platform || "") === "macos"
+    readonly property string assetName: String(st.assetName || (mac ? "安装包" : "setup.exe"))
     readonly property bool downloading: dl.active === true
     readonly property bool busy: bridge.updateBusy === true
     // 装完就走人的动作不是一般的按钮：点第一下只把「确认」问出来
@@ -220,7 +223,9 @@ Dialog {
                 visible: !root.hasNew && !root.downloading && root.pkg.ok !== true
                 textFormat: Text.PlainText
                 text: root.state === "latest"
-                      ? "已是最新。发布新版后，「一键更新」按钮会出现在这里——下载、校验、退出并拉起安装器一次完成。"
+                      ? (root.mac
+                         ? "已是最新。发布新版后，「一键更新」按钮会出现在这里——下载、校验、打开安装包一次完成。"
+                         : "已是最新。发布新版后，「一键更新」按钮会出现在这里——下载、校验、退出并拉起安装器一次完成。")
                       : "查到新版且清单通过验签后，「一键更新」按钮会出现在这里。"
                 color: Theme.textTertiary
                 font.family: Theme.uiFont
@@ -239,7 +244,8 @@ Dialog {
                     visible: root.hasNew && root.verified && root.pkg.ok !== true && !root.downloading
                     enabled: root.canInstall
                     text: root.canInstall ? "下载并校验 v" + String(st.version || "")
-                                          : "一键更新（仅安装版可用）"
+                                          : (root.mac ? "一键更新（源码版不可用）"
+                                                      : "一键更新（仅安装版可用）")
                     kind: "primary"
                     iconName: "update"
                     onClicked: bridge.startUpdateDownload()
@@ -251,11 +257,14 @@ Dialog {
                     onClicked: bridge.cancelUpdateDownload()
                 }
                 AppButton {
-                    // 校验通过的包 + 验签通过的清单 + 安装版，三者齐了才让这个按钮存在
+                    // 校验通过的包 + 验签通过的清单 + 运行方式允许，三者齐了才让这个按钮存在
                     visible: root.canInstall && root.pkg.ok === true
-                    text: root.armedInstall ? "确认退出并安装（未保存草稿会保留）"
-                                            : "立即安装 v" + String(st.version || "")
-                    kind: root.armedInstall ? "danger" : "primary"
+                    text: root.mac
+                          ? (root.armedInstall ? "确认打开安装包（应用不退出）"
+                                               : "打开安装包 v" + String(st.version || ""))
+                          : (root.armedInstall ? "确认退出并安装（未保存草稿会保留）"
+                                               : "立即安装 v" + String(st.version || ""))
+                    kind: (root.armedInstall && !root.mac) ? "danger" : "primary"
                     onClicked: {
                         if (!root.armedInstall) { root.armedInstall = true; return }
                         bridge.installUpdateNow()
@@ -305,7 +314,7 @@ Dialog {
             }
             Text {
                 Layout.fillWidth: true
-                text: "在能上网的设备上下载这两样，拷到本机：latest.json（约 1KB）和 setup.exe。"
+                text: "在能上网的设备上下载这两样，拷到本机：latest.json（约 1KB）和 " + root.assetName + "。"
                       + "先导入清单，再选安装包，两边 SHA-256 对上才会出现安装按钮。"
                 color: Theme.textTertiary
                 font.family: Theme.uiFont
@@ -451,11 +460,17 @@ Dialog {
 
         Text {
             Layout.fillWidth: true
-            text: "升级只覆盖程序目录，不改你的 config.json 配置；书稿 " + bridge.defaultBooksRoot()
-                  + " 不会被动。更新缓存（清单与安装包）会写入数据目录的 updates/ 子目录"
-                  + "\n安装包没有代码签名证书，双击后 Windows 会弹蓝底「Windows 已保护你的电脑」："
-                  + "那是缺证书，不是文件坏了。点「更多信息」→「仍要运行」继续；"
-                    + "不确定就先对一下上面的 SHA-256，跟这里列的一致就是我发布的那个文件。"
+        text: root.mac
+              ? "升级只换「应用程序」里那份 .app，不改你的 config.json 配置；书稿 " + bridge.defaultBooksRoot()
+                + " 不会被动。更新缓存（清单与安装包）会写入数据目录的 updates/ 子目录"
+                + "\n安装包没有开发者签名：首次打开若被「无法打开」拦下，右键 → 打开，"
+                + "或在「系统设置 → 隐私与安全性」里点仍要打开。"
+                + "不确定就先对一下上面的 SHA-256，跟这里列的一致就是我发布的那个文件。"
+              : "升级只覆盖程序目录，不改你的 config.json 配置；书稿 " + bridge.defaultBooksRoot()
+                + " 不会被动。更新缓存（清单与安装包）会写入数据目录的 updates/ 子目录"
+                + "\n安装包没有代码签名证书，双击后 Windows 会弹蓝底「Windows 已保护你的电脑」："
+                + "那是缺证书，不是文件坏了。点「更多信息」→「仍要运行」继续；"
+                + "不确定就先对一下上面的 SHA-256，跟这里列的一致就是我发布的那个文件。"
             color: Theme.textTertiary
             font.family: Theme.uiFont
             font.pixelSize: Theme.fsMicro
@@ -481,7 +496,8 @@ Dialog {
         id: packageDialog
         objectName: "updatePackageDialog"
         title: "选择已下载的安装包"
-        nameFilters: ["安装程序 (*.exe)", "所有文件 (*)"]
+        nameFilters: root.mac ? ["磁盘映像 (*.dmg)", "所有文件 (*)"]
+                              : ["安装程序 (*.exe)", "所有文件 (*)"]
         onAccepted: bridge.checkLocalPackage(String(selectedFile))
     }
 }

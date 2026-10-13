@@ -39,6 +39,22 @@
 - [x] 便携 zip 解压实测可启动
 - [x] SHA256SUMS.txt 已生成且条目齐全
 
+## 2b. macOS 打包（换一台 macOS 机器跑同一条流水线）
+
+- [ ] `python scripts/build_release.py`（macOS 上自动跳过 `version_info` / Inno /
+      signtool，改走 `hdiutil` 出 dmg；清单只改 `assets.dmg` 与 `assets.portable`，
+      **`assets.setup` 原样保留**——两个平台是两次构建，抹掉另一侧 = 客户端报「没有本平台的包」）
+- [ ] `dist/release/v<版本>/QianBi-Novel-v<版本>-mac.dmg` 挂载后 `.app` 可启动
+      （流水线的 `probe_packaged` 已覆盖：Qt 模块 / 资源清单 80 项 / 启动冒烟 / 打包态摘要对拍）
+- [ ] `-macos.zip` 解出来第一层就是 `QianBi-Novel.app`（`unzip -l | head` 验）——
+      压成 `Contents/` 平铺的话 bootloader 认不出 bundle，报
+      `Failed to load Python shared library .../Contents/MacOS/_internal/Python`
+- [ ] zip 里的符号链接还是链接：`unzip -l ... | grep -c Versions/Current` 非 0
+      （Python.framework 全靠它搭结构，被解引用成普通文件 = 包体看着完整但跑不起来）
+- [ ] 无 `QIANBI_SIGN_IDENTITY` 时流水线打 `[SKIP]` 照常出包 —— README / Release 正文
+      **必须写明 Gatekeeper 放行**（右键「打开」+ 核对 SHA-256）
+- [ ] 真机验收：拖进「应用程序」→ 首次右键「打开」→ 首启向导出现 → 建书 → 贴 Key（进钥匙串）
+
 ## 3. 杀软预检（误报预案）
 
 - [ ] 安装包与 exe 上传 [VirusTotal](https://www.virustotal.com/) 查看检出

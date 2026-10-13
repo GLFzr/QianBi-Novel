@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -63,6 +64,76 @@ CHANNEL_LABELS = {
     "cache": "本机缓存的上次清单",
     "file": "本地清单文件",
 }
+
+# ---- 平台资产（清单里「本机该认领哪一份」）----
+# Windows 发的是 Inno 安装包（.exe），macOS 发的是 .dmg——同一份 latest.json 同时挂着
+# 两份资产，客户端各取各的。默认后缀写在这里而不是散在调用点：下载名、哈希、下载地址
+# 三处必须同指一份，否则「校验的是 dmg、下载的是 exe」这种错位没人拦得住。
+ASSET_KIND_BY_PLATFORM = {"darwin": "dmg"}
+ASSET_SUFFIX = {"setup": "-setup.exe", "dmg": "-mac.dmg"}
+ASSET_EXT = {"setup": ".exe", "dmg": ".dmg"}
+
+
+def asset_kind(platform: str | None = None) -> str:
+    """本平台在版本清单里认领的资产类型：Windows/Linux=setup（.exe）｜macOS=dmg"""
+    p = sys.platform if platform is None else platform
+    return ASSET_KIND_BY_PLATFORM.get(p, "setup")
+
+
+def asset_ext(kind: str) -> str:
+    return ASSET_EXT.get(kind, ".exe")
+
+
+def platform_asset(manifest: dict) -> dict:
+    """本平台那份资产条目（没有就是空 dict）"""
+    assets = (manifest or {}).get("assets")
+    if not isinstance(assets, dict):
+        return {}
+    entry = assets.get(asset_kind())
+    return entry if isinstance(entry, dict) else {}
+
+
+def has_platform_asset(manifest: dict) -> bool:
+    """这份清单给本平台发包了没有——没发就是没发，不许拿别的平台的字节顶替
+
+    老清单（assets 字段出现之前）只有顶层 url/sha256，那是 Windows 安装包的字节，
+    只认在 setup 这一侧；macOS 客户端读到这种清单必须报「没有 Mac 包」。
+    """
+    assets = (manifest or {}).get("assets")
+    if not isinstance(assets, dict):
+        return asset_kind() == "setup" and bool((manifest or {}).get("sha256"))
+    entry = platform_asset(manifest)
+    return bool(entry.get("url") or entry.get("sha256"))
+
+
+def install_allowed(mode: str, platform: str | None = None) -> bool:
+    """「一键更新」认哪种运行方式（install_mode() 的返回值）
+
+    - Windows：只认安装版——便携版/源码态的 exe 被安装器覆盖的就是正在运行的自己；
+    - macOS：安装包是 .dmg，打开它不会碰正在运行的 .app，所以冻结版（安装到
+      /Applications 或解压即跑）都放行；源码态照旧不放（升级该换的是程序目录本身）。
+    """
+    p = sys.platform if platform is None else platform
+    if p == "darwin":
+        return mode != "dev"
+    return mode == "installed"
+
+
+def install_denied_reason(short: bool = False, platform: str | None = None) -> str:
+    """运行方式不被「一键更新」认时，写给用户看的那句话
+
+    措辞按平台分：Windows 的门槛是「便携版/源码运行」，macOS 没有便携版这回事，
+    拦下的只是源码态——同一句 Windows 措辞打到 Mac 用户脸上，等于让他去查一个
+    本机不存在的东西。
+    """
+    p = sys.platform if platform is None else platform
+    if p == "darwin":
+        return ("源码运行：一键更新只对安装版（.app）开放" if short else
+                "源码运行：升级要换掉的是程序目录本身，请手动更新，或改用安装版 .app")
+    if short:
+        return "便携版/源码运行：应用不会去覆盖正在运行的自己"
+    return ("便携版/源码运行：应用不会去覆盖正在运行的自己。"
+            "请用安装版升级，或手动替换整个程序目录。")
 
 
 def offline() -> bool:
@@ -146,12 +217,21 @@ def channels(cfg: dict) -> list:
 # ---------- 代理 ----------
 
 def system_proxy() -> tuple:
-    """读 WinINET 的注册表设置（不碰 ctypes/WinINet：省掉一套句柄与 GlobalFree）
+    """读系统代理设置，返回 (proxy_url, note)。
 
-    返回 (proxy_url, note)。note 是「为什么没用上系统代理」的人话，拿不准时宁可留空
-    并说清楚，也不要猜一个地址出去连。
+    note 是「为什么没用上系统代理」的人话，拿不准时宁可留空并说清楚，
+    也不要猜一个地址出去连。Windows 读 WinINET 注册表（不碰 ctypes/WinINet：
+    省掉一套句柄与 GlobalFree），macOS 读 `scutil --proxy`。
     """
-    if os.name != "nt":
+    if os.name == "nt":
+        return _win_system_proxy()
+    if sys.platform == "darwin":
+        return _mac_system_proxy()
+    return ("", "")
+
+
+def _win_system_proxy() -> tuple:
+    if os.name != "nt":        # 单测会把 os.name 打桩成 nt；真到这里的一定是 Windows
         return ("", "")
     try:
         import winreg
@@ -186,6 +266,57 @@ def system_proxy() -> tuple:
                    else "，请在面板里手填代理地址"))
     if not host.startswith("http"):
         host = "http://" + host
+    return (host, "")
+
+
+def parse_scutil_proxy(text: str) -> dict:
+    """`scutil --proxy` 的文本输出 → {key: value}（纯函数，单测直接喂样例）
+
+    输出形如 `HTTPEnable : 1`；键名固定但顺序不固定，逐行切比正则更抗排版差异。
+    """
+    out = {}
+    for line in (text or "").splitlines():
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key, val = key.strip(), val.strip()
+        if key:
+            out[key] = val
+    return out
+
+
+def _mac_system_proxy() -> tuple:
+    """读 macOS 系统代理（scutil --proxy）。
+
+    与 Windows 侧同一条纪律：拿不准就留空并说清楚（交回环境变量），
+    不猜地址出去连；PAC 只报存在、不解析。
+    """
+    try:
+        r = subprocess.run(["scutil", "--proxy"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return ("", "")
+    if r.returncode != 0:
+        return ("", "")
+    d = parse_scutil_proxy(r.stdout or "")
+    pac = d.get("ProxyAutoConfigEnable") == "1"
+    enabled = d.get("HTTPSEnable") == "1" or d.get("HTTPEnable") == "1"
+    if not enabled:
+        if pac:
+            return ("", "系统未启用代理（配了 PAC 自动脚本，应用不解析，需要时请手填代理）")
+        return ("", "系统未启用代理")
+    # 与 WinINET 侧同序：HTTPS 优先于 HTTP
+    host = (d.get("HTTPSProxy") or d.get("HTTPProxy") or "").strip()
+    port = (d.get("HTTPSPort") or d.get("HTTPPort") or "").strip()
+    if not host:
+        return ("", "系统代理开着但没有可用地址" + ("（PAC 脚本 %s，应用不解析，请手填代理）"
+                                              % d.get("ProxyAutoConfigURLString", "") if pac else "")
+                + "，请在面板里手填代理地址")
+    if not host.startswith("http"):
+        host = "http://" + host
+    if port and "://" in host and ":" not in host.split("://", 1)[1]:
+        host = "%s:%s" % (host, port)
+    if pac:
+        return (host, "（另有 PAC 自动脚本，应用不解析，已用手动代理地址）")
     return (host, "")
 
 
@@ -537,15 +668,28 @@ def safe_asset_url(url: str) -> bool:
     return is_https_url(url)
 
 
-def asset_sha(manifest: dict, kind: str = "setup") -> str:
-    """校验值：优先 assets.<kind>.sha256，回落到顶层 sha256（老清单只有顶层那一个）"""
-    entry = ((manifest or {}).get("assets") or {}).get(kind) or {}
-    return str(entry.get("sha256") or (manifest or {}).get("sha256") or "").strip()
+def asset_sha(manifest: dict, kind: str | None = None) -> str:
+    """校验值：优先 assets.<kind>.sha256，回落到顶层 sha256
+
+    顶层那份是老清单时代「全平台只有 Windows 安装包」的产物，只在 setup 这一侧
+    才有意义——macOS 客户端拿它当 dmg 的哈希，只会校验失败得莫名其妙。
+    """
+    k = asset_kind() if kind is None else kind
+    entry = ((manifest or {}).get("assets") or {}).get(k) or {}
+    got = str(entry.get("sha256") or "").strip()
+    if got:
+        return got
+    if k == "setup":
+        return str((manifest or {}).get("sha256") or "").strip()
+    return ""
 
 
-def asset_url_list(manifest: dict, kind: str = "setup") -> list:
-    entry = ((manifest or {}).get("assets") or {}).get(kind) or {}
-    out = [str(entry.get("url") or ""), str((manifest or {}).get("url") or "")]
+def asset_url_list(manifest: dict, kind: str | None = None) -> list:
+    k = asset_kind() if kind is None else kind
+    entry = ((manifest or {}).get("assets") or {}).get(k) or {}
+    out = [str(entry.get("url") or "")]
+    if k == "setup":
+        out.append(str((manifest or {}).get("url") or ""))
     out += [str(x) for x in (entry.get("mirrors") or [])]
     return [u for u in out if u]
 
@@ -560,14 +704,28 @@ def sanitize_version(v: str) -> str:
     return re.sub(r"\.{2,}", ".", s).strip(".")[:32]
 
 
-def setup_download_name(manifest: dict) -> str:
+def download_name(manifest: dict, kind: str | None = None) -> str:
+    """下载落盘文件名。version/资产名会拼进路径：`../../x` 这种塞得进清单字段
+
+    分隔符先没了就没法穿越，但留下的点会拼出 `QianBi-Novel-v....x-setup.exe` 这种
+    没人念得动的名字（Windows 还会因结尾点另生枝节），所以连续点压一、首尾点掐净。
+    清单给的资产名必须与本平台后缀同族才认——拿一个 .exe 名字当 .dmg 落盘，
+    校验通过之后点开的会是另一个程序。
+    """
     m = manifest or {}
+    k = asset_kind() if kind is None else kind
     assets = m.get("assets") or {}
-    name = str((assets.get("setup") or {}).get("name") or "")
-    if name and os.path.basename(name) == name and name.lower().endswith(".exe"):
+    name = str(((assets.get(k) or {}) if isinstance(assets, dict) else {}).get("name") or "")
+    ext = asset_ext(k)
+    if name and os.path.basename(name) == name and name.lower().endswith(ext):
         return name
     v = sanitize_version(m.get("version")) or "latest"
-    return "QianBi-Novel-v%s-setup.exe" % v
+    return "QianBi-Novel-v%s%s" % (v, ASSET_SUFFIX.get(k, "-setup.exe"))
+
+
+def setup_download_name(manifest: dict) -> str:
+    """Windows 安装包落盘名（跨平台入口走 download_name）"""
+    return download_name(manifest, "setup")
 
 
 def sha256_file(path: str, chunk: int = 1 << 20) -> str:

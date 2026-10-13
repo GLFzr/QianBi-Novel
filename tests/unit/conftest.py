@@ -34,6 +34,22 @@ try:
 except Exception:  # pragma: no cover
     raise
 
+# ---- 会话起始的真实 HOME（macOS 钥匙串按 HOME 找 login.keychain-db）----
+# 十余个测试模块在 import 期把 HOME/USERPROFILE 改到各自的临时目录（且不还原），
+# 于是排在它们之后的用例拿到的是别人的临时 HOME：钥匙串路径随之落空，真凭据写入
+# 失败 → dehydrate 回退明文 → 「磁盘泄漏明文 key」假红。需要真凭据库的用例用这两个
+# 值在自己作用域里把 HOME 还原（monkeypatch.setenv，退出即复原）。
+_REAL_HOME = os.environ.get("HOME") or ""
+_REAL_USERPROFILE = os.environ.get("USERPROFILE") or ""
+
+
+def restore_real_home(monkeypatch):
+    """把 HOME/USERPROFILE 拨回会话起始值（钥匙串/凭据类用例用）"""
+    if _REAL_HOME:
+        monkeypatch.setenv("HOME", _REAL_HOME)
+    if _REAL_USERPROFILE:
+        monkeypatch.setenv("USERPROFILE", _REAL_USERPROFILE)
+
 
 def qianbi_isolated_dir():
     """给锁测试用：当前单测进程的配置落盘目标。"""

@@ -27,19 +27,33 @@ import time
 
 TITLE = "千笔一文 Novel"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)          # 日志路径要跟 app.config 同源，别在探针里复刻一份
 
 # 与 app/selftest._MANIFEST_SPECS 同构：(相对目录, 允许的扩展名 / None=全部)
 AUDIT_SPECS = [("app/ui/qml", (".qml", "")), ("app/presets", (".json",)), ("assets", None)]
 
-# Qt 运行模块：offscreen（探针用）与 windows（真实运行用）都要在
-QT_RUNTIME = [
-    "PySide6/qml/QtQuick/Controls/Basic",
-    "PySide6/qml/QtQuick/Layouts",
-    "PySide6/qml/QtQuick/Templates",
-    "PySide6/qml/QtQuick/Window",
-    "PySide6/plugins/platforms/qoffscreen.dll",
-    "PySide6/plugins/platforms/qwindows.dll",
-]
+# Qt 运行模块：offscreen（探针用）与真实窗口平台（冒烟用）都要在。
+# 目录名按平台分：Windows 的 Qt 装在 PySide6/plugins|qml，macOS 装在 PySide6/Qt/plugins|qml；
+# 平台插件后缀 .dll/.dylib、真实窗口插件 windows/cocoa——写错一个字母这道门就变成摆设。
+if sys.platform == "darwin":
+    QT_RUNTIME = [
+        "PySide6/Qt/qml/QtQuick/Controls/Basic",
+        "PySide6/Qt/qml/QtQuick/Layouts",
+        "PySide6/Qt/qml/QtQuick/Templates",
+        "PySide6/Qt/qml/QtQuick/Window",
+        "PySide6/Qt/plugins/platforms/libqoffscreen.dylib",
+        "PySide6/Qt/plugins/platforms/libqcocoa.dylib",
+    ]
+else:
+    QT_RUNTIME = [
+        "PySide6/qml/QtQuick/Controls/Basic",
+        "PySide6/qml/QtQuick/Layouts",
+        "PySide6/qml/QtQuick/Templates",
+        "PySide6/qml/QtQuick/Window",
+        "PySide6/plugins/platforms/qoffscreen.dll",
+        "PySide6/plugins/platforms/qwindows.dll",
+    ]
 
 
 class Gate:
@@ -120,13 +134,41 @@ def find_window() -> int:
     return ctypes.windll.user32.FindWindowW(None, TITLE)
 
 
+def _log_path() -> str:
+    from app.logger import LOG_FILE
+    return LOG_FILE
+
+
+def _log_tail(path: str, offset: int) -> str:
+    try:
+        with open(path, "rb") as f:
+            f.seek(offset)
+            return f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def _log_size(path: str) -> int:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
 def smoke_boot(gate: Gate, exe: str) -> bool:
     """原 T1.3 冒烟：窗口出现 + 存活 5s
 
     启动 exe 时必须剥掉调用方环境里的 QT_QPA_PLATFORM（如 CI/批处理常设的
     offscreen）：打包验证要的就是「真实窗口出现」——offscreen 被继承时 Qt 走
-    离屏平台、永远不建可见窗口，探针会假失败（进程存活但 60s 无窗）。"""
+    离屏平台、永远不建可见窗口，探针会假失败（进程存活但 60s 无窗）。
+
+    窗口的判定按平台分：Windows 走 FindWindowW；macOS 没有不给权限就能查窗口的
+    系统调用（osascript 要 TCC 授权，冒烟不许弹授权框），改用应用自己的正向标记
+    ——main.py 只在 QML 根对象建出来（= 主窗口在位）之后打「主窗口就绪」，
+    反面是打 error「QML 加载失败」并 exit(1)，两种情况这里都盯。"""
     env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
+    if sys.platform != "win32":
+        return _smoke_boot_posix(gate, exe, env)
     proc = subprocess.Popen([exe], cwd=os.path.dirname(exe), env=env)
     try:
         deadline, hwnd = time.time() + 60, 0
@@ -139,6 +181,39 @@ def smoke_boot(gate: Gate, exe: str) -> bool:
                                   f"进程提前退出（code={proc.returncode}）")
             time.sleep(0.5)
         if not gate.check("主窗口出现", bool(hwnd), "60s 内未出现主窗口"):
+            return False
+        time.sleep(5)
+        return gate.check("启动 5s 内存活无崩溃", proc.poll() is None,
+                          f"进程退出（code={proc.poll()}）")
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
+def _smoke_boot_posix(gate: Gate, exe: str, env: dict) -> bool:
+    log_file = _log_path()
+    offset = _log_size(log_file)
+    proc = subprocess.Popen([exe], cwd=os.path.dirname(exe), env=env)
+    try:
+        deadline = time.time() + 60
+        ready = False
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                tail = _log_tail(log_file, offset)
+                return gate.check("主窗口出现", False,
+                                  f"进程提前退出（code={proc.returncode}）\n{tail[-800:]}")
+            tail = _log_tail(log_file, offset)
+            if "QML 加载失败" in tail:
+                return gate.check("主窗口出现", False, f"QML 加载失败\n{tail[-800:]}")
+            if "主窗口就绪" in tail:
+                ready = True
+                break
+            time.sleep(0.5)
+        if not gate.check("主窗口出现", ready, "60s 内日志里没等到「主窗口就绪」"):
             return False
         time.sleep(5)
         return gate.check("启动 5s 内存活无崩溃", proc.poll() is None,
@@ -243,6 +318,11 @@ def main():
     exe = os.path.abspath(args.exe)
     dist_dir = os.path.dirname(exe)
     internal = os.path.join(dist_dir, "_internal")
+    # .app 里的资源不在 _internal：PyInstaller 把 COLLECT 的内容摊进 Contents/Frameworks
+    if not os.path.isdir(internal) and os.path.basename(dist_dir) == "MacOS":
+        bundle_internal = os.path.join(os.path.dirname(dist_dir), "Frameworks")
+        if os.path.isdir(bundle_internal):
+            internal = bundle_internal
     gate = Gate()
 
     if not os.path.exists(exe):

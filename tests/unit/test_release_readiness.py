@@ -125,6 +125,11 @@ def test_save_config_keeps_runtime_key_and_disk_clean(tmp_path, monkeypatch):
     import json as _json
     from app import config as cfg_mod
     from app import secrets as secrets_mod
+    import conftest as unit_conftest
+    # macOS：钥匙串按 HOME 定位 login.keychain-db，而前面若干用例在 import 期把
+    # HOME 改到自己的临时目录（不还原）——不拨回真 HOME 就写不进钥匙串，脱水被迫
+    # 回退明文 → 本用例假红。monkeypatch 退出即复原，不动别人的状态。
+    unit_conftest.restore_real_home(monkeypatch)
     # 凭据隔离：keyring 指向假服务名，测试绝不触碰真实用户凭据（事故教训 2026-08-29）
     monkeypatch.setattr(secrets_mod, "SERVICE", "QianBiNovel/test-run")
     cfg_file = tmp_path / "config.json"

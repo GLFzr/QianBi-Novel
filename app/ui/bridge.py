@@ -7,6 +7,7 @@ import threading
 import logging
 import os
 import re
+import sys
 import time
 
 from PySide6.QtCore import (QObject, QAbstractListModel, Qt, QModelIndex,
@@ -1854,20 +1855,29 @@ class Bridge(QObject):
         r = self._update_result
         m = dict(r.to_map()) if r is not None else {}
         mode = uc.install_mode()
-        can_install = bool(r and r.can_install and mode == "installed")
+        # 三道门：清单验签 → 本平台有包（清单同时挂着 .exe 与 .dmg，各取各的）
+        # → 运行方式允许（Windows 只认安装版；macOS 打开 .dmg 不碰正在运行的自己）
+        can_install = bool(r and r.can_install and uc.has_platform_asset(r.manifest or {})
+                           and uc.install_allowed(mode))
         why = ""
         if r is not None and r.is_new and not can_install:
             if not r.verified:
                 why = r.verify_reason or "清单未通过验签"
-            elif mode != "installed":
-                why = ("便携版/源码运行：应用不会去覆盖正在运行的自己。"
-                       "请用安装版升级，或手动替换整个程序目录。")
+            elif not uc.has_platform_asset(r.manifest or {}):
+                why = ("这份清单里没有 %s 安装包（作者还没发本平台的包）。"
+                       "可以点「打开发布页」看有没有对应版本。"
+                       % ("macOS" if uc.asset_kind() == "dmg" else "Windows"))
+            elif not uc.install_allowed(mode):
+                why = uc.install_denied_reason()
         m.update({
             "checking": self._update_checking,
             "busy": self.updateBusy,
             "available": self.updateAvailable,
             "dismissed": bool(r and r.version() == self._dismissed_version()),
             "localVersion": __version__,
+            "platform": "macos" if sys.platform == "darwin" else "windows",
+            "assetKind": uc.asset_kind(),
+            "assetName": uc.download_name(r.manifest if r else {}) if r else "",
             "installMode": mode,
             "installDir": uc.install_dir(),
             "canInstall": can_install,
@@ -2030,8 +2040,15 @@ class Bridge(QObject):
         if r is None or not r.can_install:
             self.toast.emit("warn", (r.verify_reason if r and not r.verified else "没有可安装的更新"))
             return
+        # UI 侧的三道门再钉一次（槽可以被别的入口调到，不能只靠按钮禁用）
+        if not uc.has_platform_asset(r.manifest or {}):
+            self.toast.emit("warn", "这份清单里没有本平台的安装包，不会下载别的平台的字节")
+            return
+        if not uc.install_allowed(uc.install_mode()):
+            self.toast.emit("warn", uc.install_denied_reason(short=True))
+            return
         u = self._updates()
-        dest = os.path.join(uc.updates_dir(), uc.setup_download_name(r.manifest))
+        dest = os.path.join(uc.updates_dir(), uc.download_name(r.manifest))
         if self._dl_worker is not None and self._dl_worker.isRunning():
             return
         if not update_install.disk_space_ok(dest, r.manifest):
@@ -2042,7 +2059,7 @@ class Bridge(QObject):
         # 无代理自动换镜像（v0.18.5）：确定性选一张实测主镜像放第一，
         # 官方直链/清单镜像/用户自填殿后兜底（同文件同字节，跨源断点续传成立）
         urls, via_mirror = update_mirrors.ordered_urls(
-            r.manifest, "setup", str(u.get("custom_url") or ""), {"updates": u}, plan)
+            r.manifest, uc.asset_kind(), str(u.get("custom_url") or ""), {"updates": u}, plan)
         urls = [x for x in urls if x]
         if not urls:
             self.toast.emit("warn", "清单里没有可用的下载地址（只给了发布页）")
@@ -2095,7 +2112,8 @@ class Bridge(QObject):
     def installUpdateNow(self):
         """让应用执行程序的唯一路径：三道门一道都不能少
 
-        ① 清单验签通过且确实有更新；② 跑的是安装版（不覆盖正在运行的自己）；
+        ① 清单验签通过且确实有更新；② 运行方式允许（Windows 只认安装版，不覆盖
+        正在运行的自己；macOS 冻结版即可——.dmg 打开时不碰正在运行的 .app）；
         ③ 落盘文件此刻重算一遍 SHA-256 仍然命中——校验过就被换掉是极小的窗口，
         但重算只花几百毫秒，比赌它没被换便宜。
         """
@@ -2105,7 +2123,11 @@ class Bridge(QObject):
         if r is None or not r.can_install:
             self.toast.emit("warn", "清单未通过验签或没有新版，不会执行任何文件")
             return
-        if uc.install_mode() != "installed":
+        if sys.platform == "darwin":
+            if uc.install_mode() == "dev":
+                self.toast.emit("warn", "源码运行不提供一键升级，请自行下载安装包")
+                return
+        elif uc.install_mode() != "installed":
             self.toast.emit("warn", "便携版/源码运行请手动替换程序目录")
             return
         path = str(pkg.get("path") or "")
@@ -2123,6 +2145,14 @@ class Bridge(QObject):
                                 "expected": expected, "reason": "文件在校验后被改动，已拒绝执行"}
             self.updateStateChanged.emit()
             self.toast.emit("error", self._update_pkg["reason"])
+            return
+        if sys.platform == "darwin":
+            # macOS 没有「安装器」可拉起：把校验过的 .dmg 交给 Finder（挂载后把
+            # 应用拖进「应用程序」）。不退出——退出了没人拖，也没人把新 .app 放回去。
+            if not QProcess.startDetached("open", [path]):
+                self.toast.emit("error", "打开安装包失败（路径：%s）" % path)
+                return
+            self.toast.emit("ok", "已打开安装包：把「千笔一文」拖进「应用程序」即可完成升级")
             return
         # 脏稿不再拦关闭：未保存草稿本来就会被暂存，下次启动有恢复对话框兜底
         self._quit_for_update = True
@@ -2143,9 +2173,18 @@ class Bridge(QObject):
     @Slot(str)
     @_guarded
     def openPath(self, path: str):
-        """打开目录/文件（资源管理器或默认程序）"""
+        """打开目录/文件（资源管理器 / 访达 / 默认程序）"""
         try:
-            os.startfile(path)
+            if not path:
+                return
+            if sys.platform == "win32":
+                os.startfile(path)
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.Popen(["open", path])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", path])
         except Exception as e:  # noqa: BLE001
             self.toast.emit("warn", f"无法打开: {e}")
 
@@ -2805,7 +2844,7 @@ class Bridge(QObject):
             key_note = "及其 Key"
         else:
             # L2-02：Key 销毁失败不许谎报——指向手动清理路径
-            key_note = "（注意：凭据管理器中的 Key 删除失败，请到 Windows 凭据管理器手动删除 QianBiNovel/connections 下的该条目）"
+            key_note = "（注意：凭据管理器中的 Key 删除失败，请到%s手动删除 QianBiNovel/connections 下的该条目）" % secrets.backend_name()
         self.connectionModel.refresh()
         self.slotsTextChanged.emit()
         self.toast.emit("ok", "已删除连接「%s」%s" % (name, key_note))
@@ -3155,7 +3194,7 @@ class Bridge(QObject):
             try:
                 trash.send_to_recycle(target)
             except Exception as e:  # 回收站失败：书原样保留，如实回执
-                self.toast.emit("warn", f"移入回收站失败，书籍未被删除：{e}")
+                self.toast.emit("warn", f"移入{self.trashName}失败，书籍未被删除：{e}")
                 return
         self.cfg["recent_projects"] = [
             p for p in self.cfg.get("recent_projects", [])
@@ -3163,7 +3202,8 @@ class Bridge(QObject):
         ]
         cfg_mod.save_config(self.cfg)
         if mode == "disk":
-            self.toast.emit("ok", f"已移入系统回收站：{os.path.basename(target)}（可在回收站还原）")
+            self.toast.emit("ok", f"已移入系统{self.trashName}：{os.path.basename(target)}"
+                                  f"（可在{self.trashName}还原）")
         else:
             self.toast.emit("ok", f"已移出书架（文件保留在原位置）：{os.path.basename(target)}")
 
@@ -3424,6 +3464,11 @@ class Bridge(QObject):
         fl = (st.load_state(self.proj).get("forced_locks") or {})
         return [{"num": int(k), "reason": v.get("reason", ""), "ts": v.get("ts", "")}
                 for k, v in sorted(fl.items(), key=lambda kv: int(kv[0]))][-50:]
+
+    @Property(str, constant=True)
+    def trashName(self) -> str:
+        """书架删书对话框里的系统垃圾桶叫法：macOS 是废纸篓，Windows 是回收站"""
+        return "废纸篓" if sys.platform == "darwin" else "回收站"
 
     @Slot(result=str)
     @_guarded
@@ -6210,7 +6255,7 @@ class Bridge(QObject):
     @Slot(str)
     @_guarded
     def revealPath(self, path: str):
-        """在系统文件管理器中定位文件（Windows 用 explorer /select 选中）"""
+        """在系统文件管理器中定位文件（Windows: explorer /select ｜macOS: open -R）"""
         if not path:
             self.toast.emit("warn", "还没有导出文件")
             return
@@ -6222,9 +6267,10 @@ class Bridge(QObject):
             return
         try:
             import subprocess
-            import sys
             if sys.platform == "win32":
                 subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", os.path.abspath(path)])
             else:
                 from PySide6.QtCore import QUrl
                 from PySide6.QtGui import QDesktopServices
@@ -6232,6 +6278,22 @@ class Bridge(QObject):
             self.toast.emit("ok", "已在文件管理器中定位导出文件")
         except Exception as e:  # noqa: BLE001
             self.toast.emit("error", f"无法打开文件管理器: {e}")
+
+    @Slot(str, result=str)
+    @_guarded
+    def urlToPath(self, url: str) -> str:
+        """QML 的 file:/// url → 本机路径（原样已是路径就原样返回）
+
+        QML 侧手写 `toString().replace("file:///","")` 在 macOS 上会把开头的斜杠
+        一起剥掉（file:///Users/x → Users/x），书就被建到了相对路径上——
+        URL→本地路径这件事只许在一个地方做，就是 Qt 自己的 QUrl.toLocalFile。
+        """
+        if not url:
+            return ""
+        if url.startswith("file:"):
+            from PySide6.QtCore import QUrl
+            return QUrl(url).toLocalFile()
+        return url
 
     @Slot(str)
     @_guarded

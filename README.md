@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/GLFzr/QianBi-Novel?sort=semver&label=release&color=FF6B35)](https://github.com/GLFzr/QianBi-Novel/releases/latest)
 [![License](https://img.shields.io/github/license/GLFzr/QianBi-Novel?color=3BA7E6)](LICENSE)
 [![Platform](https://img.shields.io/badge/Windows%2010%20%2F%2011%20x64-0078D6?logo=windows)](#下载)
+[![Platform](https://img.shields.io/badge/macOS%2012%2B-000000?logo=apple)](#下载)
 [![Tests](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/GLFzr/QianBi-Novel/actions/workflows/tests.yml)
 
 **人 AI 共写的长篇网文创作台** —— AI 全程透明写作，人永远是作者。
@@ -41,7 +42,7 @@
 - 📜 **本书契约面板**：正则规则逐条可见、可改、可删；导入批次在同一页整批撤销 —— 契约不该是一个黑盒
 - 🎨 **10 套题材预设**：修仙·凡人流 / 都市改命 / 克苏鲁 / 规则怪谈 / 无限流 / 末日废土 / 历史权谋 …，每套含 6 阶段特化提示
 - 🔑 **BYOK + 全本地**：自带模型 Key，书稿、配置、版本历史全在你机器上（MIT 开源，无云端）
-- 🖥️ **Windows 桌面应用**：PySide6 + QML，安装包开箱即用，无需 Python
+- 🖥️ **桌面应用（Windows / macOS）**：PySide6 + QML，安装包开箱即用，无需 Python
 
 ![共写档：六阶段导航 + 与写作 Agent 的多轮讨论 + 正文实时预览](docs/shot_co_writing.png)
 
@@ -52,7 +53,7 @@
 | 人的位置 | 给设定、收全书 | 对话式辅助为主 | **共写六阶段，每步可插手、可回滚** |
 | 防幻觉 | 多靠模型自觉 | 多靠模型自觉 | **引证验真：编造的引证当场作废，三票定案** |
 | 硬规则 | prompt 约束 | prompt 约束 | **must 契约注入每张写作 prompt + 确定性复检拦住锁定** |
-| 你的数据 | 各家云端 | 平台云端 | **全本地：书稿在你的文档目录，Key 入 Windows 凭据管理器** |
+| 你的数据 | 各家云端 | 平台云端 | **全本地：书稿在你的文档目录，Key 入系统凭据库（Windows 凭据管理器 / macOS 钥匙串）** |
 | 费用 | 订阅 / 点数 | 订阅 | **MIT 开源 + BYOK，真实 e2e 写 5 章 ≈ ¥0.07**（测试脚本口径，见下） |
 | 长篇一致性 | 上下文塞设定 | 对话窗口 | **条目化世界书 + 剧情反哺 + 摘要链** |
 
@@ -70,14 +71,17 @@
 |---|---|---|
 | **安装版（推荐）** | `QianBi-Novel-v<版本号>-setup.exe` | Inno Setup，per-user 安装（免管理员）；**创建桌面快捷方式**，在「设置 → 应用」里可卸载，卸载时**保留书稿** |
 | **便携版** | `QianBi-Novel-v<版本号>-portable.zip` | 解压双击即用；**不建快捷方式、不写注册表、无卸载入口**（删文件夹即清除）。包内附《使用说明.txt》 |
+| **macOS 安装包** | `QianBi-Novel-v<版本号>-mac.dmg` | 打开后把 `QianBi-Novel.app` 拖进「应用程序」；包内附 macOS 版《使用说明.txt》 |
+| **macOS 便携包** | `QianBi-Novel-v<版本号>-macos.zip` | 解压得到完整 `.app`，双击即用；随包三份文档 |
 
-程序与数据分开：配置/预设/日志在 `%USERPROFILE%\.qianbi_novel\`，书稿默认在
-`%USERPROFILE%\Documents\千笔一文\`（新建书目时可改保存位置）。两种版本共用这两处，换着用最方便。
+程序与数据分开：配置/预设/日志在 `%USERPROFILE%\.qianbi_novel\`（macOS 为
+`~/.qianbi_novel/`），书稿默认在 `%USERPROFILE%\Documents\千笔一文\`（macOS 为
+`~/Documents/千笔一文/`，新建书目时可改保存位置）。各平台的两种版本共用这两处，换着用最方便。
 
 → **[Releases](https://github.com/GLFzr/QianBi-Novel/releases/latest)** ·
 每个版本附 `SHA256SUMS.txt`，校验后再运行。
 
-系统要求：Windows 10/11 x64。无需安装 Python。
+系统要求：Windows 10/11 x64；macOS 12+（dmg/zip 由发布流水线在 macOS 上构建）。无需安装 Python。
 
 ---
 
@@ -110,6 +114,12 @@
   应用不会照着它下载或执行任何东西。安装包地址与面板里替你打开的链接**只认 https**，
   `file://` 与网络路径直接拒；清单那一侧允许 http（真正兜底的是签名，明文最多让它晚一步拿到），
   你自己填的局域网镜像也允许，但它下回来的每个字节照样过 sha256。
+
+### macOS 拒绝打开（无法验证开发者）
+
+macOS 包同样**没有签名证书**，Gatekeeper 会拦第一次打开：在 Finder 里右键
+`QianBi-Novel.app` →「打开」→ 再点一次「打开」即可（一次性）。
+命令行放行：`xattr -dr com.apple.quarantine /Applications/QianBi-Novel.app`。
 
 ### Windows 弹「已保护你的电脑」
 
@@ -351,7 +361,7 @@ python -m venv .venv
 ```
 
 首次启动在「设置 → 连接与模型」填 API Key。
-**Key 存进 Windows 凭据管理器**（`app/secrets.py`），`config.json` 里只留指纹，不落明文；
+**Key 存进系统凭据库**（`app/secrets.py`：Windows 凭据管理器 / macOS 钥匙串），`config.json` 里只留指纹，不落明文；
 崩溃 dump、日志、遥测出口统一脱敏。
 
 > **提示词适配范围**：内置 prompt 工程（正文/去味/审校等）按 **DeepSeek API** 的
@@ -502,7 +512,7 @@ docs/                   设计与计划文档、隐私说明
   默认在 `~/Documents/千笔一文/`；配置、预设、日志在 `~/.qianbi_novel/`；除模型 API 调用外没有云端。唯一的自动对外请求是检查更新：开机默认开、
   24 小时最多一次，只向 GitHub（或你自填的镜像）**下载**一份约 1KB 的公开版本清单，
   不上传任何内容，在「更新」面板里关掉之后启动阶段零请求。
-- **API Key 存 Windows 凭据管理器**，配置文件不落明文；日志与崩溃 dump 统一脱敏。
+- **API Key 存系统凭据库**（Windows 凭据管理器 / macOS 钥匙串），配置文件不落明文；日志与崩溃 dump 统一脱敏。
 - **遥测默认关闭**，且只写本地文件、不上传。详见 [docs/PRIVACY.md](docs/PRIVACY.md)。
 - 依赖与字体第三方声明见 [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)。
 - 安全漏洞报告渠道见 [SECURITY.md](SECURITY.md)。
@@ -577,7 +587,7 @@ docs/                   设计与计划文档、隐私说明
 
 诚实列一下，避免踩坑：
 
-- **仅 Windows 打包**。Linux/macOS 需自行从源码跑，未做发行验证。
+- **macOS 打包链路已接入，发布包未签名**。`scripts/build_release.py` 在 macOS 上产 dmg/zip 并过 `probe_packaged` 冒烟（资源清单/启动/打包态摘要三道门），但没有 Apple 开发者证书，首次打开要右键放行；Linux 仍需自行从源码跑。
 - **提示词按 DeepSeek 调校**。换其他家模型时闸门判定会更抖（审校相位已统一低温运行来缓解）。
 - **长请求受端点稳定性影响**。部分兼容网关在单次输出较长时会断连，客户端有重试与退化档，
   但换模型/换网关仍可能遇到。
@@ -586,9 +596,11 @@ docs/                   设计与计划文档、隐私说明
 - 3 轮反馈环不收敛的章节会标记待人工，不会无限重试。
 - **外部文档导入是「摘录 + 映射」，不是「读完整本书」**。长文按 3 万字分段、单次最多 8 段；
   只处理文档里真写得有的内容（拆不出来的落点会明确告诉你缺什么），模型补写出来的一律判不通过。
-- **更新链路还剩三件事做不到**：① 安装包**没有代码签名证书**，双击必然撞 SmartScreen 的
-  「Windows 已保护你的电脑」，要手点「更多信息 → 仍要运行」；② 「立即安装」只对**安装版**开放，
-  便携版与源码态不会去覆盖正在运行的自己（那样必失败），只给链接与哈希；③ 51MB 的安装包
+- **更新链路还剩三件事做不到**：① 安装包**没有代码签名证书**，Windows 撞 SmartScreen 的
+  「Windows 已保护你的电脑」（手点「更多信息 → 仍要运行」），macOS 撞 Gatekeeper（右键「打开」）；
+  ② 「立即安装」按平台收口——Windows 只对**安装版**开放（便携版/源码态不会去覆盖正在运行的
+  自己），macOS 对 `.app` 开放（打开 dmg 不碰正在运行的程序），**源码态两边都只给链接与哈希**；
+  ③ 51MB 的安装包
   **变不出带宽**——应用能做的是把「有没有新版」降到一份 1KB 的多通道清单、把离线路径做成
   一等公民、把完整性钉死在签名与哈希上，而不是宣称连不上也能下包。
 
