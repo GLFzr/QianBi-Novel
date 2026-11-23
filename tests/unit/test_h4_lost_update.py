@@ -117,6 +117,26 @@ def test_concurrent_add_idea_both_survive(proj):
     assert texts == ["想法A", "想法B"], f"并发 add_idea 互相吞条目：{texts}"
 
 
+def test_add_idea_ids_unique_within_same_millisecond(proj, monkeypatch):
+    """同毫秒两次 add 不许撞 id（H-4 并发丢更新的真正根因）。
+
+    旧 id = `idea_{毫秒}_{该快照长度}`：两个线程从同一基线装载时长度相同，
+    同毫秒内落盘就得到同一个 id；三方合并按 id 去重 ⇒ 后写的把先写的当
+    「同一条」覆盖掉。CI 上 `test_concurrent_add_idea_both_survive` 的间歇
+    红即此，不是线程调度问题。这里把时钟钉死，把偶发变确定。
+    """
+    monkeypatch.setattr(st.time, "time", lambda: 1700000000.123)
+    base_a = st.load_state(proj)
+    base_b = st.load_state(proj)
+    st.add_idea(proj, base_a, "想法A")
+    st.add_idea(proj, base_b, "想法B")
+    state = st.load_state(proj)
+    ids = [i["id"] for i in st.norm_ideas(state)]
+    assert len(ids) == len(set(ids)), f"id 撞车：{ids}"
+    texts = sorted(i["text"] for i in st.norm_ideas(state))
+    assert texts == ["想法A", "想法B"], f"同毫秒 add 丢条目：{texts}"
+
+
 def test_history_status_fix_survives_worker_append(proj):
     """GUI「标记已修复」(needs_fix→pass) 与 worker append_history 并发：
     新章记录要进 history，GUI 的状态修复也不得被旧快照回滚。"""

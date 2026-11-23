@@ -9,6 +9,7 @@ import os
 import tempfile
 import threading
 import time
+import uuid
 from typing import TypedDict
 
 from . import ledger_view as _lv   # S6a：章级成本视图（core→core 合法；原 usage 上探已拆）
@@ -487,7 +488,10 @@ def add_idea(proj: str, state: dict, text: str, scope: str = "next"):
         return False
     import datetime
     state.setdefault("pending_ideas", []).append({
-        "id": f"idea_{int(time.time() * 1000) % 100000000}_{len(state['pending_ideas'])}",
+        # H-4 补漏（0.20.4）：id 必须与「毫秒 + 快照长度」解耦。两个线程从同一
+        # 基线装载时长度相同，同毫秒落盘会撞出同一个 id；save_state 的三方合并
+        # 按 id 去重，后写者会把先写者当成「同一条」覆盖掉（CI 间歇红实证）。
+        "id": f"idea_{int(time.time() * 1000) % 100000000}_{uuid.uuid4().hex[:8]}",
         "text": text,
         "status": "pending",            # pending / applied
         "scope": scope,
