@@ -24,7 +24,7 @@ os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
 from PySide6.QtGui import QGuiApplication     # noqa: E402
 
-from app import project                       # noqa: E402
+from app import project, wb                   # noqa: E402（wb 自 c8419e1 拆除 project.wb 兼容壳后直接导入）
 from app.ui.bridge import Bridge              # noqa: E402
 
 results = []
@@ -61,7 +61,7 @@ check("JSON 导入：项目目录成型", project.is_project(proj1))
 check("JSON 导入：toast 报告条目数",
       any("2 条" in m for _lv, m in toasts), str(toasts[:2]))
 wb_doc = project.read_file(os.path.join(proj1, project.WORLDBOOK_PATH))
-entries = project.wb.parse(wb_doc)
+entries = wb.parse(wb_doc)
 names = [e.name for e in entries]
 check("JSON 导入：条目被 wb.parse 认出", {"灯盟", "玛娜潮汐"} <= set(names), str(names))
 check("JSON 导入：常驻标记保留",

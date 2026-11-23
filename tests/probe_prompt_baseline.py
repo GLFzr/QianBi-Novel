@@ -243,11 +243,19 @@ for _kind, _name in [
     ("review_v1", "REVIEW_PROMPT"), ("tracking", "TRACKING_UPDATE_PROMPT"),
     ("backflow", "MEMORY_BACKFLOW_PROMPT"), ("chapter_summary", "CHAPTER_SUMMARY_PROMPT"),
     ("global_summary", "GLOBAL_SUMMARY_PROMPT"), ("blurb", "BLURB_AND_TAGS_PROMPT"),
-    ("enrich", "ENRICH_PROMPT"), ("trim", "TRIM_PROMPT"),
+    ("enrich", "ENRICH_PROMPT"), ("enrich_para", "ENRICH_PARA_PROMPT"),
+    ("trim", "TRIM_PROMPT"),
     ("deslop", "DESLOP_REWRITE_PROMPT"), ("selection", "SELECTION_REWRITE_PROMPT"),
     ("revision", "REVISION_TARGETS_PROMPT"), ("idea", "IDEA_EXPAND_PROMPT"),
 ]:
     _reg(_kind, getattr(prompts, _name))
+
+# Q4-e（0.20.4 W2-a）：章首 best-of-3 择优也是新的产文装配点（每章 3 次候选调用）。
+# 它的 prompt 目前是 app/core/stages.py::_opening_bestof_block 里的内联字符串，没有
+# 可 getattr 的模板常量，只能按首句字面在探针侧登记签名。产品若改掉这句，本类回落
+# unknown——字节内容仍会在基线里以调用次数/内容漂移报出来，只是标签变粗；根治做法
+# 是把该 prompt 拆进 prompts 库（本轮只做登记，不动产线字节）。
+_SIGS["opening"] = ("你是网文写手。只写本章正文开头的第 1 段（300-500 字）",)
 
 _CH_NUM = re.compile(r"第\s*(\d+)\s*章")
 
@@ -284,7 +292,8 @@ class Recorder:
             nums = [int(x) for x in _CH_NUM.findall(prompt)]
             lo = min(nums) if nums else n
             return "\n\n".join(_mock_outline(k) for k in range(lo, min(lo + 4, lo + 6)))
-        if kind in ("prose", "enrich", "trim", "unknown", "selection", "revision"):
+        if kind in ("prose", "enrich", "enrich_para", "trim", "unknown",
+                    "selection", "revision"):
             return self._prose(n)
         if kind == "deslop":
             return self._prose(n)
@@ -358,6 +367,33 @@ class MockRouter:
         pass
 
 
+class ProbeSession:
+    """最小章会话替身：只为让段落级增厚（_enrich_para_rewrite）的真实装配点跑起来。
+
+    真章会话（ChapterSession）要求客户端支持 chat_turn；本探针的 MockClient 没有
+    ⇒ 微循环走单轮路径，段落级增厚按设计直接 return（没有装配调用，基线对它失明）。
+    这里只实现该函数真正读到的四个会话方法；ask 把请求转回 MockClient，prompt 因此
+    照常进 Recorder，模型回复照常由 Recorder 按模板签名分派（接不回 ⟦Pnn⟧ 段稿时
+    函数会按自身守卫回滚返回空串，不改变后续流水线状态）。
+    """
+    enabled = True
+
+    def __init__(self):
+        self._turns = []
+
+    def turn_count(self) -> int:
+        return len(self._turns)
+
+    def rollback_to(self, n: int):
+        del self._turns[n:]
+
+    def commit_turn(self, req: str, out: str):
+        self._turns.append((req, out))
+
+    def ask(self, prompt, client=None, on_chunk=None, on_reasoning=None, **kw):
+        return client.chat_stream(prompt, on_chunk=on_chunk)
+
+
 # ---------------- 夹具书构建 ----------------
 
 def build_book(root: str) -> str:
@@ -412,6 +448,15 @@ def run_all(proj: str, cfg: dict, rec: Recorder) -> None:
         st.save_state(proj, {**st.load_state(proj), "stage": st.STAGE_PROSE})
         st_mod.chapter_microcycle(orch, n)
     rec.prose_mult = 29
+
+    # Q2-a（0.20.4 W2-a）：段落级增厚（ENRICH_PARA_PROMPT）已取代整章重写成为默认
+    # 扩写路径，但它只在章会话可用时才起；MockClient 没有 chat_turn ⇒ 微循环里
+    # 这一步按设计直接返回（第 3 章只有「段落级扩写未达标」日志、没有装配调用）。
+    # 为让这条默认产文路径不再对字节漂移失明（A4：新产文路径装配点登记），这里用
+    # 最小会话替身直接跑一次真实 _enrich_para_rewrite 取它的装配 prompt；替身接不回
+    # ⟦Pnn⟧ 段稿，函数会按自身守卫回滚返回空串，后续流水线状态不受影响。
+    st_mod._enrich_para_rewrite(orch, ProbeSession(), _mock_prose(3, 20),
+                                gap=992, num=3, chapter_words=3000)
 
     prose1 = _mock_prose(1)
 
@@ -569,7 +614,22 @@ def wiring_check(rec, proj: str) -> list:
     # 扩写/压缩/去味/局部改写四张模板历史上不带契约，而它们全在整章/整段重写正文；
     # 少一条 = 那一步在裸写，只能等终审概率性抓。规则文本从 regex_rules 动态取，
     # 免得改了夹具 RG_FIXTURE 之后这条断言悄悄变成空转。
-    _MUST_KINDS = ("prose", "enrich", "trim", "deslop", "selection", "review")
+    #
+    # Q2-a（0.20.4 W2-a）契约变更：「整章不足→整章重写扩写」（ENRICH_PROMPT）已退役
+    # 为 fallback（仅 writing.enrich_para=False / enrich_tail 兜底时走到），默认路径
+    # 改走段落级增厚（ENRICH_PARA_PROMPT，见上方 ProbeSession 装配点）。因此：
+    #   · 从 _MUST_KINDS 移除 "enrich"——默认流水线不再触发该装配点，留着必然 WIRING
+    #     FAIL（本次红的直接原因）。ENRICH_PROMPT 模板自身的 {must_block} 仍由
+    #     tests/unit/test_must_contract.py 静态兜住，fallback 路径不算失守。
+    #   · 段落级增厚暂不进 must 接线（已知缺口，待下一轮接线）：ENRICH_PARA_PROMPT
+    #     没有 must 专属近场槽 {must_block}。项目级稳定前缀 project_header 里带的是
+    #     正则文件原文，而这里核的是 regex_rules 归一后的规则文本（多行续行会被合并
+    #     成一行）——两者不等价：实测把 enrich_para 塞进 _MUST_KINDS 会因续行规则
+    #     匹配不上而 FAIL。补法（下一轮）：模板加 {must_block} 槽 + 调用点传 kw +
+    #     test_must_contract.CONTRACT_TEMPLATES 增补 + 本表加回 enrich_para。
+    #     它已进字节基线（enrich_para 装配点），但「字节不变地丢掉契约」测不出来，
+    #     所以这条缺口必须显式记账，不能当成已覆盖。
+    _MUST_KINDS = ("prose", "trim", "deslop", "selection", "review")
     must_rules = [r["rule"] for r in project.regex_rules(proj, "logic")
                   if r["level"] == "must"]
 

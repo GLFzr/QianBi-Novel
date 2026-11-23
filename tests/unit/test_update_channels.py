@@ -150,6 +150,10 @@ def test_all_channels_down_is_failed_not_latest(monkeypatch):
 
 
 def test_first_success_wins_and_is_the_reported_channel(monkeypatch):
+    # 通道序列必须只由本用例决定：本机开着 Clash 等系统代理时，resolve_proxy 会
+    # 额外插入一条 proxy 通道，errors 变成 3 条——这不是产品回归，是用例不卫生。
+    monkeypatch.setattr(uc, "resolve_proxy",
+                        lambda cfg: uc.ProxyPlan(proxy="", trust_env=False, label="直连（测试桩）"))
     monkeypatch.setattr(uc, "fetch_text", lambda url, plan, timeout=uc.TIMEOUT: (
         ('{"version":"0.99.0","url":"https://x"}', "") if "jsdelivr" in url else ("", "HTTP 404")))
     res = uc.check(_cfg(), "0.17.0")

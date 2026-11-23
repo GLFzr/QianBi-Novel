@@ -51,9 +51,15 @@ os.makedirs(cfg_dir, exist_ok=True)
 cfg_mod.CONFIG_DIR = cfg_dir
 cfg_mod.CONFIG_FILE = os.path.join(cfg_dir, "config.json")
 cfg = json.loads(json.dumps(cfg_mod.DEFAULT_CONFIG))
+# 0.20.0(B-1) 起出厂 writing.run_mode="cw"，而 startPipeline 对共写档直接拒跑
+# ⇒ 夹具必须显式落自动档，否则本探针验的是「起不来」而不是「运行中关窗」。
+cfg["writing"]["run_mode"] = "auto"
 for c in cfg["connections"]:
     c["base_url"] = "http://127.0.0.1:9/v1"
     c["api_key"] = ""
+    # C06(A3) 起 startPipeline 前置还查「未选模型」，与缺 Key 同列拦截：
+    # 夹具补占位模型名即可——真第一次调用已被下面的 stages._stream 桩替换，不出网。
+    c["model"] = "probe-offline"
 cfg["slots"] = {k: cfg["connections"][0]["id"] for k in cfg["slots"]}
 cfg_mod.save_config(cfg)
 

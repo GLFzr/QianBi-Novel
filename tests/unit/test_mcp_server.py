@@ -205,19 +205,25 @@ class TestPathLock:
         inside = os.path.join(proj, "追踪", "设定账本.json")
         assert ensure_under(proj, inside)
 
-    def test_ensure_under_rejects_symlink_out(self, tmp_path, proj):
+    def test_ensure_under_rejects_symlink_out(self, tmp_path_factory, proj):
         if not hasattr(os, "symlink"):  # pragma: no cover
             pytest.skip("os.symlink 不可用")
-        outside = tmp_path / "outside_root" / "逃逸.json"
-        outside.parent.mkdir()
-        outside.write_text("{}", encoding="utf-8")
-        link = tmp_path / "追踪链接"
+        # proj 夹具用的就是本用例的 tmp_path；逃逸目标必须落在 proj 之外的
+        # 独立临时目录，否则 realpath 解析后仍在项目根内，断言恒不成立。
+        outside_root = tmp_path_factory.mktemp("outside_root")
+        (outside_root / "逃逸.json").write_text("{}", encoding="utf-8")
+        link = os.path.join(proj, "追踪链接")
         try:
-            os.symlink(str(outside.parent), str(link))
+            if os.name == "nt":
+                # Windows 上目录符号链接必须显式 target_is_directory=True，
+                # 否则建出的是文件类型链接，跨 Python 版本 realpath 解析不一致。
+                os.symlink(str(outside_root), link, target_is_directory=True)
+            else:
+                os.symlink(str(outside_root), link)
         except OSError:  # pragma: no cover - Windows 无特权场景
             pytest.skip("符号链接创建受限")
         with pytest.raises(PathEscape):
-            ensure_under(proj, str(link / "逃逸.json"))
+            ensure_under(proj, os.path.join(link, "逃逸.json"))
 
     def test_resolver_whitelist_rejects_foreign_name(self, server):
         with pytest.raises(PathEscape):

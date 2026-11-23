@@ -7,6 +7,11 @@
   确定细纲 = 定稿本单元 → 已有细纲则校验 → 无阻塞才进入「正文写作」
   生成下一批 = 只往后滚一批细纲，阶段一个字都不动
 
+0.20.x 流程变更点（共写轨道）：校验不是在点「确定」的同一个调用栈里同步起的，
+而是总结完成后由 _on_cw_sum_done → _cw_finish_unit_stage → _start_cw_outline_validation
+异步接链；阶段推进点仍在 _on_cw_validate_done（PASS 才 advance）。本探针用 QTimer
+事件泵等两段链走完，断言顺序与推进点按该现状钉死。
+
 全程零 LLM 调用（三个 worker 都被替身接掉）。
 """
 import os
@@ -99,6 +104,20 @@ def pump(ms=120):
 
 
 b = Bridge()
+# 0.20.x 流程变更点（共写轨道 C06/A5）：起跑前新增槽位就绪拦截——
+# confirmCwStage 的总结链与随后接上的细纲校验链（dialogue_slot(stage, "compose")）
+# 现在都先过 Bridge._slot_readiness：缺连接/缺 Key/缺模型时零请求拦下，连
+# SummarizeWorker / ReviewOutlinesWorker 都不构造。探针本身不联网、不配 Key，
+# 旧桩只替换了 worker，于是「确定」在起跑线就被拦停（summarize/review 都不起），
+# 三条断言连锁红。这里给 Bridge 塞一条本机回环连接当就绪桩（needs_api_key=False：
+# 本地端点天然免 Key，拦截图放行），测的仍是后面真正要钉的
+# 「定稿→校验→推进」链；真 LLM 调用依旧被下方 worker 替身接掉。
+b.cfg = dict(b.cfg or {})
+b.cfg["connections"] = [{"id": "probe-local", "name": "探针本机桩",
+                         "base_url": "http://127.0.0.1:9/v1",
+                         "api_key": "", "model": "probe-model"}]
+b.cfg["slots"] = {"writing": "probe-local", "helper": "probe-local",
+                  "review": "probe-local"}
 b._open_project(PROJ, silent=True)
 
 UNIT_PRODUCT = "单元总纲：第一段冲突收口。\n\n→ 下阶段交接\n按批出细纲。"
