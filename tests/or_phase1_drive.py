@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.23.0 全量实测 Phase 1 共写档驱动（offscreen QGuiApplication + Bridge Slots）
+"""0.20.3 全量实测 Phase 1 共写档驱动（offscreen QGuiApplication + Bridge Slots）
 
 用法（工作区根目录执行）：
     ./.venv/Scripts/python.exe tests/or_phase1_drive.py <step>

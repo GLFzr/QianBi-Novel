@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.23.0 实测阻断修复回归：200 + 畸形 JSON body 不得裸抛绕过重试/台账。
+"""0.20.3 实测阻断修复回归：200 + 畸形 JSON body 不得裸抛绕过重试/台账。
 
 背景：OpenRouter stealth 长非流式调用两连发 200 + 断裂 body（JSONDecodeError
 在「line 201 column 1」），旧行为直接裸抛——绕过重试、对话台账、用量记账。
@@ -89,7 +89,7 @@ def test_bad_json_exhausted_raises_with_body_head(monkeypatch):
 
 
 def test_nonstream_deadline_enforced(monkeypatch):
-    """0.23.0 实测阻断修复#3：keep-alive 填充重置空闲超时 → 总时钟死线收口。
+    """0.20.3 实测阻断修复#3：keep-alive 填充重置空闲超时 → 总时钟死线收口。
 
     模拟网关行为：post 每 0.05s 吐一个填充字节、永不结束——空闲超时永不触发，
     总死线（timeout=1s）必须掐断并按可重试超时处理；第二发正常返回。

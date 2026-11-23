@@ -185,10 +185,18 @@ def test_g5_degrades_to_debug_without_max_tokens_or_usage(um, tmp_path, caplog):
 
 def test_g5_replay_from_disk_after_restart_trailing_gap_only(tmp_path, monkeypatch):
     """跨进程：内存清零后从盘上台账回放——chapter_accounted 成立；
-    续跑下一章 prose 只对「尾部未愈合断档」翻页告警，已记账章不翻旧账"""
+    续跑下一章 prose 只对「尾部未愈合断档」翻页告警，已记账章不翻旧账
+
+    10-14 断链①-D 配套：回放播种现在要求行带项目归属（usage.record 盖 proj 章，
+    ledger_view.rebuild 只认本项目行）——因为真实 usage.jsonl 是**按天全库共写一份**，
+    别书的高章号不得替本进程作保。故本用例显式登记项目（与同文件其余用例一致）；
+    断言本身逐条不变。
+    """
+    proj = _mk_proj(tmp_path, "回放书")
     import app.usage as m1
     m1 = importlib.reload(m1)
     _isolate(m1, tmp_path, monkeypatch)
+    m1.set_project(proj, None)
     m1.set_chapter(1)
     m1.record(None, _MODEL, "writing", 30000, 1400, 1.0, phase="prose", sent=_MT)
     m1.record(None, _MODEL, "writing", 5000, 100, 1.0, phase="tracking")
@@ -198,6 +206,7 @@ def test_g5_replay_from_disk_after_restart_trailing_gap_only(tmp_path, monkeypat
     import app.usage as m2
     m2 = importlib.reload(m2)
     _isolate(m2, tmp_path, monkeypatch)
+    m2.set_project(proj, None)
     assert m2.chapter_accounted(1) is True
     assert m2.chapter_accounted(2) is False
     m2.set_chapter(3)

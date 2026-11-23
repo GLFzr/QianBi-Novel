@@ -34,9 +34,14 @@ _ANOMALY_KEEP = 200            # 内存镜像上限（state 侧 500 条，见 an
 _lock = threading.Lock()
 _alert_proj = ""        # 当前项目（orchestrator.run 启动登记；空=规则照评，只留内存与日志）
 _alert_cost_cny = DEFAULT_COST_ALERT_CNY
-_chapter_phases = {}    # {ch: set(phase)}——本进程见过 + rebuild 从盘上台账回放的
+_chapter_phases = {}    # {ch: set(phase)}——展示视图：本进程见过 + rebuild 从盘上台账回放的
 _chapter_cost = {}      # {ch: 单章累计估算成本（元）}
-_last_prose_ch = 0      # 最近开写过 prose 的章号（回放取最大；0=尚无）
+# 规则视图：只收**本进程真实写下**的调用行（observe），不接收盘上回放。
+# 用量台账是按天全库共写一份 usage.jsonl 的（行里没有项目字段），跨书回放会把
+# 别的书的高章号算进来——实测另一本书写到 88 章后，本进程章号 <88 的书永远触发
+# 不了 tracking_missing（10-09 深审断链①的另一半）。
+_live_phases = {}       # {ch: set(phase)}
+_last_prose_ch = 0      # 本进程最近开写过 prose 的章号（rebuild 不播种，见 observe）
 _flagged = set()        # 本进程已告警过的 (rule, ch)
 _anomalies = []         # 告警内存镜像（尾部 _ANOMALY_KEEP 条）
 
@@ -101,6 +106,7 @@ def reset() -> None:
     """清空告警视角的内存状态（单测隔离用；生产路径只在进程生命周期内自然累积）"""
     global _last_prose_ch
     _chapter_phases.clear()
+    _live_phases.clear()
     _chapter_cost.clear()
     _flagged.clear()
     _anomalies.clear()
@@ -130,20 +136,35 @@ def chapter_cost(num: int):
         return None if v is None else round(float(v), 6)
 
 
+def current_project() -> str:
+    """当前登记的项目路径（usage.record 用它给台账行盖项目章；空=未登记）"""
+    return _alert_proj
+
+
 def rebuild(rec: dict) -> None:
-    """从盘上台账回放一行（usage._load 逐行喂入；只建视图，不触发规则不加镜像）"""
+    """从盘上台账回放一行（usage._load 逐行喂入；只建视图，不触发规则不加镜像）
+
+    10-14 断链①-D 修：回放**只播种本项目自己的行**。用量台账按天全库共写一份
+    usage.jsonl，行里过去没有项目字段 ⇒ 别的书写到第 88 章会把本进程的「最近 prose
+    章」抬到比自己大，tracking_missing 从此永不触发（10-09 实测）。现在行里带 proj
+    （见 usage.record），只认与本进程当前项目相同、且非空的行。
+    """
+    global _last_prose_ch
     ch = int(rec.get("ch", 0) or 0)
     if ch <= 0:
         return
-    global _last_prose_ch
     with _lock:
         phase = str(rec.get("phase") or "")
         _chapter_phases.setdefault(ch, set()).add(phase)
         _chapter_cost[ch] = round(_chapter_cost.get(ch, 0.0) + cost_of(
             str(rec.get("model") or ""), int(rec.get("in", 0) or 0),
             int(rec.get("out", 0) or 0)), 6)
-        if phase == "prose" and ch > _last_prose_ch:
-            _last_prose_ch = ch
+        if phase == "prose":
+            row_proj = str(rec.get("proj") or "")
+            # 无 proj 的旧行 / 别的书的行：一律不播种（宁可重启后首章不告警，
+            # 也不让跨书章号把本进程的判据缴械）
+            if row_proj and row_proj == _alert_proj and ch > _last_prose_ch:
+                _last_prose_ch = ch
 
 
 def observe(rec: dict) -> list:
@@ -161,13 +182,15 @@ def observe(rec: dict) -> list:
             return hits
         with _lock:
             _chapter_phases.setdefault(ch, set()).add(phase)
+            _live_phases.setdefault(ch, set()).add(phase)
             _chapter_cost[ch] = round(_chapter_cost.get(ch, 0.0) + cost_of(
                 str(rec.get("model") or ""), tin, tout), 6)
-            if phase == "prose" and ch > _last_prose_ch:
+            if phase == "prose" and ch != _last_prose_ch:
                 prev = _last_prose_ch
                 _last_prose_ch = ch   # 章页翻过：本章成为新的「最近 prose 章」
                 # ③ 记账窗口已随章页翻过：上一章直到此刻都没等到任何记账相位行
-                if prev > 0 and not (_chapter_phases.get(prev, set()) & ACCOUNTING_PHASES):
+                # （判据只看本进程视角 _live_phases，跨书回放不许替它作保）
+                if prev > 0 and not (_live_phases.get(prev, set()) & ACCOUNTING_PHASES):
                     key = ("tracking_missing", prev)
                     if key not in _flagged:
                         _flagged.add(key)

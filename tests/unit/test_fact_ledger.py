@@ -164,7 +164,7 @@ def test_ingest_from_extraction_skip_paths(tmp_path):
     assert rep and rep["kept"] == 1
 
 
-# ---------------- D3 源身份钉死（0.23.0）----------------
+# ---------------- D3 源身份钉死（0.20.3）----------------
 
 def test_source_autofill_on_ingest(tmp_path):
     """入账自动填写 source 三件套：正文全文 sha256 短12位 + 代际水位 + 来源标注"""

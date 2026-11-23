@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.24.0 待修章批量修复驱动（无人值守跑完 need_human 章）。
+"""0.20.4 待修章批量修复驱动（无人值守跑完 need_human 章）。
 
 用产品自有 RepairWorker（一键修复同一代码路径：定向修复+最小差异+同一性验收），
 多 pass 迭代直到 collect_needs_fix 清空或达到轮次上限。

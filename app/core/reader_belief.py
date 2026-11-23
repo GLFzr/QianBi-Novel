@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""读者认知三段式册（B3/WA3-b，移植 goink reader_perspective 三段式，0.23.0）
+"""读者认知三段式册（B3/WA3-b，移植 goink reader_perspective 三段式，0.20.3）
 
 站在读者心智视角的账本（区别于事实账本的「世界里发生了什么」）：
 - known          读者已知事实（kind=setting 设定型常驻 / event 事件型近章截断，

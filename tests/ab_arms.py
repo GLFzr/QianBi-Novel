@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.24.0 Q1-b 三臂 A/B 定架构实验（同书同细纲，臂间唯一变量=上下文架构）。
+"""0.20.4 Q1-b 三臂 A/B 定架构实验（同书同细纲，臂间唯一变量=上下文架构）。
 
 臂1 现状：volume_session + compaction(48k)         = Q1-a 后的默认
 臂2 fresh：head_rebuild（L4 每章重建+冻结头，跨章历史不入栈）
@@ -67,7 +67,7 @@ def main():
     app = QGuiApplication(sys.argv)
 
     from app.core.orchestrator import Orchestrator
-    # 0.24.0 起默认走 OpenCode Go 免费模型（用户限制：仅 space-bunny-free /
+    # 0.20.4 起默认走 OpenCode Go 免费模型（用户限制：仅 space-bunny-free /
     # longcat-2.5-preview-free，禁付费模型）；QIANBI_TEST_KEY 可覆盖为 OpenRouter。
     oc_key = os.environ.get("QIANBI_OC_KEY", "").strip()
     if oc_key:

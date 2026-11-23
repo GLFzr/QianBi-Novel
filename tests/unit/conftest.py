@@ -42,7 +42,7 @@ def qianbi_isolated_dir():
     return _ISO_DIR
 
 
-# ---- 死函数治理：公共函数零调用豁免登记（B1/0.22.0，参照 test_receipt_guards.EVIDENCE_CALLEES）----
+# ---- 死函数治理：公共函数零调用豁免登记（B1/0.20.2，参照 test_receipt_guards.EVIDENCE_CALLEES）----
 # 规约（CONTRIBUTING 同步）：新增公共函数必须当批就有调用方或测试引用；确需
 # 「先落名、后续批次才接线」的，必须在此登记「函数名 → 复活理由」，否则
 # test_dead_function_governance 判红。豁免不许用于绕过写错的代码。

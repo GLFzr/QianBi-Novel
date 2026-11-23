@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""死函数治理守卫（B1/0.22.0）：app/ 模块级公共函数零文本引用 = 判红，除非在
+"""死函数治理守卫（B1/0.20.2）：app/ 模块级公共函数零文本引用 = 判红，除非在
 conftest.DEAD_FUNC_EVIDENCE 登记复活理由。
 
 口径与 scripts/static_scan.py 第 4 节一致：对全仓 .py + QML/JS + spec 文本做

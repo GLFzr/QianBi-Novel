@@ -76,6 +76,32 @@ Item {
         modelField.editText = typed      // 换建议列表不打断已手填的模型名
     }
 
+    // 0.20.4 本地端点：扫描结果 → 一键填入（地址/名称/模型，Key 清空）
+    function providerIndexForUrl(url) {
+        var opts = bridge.providerOptions
+        for (var p = 0; p < opts.length; p++) {
+            if (opts[p].baseUrl && opts[p].baseUrl === url) return p
+        }
+        return -1
+    }
+
+    function applyLocalHit(hit) {
+        var idx = providerIndexForUrl(hit.base_url)
+        if (idx >= 0) providerCombo.currentIndex = idx
+        urlField.text = hit.base_url
+        keyField.text = ""                 // 本地回环免 Key：别把旧 Key 留给下一个服务
+        nameField.text = "本地 · " + hit.service
+        modelList.clear()
+        var models = hit.models || []
+        for (var i = 0; i < models.length; i++) modelList.append({ "m": models[i] })
+        modelField.currentIndex = models.length > 0 ? 0 : -1
+        modelField.editText = models.length > 0 ? models[0] : ""
+        if (models.length === 0)
+            bridge.showToast("warn", "这个本地服务还没有模型——先在本地拉取/加载一个")
+        else
+            bridge.showToast("ok", "已填入 " + hit.service + "（" + hit.port + "），可直接测试连接")
+    }
+
     function currentThinking() {
         switch (thinkingModeCombo.currentIndex) {
         case 1: return "disabled"
@@ -355,7 +381,39 @@ Item {
                     }
                 }
 
-                AppField { id: urlField; Layout.fillWidth: true; label: "Base URL" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    AppField { id: urlField; Layout.fillWidth: true; label: "Base URL" }
+                    AppButton {
+                        objectName: "scanLocalPortsButton"
+                        text: bridge.localScanBusy ? "扫描中…" : "扫描本地"
+                        enabled: !bridge.localScanBusy
+                        Layout.alignment: Qt.AlignBottom
+                        onClicked: bridge.scanLocalPorts()
+                    }
+                }
+
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    visible: bridge.localScanResults.length > 0
+                    Text {
+                        text: "本机在跑的服务（点一条填入，Key 自动留空）"
+                        color: Theme.textTertiary
+                        font.pixelSize: Theme.fsTiny
+                        font.family: Theme.uiFont
+                    }
+                    Repeater {
+                        model: bridge.localScanResults
+                        AppButton {
+                            width: parent.width
+                            text: modelData.service + " · " + modelData.port + " · "
+                                  + modelData.count + " 个模型"
+                            onClicked: settings.applyLocalHit(modelData)
+                        }
+                    }
+                }
 
                 RowLayout {
                     Layout.fillWidth: true

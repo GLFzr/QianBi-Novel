@@ -26,6 +26,7 @@ from ..core import co_dialogue
 from ..core import writing_rules  # D4：共写反馈→写作规约沉淀（报告区「沉淀为规约」槽）
 from ..llm import LLMClient, LLMError, ModelRouter
 from ..llm import clean_llm_output
+from ..llm import local as local_ep
 from ..llm.providers import PROVIDERS, PROVIDER_ORDER
 
 logger = logging.getLogger("qianbi.ui")
@@ -746,6 +747,18 @@ class _NetWorker(QThread):
                 self.models_done.emit(cid, [])
 
 
+class _LocalScanWorker(QThread):
+    """扫描本机常用推理端口（0.20.4）：后台跑，绝不在 UI 线程做六次网络探测。"""
+    done = Signal(list)
+
+    def run(self):
+        try:
+            self.done.emit(local_ep.scan_ports(timeout=0.6))
+        except Exception as e:  # noqa: BLE001
+            logger.error("本地端口扫描线程异常: %s", e, exc_info=True)
+            self.done.emit([])
+
+
 class _CanonAuditWorker(QThread):
     """F2 世界观对账：逐章设定清算（后台），报告落 追踪/设定清算_第NNN.json"""
     done = Signal(int, int)                     # 已完成章数, 总章数
@@ -1424,6 +1437,9 @@ class Bridge(QObject):
     demoActiveChanged = Signal()
     connTestResult = Signal(str, bool, str)     # cid, ok, msg
     modelsFetched = Signal(str, list)           # cid, models
+    localScanFinished = Signal("QVariantList")  # 0.20.4 本机服务扫描结果
+    localScanResultsChanged = Signal()
+    localScanBusyChanged = Signal()
     blurbGenerated = Signal(bool, str)          # ok, result_or_error（发布物料：标签+简介）
     lockBlocked = Signal(int, str, int, int, str)  # 锁定被闸门拦截：num, reason, actual, target, kind
     gateDetail = Signal(str, int, "QVariantMap")    # Q6（只加不改）：九门停靠详情，伴随 gateAsked
@@ -1447,6 +1463,9 @@ class Bridge(QObject):
         self._session_projects = []   # C29：本会话打开过的项目（关应用时逐个自动备份）
         self.orch = None
         self._workers = []
+        self._local_scan_results = []
+        self._local_scan_busy = False
+        self._local_scan_worker = None
         self._running = False
         self._paused = False
         self._stopping = False
@@ -1675,6 +1694,10 @@ class Bridge(QObject):
         {"key": k, "label": PROVIDERS[k]["label"], "baseUrl": PROVIDERS[k]["base_url"],
          "hint": PROVIDERS[k]["hint"], "models": PROVIDERS[k]["models"]}
         for k in PROVIDER_ORDER], constant=True)
+    localScanResults = Property("QVariantList", lambda self: self._local_scan_results,
+                                notify=localScanResultsChanged)
+    localScanBusy = Property(bool, lambda self: self._local_scan_busy,
+                             notify=localScanBusyChanged)
     slotLabels = Property("QVariantMap", lambda self: dict(cfg_mod.SLOT_LABELS), constant=True)
     # ---- 外部文档导入属性 ----
     isImporting = Property(bool, lambda self: self._import_busy, notify=importBusyChanged)
@@ -1898,8 +1921,7 @@ class Bridge(QObject):
             if not conn:
                 missing.append(cfg_mod.SLOT_LABELS[slot])
                 continue
-            url = conn.get("base_url", "")
-            if not conn.get("api_key") and "localhost" not in url and "127.0.0.1" not in url:
+            if local_ep.needs_api_key(conn):
                 missing.append(f"{cfg_mod.SLOT_LABELS[slot]}（{conn.get('name', '')} 未填 API Key）")
             # QW-A3：空模型与缺 Key 同列前置——别让第一次真实调用当探针（client.py 才报就晚了）
             if not conn.get("model"):
@@ -3540,6 +3562,33 @@ class Bridge(QObject):
         self._workers.append(w)
         w.start()
 
+    @Slot()
+    @_guarded
+    def scanLocalPorts(self):
+        """扫描本机常用端口（0.20.4）：后台线程跑，结果落 localScanResults。"""
+        if self._local_scan_busy:
+            return
+        self._local_scan_busy = True
+        self.localScanBusyChanged.emit()
+        w = _LocalScanWorker(self)
+        self._local_scan_worker = w
+
+        def _done(hits):
+            self._local_scan_results = list(hits or [])
+            self._local_scan_busy = False
+            self.localScanResultsChanged.emit()
+            self.localScanBusyChanged.emit()
+            self.localScanFinished.emit(self._local_scan_results)
+            if not self._local_scan_results:
+                self.toast.emit(
+                    "warn", "没扫到本地服务：请确认 Ollama / llama.cpp / LM Studio 是否在运行"
+                            "（只探本机 11434/8080/1234/8000/5001/5000）")
+
+        w.done.connect(_done)
+        w.finished.connect(lambda: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        w.start()
+
     @Slot(str)
     @_guarded
     def fetchModels(self, cid: str):
@@ -5036,8 +5085,7 @@ class Bridge(QObject):
         label = cfg_mod.SLOT_LABELS.get(slot, slot)
         if not conn:
             return f"{label}还没配置连接——先到「设置 · 连接与模型」选一家服务商并粘贴 API Key"
-        url = conn.get("base_url", "")
-        if not conn.get("api_key") and "localhost" not in url and "127.0.0.1" not in url:
+        if local_ep.needs_api_key(conn):
             return f"{label}（{conn.get('name', '')}）还没填 API Key——先到「设置 · 连接与模型」粘贴"
         if not conn.get("model"):
             return (f"这条连接（{conn.get('name', '')}）还没选模型，"

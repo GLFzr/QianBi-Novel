@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.23.0 质量深测执行器（Phase 5，预注册：docs/0.23.0_质量深测计划.md）
+"""0.20.3 质量深测执行器（Phase 5，预注册：docs/0.20.3_质量深测计划.md）
 
 用法（工作区根目录）：
     ./.venv/Scripts/python.exe tests/quality_suite.py <cmd>
@@ -354,7 +354,7 @@ RUBRIC = """你是资深网文责编。对给定章节正文按 10 个维度打�
 
 
 def _length_normalize(text: str, lo: int = 1400, hi: int = 3600) -> str:
-    """W5-b（0.24.0）：盲评长度配平——超出 [lo,hi] 的稿按句边界截到 hi（评委有
+    """W5-b（0.20.4）：盲评长度配平——超出 [lo,hi] 的稿按句边界截到 hi（评委有
     长度偏好，LitBench 实证：不配平测的是长度不是质量）；过短稿保留原样（截无可截）。"""
     t = text or ""
     if len(t) <= hi:

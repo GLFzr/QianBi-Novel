@@ -12,7 +12,7 @@ import os
 import sys
 import time
 
-# 0.23.0 实测环境：剥死代理（本机 127.0.0.1:7897 已死，httpx trust_env 会撞上）
+# 0.20.3 实测环境：剥死代理（本机 127.0.0.1:7897 已死，httpx trust_env 会撞上）
 for _k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy",
            "https_proxy", "all_proxy"):
     os.environ.pop(_k, None)
@@ -57,7 +57,7 @@ THINKING = os.environ.get("QIANBI_TEST_THINKING", "enabled")   # 百炼兼容端
 EFFORT = os.environ.get("QIANBI_TEST_EFFORT", "max")
 MAX_TOKENS = int(os.environ.get("QIANBI_TEST_MAX_TOKENS", "65536"))  # 百炼 qwen-flash 上限 32768
 CHAPTER_WORDS = 2000            # 每章目标字数（与示例细纲一致）
-TOTAL_WORDS_TARGET = 100000     # 累计 10 万字达标
+TOTAL_WORDS_TARGET = int(os.environ.get("QIANBI_TEST_TOTAL_WORDS", "100000"))  # 累计达标线（战役驱动按本传）
 
 SRC_PROJ = os.path.join(os.getcwd(), "examples", "改命笔记")
 DEFAULT_PROJ = os.path.join(os.getcwd(), "tests_output", "长测_改命笔记")
@@ -89,23 +89,25 @@ def main():
              "base_url": BASE, "api_key": KEY, "model": MODEL,
              "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": int(os.environ.get("QIANBI_TEST_TIMEOUT", "900")),
              "thinking": THINKING, "reasoning_effort": EFFORT,
-             # C44：连接级流式开关（0.23.0 实测：stealth 系不支持流式 → QIANBI_TEST_STREAM=false）
+             "user_id": os.environ.get("QIANBI_TEST_USER_ID", "qianbi-novel"),
+             # C44：连接级流式开关（0.20.3 实测：stealth 系不支持流式 → QIANBI_TEST_STREAM=false）
              "stream": os.environ.get("QIANBI_TEST_STREAM", "true").lower() != "false"},
             {"id": "t-helper", "name": f"{MODEL}（辅助槽）", "provider": "custom",
              "base_url": BASE, "api_key": KEY, "model": MODEL,
              "temperature": 0.7, "max_tokens": MAX_TOKENS, "timeout": int(os.environ.get("QIANBI_TEST_TIMEOUT", "900")),
              "thinking": THINKING, "reasoning_effort": EFFORT,
+             "user_id": os.environ.get("QIANBI_TEST_USER_ID", "qianbi-novel"),
              "stream": os.environ.get("QIANBI_TEST_STREAM", "true").lower() != "false"},
         ],
         "slots": {"writing": "t-write", "helper": "t-helper", "review": "t-helper"},
         "gates": {"strategy": "mark_continue", "deslop_max_rounds": 2,
                   "word_tolerance": 0.1, "review_enabled": True, "review_max_rounds": 1},
-        # 0.23.0 实测：stealth 网关间歇空响应/坏 JSON，max_retries 1→2 提升自愈率
+        # 0.20.3 实测：stealth 网关间歇空响应/坏 JSON，max_retries 1→2 提升自愈率
         "llm": {"max_retries": int(os.environ.get("QIANBI_TEST_RETRIES", "1")),
                 "backoff_base": 2.0},
         "writing": {"chapter_word_target": CHAPTER_WORDS, "default_genre": "",
                     "default_platform": "番茄",
-                    # 0.23.0 实测适配：V7 补尾式扩写——只续缺口(400-600字)而非全量重写，
+                    # 0.20.3 实测适配：V7 补尾式扩写——只续缺口(400-600字)而非全量重写，
                     # 输出∝缺口，躲开本网关「非流式长生成必悬挂」的墙
                     "enrich_tail": True,
                     # QIANBI_TEST_COST_STACK=1：开 0.19.5 全栈（卷会话/S4 冻结/台账补丁/审校前置）——
@@ -139,7 +141,7 @@ def main():
         fail["msg"] = msg
         mark(f"[e2e] 流水线失败: {msg}")
 
-    # 0.23.0 实测处置约定：预算宪法熔断＝预注册判据的**预期命中**（§5.3 超限必熔断）。
+    # 0.20.3 实测处置约定：预算宪法熔断＝预注册判据的**预期命中**（§5.3 超限必熔断）。
     # 长跑驱动扮演「已阅报告的值班操作员」：记录熔断 → 1s 后点「继续」，让本轮
     # 继续跑完 4 章口径；熔断事实已落 anomalies/session_events，评分照实扣。
     def on_auto_paused(reason):
@@ -159,7 +161,7 @@ def main():
     mark(f"[run] 启动流水线（{MODEL} thinking={THINKING} effort={EFFORT}）…")
     orch.start()
 
-    TIMEOUT = 100 * 60
+    TIMEOUT = int(os.environ.get("QIANBI_TEST_ROUND_TIMEOUT_MIN", "100")) * 60
     last_beat = time.monotonic()
     done_this_round = 0
     while orch.isRunning() and time.monotonic() - t0 < TIMEOUT:

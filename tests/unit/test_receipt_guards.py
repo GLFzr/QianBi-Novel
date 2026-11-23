@@ -97,7 +97,7 @@ EVIDENCE_CALLEES = {
     "_keep_aside": "坏批注库留证 .corrupt 落盘（_read_store 损坏隔离，WP-13）",
     "create_bundle": "报障包 zip 落盘（report_bundle.create_bundle 写完才发回执，WP-28）",
     "_make_bug_report": "报障包 zip 落盘（体内经 report_bundle.create_bundle，含正文/仅日志两档，A-9）",
-    # —— D4 写作规约（0.23.0）：回执实际有真效果，原先证据不在射程 ——
+    # —— D4 写作规约（0.20.3）：回执实际有真效果，原先证据不在射程 ——
     "add_rule": "写作规约 sidecar 追踪/写作规约.json 落盘（addWritingRule 写完才发回执，D4）",
     # —— 内存生效类（界面/模型态，无盘语义但状态真实切换） ——
     "cwProsePolished": "共写去味信号驱动编辑器（内存生效）",

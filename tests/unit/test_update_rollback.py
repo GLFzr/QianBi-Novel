@@ -21,7 +21,7 @@ from app import config as cfg_mod
 from app import update_install as upd
 from app import update_rollback as ur
 
-FROM_VER = "0.21.0"
+FROM_VER = "0.20.2"
 TO_VER = "99.0.0"
 
 
@@ -143,14 +143,14 @@ def test_previous_installer_picks_closest_older(isolate_updates_dir, tmp_path):
     d = str(tmp_path / "updates")
     os.makedirs(d, exist_ok=True)
     for name in ("QianBi-Novel-v0.20.0-setup.exe",
-                 "QianBi-Novel-v0.21.0-setup.exe",
+                 "QianBi-Novel-v0.20.2-setup.exe",
                  "QianBi-Novel-v99.0.0-setup.exe",      # 比当前新版：不是回滚路子
                  "not-an-installer.exe",                # 解析不出版本：跳过
                  "readme.txt"):                          # 非 exe：跳过
         with open(os.path.join(d, name), "wb") as f:
             f.write(b"x")
     got = ur.previous_installer(d, TO_VER)
-    assert got == os.path.join(d, "QianBi-Novel-v0.21.0-setup.exe"), got
+    assert got == os.path.join(d, "QianBi-Novel-v0.20.2-setup.exe"), got
     assert ur.previous_installer(d, "0.19.0") == "", "没有更旧的包就返回空串，不编路径"
 
 
@@ -158,7 +158,7 @@ def test_startup_crash_verdict_carries_installer(isolate_updates_dir, tmp_path):
     """崩溃 verdict 必须自带上一版安装包路径与 updates 目录（恢复对话框数据齐）"""
     d = str(tmp_path / "updates")
     os.makedirs(d, exist_ok=True)
-    with open(os.path.join(d, "QianBi-Novel-v0.21.0-setup.exe"), "wb") as f:
+    with open(os.path.join(d, "QianBi-Novel-v0.20.2-setup.exe"), "wb") as f:
         f.write(b"x")
     # 相位文件与安装包同住 updates/（生产事实）：两次调用必须同一个目录，
     # 否则第二次读的是另一份 updates/，相位为空、崩溃判定根本不会发生
@@ -166,7 +166,7 @@ def test_startup_crash_verdict_carries_installer(isolate_updates_dir, tmp_path):
     _dump(str(tmp_path / "crashes"))
     v = ur.startup_check({}, "", TO_VER, crashes_dir=str(tmp_path / "crashes"),
                          updates_dir=d)
-    assert v["installer"] == os.path.join(d, "QianBi-Novel-v0.21.0-setup.exe"), v
+    assert v["installer"] == os.path.join(d, "QianBi-Novel-v0.20.2-setup.exe"), v
     assert v["updatesDir"] == d, v
 
 
@@ -183,7 +183,7 @@ def test_bridge_run_previous_installer_interactive_params(isolate_updates_dir,
     monkeypatch.setattr(cfg_mod, "CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setattr(uc, "install_dir", lambda: str(tmp_path / "app"))
     upd_dir = uc.updates_dir()
-    old_pkg = os.path.join(upd_dir, "QianBi-Novel-v0.21.0-setup.exe")
+    old_pkg = os.path.join(upd_dir, "QianBi-Novel-v0.20.2-setup.exe")
     with open(old_pkg, "wb") as f:
         f.write(b"old-installer")
     # 相位文件直接立在盘上（模拟「首启崩过后第二次启动」之前的现场）

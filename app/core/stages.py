@@ -22,12 +22,12 @@ from ..slots import SLOT_HELPER, SLOT_REVIEW, SLOT_WRITING, slot_connection
 from .. import project, prompts, deslop, mustscan, wb
 from ..wb import worldbook_anchors, worldbook_text
 from ..llm import clean_llm_output
-from ..llm.client import LLMError  # 0.24.0：扩写失败降级（不杀章）
+from ..llm.client import LLMError  # 0.20.4：扩写失败降级（不杀章）
 from ..prompts import bridge_codes, scene_cards
 from . import deslop_metrics, gates, memory, scan, state as st, tracking_store, versions  # S6a：度量层下沉 core
-from . import rewrite_gate  # Q2-b（0.24.0）：改写净增益闸
-from . import style_anchor, opening_score, hook_carry  # W3/W4（0.24.0）
-from .chapter_directive import (FIELD_ORDER as _CD_FIELD_ORDER,       # A1（0.23.0）章纲合同
+from . import rewrite_gate  # Q2-b（0.20.4）：改写净增益闸
+from . import style_anchor, opening_score, hook_carry  # W3/W4（0.20.4）
+from .chapter_directive import (FIELD_ORDER as _CD_FIELD_ORDER,       # A1（0.20.3）章纲合同
                                 parse_directive as _parse_directive,
                                 to_prompt_block as _to_prompt_block,
                                 validate_directive as _validate_directive)
@@ -855,16 +855,67 @@ def _rewrite_budget_exhausted(ctx, phase, num) -> bool:
     return True
 
 
+def _report_accounting_failure(ctx, num, kind, err) -> None:
+    """记账相位失败的落账出口（台账异常的唯一写通道 report_anomaly）。
+
+    日志由调用点就地打（N-36 纪律：except 处理器必须自己出声，护栏只看 AST 看得见的
+    log 调用）；本函数只负责把异常写进 anomalies + session_events。
+    「不阻断」的意思是别打断本章定稿，不是别告诉任何人——09-26 T3-1 与 10-09 深审
+    是同一条事故链：49 章长跑里「追踪更新失败（不阻断）」出现 41 次，anomalies 里
+    一条记账异常都没有，界面全程显示正常。
+
+    ctx 入参口径（10-14 断链①）：与调用点同源，供后续按项目归属扩展；当前落账仍走
+    ledger_view 的 _alert_proj（orchestrator.run 启动时登记），故本函数不读 ctx。
+    """
+    try:
+        from . import ledger_view
+        ledger_view.report_anomaly(
+            "accounting_call_failed", "error", ch=int(num or 0),
+            msg=f"第 {num} 章 {kind}失败：{str(err)[:160]}", phase=str(kind))
+    except Exception:  # noqa: BLE001
+        # 告警是观测件，绝不反过来打断记账；此处不打 log 以免与调用点重复
+        pass
+
+
+def _accounting_tally(ctx, num, results: dict) -> None:
+    """本章记账结算：尝试过的相位全失败 → 标待修 + error 异常，绝不静默定稿。
+
+    results 值口径：True=写成功；False=尝试且失败；None/缺键=本就没尝试
+    （相位被关掉或前置条件不满足）。只按「尝试过」的判，否则关掉某个相位＝人人待修。
+    """
+    attempted = [k for k, v in (results or {}).items() if v is not None]
+    if not attempted or any(results.get(k) for k in attempted):
+        return
+    ctx.log("error", f"第 {num} 章尝试的 {len(attempted)} 个记账相位全部失败"
+                    f"（{'、'.join(sorted(attempted))}）——正文已定稿但台账零新增，已标待修")
+    try:
+        from . import state as st
+        st.mark_chapter_need_human(ctx.proj, st.load_state(ctx.proj), int(num or 0))
+    except Exception as e:  # noqa: BLE001
+        ctx.log("warn", f"第 {num} 章待修标记写入失败：{e}")
+    try:
+        from . import ledger_view
+        ledger_view.report_anomaly(
+            "accounting_all_failed", "error", ch=int(num or 0),
+            msg=f"第 {num} 章记账相位全部失败：{'、'.join(sorted(attempted))}")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _rewrite_adopt(ctx, phase, num, prose, rewritten, session=None, t_turn=0):
-    """Q2-b：改写净增益闸——GATED_PHASES 的改写稿过 rewrite_gate 才放行。
+    """Q2-b：改写净增益闸——GATED_PHASES 与 GROWTH_PHASES 的改写稿过 rewrite_gate 才放行。
 
     拒收=回退原稿+会话截断（改写轮不留在历史）+留痕（rewrite_rejected 事件）。
-    非闸相位 / 空稿 / 零编辑原样透传（各调用方既有守卫语义不变）。"""
-    if phase not in rewrite_gate.GATED_PHASES or not _rewrite_gate_on(ctx):
+    增造型相位（enrich）跳过尺寸预算判据，质量判据照常。
+    其余相位 / 空稿 / 零编辑原样透传（各调用方既有守卫语义不变）。"""
+    allow_growth = phase in rewrite_gate.GROWTH_PHASES
+    if (phase not in rewrite_gate.GATED_PHASES and not allow_growth) \
+            or not _rewrite_gate_on(ctx):
         return rewritten
     if not (rewritten or "").strip() or rewritten == prose:
         return rewritten
-    ok, reasons = rewrite_gate.gate_rewrite(prose, rewritten, proj=ctx.proj)
+    ok, reasons = rewrite_gate.gate_rewrite(prose, rewritten, proj=ctx.proj,
+                                            allow_growth=allow_growth)
     if ok:
         return rewritten
     if session is not None:
@@ -903,7 +954,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
     返回改写后全文；完全失败返回空串（调用方既有守卫接管）。
     """
     use_sess = _use_session(ctx, session, slot, phase)
-    # Q2-b/Q2-d（0.24.0）：净增益闸只作用于毁稿高危相位；预算耗尽即不再发起新改写
+    # Q2-b/Q2-d（0.20.4）：净增益闸只作用于毁稿高危相位；预算耗尽即不再发起新改写
     _gated_phase = (phase in rewrite_gate.GATED_PHASES and _rewrite_gate_on(ctx))
     if _gated_phase and _rewrite_budget_exhausted(ctx, phase, num):
         return prose
@@ -992,7 +1043,7 @@ def _rewrite_phase(ctx, session, slot: str, phase: str, template: str, kw: dict,
 DESLOP_PINNED_MAX_PARAS = 2      # 命中段上限（旧定点档）：超过即回退整章重写
 DESLOP_PINNED_MAX_GROW = 0.25    # 替换后全文长度变化上限，超过即回退
 
-# ---- Q2-c（0.24.0）去味卡片制：游蜂修改卡同构 ----
+# ---- Q2-c（0.20.4）去味卡片制：游蜂修改卡同构 ----
 # 卡级验收（三查）：①违规词必须消失（命中 tic 不在新段）②防搬运（新段不得含
 # 其他段 ≥16 字原文片段——堆料/复读的卡级形态）③段长带宽（0.3×~2.5×，卡级
 # 松界）。坏卡处置：定向返工一次（附违规原文+修法，DOC 爬升制）→ 仍坏则剔除
@@ -1062,7 +1113,7 @@ def _card_violations(span: dict, para_map: dict, para_text: dict) -> list:
 
 def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
                            advisory: list, num: int) -> str:
-    """去味改写卡（Q2-c，0.24.0 升级旧定点修复）。
+    """去味改写卡（Q2-c，0.20.4 升级旧定点修复）。
 
     命中段 ≤上限（卡片制 6 / 旧档 2）时只让模型输出替换段全文。卡级三查
     （_card_violations）逐卡验收：好卡采纳、坏卡定向返工一次（附违规原文+修法，
@@ -1168,8 +1219,15 @@ def _deslop_pinned_rewrite(ctx, session, prose: str, blocking: list,
             session.rollback_to(t_before)
             return ""
         session.commit_turn(req, merged)   # 固化合成轮：「最近一条章正文消息」仍指向最新正文
+        # Q2-b 补接（2026-10-09 审查）：卡片合并稿同样必须过净增益闸——
+        # 拒收回落到 ""，由调用方按既有语义处置（不静默采纳更差的稿）。
+        adopted = _rewrite_adopt(ctx, PHASE_DESLOP, num, prose, merged,
+                                 session=session, t_turn=t_before)
+        if adopted == prose:
+            span_edit.record_event(ctx.proj, "deslop", "pinned_fallback", "gate_reject")
+            return ""
         span_edit.record_event(ctx.proj, "deslop", "pinned", "paras=%s" % paras)
-        return merged
+        return adopted
     except PipelineStopped:
         raise
     except Exception as e:  # noqa: BLE001
@@ -1380,7 +1438,7 @@ def stage_chapter_outlines(ctx, start: int, end: int) -> list:
 
 
 def _carry_block(proj: str, num: int) -> str:
-    """Q4-a/Q4-d（0.24.0）：承接义务块——上一章钩型+内容+应答义务+钩型轮换。
+    """Q4-a/Q4-d（0.20.4）：承接义务块——上一章钩型+内容+应答义务+钩型轮换。
 
     数据源=追踪/钩子账本.json（缺账本/首章 → 空串，fail-open）。三测 S2 实证：
     上一章钩子被本章应答率 1/6、钩型 5/7 同型——账本早有数据，缺的就是这条
@@ -1413,7 +1471,7 @@ def _carry_block(proj: str, num: int) -> str:
 
 
 def _beat_budget_block(outline: str, chapter_words: int) -> str:
-    """Q2-a（0.24.0）：拍段字数预算块——细纲 N 拍 → 每拍约 W/N 字均衡展开。
+    """Q2-a（0.20.4）：拍段字数预算块——细纲 N 拍 → 每拍约 W/N 字均衡展开。
 
     AgentWrite/Scene-Beats 思想：字数达标从「写后补救」前移到「写前预算」。
     细纲无拍段（无 `- ` 行）→ 空串（fail-open，装配字节不变）。"""
@@ -1427,7 +1485,7 @@ def _beat_budget_block(outline: str, chapter_words: int) -> str:
 
 
 def _opening_bestof_block(ctx, proj, num, outline, n_open):
-    """Q4-e（0.24.0）：章首 best-of-N 择优——前 300-500 字独立生成（短上下文避开
+    """Q4-e（0.20.4）：章首 best-of-N 择优——前 300-500 字独立生成（短上下文避开
     长程污染），本地评分择优（砍掉 bad beginning 分布左尾），胜者作已定稿章首前缀。
     n_open<2 / 全部候选为空 / 任何异常 → 空串（直入正文相位，fail-open）。"""
     if n_open < 2:
@@ -1466,15 +1524,19 @@ def _opening_bestof_block(ctx, proj, num, outline, n_open):
 
 def _enrich_para_rewrite(ctx, session, prose: str, gap: int, num: int,
                          chapter_words: int) -> str:
-    """Q2-a（0.24.0）：段落级扩写——废除「整章不足→整章重写」的行业不存在形态。
+    """Q2-a（0.20.4）：段落级扩写——废除「整章不足→整章重写」的行业不存在形态。
 
     定位最单薄段落（叙事段按长度升序取前 K 段），卡式调用逐段增厚（情节不变
     约束），卡级验收（防搬运/段长带宽/总增益）。失败返回 ""（调用方跳出扩写环，
     字数不足走既有「降级建议」路径——绝不回退整章重写）。"""
     if not _session_usable(session) or gap < 150:
         return ""
-    paras = [(i + 1, ln) for i, ln in enumerate(prose.split("\n"))
-             if ln.strip() and not ln.lstrip().startswith("#")
+    from . import span_edit
+    # 段号一律走 span_edit 的编号空间（非空行从 1 连续），不能用 split 的行号：
+    # apply_spans 按段号解释 para，行号口径会把本段的增厚稿写到别的段上。
+    all_paras = span_edit.numbered_paras(prose)
+    paras = [(n, ln) for n, ln in all_paras
+             if not ln.lstrip().startswith("#")
              and not ln.lstrip().startswith("⟦")]
     if not paras:
         return ""
@@ -1491,7 +1553,6 @@ def _enrich_para_rewrite(ctx, session, prose: str, gap: int, num: int,
            "本步为段落级增厚，只处理下方点名的段落。）\n\n" +
            prompts.ENRICH_PARA_PROMPT.format(**kw))
     t_before = session.turn_count()
-    from . import span_edit
     try:
         ctx.last_prompt = req
         _snap_prompt(ctx, PHASE_ENRICH, num)
@@ -1511,8 +1572,7 @@ def _enrich_para_rewrite(ctx, session, prose: str, gap: int, num: int,
             if not orig:
                 continue
             win = DESLOP_CARD_TRANSPORT_CHARS
-            others_wo = "\n".join(ln for i, ln in enumerate(prose.split("\n"), 1)
-                                  if i != p)
+            others_wo = "\n".join(t for q, t in all_paras if q != p)
             transport = any(new[i:i + win] in others_wo
                             for i in range(max(0, len(new) - win)))
             hi = len(orig) + int(per_para * 1.8)
@@ -1534,9 +1594,18 @@ def _enrich_para_rewrite(ctx, session, prose: str, gap: int, num: int,
             session.rollback_to(t_before)
             return ""
         session.commit_turn(req, merged)
+        # Q2-b 补接（2026-10-09 审查）：增厚稿也要过净增益闸（增造型判据集：
+        # 不新增阻断 / 不复读堆料 / 角色在场）。拒收→回落到 ""，由调用方走
+        # 既有「字数不足降级为建议」出口，绝不静默采纳复读堆料的稿。
+        adopted = _rewrite_adopt(ctx, PHASE_ENRICH, num, prose, merged,
+                                 session=session, t_turn=t_before)
+        if adopted == prose:
+            span_edit.record_event(ctx.proj, "enrich_para", "gate_rejected",
+                                   f"added={added}")
+            return ""
         ctx.log("ok", f"第 {num} 章 段落级扩写：{len(keep)} 段增厚 +{added} 字"
                       f"（缺口 {gap}）")
-        return merged
+        return adopted
     except PipelineStopped:
         raise
     except Exception as e:  # noqa: BLE001
@@ -1887,7 +1956,7 @@ def _live_stack_gen(proj: str, vol: int) -> int:
 
 
 def _bk_session(ctx, session):
-    """Q1-c（0.24.0）：记账相位（tracking/章·全局摘要/canon_audit）脱离卷会话。
+    """Q1-c（0.20.4）：记账相位（tracking/章·全局摘要/canon_audit）脱离卷会话。
 
     实测 E2：ch7 记账单发 179k 入 / 473 tok 出——记账只需要章文本+账本材料，
     骑卷会话纯粹吃膨胀栈（成本与劣化双输）。writing.bookkeeping_off_session
@@ -1903,7 +1972,7 @@ def _bk_session(ctx, session):
 
 
 def _compaction_step(ctx, proj: str, num: int, session):
-    """长程压缩 §4.3「接力压缩」接线（writing.compaction，0.24.0 起默认开）。
+    """长程压缩 §4.3「接力压缩」接线（writing.compaction，0.20.4 起默认开）。
 
     触发（§6.2 卷界 / 输入越阈 / 手动）时：把本卷历史折叠成装配式交接块（零 LLM
     调用），另起一代会话栈——system 逐字节沿用旧栈（它就是新前缀的共享段），
@@ -1952,7 +2021,7 @@ def _compaction_step(ctx, proj: str, num: int, session):
     return session, preface
 
 
-# ---- A1/E1（0.23.0）章纲合同与 prompt 快照的模块级助手 ----
+# ---- A1/E1（0.20.3）章纲合同与 prompt 快照的模块级助手 ----
 
 def _directive_contract_block(directive) -> str:
     """A1：ChapterDirective → 正文轮合同块；None / 零识别字段 → 空串。
@@ -2060,7 +2129,7 @@ class _MicroCycle:
     skip_scan_deslop: bool = False
     word_overflow: bool = False   # C17 G1 字数断路器：True=跳过 scan/deslop/review 直转人工
     sat_row: dict = None          # C33 爽点节奏账本：本章行（assemble 立据→finalize 落账）
-    directive: object = None      # A1（0.23.0）章纲合同实例（assemble 解析→draft 注入/review 消费）
+    directive: object = None      # A1（0.20.3）章纲合同实例（assemble 解析→draft 注入/review 消费）
     directive_missing: list = field(default_factory=list)   # A1 必填缺失 fail 候选清单
 
     def _mc_assemble(self) -> None:
@@ -2125,7 +2194,7 @@ class _MicroCycle:
             session.seed_prose(self.prose, chapter_num=num)
             ctx.log("info", f"第 {num} 章 卷会话断点续跑：草稿已播种（下次会话调用并入历史）")
 
-        # A1（0.23.0）章纲合同挂点：细纲 → ChapterDirective（宽容解析，畸形不炸）
+        # A1（0.20.3）章纲合同挂点：细纲 → ChapterDirective（宽容解析，畸形不炸）
         # + 必填校验。缺字段清单 = fail 候选（G4 warn 风格：只出声不阻断不落库），
         # 实例存 mc 供正文合同块注入（_mc_draft）与 A2 覆盖对照（_mc_review）消费；
         # while 循环之后解析 = G4 回退重读细纲后拿到的是最终版（断点续跑路径
@@ -2143,7 +2212,7 @@ class _MicroCycle:
             ctx.log("warn", f"第 {num} 章 细纲合同校验：缺必填字段 "
                             f"{', '.join(self.directive_missing)}"
                             f"（fail 候选，不阻断——大纲即法律的机器抓手）")
-        # Q4-b（0.24.0）：承接断链标记——cbn/cen 双缺（解析成功的合同书才判；
+        # Q4-b（0.20.4）：承接断链标记——cbn/cen 双缺（解析成功的合同书才判；
         # 旧式细纲书 fail-open）。动作=error 警告+need_human 标记（仅 0.23 模板书），
         # 不斩流程——承接质量的真闸是 _carry_block 注入与对偶检测两层闭环。
         if self.directive is not None \
@@ -2188,7 +2257,7 @@ class _MicroCycle:
         chapter_words = self.chapter_words
         ctx.step(num, st.STEP_DRAFT)
         ctx.checkpoint()
-        # Q4-e（0.24.0）：章首 best-of-N 择优（短上下文砍 bad beginning 左尾）；
+        # Q4-e（0.20.4）：章首 best-of-N 择优（短上下文砍 bad beginning 左尾）；
         # 先于一切 try 语句独立执行（N-36 扫描面隔离）。
         _opening_prefix = (_opening_bestof_block(
             ctx, proj, num, outline,
@@ -2226,11 +2295,11 @@ class _MicroCycle:
             "author_note": _author_note(proj),
         }
         _prose_directives = _dyn_directives(ctx, PHASE_PROSE)   # E1.2/O2（未配置=空串）
-        # Q2-a（0.24.0）：拍段字数预算——细纲 N 拍均分目标字数（写前预算替代写后补救）
+        # Q2-a（0.20.4）：拍段字数预算——细纲 N 拍均分目标字数（写前预算替代写后补救）
         _budget_block = _beat_budget_block(outline, chapter_words)
         # Q4-a/Q4-d：承接义务块（上一章钩子应答 + 钩型轮换）
         _carry = _carry_block(proj, num)
-        # W3（0.24.0）文风纪律块：指纹+全书统计镜像+文风锚（末位纪律——动笔前
+        # W3（0.20.4）文风纪律块：指纹+全书统计镜像+文风锚（末位纪律——动笔前
         # 最后读入的是正文语态样本）；书未建基准/章数<2 时为空串（fail-open）。
         try:
             _style_block = style_anchor.assembly_block(proj)
@@ -2241,7 +2310,7 @@ class _MicroCycle:
         # 注入「三拍必须兑现」指令块；无节拍章/引擎关闭 = 空串（装配字节不变）。
         _beat_block = (_satisfaction_prose_block(outline)
                        if bool(_w_cfg.get("satisfaction_engine", False)) else "")
-        # A1（0.23.0）：细纲合同块注入——directive 有已识别字段时经 to_prompt_block
+        # A1（0.20.3）：细纲合同块注入——directive 有已识别字段时经 to_prompt_block
         # 渲染，与 _beat_block 同一挂点纪律（S4/会话/单轮三分支逐字同注入位）；
         # 零识别字段 = 空串（legacy 书装配字节不变）。注入位现状读点：状态卡/
         # compose_reference_block 只在共写链（co_dialogue）消费，流水线内正文轮
@@ -2249,7 +2318,7 @@ class _MicroCycle:
         _directive_block = _directive_contract_block(getattr(self, "directive", None))
         # A8（cost.a8_opening_compress，缺省关）：开幕轮密度压缩——只作用于会话路径
         # （开幕轮与 system 前缀重复的指令性槽位收敛为短引用）；关时逐字节不变。
-        # Q1-d（0.24.0）：装配可观测——写前体检（各注入块字节数）
+        # Q1-d（0.20.4）：装配可观测——写前体检（各注入块字节数）
         if _budget_block or _carry or _style_block:
             ctx.log("info", f"第 {num} 章 装配体检：拍段预算 {len(_budget_block)}B "
                             f"承接 {len(_carry)}B 合同 {len(_directive_block)}B "
@@ -2329,7 +2398,7 @@ class _MicroCycle:
             _pace_after_long_call(ctx, session, boundary="prose_tail")
             enrich_rounds = 0
             _enrich_tail = bool(_w_cfg.get("enrich_tail", False))
-            # Q2-a（0.24.0）：段落级扩写缺省开（enrich_para=True）——废除「整章不足→
+            # Q2-a（0.20.4）：段落级扩写缺省开（enrich_para=True）——废除「整章不足→
             # 整章重写」的行业不存在形态；显式 enrich_tail 优先，enrich_para=False 走旧路。
             _enrich_para = (bool(_w_cfg.get("enrich_para", True))
                             and not _enrich_tail)
@@ -2386,7 +2455,7 @@ class _MicroCycle:
                     except PipelineStopped:
                         raise
                     except LLMError as _e:
-                        # 0.24.0 实测修正：扩写调用失败（如 OpenCode space-bunny 对
+                        # 0.20.4 实测修正：扩写调用失败（如 OpenCode space-bunny 对
                         # 特定章尾内容的确定性 400 上游拒绝）不得杀章——字数不足本就
                         # 有「降级为建议」出口，异常路径汇入同一出口（保留原稿继续）。
                         ctx.log("warn", f"第 {num} 章 扩写调用失败（{_e}）——"
@@ -2614,7 +2683,7 @@ class _MicroCycle:
         _round_tics = []      # 3-gram 防复用黑名单（会话级不落盘，只进去味 prompt）
         # 调整五（writing.deslop_pinned，缺省关）：命中段 ≤2 处走定点修复——只输出
         # 替换段全文（无 JSON 编辑列表），本地拼回；不适定自动回退整章重写。
-        # Q2-c（0.24.0）：去味卡片制缺省开（deslop_cards=True → 走卡路径，上限 6 段）；
+        # Q2-c（0.20.4）：去味卡片制缺省开（deslop_cards=True → 走卡路径，上限 6 段）；
         # 旧定点档 deslop_pinned 显式开时同路径（上限 2）。两者都关 = 整章重写旧路径。
         _deslop_pinned_on = (bool(_w_cfg.get("deslop_pinned", False))
                              or bool(_w_cfg.get("deslop_cards", True)))
@@ -2653,7 +2722,7 @@ class _MicroCycle:
                 except PipelineStopped:
                     raise
                 except LLMError as _e:
-                    # 0.24.0 实测修正：去味调用失败（通道上游对含正文请求的间歇 400）
+                    # 0.20.4 实测修正：去味调用失败（通道上游对含正文请求的间歇 400）
                     # 不得杀章——保留原稿、阻断照留、走既有「待修」出口。
                     ctx.log("warn", f"第 {num} 章 去味调用失败（{_e}）——保留原稿"
                                     "继续（阻断转待修）")
@@ -2835,7 +2904,7 @@ class _MicroCycle:
 
             if blocking_review and all(str(b).startswith("[字数]") for b in blocking_review):
                 _demote_word_block()
-            # A2（0.23.0）大纲覆盖拒收：directive.must_cover_nodes 对照正文（确定性
+            # A2（0.20.3）大纲覆盖拒收：directive.must_cover_nodes 对照正文（确定性
             # 零 LLM）。缺失≥1 → 合成一条阻塞票（带缺失清单）走既有 REJECT 修复环：
             # findings 进 REVIEW_FIX、verdict 记 REJECT、连续拒收受 review_max_rounds
             # 既有上限约束（不另起环）；修复后仍缺 → 走既有「轮尽标 human +
@@ -2978,12 +3047,42 @@ class _MicroCycle:
         ctx = self.ctx
         num = self.num
         proj = self.proj
-        # Q1-c（0.24.0）：本段全部是记账相位——统一脱离卷会话（膨胀栈不再拖累记账；
+        # Q1-c（0.20.4）：本段全部是记账相位——统一脱离卷会话（膨胀栈不再拖累记账；
         # 独立单发路径既有字节行为接管）。草稿/改写相位的 self.session 不受影响。
         session = _bk_session(ctx, self.session)
         _w_cfg = self._w_cfg
         gr = self.gr
         prose = self.prose   # 本段只读（定稿不改写正文），局部别名保持段体逐字
+        # 断链②（10-14 深审）：正文卫生——写盘/版本快照/追踪之前先剥掉章标题之前的
+        # 模型自述块（实测第 3/5/6 章首行是「这是一个针对…去AI味改写」类工程语），
+        # 再跑生成退化检测。清洗后的文本即本章的规范正文，全部下游（落库/追踪/摘要/
+        # 字数/钩子）看到的是同一份。
+        _clean, _meta_stripped = gates.strip_meta_preamble(prose)
+        if _meta_stripped:
+            _cut = len(prose) - len(_clean)
+            ctx.log("warn", f"第 {num} 章 正文卫生：剥除章标题前的模型自述 {_cut} 字")
+            try:
+                from . import ledger_view
+                ledger_view.report_anomaly(
+                    "meta_preamble_stripped", "warn", ch=int(num),
+                    msg=f"第 {num} 章定稿剥除模型自述 {_cut} 字（写盘前）")
+            except Exception as e:  # noqa: BLE001
+                ctx.log("warn", f"第 {num} 章 正文卫生落账失败（不阻断）：{e}")
+            prose = _clean
+        for _deg in gates.degeneration_findings(prose):
+            ctx.log("warn", f"第 {num} 章 生成退化信号[{_deg.rule}]：{_deg.message}")
+            if _deg.rule == "degeneration-metaleak":
+                # 清洗只处理「章标题之前的自述块」；正文中段仍出现工程语 ⇒ 必须落账
+                try:
+                    from . import ledger_view
+                    ledger_view.report_anomaly(
+                        "degeneration_metaleak", "warn", ch=int(num),
+                        msg=f"第 {num} 章定稿仍含元泄漏：{_deg.message[:120]}")
+                except Exception as e:  # noqa: BLE001
+                    ctx.log("warn", f"第 {num} 章 元泄漏落账失败（不阻断）：{e}")
+        # 记账相位结果（True=写成功 / False=尝试且失败 / 缺键=没尝试）；
+        # 段末由 _accounting_tally 结算——见 10-09 深审断链①。
+        _acct = {}
         # ---- ⑤ 定稿落库：正文 + 追踪四文件 + 摘要链 ----
         ctx.step(num, st.STEP_FINALIZE)
         title = ""
@@ -2998,7 +3097,7 @@ class _MicroCycle:
             versions.snapshot(proj, num, prose, versions.SOURCE_FINALIZE)
         elif old_text and old_text != prose:
             versions.snapshot(proj, num, old_text, versions.SOURCE_REREWRITE)
-            # B4（0.23.0）伏笔推进回补接线（WA4 补链）：章重写（旧稿在场且内容
+            # B4（0.20.3）伏笔推进回补接线（WA4 补链）：章重写（旧稿在场且内容
             # 有变）时撤销本章按旧稿登记的伏笔推进——后续章已接续推进/已回收的
             # 不动状态，该章 advances 日志清零使重定稿可重登记（幂等键释放）。
             try:
@@ -3015,12 +3114,15 @@ class _MicroCycle:
         try:
             tracking = _update_tracking(ctx, num, prose, session=session)
             applied = [k for k in tracking.keys()]
+            _acct["tracking"] = True
             ctx.log("ok", f"追踪文件已更新：{', '.join(applied) if applied else '（无变化）'}")
         except PipelineStopped:
             # 停止请求在定稿收尾中到达：正文已落库，保留本记录，返回后由调度层停止
             ctx.log("info", f"第 {num} 章已落库，停止请求在收尾中到达，记录保留")
         except Exception as e:
-            ctx.log("warn", f"追踪更新失败（不阻断）：{e}")
+            _acct["tracking"] = False
+            ctx.log("error", f"第 {num} 章 追踪更新失败（不阻断定稿，已落异常账）：{e}")
+            _report_accounting_failure(ctx, num, "追踪更新", e)
 
         # ---- C42（卡9 P1）：事实账本入账（追踪落账区，fail-open）——有抽取结果
         # （ctx.fact_extraction，抽取闸门属后续卡）则两级锚定逐条入账（strict→归一化，
@@ -3178,11 +3280,14 @@ class _MicroCycle:
                             global_prompt, phase=PHASE_G_SUMMARY))
                     if new_global.strip():
                         memory.write_global_summary(proj, new_global)
+                    _acct["chapter_summary"] = True
                     ctx.log("ok", f"摘要链已更新（全局摘要 {len(new_global)} 字）")
         except PipelineStopped:
             ctx.log("info", f"第 {num} 章摘要链更新被停止请求中断（不影响已落库正文与记录）")
         except Exception as e:
-            ctx.log("warn", f"摘要链更新失败（不阻断）：{e}")
+            _acct["chapter_summary"] = False
+            ctx.log("error", f"第 {num} 章 摘要链更新失败（不阻断定稿，已落异常账）：{e}")
+            _report_accounting_failure(ctx, num, "摘要链更新", e)
 
         # ---- 设定清算（方案 D1）：本章自创设定三分类对账（不阻断，产物落追踪/）----
         try:
@@ -3203,8 +3308,15 @@ class _MicroCycle:
                                 f"可收编自创 {len(adopt)}——详见 追踪/设定清算_第{num:03d}.json")
             else:
                 ctx.log("ok", f"第 {num} 章 设定清算：无越界")
+            _acct["canon_audit"] = not bool(audit.get("failed"))
         except Exception as e:
-            ctx.log("warn", f"设定清算失败（不阻断）：{e}")
+            _acct["canon_audit"] = False
+            ctx.log("error", f"第 {num} 章 设定清算失败（不阻断定稿，已落异常账）：{e}")
+            _report_accounting_failure(ctx, num, "设定清算", e)
+
+        # 记账结算（10-09 深审断链①）：尝试过的相位全失败 → 标待修 + 落异常账，
+        # 不再让「追踪失败 41 次、anomalies 一条没有」这种事重演。
+        _accounting_tally(ctx, num, _acct)
 
         # ---- v15（writing.corpus_roll）：章末滚动语料快照（追加式+前缀守卫）----
         # 本章正文+摘要行追加进语料快照，下一章头部构建自然读到——头部从
@@ -3234,7 +3346,7 @@ class _MicroCycle:
         # 服务端前缀缓存继续有效（不重放、不重新 miss）。
         _save_session_checkpoint(ctx, session, "定稿后")
         gr.word_actual = project.count_chars(prose)
-        # Q4-c（0.24.0）：成品对偶检测——本章开头 500 字 vs 上一章钩子 → 应答
+        # Q4-c（0.20.4）：成品对偶检测——本章开头 500 字 vs 上一章钩子 → 应答
         # 判定落 sidecar（true/partial/false；S2 口径复算与下章承接义务的数据源）。
         try:
             hook_carry.record_answer(
@@ -3242,7 +3354,7 @@ class _MicroCycle:
                     prose[:500], hook_carry._prev_hook_text(proj, num - 1)))
         except Exception as _e:  # noqa: BLE001
             ctx.log("warn", f"Q4-c 应答检测未落账（不影响本章定稿）：{_e}")
-        # W3-a（0.24.0）：首章定稿回填文风校准段（幂等，供后续章末位锚）。
+        # W3-a（0.20.4）：首章定稿回填文风校准段（幂等，供后续章末位锚）。
         if num == 1:
             try:
                 if style_anchor.backfill_from_chapter(proj, 1):
@@ -3258,7 +3370,7 @@ class _MicroCycle:
 
 def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) -> dict:
     """上下文组装→草稿→字数闸门→AI味扫描→去味→定稿落库。返回章节记录"""
-    # Q2-d（0.24.0）：章内改写预算计数器清零（断点续跑重入本章也重新计）
+    # Q2-d（0.20.4）：章内改写预算计数器清零（断点续跑重入本章也重新计）
     ctx._rewrite_used = 0
     ctx._rewrite_budget_logged = False
 
@@ -3266,7 +3378,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     # 无重置——断路/人工/字数拦截章的 finalize 会吃到上一章 B_PAYOFF 裁决，
     # 误记「兑现/空头支票」。章入口强制清零。
     ctx.review_v2 = None
-    # E1（0.23.0）prompt 快照：ctx 跨章单例同纪律，章入口清零（内存只留本章
+    # E1（0.20.3）prompt 快照：ctx 跨章单例同纪律，章入口清零（内存只留本章
     # 最新一份 kind→prompt）；prompt_snapshot_ch 供修订相位快照落盘取章号。
     ctx.prompt_snapshots = {}
     ctx.prompt_snapshot_ch = int(num)
@@ -3294,7 +3406,7 @@ def chapter_microcycle(ctx, num: int, guidance: str = "", ideas: list = None) ->
     _s4_freeze = bool(_w_cfg.get("s4_static_freeze", False))
     # 长程压缩（writing.compaction，默认关，长程压缩文档 §6.2）：只在卷会话之上
     # 加一步「历史折叠成交接块 + 另起会话栈」，关闭时下方 _compaction_step 不触达。
-    _compaction = bool(_w_cfg.get("compaction", True))   # 0.24.0 Q1-a：默认开（质量标定）
+    _compaction = bool(_w_cfg.get("compaction", True))   # 0.20.4 Q1-a：默认开（质量标定）
     # 缺省无会话：纯单轮路径（旧客户端/配置全关），后续 _session_usable(None) 兜底
     session = None
     _comp_preface = ""

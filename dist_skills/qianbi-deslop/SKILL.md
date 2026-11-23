@@ -5,7 +5,7 @@ license: MIT
 compatibility: 需要 Python 3.8+（仅标准库）；脚本在本 skill 目录 scripts/ 下运行，适用于任何支持 Agent Skills 的客户端。
 metadata:
   author: qianbi
-  version: 0.22.0
+  version: 0.20.2
   source: https://github.com/GLFzr/qianbi-novel
 ---
 # 网文去 AI 味：确定性 lint + 白名单改写
@@ -13,7 +13,7 @@ metadata:
 目标**只是读感**：把「一眼 AI」的文本改成可读、可信的中文叙事。本 skill 不承诺、
 不讨论、不尝试优化任何第三方 AIGC 检测器的分数；不注水、不故意制造错字。
 
-本版引擎 **45 条规则**（与上游 qianbi-novel 0.22.0 逐字一致），随包自检金标见
+本版引擎 **45 条规则**（与上游 qianbi-novel 0.20.2 逐字一致），随包自检金标见
 `tests/`。
 
 ## 流程（五步，按序执行，不得跳步）

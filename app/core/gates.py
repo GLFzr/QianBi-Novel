@@ -5,7 +5,7 @@
 - mark_continue（默认）：修复失败 → 标待修继续写
 - strict：修复失败 → 自动暂停等人（auto_pause）
 
-C4/C5（0.23.0 新增检测区）：生成退化检测（degeneration_findings，advisory 先观测）
+C4/C5（0.20.3 新增检测区）：生成退化检测（degeneration_findings，advisory 先观测）
 与字数双带判定（word_double_band/check_word_double_band，±12% 常规带/±15% 硬带）。
 """
 import logging
@@ -301,7 +301,7 @@ def collapse_report(text: str, target: int) -> dict:
             "repeat": repeat_findings(text), "sensitive": sensitive_findings(text)}
 
 
-# ============ C4 生成退化检测（0.23.0；oh-story check-degeneration.js 思想移植，t2 §5-Top4）============
+# ============ C4 生成退化检测（0.20.3；oh-story check-degeneration.js 思想移植，t2 §5-Top4）============
 # 检测对象是「生成过程退化」（复读膨胀/词汇坍缩/句式固化/截断/占位/元泄漏），与
 # deslop 的「AI 文风痕迹」正交：退化是模型循环/断流的故障信号，deslop 是读感问题。
 # 全部 advisory——先观测真机稿分布，绝不 blocking、绝不进停机裁决（误拦=停机等人，
@@ -321,10 +321,31 @@ DEGEN_TRUNC_MIN_CHARS = 200    # 截断判定的最小正文长度
 _TRUNC_TAIL_OK = set("。！？!?…”』」】)）…—")
 _DEGEN_PLACEHOLDER_RE = re.compile(
     r"【待补】|【待填】|【待写】|【占位】|（待补）|（待填）|此处省略|TODO|FIXME")
+# 现场词表（10-14 断链②）：以下五条**逐字取自** 49 章实测书的落盘正文首行
+# （tests_output/or_二测_改命笔记/正文/第003章、第005章、第006章），是 0.20.4 长跑里
+# 真实发生的形态——旧词表（作为AI/该到下一章了…）对它们**全部漏检**。
+_META_LIVE_FORMS = (
+    r"这是一个针对",
+    r"主要修改点",
+    r"用户要求修改",
+    r"查看提供的",
+    r"好的，以下是",
+    r"以下是(?:修改|改写|润色|优化)?后?(?:的)?(?:第[^\n]{0,8}章)?(?:正文|内容|版本)",
+    # 第 007 章现场（同书，标题在第 38 行、前面 1.5k 字全是核对过程自述）：
+    r"经过(?:仔细)?核对",
+    r"您提供的",
+    r"被处理正文",
+    r"以下是基于",
+)
+_META_PREAMBLE_RE = re.compile("|".join(_META_LIVE_FORMS))
+_CHAPTER_HEAD_RE = re.compile(r"^#{1,3}\s*第\s*\d+\s*章")
 _DEGEN_META_RE = re.compile(
     r"作为(?:一个)?AI|身为AI|人工智能助手|AI助手|语言模型|无法生成"
     r"|无法完成[^。！？!?\n]{0,12}(?:请求|任务|创作)|内容政策|该到下一章了"
-    r"|以下是本章|以上是本章正文|本次生成|希望这段[^。！？!?\n]{0,12}符合")
+    r"|以下是本章|以上是本章正文|本次生成|希望这段[^。！？!?\n]{0,12}符合"
+    r"|这是一个针对|主要修改点|用户要求修改|查看提供的|好的，以下是"
+    r"|以下是(?:修改|改写|润色|优化)?后?(?:的)?(?:第[^\n]{0,8}章)?(?:正文|内容|版本)"
+    r"|经过(?:仔细)?核对|您提供的|被处理正文|以下是基于")
 
 
 def degeneration_findings(text: str) -> list:
@@ -406,6 +427,33 @@ def degeneration_findings(text: str) -> list:
             start=masked.find(leaks[0]), end=masked.find(leaks[0]) + len(leaks[0]),
             fix_hint="删除元话语；叙述只写故事内世界，不写生成过程"))
     return out
+
+
+def strip_meta_preamble(text: str) -> tuple:
+    """剥掉章标题之前的模型自述块（断链②，2026-10-14）。返回 (out, stripped)。
+
+    保守判据（宁可留着可疑文字，也绝不删正文）：
+    1. 找**第一个章标题行**（`^#{1,3} 第 N 章`）——找不到就什么都不做；
+    2. 标题已在首行（前面没有内容）→ 原样返回；
+    3. 标题之前那段文本必须命中自述词表（_META_PREAMBLE_RE）才剥——题记/引文
+       没有自述特征就不许剥；
+    4. 剥除范围＝标题之前的全部行（含 `***` 分隔线）；**标题行与正文逐字保留**。
+
+    调用方必须是定稿落库路径（stages._mc_finalize）：清洗发生在写盘/版本快照/追踪
+    之前，使「成稿」与「台账」看到同一份正文。
+    """
+    body = text or ""
+    lines = body.split("\n")
+    head = None
+    for i, ln in enumerate(lines):
+        if _CHAPTER_HEAD_RE.match(ln.strip()):
+            head = i
+            break
+    if head is None or head == 0:
+        return body, False
+    if not _META_PREAMBLE_RE.search("\n".join(lines[:head])):
+        return body, False
+    return "\n".join(lines[head:]), True
 
 
 # ============ C5 字数双带（oh-story wordcount_core.compute_wordcount_bands 实证参数，t2 §12.2）============

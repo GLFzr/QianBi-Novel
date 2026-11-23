@@ -21,7 +21,7 @@ _END_HOOK_FIELD = ("- 章尾钩子：（具体内容一句概括；钩型：" + 
                    "低压生活/信息整理章可写「无」+读者往下看的理由；与下一章如何承接）")
 
 # A1 章纲合同（ChapterDirective · 17 字段）注入块——细纲从自由 markdown 升级为
-# 可校验合同（0.23.0 A1）。**钉定渲染副本**纪律：planning 不能模块级 import
+# 可校验合同（0.20.3 A1）。**钉定渲染副本**纪律：planning 不能模块级 import
 # app.core.*（app/core/__init__ 拉起 orchestrator→anomaly_persist→volume_session
 # →app.prompts 半初始化窗口，实测 ImportError），故单一出处定在
 # app/core/chapter_directive.FIELD_SPECS（directive_contract_menu() 渲染），

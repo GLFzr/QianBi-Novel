@@ -5,7 +5,7 @@ license: MIT
 compatibility: 需要 Python 3.8+（仅标准库）；脚本在本 skill 目录 scripts/ 下运行，适用于任何支持 Agent Skills 的客户端。
 metadata:
   author: qianbi
-  version: 0.22.0
+  version: 0.20.2
   source: https://github.com/GLFzr/qianbi-novel
 ---
 # 续写状态卡：七栏续写上下文契约
@@ -15,7 +15,7 @@ metadata:
 外部写作流：你也可以为手写章节维护同样的卡。
 
 完整 schema（栏语义/裁剪序/容量上限）见 `references/state-card-schema.md`；
-本版契约与上游 qianbi-novel 0.22.0 逐字一致。
+本版契约与上游 qianbi-novel 0.20.2 逐字一致。
 
 ## 流程（三步）
 

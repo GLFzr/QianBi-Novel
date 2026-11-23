@@ -278,10 +278,10 @@ def test_prune_keeps_current_and_previous(tmp_path):
     _touch(d, "QianBi-Novel-v0.18.0-setup.exe")
     _touch(d, "QianBi-Novel-v0.19.0-setup.exe")
     _touch(d, "QianBi-Novel-v0.20.0-setup.exe")
-    _touch(d, "QianBi-Novel-v0.21.0-setup.exe")      # 刚下载成功的新版
-    rep = upd.prune_old_installers(str(d), current_version="0.21.0", keep=2)
+    _touch(d, "QianBi-Novel-v0.20.2-setup.exe")      # 刚下载成功的新版
+    rep = upd.prune_old_installers(str(d), current_version="0.20.2", keep=2)
     kept = sorted(os.path.basename(p) for p in rep["kept"])
-    assert kept == ["QianBi-Novel-v0.20.0-setup.exe", "QianBi-Novel-v0.21.0-setup.exe"], rep
+    assert kept == ["QianBi-Novel-v0.20.0-setup.exe", "QianBi-Novel-v0.20.2-setup.exe"], rep
     assert sorted(os.path.basename(p) for p in rep["deleted"]) == [
         "QianBi-Novel-v0.18.0-setup.exe", "QianBi-Novel-v0.19.0-setup.exe"], rep
     remaining = [n for n in os.listdir(str(d)) if n.endswith(".exe")]

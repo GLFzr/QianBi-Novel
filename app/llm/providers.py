@@ -18,6 +18,10 @@ Key）：返回 401/400 的 JSON 说明路径正确、只差鉴权；返回 404/
   · 百炼新版业务空间域名 —— URL 里带 {WorkspaceId}（旧域名官方仍支持，故预置旧的）。
 """
 
+_LOCAL_CAVEAT = ("内置提示词按 DeepSeek V4 系调校，本地模型写作质量与闸门稳定性可能打折；"
+                 "端口被改过就把 Base URL 里的端口一起改掉（地址可写 127.0.0.1:端口，"
+                 "保存时自动补 http:// 与 /v1）。")
+
 PROVIDERS = {
     # ---- 国内 ----
     "deepseek": {
@@ -121,6 +125,55 @@ PROVIDERS = {
         "hint": "实测返回 403 而不是 401：CDN 会先挡掉不带 Key 的裸探测，不代表路径错。"
                 "gpt-oss-20b 写长文偏弱，正文建议换 70b 或直接用 DeepSeek 系。",
     },
+    # ---- 本地推理服务（免 Key；出问题先看服务有没有起来）----
+    "local-ollama": {
+        "label": "本地 · Ollama",
+        "builtin": False,
+        "base_url": "http://127.0.0.1:11434",
+        "models": [],
+        "hint": "先在本机跑 `ollama serve`，再 `ollama pull <模型>`（如 qwen2.5:7b）；"
+                "默认端口 11434。Key 留空即可，" + _LOCAL_CAVEAT,
+    },
+    "local-llamacpp": {
+        "label": "本地 · llama.cpp",
+        "builtin": False,
+        "base_url": "http://127.0.0.1:8080",
+        "models": [],
+        "hint": "`llama-server -m <模型.gguf> --port 8080` 启动后接这里；单模型服务通常"
+                "忽略模型名，随便填或点「拉取」。Key 留空即可，" + _LOCAL_CAVEAT,
+    },
+    "local-lmstudio": {
+        "label": "本地 · LM Studio",
+        "builtin": False,
+        "base_url": "http://127.0.0.1:1234",
+        "models": [],
+        "hint": "LM Studio 里打开 Local Server（默认 1234），模型名点「拉取」选；"
+                "Key 留空即可，" + _LOCAL_CAVEAT,
+    },
+    "local-vllm": {
+        "label": "本地 · vLLM",
+        "builtin": False,
+        "base_url": "http://127.0.0.1:8000",
+        "models": [],
+        "hint": "`vllm serve <模型> --served-model-name <名字>` 启动；没开 --api-key 时"
+                "Key 留空。" + _LOCAL_CAVEAT,
+    },
+    "local-koboldcpp": {
+        "label": "本地 · KoboldCpp",
+        "builtin": False,
+        "base_url": "http://127.0.0.1:5001",
+        "models": [],
+        "hint": "KoboldCpp 启动后默认 5001（OpenAI 兼容层在 /v1）；Key 留空即可，"
+                + _LOCAL_CAVEAT,
+    },
+    "local-textgen": {
+        "label": "本地 · text-generation-webui",
+        "builtin": False,
+        "base_url": "http://127.0.0.1:5000",
+        "models": [],
+        "hint": "text-generation-webui 开启 --api 后默认 5000；Key 留空即可，"
+                + _LOCAL_CAVEAT,
+    },
     "custom": {
         "label": "自定义（第三方 / OpenAI 兼容）",
         "builtin": False,
@@ -133,7 +186,9 @@ PROVIDERS = {
 }
 
 PROVIDER_ORDER = ["deepseek", "bailian", "zhipu", "kimi", "ark", "hunyuan", "minimax",
-                  "siliconflow", "openrouter", "gemini", "xai", "groq", "custom"]
+                  "siliconflow", "openrouter", "gemini", "xai", "groq",
+                  "local-ollama", "local-llamacpp", "local-lmstudio", "local-vllm",
+                  "local-koboldcpp", "local-textgen", "custom"]
 
 
 def provider_label(key: str) -> str:

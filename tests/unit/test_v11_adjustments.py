@@ -462,7 +462,7 @@ def test_deslop_pinned_happy_path_and_guards(tmp_path):
                               _w={"deslop_cards": False})
     assert _deslop_pinned_rewrite(ctx4, sess4, prose, finds, [], 1) == ""
     assert sess4.committed is None and sess4.rolled_back == 0
-    # Q2-c（0.24.0）卡制默认开：3 命中段 ≤6 进入卡路径（旧行为的反转钉子）；
+    # Q2-c（0.20.4）卡制默认开：3 命中段 ≤6 进入卡路径（旧行为的反转钉子）；
     # 坏卡（"x" 段长越带）返工一次仍坏 → 剔除全部 → 空串回退（有回滚）
     ctx5, sess5 = _pinned_env(tmp_path, prose, "⟦P02⟧ x")
     assert _deslop_pinned_rewrite(ctx5, sess5, prose, finds, [], 1) == ""

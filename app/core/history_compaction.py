@@ -60,14 +60,14 @@ from dataclasses import dataclass, field
 from .. import project
 from . import memory
 
-# ---- 旗标与阈值（§6.2；0.24.0 Q1-a 质量标定）----
+# ---- 旗标与阈值（§6.2；0.20.4 Q1-a 质量标定）----
 FLAG_KEY = "compaction"                       # cfg["writing"]["compaction"]，默认开
 THRESHOLD_KEY = "compaction_token_threshold"  # 触发器②的阈值覆盖位
-# 0.24.0 质量标定：旧 800k 是按**成本**标定的（deepseek 全价时代的省钱闸）——三测
+# 0.20.4 质量标定：旧 800k 是按**成本**标定的（deepseek 全价时代的省钱闸）——三测
 # 取证 E1-E4 证明质量劣化区在 100k+（192k 窗口模型单发 157k 时盲评 3.8，5k 时 7.9），
 # 全程发生在旧阈值之下，护栏形同虚设。新默认 48k ≈ 192k 窗口的 25%（小窗模型
 # 可用 compaction_token_threshold 覆盖）。828k→48k 之间的会话质量代价见
-# docs/0.24.0_质量全量提升计划.md §一 P0-1。
+# docs/0.20.4_质量全量提升计划.md §一 P0-1。
 DEFAULT_TOKEN_THRESHOLD = 48_000
 
 # ---- 装配窗口（§4.3 项 2 / §6.3）----
@@ -283,7 +283,7 @@ def session_input_estimate(proj: str, volume: int = 0) -> tuple:
 # ==================== 触发器（§6.2）====================
 
 def compaction_enabled(cfg: dict = None) -> bool:
-    """旗标读数：writing.compaction（0.24.0 Q1-a 起默认开——质量标定，
+    """旗标读数：writing.compaction（0.20.4 Q1-a 起默认开——质量标定，
     旧「默认关」让质量劣化全程发生在 800k 阈值之下，见模块头注释）。"""
     return bool(((cfg or {}).get("writing") or {}).get(FLAG_KEY, True))
 

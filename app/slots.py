@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """任务槽位与闸门策略常量（零依赖基础层）
 
-B2a 拆环（0.22.0 试验版 C10）：这些常量原在 app/config.py，被 core 层
+B2a 拆环（0.20.2 试验版 C10）：这些常量原在 app/config.py，被 core 层
 （canon_audit/gates/stages）与 llm 层（router）反向引用，形成 core->app-top
 上行边。下沉到本模块后 core/llm 改从 slots 导入，config 保留同名 re-export
 兼容旧消费方（bridge/selftest/update_* 等不动）。

@@ -30,7 +30,7 @@ LOG_TAIL_MAX = 50  # 日志环形缓冲条数（失败 dump 用）
 
 G4_PAUSE_AFTER = 2  # 相位看门狗：连续 N 章记账产物缺失 → auto_pause（T3 连停 30 章的翻案线）
 
-# D1 预算宪法出厂值（0.23.0，源自 AI-Novel-Writer generation-harness 的会话级硬顶）：
+# D1 预算宪法出厂值（0.20.3，源自 AI-Novel-Writer generation-harness 的会话级硬顶）：
 # 可被 writing.gen_budget 全量覆盖；0/负值=该轴不设限。
 GEN_BUDGET_DEFAULTS = {"max_calls": 32, "max_total_tokens": 147456,
                        "max_single_tokens": 32768, "max_minutes": 60}

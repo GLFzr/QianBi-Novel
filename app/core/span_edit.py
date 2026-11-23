@@ -47,6 +47,29 @@ class SpanEditError(ValueError):
     """span 解析或应用失败（调用方据此回退全量模式）"""
 
 
+def _para_scan(prose: str) -> list:
+    """[(段号, 行下标, 该行原文)]——本模块唯一的段号口径实现。
+
+    段号＝非空行按出现顺序从 1 连续编号（空行不占号）；标题行同样占号。
+    annotate()/apply_spans() 与本函数的调用方必须共用这套编号，否则
+    「标给模型的段号」与「实际被改的段」会静默分家（0.20.4 段落级扩写的缺陷）。
+    """
+    out, k = [], 0
+    for i, line in enumerate((prose or "").split("\n")):
+        if line.strip():
+            k += 1
+            out.append((k, i, line))
+    return out
+
+
+def numbered_paras(prose: str) -> list:
+    """[(段号, 该段原文)]，与 annotate 写进 prompt 的 ⟦Pnn⟧ 逐项对应。
+
+    调用方选段/校验段号必须用它：自己数 split 的行号会与 apply_spans 的解释错位。
+    """
+    return [(no, line) for no, _, line in _para_scan(prose)]
+
+
 def annotate(prose: str) -> str:
     """给每段（非空行）行首加 ⟦Pnn⟧ 编号；空行原样保留、不编号。
 
@@ -117,13 +140,9 @@ def apply_spans(prose: str, spans: list) -> str:
     同一段落被多次编辑时按列表顺序依次生效（最后一条为准）。
     """
     lines = (prose or "").split("\n")
-    idx_of = {}   # 段号 → lines 下标
-    k = 0
-    for i, line in enumerate(lines):
-        if line.strip():
-            k += 1
-            idx_of[k] = i
-    total = k
+    scanned = _para_scan(prose)
+    idx_of = {no: i for no, i, _ in scanned}   # 段号 → lines 下标
+    total = len(scanned)
     for s in spans:
         if s["para"] > total:
             raise SpanEditError("para=%d 越界（正文共 %d 段）" % (s["para"], total))

@@ -71,6 +71,9 @@ where you can intervene at every step.
   blocking issues, the AI only fixes them. Zero review-model spend.
 - 🔑 **BYOK, fully local** — bring your own model key. Manuscripts, config and version history
   live on your machine (MIT, no cloud).
+- 🏠 **Local models (v0.20.4)** — Ollama / llama.cpp / LM Studio / vLLM / KoboldCpp /
+  text-gen-webui presets: no API key, one-click local-port scan, OpenAI-compatible `/v1`,
+  nothing leaves your machine.
 - 🖥️ **Windows desktop app** — PySide6 + QML, one installer, no Python required.
 
 ![Co-writing mode: six-stage navigation, multi-turn discussion with the writing agent, live prose preview](docs/shot_co_writing.png)
@@ -392,7 +395,7 @@ fingerprint, never plaintext. Crash dumps, logs and the telemetry sink are all r
 ```bash
 # Offline unit tests (no API key, ~25 seconds)
 .venv/Scripts/python -m pytest tests/unit -q --tb=no -p no:cacheprovider
-# → 1758 tests collected (2026-09-30, --collect-only snapshot; scripts/check_docs.py
+# → 1834 tests collected (2026-09-30, --collect-only snapshot; scripts/check_docs.py
 #   re-runs the count and goes red when this number rots)
 
 # Offline probes: real Bridge + headless QML, covering gates/locks/backflow/relay/import/export
@@ -466,7 +469,7 @@ scripts/
   build_release.py      one-shot release pipeline (quality gates → version info → packaging →
                           smoke test → digest diff)
 tests/
-  unit/                 1758 offline tests (collect-only snapshot)
+  unit/                 1834 offline tests (collect-only snapshot)
   probe_*.py            50 headless chain probes
   evals/                prompt assembly baseline + review gold set
 docs/                   design & planning docs, privacy notice

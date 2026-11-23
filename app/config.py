@@ -111,32 +111,32 @@ DEFAULT_CONFIG = {
                 "gate_list": ["G2", "G5L", "G8", "G9"],   # 边界确认勾选清单（出厂=大节点：大纲/开写/审校/定稿）
                 "offpeak_run": False,           # 离峰挂机：peak 时段自动等待，off-peak 再跑
                 "chapter_session": True,        # 章会话消息栈：同章阶段共享前缀（关闭回退单轮）
-                # 0.24.0 Q1-a 质量标定：接力压缩默认开、阈值 48k（≈192k 窗口×25%）。
+                # 0.20.4 Q1-a 质量标定：接力压缩默认开、阈值 48k（≈192k 窗口×25%）。
                 # 旧默认关+800k（成本口径）使质量劣化区（100k+）全程在阈值下裸奔
                 # （实测 E1-E4：单发 157k 盲评 3.8 vs 5k 上下文 7.9）。
-                # docs/0.24.0_质量全量提升计划.md §三 W1。
+                # docs/0.20.4_质量全量提升计划.md §三 W1。
                 "compaction": True,
                 "compaction_token_threshold": 48000,
                 # B1 爽点引擎（0.20.0 L5-B1，缺省关）：开时细纲携带「本章爽点节拍」
                 # 三拍字段、正文轮注入兑现指令、L0 账本对照加节拍检查；关时所有
                 # 装配字节与 0.19.x 逐字节一致（变量隔离纪律）。
                 "satisfaction_engine": False,
-                # C33 爽点节奏账本（0.22.0 T1，缺省 on）：与 satisfaction_engine 解耦——
+                # C33 爽点节奏账本（0.20.2 T1，缺省 on）：与 satisfaction_engine 解耦——
                 # 引擎是「改写装配」开关（细纲字段指令/正文兑现块注入，受字节隔离纪律
                 # 约束，缺省关）；账本是「记录+核对」通道（sidecar 追踪/爽点账本.json
                 # 落账 + L0 三条跨章节奏规则进审校证据），不改写任何装配路径，不受
                 # 字节隔离纪律约束，故缺省 on。off 时账本读写与 L0 注入全惰性，
                 # 输出与现状逐字一致。
                 "satisfaction_ledger_enabled": True,
-                # C43 桥段码账本（0.22.0 卡5，缺省关）：开时正文轮 craft_block 按
+                # C43 桥段码账本（0.20.2 卡5，缺省关）：开时正文轮 craft_block 按
                 # 细纲「- 桥段：」码行直路由场景卡并追加打法卡；关时装配字节与
                 # 现状逐字一致（变量隔离纪律）。
                 "bridge_codes_enabled": False,
-                # C17 G1 字数预算断路器（0.22.0 卡8-G1，出厂 3）：首稿字数 > 目标
+                # C17 G1 字数预算断路器（0.20.2 卡8-G1，出厂 3）：首稿字数 > 目标
                 # ×(1+容差)×N → 不进压缩/去味/审校，直转人工（word_overflow）。
                 # 文青书 P90 16k 字 vs 目标 3k 已 >5×，N 必须可配；0/负值=关。
                 "word_overflow_breaker": 3,
-                # D1 预算宪法（0.23.0，源自 AI-Novel-Writer generation-harness 的
+                # D1 预算宪法（0.20.3，源自 AI-Novel-Writer generation-harness 的
                 # 会话级硬顶 GENERATION_ABSOLUTE_BUDGET_LIMITS）：单章生成周期内
                 # LLM 四轴上限，任一超限即熔断（auto_pause + 异常落账
                 # gen_budget_exceeded + toast，回执=次数/tokens/分钟/章号）。

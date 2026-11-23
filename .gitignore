@@ -51,3 +51,9 @@ pipeline_debug/
 
 version_info.txt
 .tmp_fleet_logs/
+
+# ---- 0.20.4 卫生：本地评测产物与运行态（2026-11-23）----
+# _scratch 里是评测草稿与变异副本；pipeline_state.json 是运行态，曾被测试反复覆写
+_scratch/
+pipeline_state.json
+.pytest_cache/

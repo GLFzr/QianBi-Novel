@@ -1,0 +1,163 @@
+{
+  "version": "0.20.4",
+  "generated": "2026-10-14",
+  "caliber_note": "口径 A=提交态 91a6aa9；口径 B=A+T1/T2/T3 未提交改动。默认 A 为交付口径、B 为进展口径。",
+  "scoring": {
+    "formula": "子项得分 = 权重 x f(实测/目标) x 证据折减；f 见 kind；域得分封顶见 cap_if_red_gate；总分 = 各域之和",
+    "kinds": {
+      "min_ratio": "越高越好：f = min(1, 实测/目标)",
+      "max_ratio": "越低越好：f = min(1, 目标/实测)；目标=0 时按缺陷率解释 f = max(0, 1-实测)；实测<=0 记 1.0",
+      "boolean": "达标记 1，不达标记 0"
+    },
+    "discount": { "E1": 1.0, "E2": 0.7, "E3": 0.0 },
+    "levels": [
+      { "min": 0, "max": 39.99, "level": "L1", "name": "能跑但不可信" },
+      { "min": 40, "max": 59.99, "level": "L2", "name": "内部试验品级" },
+      { "min": 60, "max": 79.99, "level": "L3", "name": "可交付 beta 级" },
+      { "min": 80, "max": 89.99, "level": "L4", "name": "可发布级" },
+      { "min": 90, "max": 100, "level": "L5", "name": "可持续交付级" }
+    ]
+  },
+  "domains": [
+    {
+      "id": "D1",
+      "name": "功能正确性（离线地基）",
+      "weight": 20,
+      "cap_if_red_gate": 0.6,
+      "red_gates": ["J-01", "J-02", "J-03", "J-04", "J-12"],
+      "metrics": [
+        { "id": "D1.1", "name": "单测绿率", "weight": 6, "kind": "min_ratio", "target": 1.0, "current": 1.0, "grade": "E1", "gate": "J-01", "caliber": "B", "evidence": "E-FIX1" },
+        { "id": "D1.2", "name": "根测试绿率", "weight": 5, "kind": "min_ratio", "target": 1.0, "current": 0.9514, "grade": "E1", "gate": "J-02", "caliber": "A", "evidence": "E-ROOT1/E-ROOT2" },
+        { "id": "D1.3", "name": "行覆盖率", "weight": 4, "kind": "min_ratio", "target": 0.8, "current": 0.722, "grade": "E1", "gate": "J-05", "caliber": "B", "evidence": "E-COV1" },
+        { "id": "D1.4", "name": "探针舰队绿率", "weight": 4, "kind": "min_ratio", "target": 1.0, "current": 0.875, "grade": "E1", "gate": "J-03", "caliber": "B", "evidence": "E-FLEET1" },
+        { "id": "D1.5", "name": "flaky 率（3 连跑 0 次翻红）", "weight": 1, "kind": "max_ratio", "target": 0.0, "current": 0.0, "grade": "E1", "gate": "J-07", "caliber": "B", "evidence": "E-FIX1" }
+      ]
+    },
+    {
+      "id": "D2",
+      "name": "生成质量达成",
+      "weight": 20,
+      "cap_if_red_gate": null,
+      "red_gates": [],
+      "metrics": [
+        { "id": "D2.1", "name": "盲评臂均分", "weight": 6, "kind": "min_ratio", "target": 6.5, "current": 8.1, "grade": "E2", "gate": "J-14", "caliber": "B", "evidence": "E-DOC1" },
+        { "id": "D2.2", "name": "M 层判据达标度", "weight": 5, "kind": "min_ratio", "target": 1.0, "current": 0.7, "grade": "E1", "gate": "J-16/J-17/J-18", "caliber": "B", "evidence": "E-DOC1" },
+        { "id": "D2.3", "name": "字数带内率（口径混用折减）", "weight": 4, "kind": "min_ratio", "target": 0.8, "current": 0.83, "grade": "E2", "gate": "J-19", "caliber": "B", "evidence": "E-REVIEW1" },
+        { "id": "D2.4", "name": "落盘正文零模型自述", "weight": 3, "kind": "boolean", "target": 1.0, "current": 1.0, "grade": "E1", "gate": "J-20", "caliber": "B", "evidence": "E-FIX2/E-CAMP2" },
+        { "id": "D2.5", "name": "质量闸自动化覆盖", "weight": 2, "kind": "min_ratio", "target": 1.0, "current": 0.25, "grade": "E1", "gate": "J-25", "caliber": "B", "evidence": "E-REVIEW1" }
+      ]
+    },
+    {
+      "id": "D3",
+      "name": "稳健性与故障自愈",
+      "weight": 15,
+      "cap_if_red_gate": null,
+      "red_gates": [],
+      "metrics": [
+        { "id": "D3.1", "name": "长跑零丢章/零杀章", "weight": 4, "kind": "min_ratio", "target": 1.0, "current": 1.0, "grade": "E1", "gate": "J-26/J-27", "caliber": "B", "evidence": "E-HIST1" },
+        { "id": "D3.2", "name": "断点续跑可用", "weight": 3, "kind": "boolean", "target": 1.0, "current": 1.0, "grade": "E1", "gate": "J-26", "caliber": "B", "evidence": "E-HIST1" },
+        { "id": "D3.3", "name": "上游异常自愈率", "weight": 3, "kind": "min_ratio", "target": 0.9, "current": 0.7, "grade": "E2", "gate": "J-27", "caliber": "B", "evidence": "E-DOC1" },
+        { "id": "D3.4", "name": "故障注入类别覆盖（六类）", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.0, "grade": "E1", "gate": "J-28", "caliber": "B", "evidence": "子代理A §9" },
+        { "id": "D3.5", "name": "记账/状态一致性", "weight": 2, "kind": "min_ratio", "target": 1.0, "current": 0.25, "grade": "E1", "gate": "J-31", "caliber": "B", "evidence": "E-UNIT1/C1" }
+      ]
+    },
+    {
+      "id": "D4",
+      "name": "可观测性与接线完整性",
+      "weight": 10,
+      "cap_if_red_gate": null,
+      "red_gates": [],
+      "metrics": [
+        { "id": "D4.1", "name": "指标接线率（1-空转率，目标空转≤10%）", "weight": 4, "kind": "min_ratio", "target": 0.9, "current": 0.6, "grade": "E1", "gate": "J-11", "caliber": "B", "evidence": "E-REVIEW1 §4" },
+        { "id": "D4.2", "name": "失败落账覆盖（静默吞射程）", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.3, "grade": "E1", "gate": "J-34", "caliber": "B", "evidence": "子代理D §1" },
+        { "id": "D4.3", "name": "接线守卫可用度", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.5, "grade": "E1", "gate": "J-04", "caliber": "B", "evidence": "E-DEP1/E-PROBE1" }
+      ]
+    },
+    {
+      "id": "D5",
+      "name": "成本与性能",
+      "weight": 10,
+      "cap_if_red_gate": null,
+      "red_gates": [],
+      "metrics": [
+        { "id": "D5.1", "name": "单章成本（取观测区间上界）", "weight": 4, "kind": "max_ratio", "target": 0.3, "current": 0.4, "grade": "E1", "gate": "J-22", "caliber": "B", "evidence": "E-DOC1/成本台账" },
+        { "id": "D5.2", "name": "单章输入 token", "weight": 3, "kind": "max_ratio", "target": 60000, "current": 13700, "grade": "E1", "gate": "J-23", "caliber": "B", "evidence": "E-DOC1" },
+        { "id": "D5.3", "name": "缓存命中率", "weight": 2, "kind": "min_ratio", "target": 0.9, "current": 0.7, "grade": "E1", "gate": "J-24", "caliber": "B", "evidence": "成本台账" },
+        { "id": "D5.4", "name": "成本回归门禁", "weight": 1, "kind": "boolean", "target": 1.0, "current": 0.0, "grade": "E1", "gate": "J-25", "caliber": "B", "evidence": "子代理A §9" }
+      ]
+    },
+    {
+      "id": "D6",
+      "name": "工程纪律与可维护性",
+      "weight": 15,
+      "cap_if_red_gate": null,
+      "red_gates": [],
+      "metrics": [
+        { "id": "D6.1", "name": "CI 可真跑且最近全绿", "weight": 4, "kind": "boolean", "target": 1.0, "current": 0.0, "grade": "E1", "gate": "J-42", "caliber": "A", "evidence": "E-REVIEW1 §3" },
+        { "id": "D6.2", "name": "字节冻结哨兵可用", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.17, "grade": "E1", "gate": "J-04/J-12", "caliber": "B", "evidence": "E-PROBE1/E-ROOT1" },
+        { "id": "D6.3", "name": "埋雷/变异验证可用度", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.4, "grade": "E1", "gate": "J-35/J-36", "caliber": "B", "evidence": "E-PLANT1" },
+        { "id": "D6.4", "name": "死代码/依赖卫生", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.6, "grade": "E1", "gate": "J-08/J-09/J-10", "caliber": "B", "evidence": "E-STATIC1/E-DEP1" },
+        { "id": "D6.5", "name": "仓库卫生（运行态不入库 + 基线同步）", "weight": 2, "kind": "min_ratio", "target": 1.0, "current": 0.15, "grade": "E1", "gate": "J-37/J-38", "caliber": "B", "evidence": "E-STATE1" }
+      ]
+    },
+    {
+      "id": "D7",
+      "name": "发布就绪与可运维",
+      "weight": 10,
+      "cap_if_red_gate": null,
+      "red_gates": [],
+      "metrics": [
+        { "id": "D7.1", "name": "版本四件套一致", "weight": 3, "kind": "min_ratio", "target": 1.0, "current": 0.5, "grade": "E1", "gate": "J-39", "caliber": "A", "evidence": "E-REVIEW1 §3" },
+        { "id": "D7.2", "name": "备份时新度（≤7 天）", "weight": 3, "kind": "max_ratio", "target": 7.0, "current": 41.0, "grade": "E1", "gate": "J-40", "caliber": "A", "evidence": "E-REVIEW1 §3" },
+        { "id": "D7.3", "name": "隐私/脱敏/验签", "weight": 2, "kind": "min_ratio", "target": 1.0, "current": 1.0, "grade": "E1", "gate": "J-41", "caliber": "A", "evidence": "子代理D §7" },
+        { "id": "D7.4", "name": "升级/回滚路径", "weight": 2, "kind": "min_ratio", "target": 1.0, "current": 0.8, "grade": "E1", "gate": "J-42", "caliber": "B", "evidence": "E-FLEET1" }
+      ]
+    }
+  ],
+  "gates": [
+    { "id": "J-01", "name": "单测 0 failed", "threshold": "=0", "current": "green", "value": "1811 passed / 0 failed（10-14 修复后）", "caliber": "B", "evidence": "E-FIX1" },
+    { "id": "J-02", "name": "根测试 0 failed", "threshold": "=0", "current": "red", "value": "12 failed", "caliber": "A/B", "evidence": "E-ROOT1/E-ROOT2" },
+    { "id": "J-03", "name": "探针舰队 rc 全 0", "threshold": "40/40", "current": "red", "value": "35/40", "caliber": "B", "evidence": "E-FLEET1" },
+    { "id": "J-04", "name": "结构门 prompt_baseline", "threshold": "rc=0", "current": "red", "value": "rc=1", "caliber": "B", "evidence": "E-PROBE1" },
+    { "id": "J-05", "name": "行覆盖率", "threshold": ">=80%", "current": "red", "value": "72.2%", "caliber": "B", "evidence": "E-COV1" },
+    { "id": "J-06", "name": "bridge.py 覆盖率", "threshold": ">=60%", "current": "red", "value": "49.3%", "caliber": "B", "evidence": "E-COV1" },
+    { "id": "J-07", "name": "flaky 率（3 连跑）", "threshold": "=0", "current": "yellow", "value": "接缝改造后 2 连跑绿，第 3 跑待补", "caliber": "B", "evidence": "E-FIX1" },
+    { "id": "J-08", "name": "模块级死代码", "threshold": "=0", "current": "green", "value": "0", "caliber": "B", "evidence": "E-STATIC1" },
+    { "id": "J-09", "name": "依赖违规数不增", "threshold": "<=49", "current": "red", "value": "89", "caliber": "B", "evidence": "E-DEP1" },
+    { "id": "J-10", "name": "SCC 循环依赖", "threshold": "=0", "current": "green", "value": "0", "caliber": "B", "evidence": "E-DEP1" },
+    { "id": "J-11", "name": "空转指标率", "threshold": "<=10%", "current": "red", "value": "~40%", "caliber": "B", "evidence": "E-REVIEW1 §4" },
+    { "id": "J-12", "name": "冻结基线三态字节", "threshold": "全绿", "current": "red", "value": "12 红", "caliber": "A/B", "evidence": "E-ROOT1/E-ROOT2" },
+    { "id": "J-13", "name": "提交态零红门", "threshold": "=0", "current": "red", "value": "5 处", "caliber": "A/B", "evidence": "E-ROOT1/E-FLEET1/E-PROBE1" },
+    { "id": "J-14", "name": "盲评均分", "threshold": ">=6.5", "current": "green", "value": "8.1（E2）", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-15", "name": "盲评样本/评委独立性", "threshold": "N>=18 且 >=2 独立评委", "current": "red", "value": "N=9 单评委", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-16", "name": "M1 指标覆盖", "threshold": "100%", "current": "green", "value": "100%", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-17", "name": "M2 密度比值", "threshold": "[0.5,2.0]", "current": "yellow", "value": "新管线 1.26 / 全书 1.95", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-18", "name": "M3 跨章复现比值", "threshold": "<=1.5x", "current": "yellow", "value": "1.46（新）/1.69（全书）", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-19", "name": "字数带内率", "threshold": ">=80%", "current": "yellow", "value": "83-91%（口径混用）", "caliber": "B", "evidence": "E-REVIEW1" },
+    { "id": "J-20", "name": "落盘正文零模型自述", "threshold": "=0 章", "current": "green", "value": "新产出 0/49 章（book01 实测）；历史书 5 章待回洗（已登记）", "caliber": "B", "evidence": "E-FIX2/E-CAMP2" },
+    { "id": "J-21", "name": "字数排除驱动文本", "threshold": "口径显式", "current": "red", "value": "含 8.0-9.4k", "caliber": "B", "evidence": "E-REVIEW1" },
+    { "id": "J-22", "name": "单章成本", "threshold": "<=¥0.30", "current": "yellow", "value": "¥0.1-0.4（失控 0.97）", "caliber": "B", "evidence": "E-DOC1/成本台账" },
+    { "id": "J-23", "name": "单章输入 token", "threshold": "<=60k", "current": "green", "value": "13.7k", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-24", "name": "缓存命中率", "threshold": ">=90%", "current": "red", "value": "55-77%", "caliber": "B", "evidence": "成本台账" },
+    { "id": "J-25", "name": "成本回归门禁", "threshold": "有", "current": "red", "value": "无", "caliber": "B", "evidence": "子代理A §9" },
+    { "id": "J-26", "name": "长跑零丢章", "threshold": "=0", "current": "green", "value": "0", "caliber": "B", "evidence": "E-HIST1" },
+    { "id": "J-27", "name": "长跑零杀章", "threshold": "=0", "current": "green", "value": "0（历史）", "caliber": "B", "evidence": "E-DOC1" },
+    { "id": "J-28", "name": "故障注入六类", "threshold": "6/6", "current": "red", "value": "0/6", "caliber": "B", "evidence": "子代理A §9" },
+    { "id": "J-29", "name": "脏状态恢复不静默覆盖", "threshold": "用例过", "current": "red", "value": "缺", "caliber": "B", "evidence": "09-17 C-3" },
+    { "id": "J-30", "name": "跨书污染", "threshold": "用例过", "current": "red", "value": "缺", "caliber": "B", "evidence": "A7-1" },
+    { "id": "J-31", "name": "记账失败落账率", "threshold": "100%", "current": "red", "value": "半成品（命名不一致）", "caliber": "B", "evidence": "E-UNIT1/C1" },
+    { "id": "J-32", "name": "chapter_need_human 清除路径", "threshold": "有且被调用", "current": "red", "value": "无", "caliber": "B", "evidence": "V2 复核" },
+    { "id": "J-33", "name": "异常唯一出口", "threshold": "单点", "current": "green", "value": "成立", "caliber": "B", "evidence": "子代理D §1" },
+    { "id": "J-34", "name": "静默吞射程", "threshold": "全仓覆盖", "current": "red", "value": "104 处射程外", "caliber": "B", "evidence": "子代理D §1" },
+    { "id": "J-35", "name": "埋雷集六维齐+轮换可执行", "threshold": "可执行", "current": "red", "value": "轮换抛 DefectSchemaError", "caliber": "B", "evidence": "E-PLANT1" },
+    { "id": "J-36", "name": "埋雷双人核验率", "threshold": "100%", "current": "red", "value": "0%", "caliber": "B", "evidence": "E-PLANT1" },
+    { "id": "J-37", "name": "运行态文件不入库", "threshold": "空", "current": "red", "value": "已跟踪", "caliber": "B", "evidence": "E-STATE1" },
+    { "id": "J-38", "name": "跑完工作树干净", "threshold": "0 改动", "current": "red", "value": "被改写", "caliber": "B", "evidence": "E-STATE1" },
+    { "id": "J-39", "name": "版本四件套一致", "threshold": "4 者同版", "current": "red", "value": "0.20.4/0.20.1/0.20.0/v0.20.0", "caliber": "A", "evidence": "E-REVIEW1 §3" },
+    { "id": "J-40", "name": "备份时新度", "threshold": "<=7 天", "current": "red", "value": "41 天", "caliber": "A", "evidence": "E-REVIEW1 §3" },
+    { "id": "J-41", "name": "失败现场脱敏", "threshold": "必过 redact", "current": "green", "value": "成立", "caliber": "B", "evidence": "子代理D §7" },
+    { "id": "J-42", "name": "CI 可真跑", "threshold": "有可真跑门禁", "current": "red", "value": "Actions 从未跑", "caliber": "A", "evidence": "E-REVIEW1 §3" },
+    { "id": "J-43", "name": "覆盖闸门误报率（6 章样本）", "threshold": "<=10%", "current": "red", "value": "实测 100%（24/24 判缺失，真未演 0）", "caliber": "B", "evidence": "E-CAMP3 / 台账 §6.12" },
+    { "id": "J-44", "name": "冻结表/禁区确定性检查", "threshold": "存在且本样本 6/6 命中", "current": "red", "value": "两层均无检查（本样本 6 处硬伤 0 命中）", "caliber": "B", "evidence": "E-CAMP3 / 台账 §6.12" }
+  ]
+}

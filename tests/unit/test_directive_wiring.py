@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""D-stages（0.23.0）stages 接线批：章纲合同/覆盖拒收/伏笔回补/白名单/快照
+"""D-stages（0.20.3）stages 接线批：章纲合同/覆盖拒收/伏笔回补/白名单/快照
 
 - A1：_mc_assemble 挂 parse_directive+validate_directive——缺必填字段出 fail 候选
   warn（G4 风格，不阻断）；合同块经 to_prompt_block 注入正文轮（S4/会话/单轮
@@ -328,7 +328,7 @@ def test_whitelist_wiring_passes_proj_at_all_call_sites():
                encoding="utf-8").read()
     n = len(re.findall(r"scan_deslop\(self\.prose, proj=", src))
     assert n == 5, f"stages 内 scan_deslop 应 5 处全部传 proj（实测 {n}）"
-    # 0.24.0 Q2-b：+长度骤减守卫的采纳前复扫（第 5 处）
+    # 0.20.4 Q2-b：+长度骤减守卫的采纳前复扫（第 5 处）
 
 
 def test_whitelist_actually_masks_blocking_phrase(tmp_path):

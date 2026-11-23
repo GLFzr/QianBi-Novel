@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Token 用量统计（插件）：本地持久化 + 多维聚合 + 成本估算 + 准实时告警
 
-- 落点 ~/.qianbi_novel/usage/usage.jsonl，每行一条调用记录
+- 落点 <CONFIG_DIR>/usage/usage.jsonl（缺省 ~/.qianbi_novel/usage/；`QIANBI_CONFIG_DIR`
+  可整体改道——测试与长跑战役用它隔离，不再污染用户真实台账），每行一条调用记录
   （ts/ymd/slot/model/in/out/latency + hit/miss/phase/reasoning；旧文件缺后面几列，读取时按 0/空兜底）
 - 内存聚合缓存：启动全量读入，运行中增量累计；跨天自动切分
 - 费率表（元/百万 tokens）：flash/mini 档 1.0/2.0，其余 2.0/8.0——可被 config.usage_prices 覆盖
@@ -19,11 +20,16 @@ import logging
 import os
 import threading
 
+from .config import CONFIG_DIR as _CONFIG_DIR
 from .core import ledger_view as _lv
 
 logger = logging.getLogger("qianbi.usage")
 
-DIR = os.path.join(os.path.expanduser("~"), ".qianbi_novel", "usage")
+# 落点跟随 config.CONFIG_DIR（10-14 修）：过去这里硬编码 ~/.qianbi_novel/usage，
+# 于是 `QIANBI_CONFIG_DIR` 这个隔离开关对其他一切都生效（config/logs/backups），
+# 唯独用量台账照旧写进用户真实目录——测试/战役的百万级 tokens 会混进用户成本面板。
+# 单测侧仍可直接 monkeypatch DIR/FILE（既有夹具口径不变）。
+DIR = os.path.join(_CONFIG_DIR, "usage")
 FILE = os.path.join(DIR, "usage.jsonl")
 
 _lock = threading.Lock()
@@ -164,6 +170,12 @@ def record(cfg: dict, model: str, slot: str, tin: int, tout: int, latency: float
            "in": int(tin), "out": int(tout), "latency": round(float(latency or 0), 2),
            "hit": int(hit or 0), "miss": int(miss or 0), "phase": phase or "",
            "reasoning": int(reasoning or 0), "ch": int(_chapter or 0)}
+    _proj = _lv.current_project()
+    if _proj:
+        # 10-14 断链①-D：台账行盖项目章。用量台账按天全库共写一份，过去行里没有项目
+        # 字段 ⇒ 跨书回放会把别书的高章号播种进本进程的看门狗（tracking_missing 从此
+        # 永不触发）；rebuild 现在只认与本项目相同的行，故写入端必须盖章。
+        rec["proj"] = _proj
     if sent:
         # 只记**真正随请求下发**的参数（网关剥参、thinking 未设导致 effort 被丢，
         # 都只有这一格能看出来）；未设置时不落空字段，保持旧行形状

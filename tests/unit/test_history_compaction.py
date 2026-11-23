@@ -355,7 +355,7 @@ def test_trigger_volume_boundary(tmp_path):
 
 
 def test_trigger_input_threshold_boundary(tmp_path):
-    """触发器②：估算输入 ≥ 阈值（0.24.0 Q1-a 质量标定默认 48k）——阈值边界两侧各测一次"""
+    """触发器②：估算输入 ≥ 阈值（0.20.4 Q1-a 质量标定默认 48k）——阈值边界两侧各测一次"""
     _home, proj = _make_home(tmp_path)
     assert hc.token_threshold({}) == hc.DEFAULT_TOKEN_THRESHOLD == 48_000
     cfg = {"writing": {"compaction": True, "compaction_token_threshold": 100_000}}
@@ -376,10 +376,10 @@ def test_trigger_manual_and_real_usage_reading(tmp_path):
 
 def test_flag_off_module_never_intervenes(tmp_path):
     """flag 显式关：装配拒绝、触发器不燃、开幕块零贡献（连手动请求也不放行）
-    （0.24.0 Q1-a 起缺省为开；「关」必须显式写 compaction=False）"""
+    （0.20.4 Q1-a 起缺省为开；「关」必须显式写 compaction=False）"""
     home, proj = _make_home(tmp_path)
     _write_usage(home, [{"phase": "prose", "in": 5_000_000}])
-    # 0.24.0 Q1-a：默认开——{} / None 均视为开；显式 False 才关（字节不变纪律仍由显式关承载）
+    # 0.20.4 Q1-a：默认开——{} / None 均视为开；显式 False 才关（字节不变纪律仍由显式关承载）
     assert hc.compaction_enabled({}) is True
     assert hc.compaction_enabled(None) is True
     assert hc.compaction_enabled({"writing": {"compaction": False}}) is False
@@ -405,7 +405,7 @@ def test_flag_off_open_turn_bytes_identical_to_legacy(tmp_path):
     header, dyn = "【第 9 章共享上下文】细纲+台账", "## 本章动态值\n- 本章章号：第 9 章"
     legacy = VolumeSession(_NoCallClient(), "SYS", volume=2, proj="").open_chapter(
         header, dyn, chapter_num=9)
-    # 0.24.0 Q1-a：{} 已是默认开——字节不变纪律只由显式 False 承载
+    # 0.20.4 Q1-a：{} 已是默认开——字节不变纪律只由显式 False 承载
     for cfg in ({"writing": {"compaction": False}},):
         mine = hc.compose_open_turn(proj, 9, header, dyn, cfg=cfg)
         assert mine == legacy
@@ -449,7 +449,7 @@ def test_wiring_via_open_chapter_prepend_is_byte_equivalent(tmp_path):
     assert wired.encode("utf-8") == hc.compose_open_turn(
         proj, 9, header, dyn, cfg=CFG_ON).encode("utf-8")
     # flag 显式关：前缀空串 → 与今天的调用逐字节一致（同一行代码，两种旗标态）
-    # （0.24.0 Q1-a：cfg={} 已默认开，会产出交接块——这里必须显式 False）
+    # （0.20.4 Q1-a：cfg={} 已默认开，会产出交接块——这里必须显式 False）
     off = hc.opening_block(proj, 9, cfg={"writing": {"compaction": False}})
     legacy = VolumeSession(_NoCallClient(), "SYS", proj="").open_chapter(
         (off.text + "\n\n" + header) if off.text else header, dyn, chapter_num=9)
@@ -458,8 +458,8 @@ def test_wiring_via_open_chapter_prepend_is_byte_equivalent(tmp_path):
 
 
 def test_flag_registered_and_on_by_default(tmp_path):
-    """0.24.0 Q1-a：compaction 默认开并写进默认表（质量标定——旧「不注册默认关」
-    纪律反转，理由见 docs/0.24.0_质量全量提升计划.md §一 P0-1/E8）"""
+    """0.20.4 Q1-a：compaction 默认开并写进默认表（质量标定——旧「不注册默认关」
+    纪律反转，理由见 docs/0.20.4_质量全量提升计划.md §一 P0-1/E8）"""
     from app import config as cfg_mod
     w = cfg_mod.DEFAULT_CONFIG.get("writing", {})
     assert w.get("compaction") is True

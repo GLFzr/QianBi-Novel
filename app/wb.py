@@ -19,7 +19,7 @@ import hashlib
 import os
 import re
 
-# C10b 拆环（0.22.0）：本模块对 project 的三处延迟 import 升模块级——依赖方向
+# C10b 拆环（0.20.2）：本模块对 project 的三处延迟 import 升模块级——依赖方向
 # 定格为 wb→project 单向（project 侧壳函数已迁入本模块，PEP 562 兼容壳已由 S2c 拆除）。
 from . import project
 

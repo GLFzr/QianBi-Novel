@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""E7 skills 导出管线单测（0.23.0）
+"""E7 skills 导出管线单测（0.20.3）
 
 覆盖：
 - 三包产物齐全（SKILL.md/scripts/references/tests 金标 + 顶层 VERSION/marketplace）

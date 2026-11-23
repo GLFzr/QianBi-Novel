@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""E6 qianbi-mcp 只读 server 单测（0.23.0）
+"""E6 qianbi-mcp 只读 server 单测（0.20.3）
 
 覆盖：
 - 协议握手（initialize 返回 protocolVersion/capabilities/serverInfo）

@@ -5,14 +5,14 @@ license: MIT
 compatibility: 需要 Python 3.8+（仅标准库）；脚本在本 skill 目录 scripts/ 下运行，适用于任何支持 Agent Skills 的客户端。
 metadata:
   author: qianbi
-  version: 0.22.0
+  version: 0.20.2
   source: https://github.com/GLFzr/qianbi-novel
 ---
 # 桥段码表：受控词表 + 路由判据
 
 码是**写法契约**不是标签：每码带一句话判据（可指认、可对账）、典型位置（章内
 锚点）、典型跨度（章）、路由词与路由场景卡。本版 **36 码 7 组**（爽点 8 码、冲突 5 码、悬念 6 码、情感 6 码、过渡 4 码、钩子 2 码、反例 5 码），
-与上游 qianbi-novel 0.22.0 码表逐字一致。
+与上游 qianbi-novel 0.20.2 码表逐字一致。
 
 ## 流程（三步）
 

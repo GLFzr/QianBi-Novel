@@ -348,7 +348,7 @@ B 组三件套（logs 滚动 2MB×5 / crashes dump / 报障包两档脱敏）独
 
 ### 4.2 T-1 构建与真机日
 
-5. 版本收口：`app/__init__.py` → 0.21.0；CHANGELOG 补条目（含「skill 包影响」复选框，T8）。
+5. 版本收口：`app/__init__.py` → 0.20.2；CHANGELOG 补条目（含「skill 包影响」复选框，T8）。
 6. 全量闸门（=release_checklist §1）：`pytest tests/unit -q` 全绿（基线 1132+）；探针舰队离线子集逐支 rc=0 读 PROBE_DONE；`probe_prompt_baseline` **零漂移**；`probe_qml_compile`；六道发版闸门（probe_prompt_baseline / probe_qml_compile / `tools/audit_tokens.py` / `scripts/update_keys.py --check-repo` / probe_update_ui 46 项 / probe_conn_delete）；涉流水线改动 → ≥3 章真机小 e2e 产物留档。**禁止 `--skip-tests` / `--skip-probe`。**
 7. `python scripts/build_release.py`：质量闸门后 stats 自动回填（unit_tests=collect-only 实数、probes=探针名单、collected_at）；notes **删内嵌测试数字**改人写散文；installed_size 回填；先写盘后 Ed25519 签名；`sign_manifest.py --verify latest.json` = VERIFY OK + 反向验证（篡改 version 一字节必须 FAIL）；CI 断言顶层 sha256==assets.setup.sha256（老客户端兼容双写）。onedir 体积记录进发版说明。
 8. 杀软预检（所有者）：VT 上传查看检出；≥2 家检出 → 先复检 → 微软提交误报 → 等候选再发；360/火绒/腾讯实装实测。未配签名证书 → 流水线 `[SKIP]` 照常出包，**README/更新面板/Release 正文三处必须写明 SmartScreen 点击路径 + SHA256SUMS 核对法**。
@@ -357,8 +357,8 @@ B 组三件套（logs 滚动 2MB×5 / crashes dump / 报障包两档脱敏）独
 ### 4.3 T-0 发版日（上午机器链 → 下午五渠道）
 
 10. `git status` 干净 → 提交已推送（`git -c http.proxy= -c https.proxy= push origin main`）。
-11. 打 tag 并推：`git tag v0.21.0 && git -c http.proxy= -c https.proxy= push origin v0.21.0`（若仓内新增过 workflow 文件改用 `env -u GITHUB_TOKEN -u GH_TOKEN git push`）。
-12. `gh release create v0.21.0 --title "v0.21.0 …" --notes-file RELEASE_NOTES.md` 上传 setup.exe / portable.zip / SHA256SUMS / THIRD-PARTY / PRIVACY / LICENSE；Release Notes 沿用 v0.20.0「数字墙」模板（ae5e4dd 已验证）+ SmartScreen 提示句。
+11. 打 tag 并推：`git tag v0.20.2 && git -c http.proxy= -c https.proxy= push origin v0.20.2`（若仓内新增过 workflow 文件改用 `env -u GITHUB_TOKEN -u GH_TOKEN git push`）。
+12. `gh release create v0.20.2 --title "v0.20.2 …" --notes-file RELEASE_NOTES.md` 上传 setup.exe / portable.zip / SHA256SUMS / THIRD-PARTY / PRIVACY / LICENSE；Release Notes 沿用 v0.20.0「数字墙」模板（ae5e4dd 已验证）+ SmartScreen 提示句。
 13. latest.json 回填推 main（`env -u … git push` 若含 workflow 改动）；`curl -I https://<user>.github.io/<repo>/latest.json` = 200（仓库根 `.nojekyll` 在位）。
 14. 三通道一致性（M-CI）：`python scripts/check_manifest_consistency.py`——raw vs Pages vs 本地逐字节一致=PASS；jsDelivr 一致=PASS / 旧版=PASS(WARN，≤12h 追平) / 新版或改写=FAIL；触发 GH Actions release-consistency job 留档。stats 双源核对：latest.json stats.unit_tests==collect-only、probes==`ls tests/probe_*.py | wc -l`。**验收发布生效只看 raw 与 Pages，别用 jsDelivr 判断**（缓存 s-maxage=43200）。
 15. Discussions「公告」类目 cross-post 发布令；README 下载徽章自动更新。

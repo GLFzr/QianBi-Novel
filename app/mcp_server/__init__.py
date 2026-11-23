@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""qianbi-mcp：千笔账本只读 MCP server（E6，0.23.0）
+"""qianbi-mcp：千笔账本只读 MCP server（E6，0.20.3）
 
 把 P2 已落地的四本追踪账本以 MCP（Model Context Protocol）stdio server 形态
 暴露给外部 agent 宿主（Claude Code / Codex / ZCode 等）——「GUI 给作者、MCP 给
-agent」的引擎双形态（0.23.0 报告 E6 行 / t7 §2.3）。
+agent」的引擎双形态（0.20.3 报告 E6 行 / t7 §2.3）。
 
 - 纯标准库实现 JSON-RPC 2.0 + MCP stdio 传输（逐行 JSON，一请求一行一响应），
   零第三方依赖、零网络：只实现 initialize / tools/list / tools/call 三方法。

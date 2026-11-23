@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""设定名词账本（B2/WA3-a，移植 cn-ai-novel-skills「设定词典」四字段，0.23.0）
+"""设定名词账本（B2/WA3-a，移植 cn-ai-novel-skills「设定词典」四字段，0.20.3）
 
 四字段语义（outline-template「设定词典」表 + chapter-guide「新名词首现管理」）：
 - first_chapter         首现章节：首现登记时自动填，此后不变（判断「本章是否首现」）

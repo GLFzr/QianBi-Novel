@@ -15,6 +15,11 @@ import time
 import httpx
 
 from .. import dialogue_log   # WP-27：对话全量落盘（每次 HTTP 请求一条）
+from . import local as local_ep
+
+# httpx 0.28 解析 NO_PROXY 里的 IPv6 字面量会抛 InvalidURL（Windows 常见写法），
+# 进程启动即剥掉——否则所有远端请求在建 Client 这一步就炸。
+local_ep.sanitize_proxy_env()
 
 logger = logging.getLogger("qianbi.llm")
 
@@ -52,8 +57,12 @@ def _looks_like_dns_error(exc: BaseException) -> bool:
 
 
 def check_base_url(url: str) -> str:
-    """base_url 规则：以 # 结尾则原样使用；否则缺少 /vN 后缀时补 /v1"""
-    url = (url or "").strip()
+    """base_url 规则：以 # 结尾则原样使用；否则缺少 /vN 后缀时补 /v1
+
+    h-2（0.20.4）：先给无协议头的**回环**地址补 http://（`127.0.0.1:11434` 直接交给
+    httpx 是畸形 URL）；远端地址不猜协议，原样进 /v1 判定。
+    """
+    url = local_ep.normalize_local_url((url or "").strip())
     if not url:
         return url
     if url.endswith("#"):
@@ -109,6 +118,17 @@ _ESCALATE_CEILING = 32768              # 抬高 max_tokens 的硬顶：给它把
 _NON_STREAM_MIN_TOKENS = 2048
 # - Retry-After 尊重上限（秒）：服务端限流头照办，但防一个恶意/坏值把挂机跑吊死几小时
 _RETRY_AFTER_CAP = 120.0
+
+
+def _sleep(sec: float) -> None:
+    """睡眠接缝（测试注入用）。
+
+    纪律（10-08 深审 V5）：**不要**在测试里 `monkeypatch.setattr(lc.time, "sleep", …)`
+    ——`lc.time` 就是标准库 time 模块本身（进程级），本模块 abort 轮询的 `_sleep(0.1)`
+    会一起被替换，把「重试退避」的断言污染成几百个 0.05，表现为「同树三跑一红」的
+    假不稳定（实测：`sleeps == [2.0, 4.0]` 变成 22 万个 0.05）。测试请 patch `lc._sleep`。
+    """
+    time.sleep(sec)
 # - finish_reason 人话对照（E 识别层：last_finish_reason 落在 client 实例上，后续
 #   G2 截断拦截消费；这三条文案先把「为什么空/为什么短」翻译给人）
 _FINISH_REASON_HINTS = {
@@ -264,8 +284,8 @@ def invalidate_capability(base_url: str = "", model: str = ""):
 
 
 def _is_local_template_host(host: str) -> bool:
-    """本机推理网关（llama.cpp / vLLM / LM Studio）：关思考走 chat_template_kwargs。"""
-    return host in ("127.0.0.1", "localhost", "::1", "0.0.0.0", "::")
+    """本机推理网关（llama.cpp / vLLM / LM Studio / Ollama）：关思考走 chat_template_kwargs。"""
+    return local_ep.is_local_host(host)
 
 
 def _is_thinking_param_host(host: str) -> bool:
@@ -273,7 +293,7 @@ def _is_thinking_param_host(host: str) -> bool:
     return any(t in host for t in _THINKING_PARAM_HOSTS)
 
 
-# ---- D1 预算宪法：进程级调用观察者（0.23.0）----
+# ---- D1 预算宪法：进程级调用观察者（0.20.3）----
 # 计数事件在本层只广播不裁决：orchestrator 注册章周期计数器（GenBudget），共写/
 # 探针等旁路不注册则零开销。事件 = 每个网关回了 usage 的物理响应一条（chat 与
 # _stream_messages 的成功记账与 W-4 白付 empty/abort/retry 都汇经 _record_usage），
@@ -449,14 +469,14 @@ class LLMClient:
             logger.warning("LLM retry %s/%s after %.1fs: %s",
                            attempt + 1, self.max_retries, delay, reason)
         if abort is None:
-            time.sleep(delay)
+            _sleep(delay)
             return True
         _end = time.monotonic() + delay
         while time.monotonic() < _end:      # 退避也要可中断：否则点停止后还要白等数秒
             if abort():
                 self.last_aborted = True
                 return False
-            time.sleep(0.1)
+            _sleep(0.1)
         return True
 
     def _charge_failed_attempt(self, usage, t0: float, phase: str, status: str) -> None:
@@ -701,7 +721,7 @@ class LLMClient:
                                     phase=phase, log_prompt=last_user, log_system="")
 
     def _post_nonstream(self, payload: dict, headers: dict):
-        """非流式 POST，带**总时钟死线**（0.23.0 实测阻断修复 #3）。
+        """非流式 POST，带**总时钟死线**（0.20.3 实测阻断修复 #3）。
 
         httpx 的 read timeout 是空闲超时：OpenRouter 非流式长调用会周期性下发
         keep-alive 空白填充，每次填充都重置空闲计时 → timeout=900 形同虚设，
@@ -793,7 +813,7 @@ class LLMClient:
                     try:
                         data = resp.json()
                     except json.JSONDecodeError as e:
-                        # 0.23.0 实测阻断修复：网关偶发 200 + 畸形 body（长非流式
+                        # 0.20.3 实测阻断修复：网关偶发 200 + 畸形 body（长非流式
                         # 调用两连发，JSON 在中途断裂）。旧行为＝裸抛 JSONDecodeError，
                         # 绕过重试/对话台账/用量记账三套管线。改按可重试处理并留痕，
                         # body 头 300 字节进错误现场（SSE 误发/截断由此可辨）。
@@ -1152,17 +1172,26 @@ class LLMClient:
         if not (self.model or "").strip():
             return ("⚠ 这条连接还未选择模型——写作前必须选一个：到 设置 · 连接与模型 "
                     "点模型下拉选一个，或点「拉取」拿实时列表。")
-        url = (self.base_url or "").strip()
+        url = local_ep.normalize_local_url((self.base_url or "").strip())
         if not url:
             raise LLMError("连接失败：接口地址为空——请先填写 Base URL（如 https://api.deepseek.com）")
         if "/v1" not in url:
             url = url.rstrip("/") + "/v1"
+        is_local = local_ep.is_local_base_url(self.base_url)
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         try:
-            with httpx.Client(timeout=30) as client:
+            # 本地端点绕开系统代理：代理/畸形 NO_PROXY 会把 127.0.0.1 劫走。
+            # 远端不传 trust_env（保持原构造签名，既有假件与行为不变）。
+            kwargs = {"timeout": 30}
+            if is_local:
+                kwargs["trust_env"] = False
+            with httpx.Client(**kwargs) as client:
                 resp = client.get(f"{url}/models", headers=headers)
+        except httpx.InvalidURL as e:
+            raise LLMError(
+                "连接失败：接口地址格式不正确（端口或 IPv6 方括号写错？）——请检查 Base URL") from e
         except httpx.UnsupportedProtocol as e:
             scheme = url.split(":", 1)[0] if ":" in url else "(无)"
             raise LLMError(
@@ -1172,33 +1201,76 @@ class LLMClient:
         except httpx.ConnectError as e:
             if _looks_like_dns_error(e):
                 raise LLMError(f"连接失败：域名解析失败（{url}）——请检查地址拼写与本机 DNS") from e
+            if is_local:
+                raise LLMError(
+                    f"连接失败：本机 {url} 连不上——服务没启动、端口写错，或只监听了别的地址") from e
             raise LLMError(f"连接失败：无法连接到 {url}——请检查地址与端口，或服务是否在线") from e
         except httpx.RequestError as e:
             raise LLMError(f"连接失败：网络错误（{e.__class__.__name__}）——请检查网络与代理设置") from e
         if resp.status_code != 200:
+            # 本地：Ollama 关掉 OpenAI 兼容层时 /v1/models 会 404，回退原生 /api/tags
+            if is_local:
+                alt = self._local_native_models()
+                if alt is not None:
+                    return ("连接成功：Ollama 原生接口可用，发现 %d 个模型"
+                            "（/v1 兼容层未响应，写作仍可走 /v1）" % len(alt))
             raise LLMError(f"连接失败 {resp.status_code}: {resp.text[:300]}")
-        return "连接成功"
+        if not is_local:
+            return "连接成功"
+        try:
+            models = local_ep.parse_openai_models(resp.json())
+        except ValueError:
+            models = []
+        if models:
+            return "连接成功：发现 %d 个模型（%s）" % (
+                len(models), local_ep.label_for_port(httpx.URL(url).port or 0))
+        return ("连接成功：本地服务在跑，但还没发现模型——先在本地拉取/加载一个模型，"
+                "再点「拉取」选模型名")
+
+    def _local_native_models(self):
+        """本地服务的原生模型列表（当前只有 Ollama /api/tags）；非本地/失败返回 None。"""
+        if not local_ep.is_local_base_url(self.base_url):
+            return None
+        root = re.sub(r"/v\d+$", "", (self.base_url or "").rstrip("/"))
+        try:
+            with httpx.Client(timeout=10, trust_env=False) as client:
+                resp = client.get(root + "/api/tags")
+            if resp.status_code != 200:
+                return None
+            payload = resp.json()
+        except (httpx.HTTPError, ValueError, OSError):
+            return None
+        return local_ep.parse_ollama_tags(payload)
 
     def list_models(self) -> list:
-        """拉取接口可用模型列表（OpenAI /v1/models 格式）"""
-        url = self.base_url
+        """拉取接口可用模型列表（OpenAI /v1/models 格式；本地回退 Ollama /api/tags）"""
+        url = local_ep.normalize_local_url(self.base_url)
         if "/v1" not in url:
             url = url.rstrip("/") + "/v1"
+        is_local = local_ep.is_local_base_url(self.base_url)
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         try:
-            with httpx.Client(timeout=30) as client:
+            kwargs = {"timeout": 30}
+            if is_local:
+                kwargs["trust_env"] = False
+            with httpx.Client(**kwargs) as client:
                 resp = client.get(f"{url}/models", headers=headers)
             if resp.status_code != 200:
+                if is_local:
+                    alt = self._local_native_models()
+                    if alt is not None:
+                        return alt
                 raise LLMError(f"拉取失败 {resp.status_code}: {resp.text[:300]}")
             try:
                 data = resp.json()
             except ValueError as e:
                 # H-8：代理门户/错误页劫持时 200 + HTML——裸 JSONDecodeError 同样会穿成崩溃
                 raise LLMError("拉取失败：接口返回的不是 JSON（地址可能被代理门户或错误页劫持）") from e
-            models = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
-            return sorted(models)
+            return local_ep.parse_openai_models(data)
+        except httpx.InvalidURL as e:
+            raise LLMError("拉取失败：接口地址格式不正确（端口或 IPv6 方括号写错？）") from e
         except httpx.RequestError as e:
             raise LLMError(f"网络错误: {e}")
 

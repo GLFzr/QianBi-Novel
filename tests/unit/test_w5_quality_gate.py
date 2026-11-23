@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.24.0 W5 回归：盲评协议升级 + 质量门（machine 层零成本判据）。"""
+"""0.20.4 W5 回归：盲评协议升级 + 质量门（machine 层零成本判据）。"""
 import json
 import os
 import sys

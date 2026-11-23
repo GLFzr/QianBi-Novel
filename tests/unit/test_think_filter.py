@@ -117,7 +117,7 @@ def http(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
-    monkeypatch.setattr(lc.time, "sleep", lambda s: None)
+    monkeypatch.setattr(lc, "_sleep", lambda s: None)
 
 
 # ---------- 1. 状态机单测：四态逐字对拍 easy-writing ----------
@@ -321,7 +321,7 @@ def test_parse_retry_after_forms():
 def test_429_retry_after_is_honored(http, monkeypatch):
     """429 带头：按 Retry-After 等（7s），而不是指数退避的 2s"""
     sleeps = []
-    monkeypatch.setattr(lc.time, "sleep", sleeps.append)
+    monkeypatch.setattr(lc, "_sleep", sleeps.append)   # 接缝（勿 patch 标准库 time：V5）
     http([_JsonResp({}, status=429, text="rate limited",
                     headers={"Retry-After": "7"}),
           _content("好")])
@@ -334,7 +334,7 @@ def test_429_retry_after_http_date_and_cap(http, monkeypatch):
     """HTTP-date 形式折算成秒；恶意大值被钳到上限 120s（不把挂机跑吊死）"""
     from email.utils import formatdate
     sleeps = []
-    monkeypatch.setattr(lc.time, "sleep", sleeps.append)
+    monkeypatch.setattr(lc, "_sleep", sleeps.append)   # 接缝（勿 patch 标准库 time：V5）
     future = formatdate(timeval=time.time() + 30, usegmt=True)
     http([_JsonResp({}, status=429, headers={"Retry-After": future}),
           _JsonResp({}, status=429, headers={"Retry-After": "999999"}),
@@ -348,7 +348,7 @@ def test_429_retry_after_http_date_and_cap(http, monkeypatch):
 def test_429_without_header_falls_back_to_exponential(http, monkeypatch):
     """无头/非 429：退回指数退避，与改动前逐字一致"""
     sleeps = []
-    monkeypatch.setattr(lc.time, "sleep", sleeps.append)
+    monkeypatch.setattr(lc, "_sleep", sleeps.append)   # 接缝（勿 patch 标准库 time：V5）
     http([_JsonResp({}, status=429, headers={}),
           _JsonResp({}, status=503, text="busy"),
           _content("好")])
@@ -360,7 +360,7 @@ def test_429_without_header_falls_back_to_exponential(http, monkeypatch):
 def test_stream_429_retry_after_is_honored(http, monkeypatch):
     """流式 429 同一条规则（W-4 统一退避入口 + Retry-After）"""
     sleeps = []
-    monkeypatch.setattr(lc.time, "sleep", sleeps.append)
+    monkeypatch.setattr(lc, "_sleep", sleeps.append)   # 接缝（勿 patch 标准库 time：V5）
     http([_StreamResp([], status=429, text="rate limited", headers={"Retry-After": "5"}),
           _StreamResp(_sse(["好"], finish="stop"))])
     c = lc.LLMClient("http://fake.invalid/v1", "sk", "m", backoff_base=2.0, max_retries=2)

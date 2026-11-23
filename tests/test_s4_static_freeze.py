@@ -134,6 +134,11 @@ def _make_proj(tmp_path):
     for d in ("设定", "大纲", "正文", "追踪"):
         os.makedirs(os.path.join(proj, d), exist_ok=True)
     pj.ensure_tracking_files(proj)
+    # 0.20.4：章头对空小节是省略而非留标题；给伏笔表一行真内容，
+    # 才能继续测「volume 模式保留五节」。
+    pj.write_file(pj.get_tracking_path(proj, "伏笔"),
+                  "| 伏笔 | 埋设章 | 计划回收 | 状态 |\n|---|---|---|---|\n"
+                  "| 玉简来历 | 1 | 第5章 | 未回收 |\n")
     pj.write_file(os.path.join(proj, "设定", "题材定位.md"),
                   "## 主要角色表\n- 陈青山：凡人少年，灵根残缺\n")
     pj.write_file(os.path.join(proj, "大纲", "大纲.md"),
@@ -153,7 +158,11 @@ def _run_microcycle(proj, cfg, client, num):
 
 
 def _cfg(**writing):
-    base = {"chapter_session": True, "chapter_word_target": 60}
+    base = {"chapter_session": True, "chapter_word_target": 60,
+            # 0.20.4：本文件锁同会话字节；记账脱离会话（默认开）是另一条路径，显式关闭
+            "bookkeeping_off_session": False,
+            # Q4-e 章首 best-of-3 会先额外生成候选并改变首轮请求：字节锁用例关掉它
+            "opening_bestof": 0}
     base.update(writing)
     return {"writing": base, "gates": {"review_enabled": False}}
 
@@ -193,7 +202,11 @@ def _expected_prose_turn(proj, cfg, num):
             num, stages._total_chapters(proj, word_target), outline),
         "author_note": stages._author_note(proj),
     }
-    return prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw)
+    return (prompts.session_turn_text(prompts.PROSE_WRITING_PROMPT).format(**prose_kw)
+            # 0.20.4 Q2-a：拍段字数预算块默认注入（写前预算），负载与 stages 同源
+            + stages._beat_budget_block(outline, word_target)
+            # 0.20.3 A1：细纲合同块（合同化细纲才非空），与 stages 同一解析入口
+            + stages._directive_contract_block(stages._parse_directive(outline, num)))
 
 
 def _expected_tracking_turn(proj, num):

@@ -488,7 +488,7 @@ def rollback_foreshadow_advances(proj: str, num: int) -> list:
     return rolled
 
 
-# ---------------- 章节计划（B7：goink chapter_plans 三槽位 next/near/far，0.23.0） ----------------
+# ---------------- 章节计划（B7：goink chapter_plans 三槽位 next/near/far，0.20.3） ----------------
 # 「当前规划状态」而非「历史记录」（goink 固定 3 行 UPSERT 同思想）：sidecar
 # `追踪/章节计划.json` —— {version:1, next:{content,source_ch},
 # near:[{content,target_ch}], far:[{content}], consumed:[已流转章号]}。

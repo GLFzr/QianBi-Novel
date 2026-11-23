@@ -40,13 +40,13 @@ PLAN_DOCS = (
     "docs/落地计划附录C_生态与发布施工.md",
     "docs/超级迭代蓝图_v1.md",
     "docs/2026-09-29-超级迭代深度调研_v2.md",
-    "docs/0.22.0_裁决记录.md",
+    "docs/0.20.2_裁决记录.md",
 )
 
 
 PRUNE_DIRS = (".git", ".venv", "node_modules", "__pycache__", "dist", "build",
               ".tmp_test", ".workbuddy", ".zcode", "tests_output", "tests_output_pd",
-              "snapshots_tmp", ".pytest_cache")
+              "snapshots_tmp", ".pytest_cache", "_scratch")
 
 
 def _repo_files():

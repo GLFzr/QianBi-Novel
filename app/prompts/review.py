@@ -617,7 +617,7 @@ FINAL_REVIEW_COMPACT = FINAL_REVIEW_PROMPT[:FINAL_REVIEW_PROMPT.find(REVIEW_PROT
     + _esc(REVIEW_COMPACT_PROTOCOL)
 
 
-# ========== B6（0.23.0）：review2 语义复核第二 pass ==========
+# ========== B6（0.20.3）：review2 语义复核第二 pass ==========
 # 定位（T6 报告 §6.4）：主审校六维是「本章质量门」，review2 是**定稿后的第二遍
 # 语义一致性对账**——独立于六维，只回答一个问题：本章的事实/因果/时间线是否有
 # 硬伤。与 G 护栏分工：G1-G7+CW 是确定性规则校验（词表/字数/正则），review2 是

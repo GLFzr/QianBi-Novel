@@ -16,7 +16,7 @@ ctx.fact_extraction（暂无生产者，缺省跳过）、反哺侧只做账本 
 
 产物：`追踪/事实账本.jsonl`（append-only，每行一条 {chapter, claim, evidence,
 anchored, ts, source}，中文直存；按「章号+归一化 claim+归一化 evidence」去重）。
-D3 源身份钉死（0.23.0，对位 AINW 五重钉死的落地增量）：新条目一律携带 source
+D3 源身份钉死（0.20.3，对位 AINW 五重钉死的落地增量）：新条目一律携带 source
 三件套——{prose_sha256（入账所锚定正文的全文 sha256 短 12 位）, gen_watermark
 （代际/版本号，调用方传入，未知如实留空）, confirmed_by（来源标注）}；入账时自动
 计算填写。读取侧向后兼容：无 source 的旧条目容忍读取（source_of 返回 None）；
@@ -173,7 +173,7 @@ def ledger_path(proj: str) -> str:
     return os.path.join(proj, "追踪", LEDGER_FILENAME)
 
 
-# ---------------- D3 源身份钉死（0.23.0）----------------
+# ---------------- D3 源身份钉死（0.20.3）----------------
 
 def build_source(chapter_text: str, gen_watermark: str = "",
                  confirmed_by: str = "") -> dict:

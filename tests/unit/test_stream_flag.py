@@ -2,7 +2,7 @@
 """C44 连接级流式开关：连接 dict 带 "stream": False 的模型走 chat() 非流式。
 
 背景：OpenRouter stealth/space-bunny-alpha 不支持流式——长 prompt 流式请求
-返回空内容（实测 609s 空流后「模型返回空内容」失败，见 0.23.0 全量实测）。
+返回空内容（实测 609s 空流后「模型返回空内容」失败，见 0.20.3 全量实测）。
 """
 import os
 import sys

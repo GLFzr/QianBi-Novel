@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ChapterDirective 章纲合同（0.23.0 A1）：细纲从自由 markdown 升级为可校验合同。
+"""ChapterDirective 章纲合同（0.20.3 A1）：细纲从自由 markdown 升级为可校验合同。
 
 思想来源：T1 报告 §2.3/§2.4/§3.3（chapter_outline_loader 的 17 字段 schema）——
 「大纲先结构化，才谈得上即法律」。本模块是**纯函数域，零项目内依赖**（只 import

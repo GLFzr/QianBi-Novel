@@ -26,7 +26,7 @@ core 消费方各自多背一条 core->app-top 上探边；度量层本是「文
 summarize_findings，原定义在 app/deslop.py——deslop 反向自本模块导入，特征
 登记处单一真源，app-top→core 合法方向），本模块对 app 零依赖。
 
-C2 指标扩展（0.23.0；t8_deslop_research §8.1 清单 M1-M14 逐项落地，出处随项标注；
+C2 指标扩展（0.20.3；t8_deslop_research §8.1 清单 M1-M14 逐项落地，出处随项标注；
 存量 aid/by_rule/rhythm/connectivity/special/guard 键与口径零变更，只增不改）：
   M1 cooccur              共现热点 escalate_cooccurrence：同千字窗内 ≥3 类 advisory
                           才升档（humanizer 三级强度体系/weak-alone 认识论——不加
@@ -192,7 +192,7 @@ GAZE_MARKERS = re.compile(r"盯着|看向|望向|注视|目光")
 # 否定刹车句族（"没有动/没有回头/没有说话"——短促否定节奏指纹）
 BRAKE_MARKERS = re.compile(r"没有[动说气回头停开口接答理翻]")
 
-# ---- C2 指标扩展词表（0.23.0，M6/M9/M11-M13；只进读数不设规则，先观测后定阈）----
+# ---- C2 指标扩展词表（0.20.3，M6/M9/M11-M13；只进读数不设规则，先观测后定阈）----
 # 连接词三子表（M13 / t8 §5 冲突 6 裁决）：转折/口语子表「低=坏」（改碎信号）、
 # 并列/书面子表「高=坏」（翻译腔信号）——lieflat 实测口语转折人类多 3.8× 与 HC3
 # 实测并列连词 AI 多，两个方向相反的信号混计一个 conn_per_kilo 方向不明，必须拆表。
@@ -536,7 +536,7 @@ def compute_metrics(text: str, findings: list, weights: dict = None) -> dict:
 
     C2 起返回键：aid / aid_adjusted / aid_band / aid_strategy / chars / by_rule /
     rhythm / lexdiv / repetition / connectivity / special / cooccur / guard——
-    存量六键口径零变更，其余为 0.23.0 新增（形状变更记录见 0.23.0 工作报告）。
+    存量六键口径零变更，其余为 0.20.3 新增（形状变更记录见 0.20.3 工作报告）。
     """
     w = dict(AID_WEIGHTS)
     if weights:

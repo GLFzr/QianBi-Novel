@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.24.0 Q1-b 三臂盲评：9 稿（compact/fresh/legacy × 第3-5章）匿名乱序，
+"""0.20.4 Q1-b 三臂盲评：9 稿（compact/fresh/legacy × 第3-5章）匿名乱序，
 stealth 独立评委（与被测写手同模型——三臂对称故偏置恒定），长度配平。
 
 用法：QIANBI_TEST_KEY=... python tests/ab_blind.py

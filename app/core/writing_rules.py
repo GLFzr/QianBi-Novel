@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""写作规约反馈沉淀（D4，0.23.0；模式源 easy-writing writingRules，t5_ainw_easy §2.3/§3-H）
+"""写作规约反馈沉淀（D4，0.20.3；模式源 easy-writing writingRules，t5_ainw_easy §2.3/§3-H）
 
 用户在共写审校/对话里给出的修改反馈（拒绝原因、风格要求）沉淀为持久「写作规约」，
 之后每章生成时由状态卡以最高优先级注入——让「改过的错」不再犯（easy-writing 的

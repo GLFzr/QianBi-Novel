@@ -2,7 +2,7 @@
 """E1 装配预览面板（Context Viewer）单测：SnapshotPanelController 访问器
 + 真实 ctx（stages._snap_prompt 写入）链路 + 空态 fail-open + 面板 QML 钉扎。
 
-口径（docs/落地计划附录A 卡 E1 / 0.23.0 施工批）：
+口径（docs/落地计划附录A 卡 E1 / 0.20.3 施工批）：
 - bridge.snapshotPanel 独立 controller（照 C26/C39 先例不摊主类），只读不写、
   零新增配置键；
 - promptSnapshotKinds = ctx.prompt_snapshots 可用 kind（流水线装配顺序，

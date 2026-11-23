@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""E7 qianbi-skills 导出管线（0.23.0）：引擎方法论 → Agent Skill 包
+"""E7 qianbi-skills 导出管线（0.20.3）：引擎方法论 → Agent Skill 包
 
 单源原则（与 E6 MCP 同一战略，t7 §0 结论 4）：skill 包不是手写副本，而是从仓库
 当前成品**自动生成**——上游规则表/码表/schema 变了，重跑本脚本即同步：

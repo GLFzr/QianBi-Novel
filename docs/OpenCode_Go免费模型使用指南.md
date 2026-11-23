@@ -56,13 +56,13 @@
 | `400 MissingSessionID` | 缺 `x-opencode-session` 头 | 千笔 `_headers()` 已自动带；裸 curl/httpx 必须手加 |
 | `finish=length` 且 content 空 | 思考吃光 max_tokens（space-bunny） | 短 prompt：max_tokens ≥16384；**重管线 prompt（入 ≥10k tok）：直接 32768**（或 prose 相位降 effort）——16384 在重 prompt 下不够（10-04 实测） |
 | 输出突然变短/变敷衍 | `reasoning_effort` 填了 `xhigh`/`low`（思考被抑制） | 用 `high` 或干脆不发该参数 |
-| 内容疑似复读其他段 | 与模型无关——检查是否触发了扩写/去味环的旧路径 | 确认 `writing.enrich_para`/`deslop_cards` 开着（0.24.0 缺省开） |
+| 内容疑似复读其他段 | 与模型无关——检查是否触发了扩写/去味环的旧路径 | 确认 `writing.enrich_para`/`deslop_cards` 开着（0.20.4 缺省开） |
 | 付费模型误用风险 | `/v1/models` 列出 35+ 模型 | 只允许白名单两个 ID；驱动层勿把用户输入透传为 model |
 | **`400 Upstream request failed: invalid request`（间歇）** | 上游对**携带成章正文**的请求（补尾/扩写/去味/记账/摘要）间歇拒绝——10-04 连续 6 章实测：同栈 prose/审校常过、改写类常拒，且逐章加重 | 千笔降级链已全量接住（补尾→降级建议 / 去味→保留原稿转待修 / 记账摘要→不阻断）；**400 按纪律不可重试**（确定性内容形状，重试无效）；高频期换 longcat-2.5-preview-free 或等窗口 |
 
 ## 五、实测记录（10-04，二测项目续写第 8-13 章全管线）
 
-- space-bunny-free + 压缩@48k + 全 0.24.0 机制：**+6 章 / 11,067 字 / 866s（末轮 3 章）**；
+- space-bunny-free + 压缩@48k + 全 0.20.4 机制：**+6 章 / 11,067 字 / 866s（末轮 3 章）**；
 - 机器指标：密度 0.49-5.06（第 11 章 5.06 为 400 降级章——扩写被拒后未达标），复现 0.041-0.062——**全部落在真人基线邻域**（基线 0.048）；
 - 400 间歇拒绝 6+ 发，降级守卫全部接住（0 杀章——修正前的两轮各死 1 章）；
 - 成本估算 ¥0.77/3 章（内部价目口径；通道实际免费）。
@@ -70,6 +70,25 @@
 ## 六、与千笔既有机制的相容性
 
 - **C44 非流式开关**：两模型非流式均正常（42s 级长输出实测无 keep-alive 截断——OpenRouter stealth 的空白填充病在此通道未出现）；
-- **净增益闸/卡片制/拍段预算**（0.24.0）：纯本地验收件，与通道无关；
+- **净增益闸/卡片制/拍段预算**（0.20.4）：纯本地验收件，与通道无关；
 - **预算宪法**：space-bunny 单发思考可达 10k+ tok，`gen_budget.max_single_tokens=32768` 够用；若再上调 max_tokens 需同步检查该轴；
 - **对话台账/用量台账**：正常落账（usage 含 reasoning tokens，由 `completion_tokens_details.reasoning_tokens` 通道采集）。
+
+---
+
+## 七、2026-10-14 复测：space-bunny-free 已下线，免费清单变更
+
+> 探针：`_scratch/oc_probe.py`（2 发最小请求）与 `_scratch/oc_model_profile.py`（同一段 600 字中文 prompt × 每模型 1-2 发）。
+> key 只经环境变量 `QIANBI_OC_KEY` 注入，不入仓。
+
+| 模型 | 状态 | 实测 |
+|---|---|---|
+| `space-bunny-free` | **已下线** | `GET /v1/models` 不再列出；调用回 `400 Upstream request failed: Model is unavailable`。本文第一~六节的画像是历史记录 |
+| `longcat-2.5-preview-free` | ✅ 可用（**主力**） | 600 字请求 39-45s / `finish=stop` / 输出 1232-1420 tok（含 reasoning 620-899）；1 章 2000 字级全管线正常收尾 |
+| `step-5-preview-free` | ⚠ 间歇可用（兜底） | mx=4096 → 25.9s / 1991 tok 正常；mx=16384 → `429 Endpoint is unavailable`（重试可过） |
+| `cat-jam-free` | ❌ 不可用 | 两种预算均 `403 Endpoint is unavailable` |
+
+**战役接入**：`tests/campaign_drive.py --spec _scratch/campaign/spec.json`（3 本 × 50 万字；主力 longcat、兜底 step-5；每轮独立子进程、崩溃隔离、断点续跑；模型 id 硬校验必须含 `free`）。
+**参数取用**：`QIANBI_TEST_BASE=https://opencode.ai/zen/go/v1`、`QIANBI_TEST_MODEL=<free 模型>`、`QIANBI_TEST_STREAM=false`、`QIANBI_TEST_MAX_TOKENS=32768`、`QIANBI_TEST_TOTAL_WORDS=<本目标>`、`QIANBI_TEST_USER_ID=qianbi-campaign-<固定串>`（稳定会话头，网关侧 prompt 缓存不打散）。
+
+**已知观测副作用（非通道问题）**：免费模型不在 `ledger_view` 价目表内 ⇒ 按最贵默认档（2.0/8.0 元每百万）估算 ⇒ 跑几发就会触发 `chapter_cost_over` 假告警（实测第 2 章 3.51 元 / 阈值 0.80 元）。要消掉请在 `cfg['usage_prices']` 里给免费模型登记 0 价。

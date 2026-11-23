@@ -653,6 +653,10 @@ def _make_proj(tmp_path):
 
 def _run_microcycle(proj, cfg, client, num, ctx=None, router=None):
     from app.core import stages
+    # 0.20.4：本文件的断言锁的是「同会话字节」（prose/tracking/summary 走同一栈）。
+    # 记账脱离会话（bookkeeping_off_session，0.20.4 起默认开）是另一条已单测覆盖的
+    # 默认路径；这里显式关掉，才能继续测卷会话本身的结构。
+    cfg.setdefault("writing", {}).setdefault("bookkeeping_off_session", False)
     if ctx is None:
         ctx = CycleCtx(proj, cfg, client)
     if router is not None:
@@ -838,9 +842,14 @@ if __name__ == "__main__":
 # ---------------- Part C：接力压缩接线（writing.compaction，T6/T2 地基） ----------------
 
 def _comp_cfg(threshold=10 ** 9, on=True):
-    w = {"chapter_session": True, "volume_session": True, "chapter_word_target": 60}
+    w = {"chapter_session": True, "volume_session": True, "chapter_word_target": 60,
+         "bookkeeping_off_session": False}
     if on:
         w.update(compaction=True, compaction_token_threshold=threshold)
+    else:
+        # 0.20.4：compaction 默认已改为开；本组用例要测「关掉时绝不触达」，
+        # 必须显式写 False，不能靠缺键。
+        w.update(compaction=False)
     return {"writing": w, "gates": {"review_enabled": False}}
 
 

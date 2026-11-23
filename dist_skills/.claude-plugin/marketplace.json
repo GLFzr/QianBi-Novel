@@ -23,7 +23,7 @@
     "./qianbi-state-card"
    ],
    "source": "./",
-   "version": "0.22.0"
+   "version": "0.20.2"
   }
  ]
 }

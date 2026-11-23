@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """任务槽位路由：写作槽 / 辅助槽 / 审校槽 → 各自连接对应的 LLMClient"""
 from ..slots import SLOT_LABELS, SLOT_ORDER, slot_connection
+from . import local as local_ep
 from .client import LLMClient
 
 
@@ -54,13 +55,12 @@ class ModelRouter:
         return f"{conn.get('name', '')} · {conn.get('model', '')}"
 
     def any_api_key_missing(self) -> bool:
-        """任一已绑定连接的 api_key 为空（本地接口除外）"""
+        """任一已绑定连接的 api_key 为空（本地回环接口除外）"""
         for slot in SLOT_ORDER:
             conn = slot_connection(self.cfg, slot)
             if not conn:
                 return True
-            url = conn.get("base_url", "")
-            if not conn.get("api_key") and "localhost" not in url and "127.0.0.1" not in url:
+            if local_ep.needs_api_key(conn):
                 return True
         return False
 

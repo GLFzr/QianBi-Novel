@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""0.24.0 W3/W4 模块回归：style_anchor（代理实现）+ hook_carry + opening_score。"""
+"""0.20.4 W3/W4 模块回归：style_anchor（代理实现）+ hook_carry + opening_score。"""
 import json
 import os
 import sys
